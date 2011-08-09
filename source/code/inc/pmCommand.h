@@ -67,14 +67,6 @@ class pmCommunicatorCommand : public pmCommand
 	private:
 };
 
-class pmMPICommunicatorCommand : public pmCommunicatorCommand
-{
-	public:
-
-	private:
-		MPI_Request* mRequest;
-};
-
 class pmThreadCommand : public pmCommand
 {
 	public:
