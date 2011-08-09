@@ -23,18 +23,6 @@ class pmThreadCommand;
 class pmCommunicator: public THREADING_IMPLEMENTATION_CLASS
 {
 	public:
-		static pmCommunicator* GetCommunicator();
-		pmStatus DestroyCommunicator();
-
-		pmStatus Send(const pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
-		pmStatus Broadcast(const pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
-		pmStatus Receive(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
-
-		pmStatus BuildThreadCommand(const pmCommunicatorCommand* pCommunicatorCommand, const pmThreadCommand* pThreadCommand, internalIdentifier pId, pmHardware pHardware, bool pBlocking);
-
-		virtual pmStatus ThreadSwitchCallback(const pmThreadCommand* pThreadCommand);
-
-	private:
 		typedef enum internalIdentifier
 		{
 			SEND,
@@ -51,6 +39,18 @@ class pmCommunicator: public THREADING_IMPLEMENTATION_CLASS
 			pmCommunicatorCommand* communicatorCommand;
 		} commandWrapper;
 
+		static pmCommunicator* GetCommunicator();
+		pmStatus DestroyCommunicator();
+
+		pmStatus Send(const pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
+		pmStatus Broadcast(const pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
+		pmStatus Receive(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
+
+		pmStatus BuildThreadCommand(const pmCommunicatorCommand* pCommunicatorCommand, const pmThreadCommand* pThreadCommand, internalIdentifier pId, pmHardware pHardware, bool pBlocking);
+
+		virtual pmStatus ThreadSwitchCallback(const pmThreadCommand* pThreadCommand);
+
+	private:
 		pmCommunicator();
 
 		pmStatus SendInternal(const pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
