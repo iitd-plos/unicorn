@@ -7,23 +7,6 @@
 
 namespace pm
 {
-	/** 
-	 * Error code to brief error description mappings
-	 * Error codes are defined in pmPublicDefinitions.h (inside pmStatus enum)
-    */
-	const char* pmErrorMessages[] =
-	{
-		"No Error",
-		"Execution status unknown or can't be determined.",
-		"Fatal error inside library. Can't continue.",
-		"Error in PMLIB initialization",
-		"Error in network initialization",
-		"Error in shutting down network communications",
-		"Index out of bounds",
-		"PMLIB internal command object decoding failure",
-		"Internal failure in threading library"
-	};
-
 	/**
 	  * Exceptions thrown internally by PMLIB
 	  * These are mapped to pmStatus errors and are not sent to applications

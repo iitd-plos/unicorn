@@ -12,10 +12,7 @@ pmCommand::pmCommand(ushort pCommandId, void* pCommandData /* = NULL */, ulong p
 	mCommandData = pCommandData;
 	mDataLength = pDataLength;
 	mStatus = pmStatusUnavailable;
-	mSignalwait = NULL;
-
-	if(!IsValid())
-		throw pmInvalidCommandIdException(pCommandId);
+	mSignalWait = NULL;
 }
 
 pmStatus pmCommand::SetData(void* pCommandData, ulong pDataLength)

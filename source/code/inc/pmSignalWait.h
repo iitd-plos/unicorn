@@ -22,7 +22,7 @@ class pmSignalWait
 	private:
 };
 
-class pmPThreadSignalWait : pmSignalWait
+class pmPThreadSignalWait : public pmSignalWait
 {
 	public:
 		pmPThreadSignalWait();

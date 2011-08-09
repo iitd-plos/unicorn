@@ -16,6 +16,23 @@ namespace pm
 
 #define SAFE_GET_CONTROLLER(x) { x = pmController::GetController(); if(!x) return pmInitializationFailure; }
 
+/** 
+ * Error code to brief error description mappings
+ * Error codes are defined in pmPublicDefinitions.h (inside pmStatus enum)
+*/
+static const char* pmErrorMessages[] =
+{
+	"No Error",
+	"Execution status unknown or can't be determined.",
+	"Fatal error inside library. Can't continue.",
+	"Error in PMLIB initialization",
+	"Error in network initialization",
+	"Error in shutting down network communications",
+	"Index out of bounds",
+	"PMLIB internal command object decoding failure",
+	"Internal failure in threading library"
+};
+
 const char* pmGetLastError()
 {
 	uint lErrorCode = pmSuccess;

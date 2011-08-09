@@ -30,7 +30,7 @@ pmStatus pmCommunicator::DestroyCommunicator()
 	return pmSuccess;
 }
 
-pmStatus pmCommunicator::BuildThreadCommand(const pmCommunicatorCommand* pCommunicatorCommand, const pmThreadCommand* pThreadCommand, internalIdentifier pId, pmHardware pHardware, bool pBlocking)
+pmStatus pmCommunicator::BuildThreadCommand(pmCommunicatorCommand* pCommunicatorCommand, pmThreadCommand* pThreadCommand, internalIdentifier pId, pmHardware pHardware, bool pBlocking)
 {
 	/* All commands must be allocated on heap as they are usually passed across threads */
 	commandWrapper* lWrapper = new commandWrapper();
@@ -39,12 +39,12 @@ pmStatus pmCommunicator::BuildThreadCommand(const pmCommunicatorCommand* pCommun
 	lWrapper->blocking = pBlocking;
 	lWrapper->communicatorCommand = pCommunicatorCommand;
 
-	pThreadCommand = new pmThreadCommand(CONTROLLER_COMMAND_WRAPPER, lWrapper);
+	pThreadCommand = new pmThreadCommand(pmThreadCommand::CONTROLLER_COMMAND_WRAPPER, lWrapper);
 
 	return pmSuccess;
 }
 
-pmStatus pmCommunicator::ThreadSwitchCallback(const pmThreadCommand* pThreadCommand)
+pmStatus pmCommunicator::ThreadSwitchCallback(pmThreadCommand* pThreadCommand)
 {
 	ushort lCommandId = pThreadCommand->GetId();
 	commandWrapper* lWrapper = (commandWrapper*)(pThreadCommand->GetData());
@@ -56,7 +56,7 @@ pmStatus pmCommunicator::ThreadSwitchCallback(const pmThreadCommand* pThreadComm
 	delete lWrapper;
 	delete pThreadCommand;
 
-	if(lCommandId != CONTROLLER_COMMAND_WRAPPER)
+	if(lCommandId != pmThreadCommand::CONTROLLER_COMMAND_WRAPPER)
 		throw pmInvalidCommandIdException(lCommandId);
 
 	switch(lId)
@@ -80,16 +80,16 @@ pmStatus pmCommunicator::ThreadSwitchCallback(const pmThreadCommand* pThreadComm
 	return pmSuccess;
 }
 
-pmStatus pmCommunicator::Send(const pmCommunicatorCommand* pCommunicatorCommand, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmCommunicator::Send(pmCommunicatorCommand* pCommunicatorCommand, pmHardware pHardware, bool pBlocking /* = false */)
 {
-	pmThreadCommand* lThreadCommand;
-	
 	if(pBlocking)
 	{
 		return SendInternal(pCommunicatorCommand, pHardware, pBlocking);
 	}
 	else
 	{
+		pmThreadCommand* lThreadCommand = NULL;
+	
 		if( BuildThreadCommand(pCommunicatorCommand, lThreadCommand, SEND, pHardware, pBlocking) == pmSuccess )
 			return SwitchThread(lThreadCommand);
 	}
@@ -97,16 +97,16 @@ pmStatus pmCommunicator::Send(const pmCommunicatorCommand* pCommunicatorCommand,
 	return pmSuccess;
 }
 
-pmStatus pmCommunicator::Broadcast(const pmCommunicatorCommand& pCommunicatorCommand, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmCommunicator::Broadcast(pmCommunicatorCommand* pCommunicatorCommand, pmHardware pHardware, bool pBlocking /* = false */)
 {
-	pmThreadCommand* lThreadCommand;
-		
 	if(pBlocking)
 	{
 		return BroadcastInternal(pCommunicatorCommand, pHardware, pBlocking);
 	}
 	else
 	{
+		pmThreadCommand* lThreadCommand = NULL;
+		
 		if( BuildThreadCommand(pCommunicatorCommand, lThreadCommand, BROADCAST, pHardware, pBlocking) == pmSuccess )
 			return SwitchThread(lThreadCommand);
 	}
@@ -114,16 +114,16 @@ pmStatus pmCommunicator::Broadcast(const pmCommunicatorCommand& pCommunicatorCom
 	return pmSuccess;
 }
 
-pmStatus pmCommunicator::Receive(pmCommunicatorCommand& pCommunicatorCommand, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmCommunicator::Receive(pmCommunicatorCommand* pCommunicatorCommand, pmHardware pHardware, bool pBlocking /* = false */)
 {
-	pmThreadCommand* lThreadCommand;
-		
 	if(pBlocking)
 	{
 		return ReceiveInternal(pCommunicatorCommand, pHardware, pBlocking);
 	}
 	else
 	{
+		pmThreadCommand* lThreadCommand = NULL;
+		
 		if( BuildThreadCommand(pCommunicatorCommand, lThreadCommand, RECEIVE, pHardware, pBlocking) == pmSuccess )
 			return SwitchThread(lThreadCommand);
 	}
@@ -131,12 +131,12 @@ pmStatus pmCommunicator::Receive(pmCommunicatorCommand& pCommunicatorCommand, pm
 	return pmSuccess;
 }
 
-pmStatus pmCommunicator::SendInternal(const pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmCommunicator::SendInternal(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
 {
 	pmStatus lStatus = pmSuccess;
 	pmNetwork* lNetwork;
 	SAFE_GET_NETWORK(lNetwork);
-
+/*
 	if(pHardware.IsHost())
 	{
 		lStatus = lNetwork->SendByteArrayToHost(pCommand->GetData(), pCommand->GetDataLength(), pBlocking, pHardware.GetHost());
@@ -150,13 +150,13 @@ pmStatus pmCommunicator::SendInternal(const pmCommunicatorCommand* pCommand, pmH
 	{
 		throw pmFatalErrorException();
 	}
-
+*/
 	pCommand->SetStatus(lStatus);
 
 	return lStatus;
 }
 
-pmStatus pmCommunicator::BroadcastInternal(const pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmCommunicator::BroadcastInternal(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
 {
 	return pmSuccess;
 }

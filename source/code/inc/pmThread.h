@@ -11,7 +11,7 @@ namespace pm
 
 class pmThreadCommand;
 
-void ThreadLoop(void* pThreadData);
+void* ThreadLoop(void* pThreadData);
 
 /**
  * \brief The base thread class of PMLIB.
@@ -31,10 +31,10 @@ void ThreadLoop(void* pThreadData);
 class pmThread
 {
 	public:
-		virtual pmStatus SwitchThread(const pmThreadCommand* pCommand) = 0;
+		virtual pmStatus SwitchThread(pmThreadCommand* pCommand) = 0;
 		
 		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(const pmThreadCommand* pCommand) = 0;
+		virtual pmStatus ThreadSwitchCallback(pmThreadCommand* pCommand) = 0;
 };
 
 class pmPThread : pmThread
@@ -43,15 +43,15 @@ class pmPThread : pmThread
 		pmPThread();
 		virtual ~pmPThread();
 
-		virtual pmStatus SwitchThread(const pmThreadCommand* pCommand);
+		virtual pmStatus SwitchThread(pmThreadCommand* pCommand);
 
 		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(const pmThreadCommand* pCommand) = 0;
+		virtual pmStatus ThreadSwitchCallback(pmThreadCommand* pCommand) = 0;
 
-		friend void ThreadLoop(void* pThreadData);
+		friend void* ThreadLoop(void* pThreadData);
 
 	private:
-		virtual pmStatus SubmitCommand(const pmThreadCommand* pCommand);
+		virtual pmStatus SubmitCommand(pmThreadCommand* pCommand);
 		virtual pmStatus ThreadCommandLoop();
 
 		pthread_mutex_t mMutex;

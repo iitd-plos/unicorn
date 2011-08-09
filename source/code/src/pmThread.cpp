@@ -1,5 +1,6 @@
 
 #include "pmThread.h"
+#include "pmCommand.h"
 
 namespace pm
 {
@@ -24,7 +25,7 @@ pmPThread::~pmPThread()
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_destroy(&mCondVariable), pmThreadFailure, pmThreadFailure::COND_VAR_DESTROY_FAILURE );
 }
 
-pmStatus pmPThread::SwitchThread(const pmThreadCommand* pCommand)
+pmStatus pmPThread::SwitchThread(pmThreadCommand* pCommand)
 {
 	return SubmitCommand(pCommand);
 }
@@ -40,7 +41,7 @@ pmStatus pmPThread::ThreadCommandLoop()
 
 		mCondEnforcer = false;
 
-		mCommand.SetStatus( ThreadSwitchCallback(mCommand) );
+		mCommand->SetStatus( ThreadSwitchCallback(mCommand) );
 	}
 
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailure, pmThreadFailure::MUTEX_UNLOCK_FAILURE );
@@ -48,7 +49,7 @@ pmStatus pmPThread::ThreadCommandLoop()
 	return pmSuccess;
 }
 
-pmStatus pmPThread::SubmitCommand(const pmThreadCommand* pCommand)
+pmStatus pmPThread::SubmitCommand(pmThreadCommand* pCommand)
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailure, pmThreadFailure::MUTEX_LOCK_FAILURE );
 	
@@ -61,10 +62,12 @@ pmStatus pmPThread::SubmitCommand(const pmThreadCommand* pCommand)
 	return pmSuccess;
 }
 
-void ThreadLoop(void* pThreadData)
+void* ThreadLoop(void* pThreadData)
 {
 	pmPThread* lObjectPtr = (pmPThread*)pThreadData;
 	lObjectPtr->ThreadCommandLoop();
+
+	return NULL;
 }
 
 } // end namespace pm

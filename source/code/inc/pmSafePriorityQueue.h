@@ -28,7 +28,7 @@ template<typename T>
 class pmSafePQ
 {
 	public:
-		typedef typename pair<ushort, T> PQDT;
+		typedef pair<ushort, T> PQDT;
 
 		pmSafePQ<T>(ushort pPriorityLevels);
 		virtual ~pmSafePQ<T>();

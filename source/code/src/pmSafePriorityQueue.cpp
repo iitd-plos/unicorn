@@ -23,7 +23,7 @@ pmStatus pmSafePQ<T>::InsertItem(T& pItem, ushort pPriority)
 	mQueue.push(pItem);
 	UnlockQueue();
 
-	return pmStatus;
+	return pmSuccess;
 }
 
 template<typename T>
@@ -34,7 +34,7 @@ pmStatus pmSafePQ<T>::GetTopItem(T& pItem)
 	mQueue.pop();
 	UnlockQueue();
 
-	return pmStatus;
+	return pmSuccess;
 }
 
 template<typename T>
@@ -67,12 +67,12 @@ bool operator< (const pair<ushort, T>& pData1, const pair<ushort, T>& pData2)
 	if(lPriority1 < lPriority2)
 		return false;
 
-	retuirn true;
+	return true;
 }
 
 /* class pmPThreadPQ */
 template<typename T>
-pmPThreadPQ<T>::pmPThreadPQ(ushort pPriorityLevels) : pmSafePQ(pPriorityLevels)
+pmPThreadPQ<T>::pmPThreadPQ(ushort pPriorityLevels) : pmSafePQ<T>(pPriorityLevels)
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_init(&mMutex, NULL), pmThreadFailure, pmThreadFailure::MUTEX_INIT_FAILURE );
 }
@@ -88,7 +88,7 @@ pmStatus pmPThreadPQ<T>::LockQueue()
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailure, pmThreadFailure::MUTEX_LOCK_FAILURE );
 
-	return pmStatus;
+	return pmSuccess;
 }
 
 template<typename T>
@@ -96,7 +96,7 @@ pmStatus pmPThreadPQ<T>::UnlockQueue()
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailure, pmThreadFailure::MUTEX_UNLOCK_FAILURE );
 
-	return pmStatus;
+	return pmSuccess;
 }
 
 }
