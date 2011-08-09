@@ -107,6 +107,9 @@
     <ClInclude Include="..\..\..\code\inc\pmSignalWait.h" />
     <ClInclude Include="..\..\..\code\inc\pmThread.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\..\..\build\linux\Makefile" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
