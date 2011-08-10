@@ -12,6 +12,8 @@
 namespace pm
 {
 
+class RESOURCE_LOCK_IMPLEMENTATION_CLASS;
+
 /**
  * \brief An STL based thread safe priority queue implementation
  * Any number of priority levels can be set as long as ushort allows.
@@ -40,25 +42,13 @@ class pmSafePQ
 		uint GetSize();
 
 	private:
-		pmStatus LockQueue() = 0;
-		pmStatus UnlockQueue() = 0;
-
-		ushort mPriorityLevels; // 0 means highest priority
-		priority_queue<PQDT, vector<PQDT>, less<typename vector<PQDT>::value_type> > mQueue;
-};
-
-template<typename T>
-class pmPThreadPQ : public pmSafePQ<T>
-{
-	public:
-		pmPThreadPQ<T>(ushort pPriorityLevels);
-		virtual ~pmPThreadPQ<T>();
-
-	private:
 		pmStatus LockQueue();
 		pmStatus UnlockQueue();
 
-		pthread_mutex_t mMutex;
+		ushort mPriorityLevels; // 0 means highest priority
+		priority_queue<PQDT, vector<PQDT>, less<typename vector<PQDT>::value_type> > mQueue;
+
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

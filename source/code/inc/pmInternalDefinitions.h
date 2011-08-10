@@ -13,12 +13,28 @@
 */
 #define NETWORK_IMPLEMENTATION_CLASS pmMPI
 #define CLUSTER_IMPLEMENTATION_CLASS pmMPICluster
-#define THREADING_IMPLEMENTATION_CLASS pmPThread	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
-#define SAFE_PRIORITY_QUEUE_IMPLEMENTATION_CLASS pmPThreadPQ	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
-#define SIGNAL_WAIT_IMPLEMENTATION_CLASS pmPThreadSignalWait	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
 
-#define THREADING_IMPLEMENTATION_HEADER <pthread.h>	// Used alongwith THREADING_IMPLEMENTATION_CLASS, SAFE_PRIORITY_QUEUE_IMPLEMENTATION_CLASS & SIGNAL_WAIT_IMPLEMENTATION_CLASS
+#define TIMER_IMPLEMENTATION_CLASS pmLinuxTimer
+#define TIMER_IMPLEMENTATION_HEADER <sys/time.h>
+
+#define THREADING_IMPLEMENTATION_CLASS pmPThread	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
+#define SIGNAL_WAIT_IMPLEMENTATION_CLASS pmPThreadSignalWait	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
+#define RESOURCE_LOCK_IMPLEMENTATION_CLASS pmPThreadResourceLock	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
+#define THREADING_IMPLEMENTATION_HEADER <pthread.h>	// Used alongwith THREADING_IMPLEMENTATION_CLASS, SIGNAL_WAIT_IMPLEMENTATION_CLASS & RESOURCE_LOCK_IMPLEMENTATION_CLASS
+
 
 #define THROW_ON_NON_ZERO_RET_VAL(x, y, z) { int __ret_val__ = x; if(!__ret_val__) throw y(z, __ret_val__); }
+
+
+/* This code is taken from http://www.fefe.de/intof.html */
+#define __HALF_MAX_SIGNED(type) ((type)1 << (sizeof(type)*8-2))
+#define __MAX_SIGNED(type) (__HALF_MAX_SIGNED(type) - 1 + __HALF_MAX_SIGNED(type))
+#define __MIN_SIGNED(type) (-1 - __MAX_SIGNED(type))
+
+#define __MIN(type) ((type)-1 < 1?__MIN_SIGNED(type):(type)0)
+#define __MAX(type) ((type)~__MIN(type))
+///////////////////////////////////////////////////////////
+
+#define MPI_TRANSFER_MAX_LIMIT __MAX(int)
 
 #endif

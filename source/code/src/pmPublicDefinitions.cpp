@@ -30,7 +30,8 @@ static const char* pmErrorMessages[] =
 	"Error in shutting down network communications",
 	"Index out of bounds",
 	"PMLIB internal command object decoding failure",
-	"Internal failure in threading library"
+	"Internal failure in threading library",
+	"Failure in time measurement"
 };
 
 const char* pmGetLastError()

@@ -5,10 +5,15 @@
 #include "pmInternalDefinitions.h"
 #include "mpi.h"
 
+#include <vector>
+#include <map>
+
 namespace pm
 {
 
 class pmCluster;
+class pmCommunicatorCommand;
+class RESOURCE_LOCK_IMPLEMENTATION_CLASS;
 
 /**
  * \brief The base network class of PMLIB.
@@ -21,17 +26,14 @@ class pmCluster;
 class pmNetwork
 {
 	public:
-		virtual pmStatus SendByteArrayToHost(char* pArray, ulong pLength, bool pBlocking, uint pHost) = 0;
-		virtual pmStatus SendByteArrayToCluster(char* pArray, ulong pLength, bool pBlocking, pmCluster& pCluster) = 0;
-		virtual pmStatus BroadcastByteArray(char* pArray, ulong pLength, bool pBlocking) = 0;
+		virtual pmStatus Send(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false) = 0;
+		virtual pmStatus Broadcast(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false) = 0;
+		virtual pmStatus Receive(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false) = 0;
 
-		virtual pmStatus ReceiveByteArrayFromHost(char* pArray, ulong pLength, bool pBlocking, uint pHost) = 0;
-		virtual pmStatus ReceiveBroadcastedByteArray(char* pArray, ulong pLength, bool pBlocking) = 0;
+		virtual pmStatus DestroyNetwork() = 0;
 
 		virtual uint GetTotalHostCount() = 0;
 		virtual uint GetHostId() = 0;
-
-		virtual pmStatus DestroyNetwork() = 0;
 	private:
 };
 
@@ -41,12 +43,9 @@ class pmMPI : public pmNetwork
 		static pmNetwork* GetNetwork();
 		virtual pmStatus DestroyNetwork();
 
-		virtual pmStatus SendByteArrayToHost(char* pArray, ulong pLength, bool pBlocking, uint pHost);
-		virtual pmStatus SendByteArrayToCluster(char* pArray, ulong pLength, bool pBlocking, pmCluster& pCluster);
-		virtual pmStatus BroadcastByteArray(char* pArray, ulong pLength, bool pBlocking);
-
-		virtual pmStatus ReceiveByteArrayFromHost(char* pArray, ulong pLength, bool pBlocking, uint pHost);
-		virtual pmStatus ReceiveBroadcastedByteArray(char* pArray, ulong pLength, bool pBlocking);
+		virtual pmStatus Send(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
+		virtual pmStatus Broadcast(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
+		virtual pmStatus Receive(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
 
 		virtual uint GetTotalHostCount() {return mTotalHosts;}
 		virtual uint GetHostId() {return mHostId;}
@@ -54,9 +53,18 @@ class pmMPI : public pmNetwork
 	private:
 		pmMPI();
 
+		pmStatus SendInternal(pmCommunicatorCommand* pCommand, void* pData, int pLength, pmHardware pHardware, bool pBlocking = false);
+		pmStatus ReceiveInternal(pmCommunicatorCommand* pCommand, void* pData, int pLength, pmHardware pHardware, bool pBlocking = false);
+
+		pmStatus SendComplete(pmCommunicatorCommand* pCommand, pmStatus pStatus);
+		pmStatus ReceiveComplete(pmCommunicatorCommand* pCommand, pmStatus pStatus);
+
 		static pmNetwork* mNetwork;
 		uint mTotalHosts;
 		uint mHostId;
+
+		std::map<MPI_Request*, pmCommunicatorCommand*> mNonBlockingRequestMap;	// Maps MPI_Request objects to pmCommunicatorCommand object
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

@@ -133,37 +133,26 @@ pmStatus pmCommunicator::Receive(pmCommunicatorCommand* pCommunicatorCommand, pm
 
 pmStatus pmCommunicator::SendInternal(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
 {
-	pmStatus lStatus = pmSuccess;
 	pmNetwork* lNetwork;
 	SAFE_GET_NETWORK(lNetwork);
-/*
-	if(pHardware.IsHost())
-	{
-		lStatus = lNetwork->SendByteArrayToHost(pCommand->GetData(), pCommand->GetDataLength(), pBlocking, pHardware.GetHost());
-	}
-	else
-	if(pHardware.isCluster())
-	{
-		lStatus = lNetwork->SendByteArrayToCluster(pCommand->GetData(), pCommand->GetDataLength(), pBlocking, pHardware.GetCluster());
-	}
-	else
-	{
-		throw pmFatalErrorException();
-	}
-*/
-	pCommand->SetStatus(lStatus);
 
-	return lStatus;
+	return lNetwork->Send(pCommand, pHardware, pBlocking);
 }
 
 pmStatus pmCommunicator::BroadcastInternal(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
 {
-	return pmSuccess;
+	pmNetwork* lNetwork;
+	SAFE_GET_NETWORK(lNetwork);
+	
+	return lNetwork->Broadcast(pCommand, pHardware, pBlocking);
 }
 
 pmStatus pmCommunicator::ReceiveInternal(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
 {
-	return pmSuccess;
+	pmNetwork* lNetwork;
+	SAFE_GET_NETWORK(lNetwork);
+	
+	return lNetwork->Receive(pCommand, pHardware, pBlocking);
 }
 
 } // end namespace pm

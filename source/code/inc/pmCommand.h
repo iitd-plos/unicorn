@@ -3,11 +3,14 @@
 #define __PM_COMMAND__
 
 #include "pmInternalDefinitions.h"
+#include TIMER_IMPLEMENTATION_HEADER
 
 namespace pm
 {
 
 class pmSignalWait;
+class TIMER_IMPLEMENTATION_CLASS;
+class RESOURCE_LOCK_IMPLEMENTATION_CLASS;
 
 /**
  * \brief The command class of PMLIB. Serves as an interface between various PMLIB components like pmControllers.
@@ -18,8 +21,8 @@ class pmSignalWait;
  * Most command objects are passed among threads. So they should be allocated on heap rather
  * than on local thread stacks. Be cautious to keep alive the memory associated with command objects
  * and the encapsulated data until the execution of a command object finishes.
- * Callers can wait for command to finish by calling WaitForStatus() method.
- * The command executors must set the exit status of command via SetStatus() method. This also wakes
+ * Callers can wait for command to finish by calling WaitForFinish() method.
+ * The command executors must set the exit status of command via MarkExecutionEnd() method. This also wakes
  * up any awaiting threads.
 */
 
@@ -37,12 +40,21 @@ class pmCommand
 
 		virtual pmStatus SetData(void* pCommandData, ulong pDataLength);
 		virtual pmStatus SetStatus(pmStatus pStatus);
+	
+		/**
+		 * The following functions must be called by clients for
+		 * command execution time measurement and status reporting
+		*/
+		virtual pmStatus MarkExecutionStart();
+		virtual pmStatus MarkExecutionEnd(pmStatus pStatus);
+
+		double GetExecutionTimeInSecs();
 
 		/**
 		 * Block the execution of the calling thread until the status
 		 * of the command object becomes available.
 		*/
-		virtual pmStatus WaitForStatus();
+		virtual pmStatus WaitForFinish();
 
 	protected:
 		ushort mCommandId;
@@ -50,6 +62,9 @@ class pmCommand
 		ulong mDataLength;
 		pmStatus mStatus;
 		pmSignalWait* mSignalWait;
+	
+		TIMER_IMPLEMENTATION_CLASS mTimer;
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 class pmCommunicatorCommand : public pmCommand

@@ -88,9 +88,11 @@
     <ClCompile Include="..\..\..\code\src\pmDevicePool.cpp" />
     <ClCompile Include="..\..\..\code\src\pmNetwork.cpp" />
     <ClCompile Include="..\..\..\code\src\pmPublicDefinitions.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmResourceLock.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSafePriorityQueue.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSignalWait.cpp" />
     <ClCompile Include="..\..\..\code\src\pmThread.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmTimer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\code\inc\pmCluster.h" />
@@ -103,9 +105,11 @@
     <ClInclude Include="..\..\..\code\inc\pmInternalDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmNetwork.h" />
     <ClInclude Include="..\..\..\code\inc\pmPublicDefinitions.h" />
+    <ClInclude Include="..\..\..\code\inc\pmResourceLock.h" />
     <ClInclude Include="..\..\..\code\inc\pmSafePriorityQueue.h" />
     <ClInclude Include="..\..\..\code\inc\pmSignalWait.h" />
     <ClInclude Include="..\..\..\code\inc\pmThread.h" />
+    <ClInclude Include="..\..\..\code\inc\pmTimer.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\..\..\build\linux\Makefile" />

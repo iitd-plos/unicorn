@@ -1,5 +1,6 @@
 
 #include "pmSafePriorityQueue.h"
+#include "pmResourceLock.h"
 
 namespace pm
 {
@@ -58,6 +59,22 @@ uint pmSafePQ<T>::GetSize()
 }
 
 template<typename T>
+pmStatus pmSafePQ<T>::LockQueue()
+{
+	mResourceLock.Lock();
+
+	return pmSuccess;
+}
+
+template<typename T>
+pmStatus pmSafePQ<T>::UnlockQueue()
+{
+	mResourceLock.Unlock();
+
+	return pmSuccess;
+}
+
+template<typename T>
 bool operator< (const pair<ushort, T>& pData1, const pair<ushort, T>& pData2)
 {
 	ushort lPriority1 = pData1.first;
@@ -68,35 +85,6 @@ bool operator< (const pair<ushort, T>& pData1, const pair<ushort, T>& pData2)
 		return false;
 
 	return true;
-}
-
-/* class pmPThreadPQ */
-template<typename T>
-pmPThreadPQ<T>::pmPThreadPQ(ushort pPriorityLevels) : pmSafePQ<T>(pPriorityLevels)
-{
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_init(&mMutex, NULL), pmThreadFailure, pmThreadFailure::MUTEX_INIT_FAILURE );
-}
-
-template<typename T>
-pmPThreadPQ<T>::~pmPThreadPQ()
-{
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_destroy(&mMutex), pmThreadFailure, pmThreadFailure::MUTEX_DESTROY_FAILURE );
-}
-
-template<typename T>
-pmStatus pmPThreadPQ<T>::LockQueue()
-{
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailure, pmThreadFailure::MUTEX_LOCK_FAILURE );
-
-	return pmSuccess;
-}
-
-template<typename T>
-pmStatus pmPThreadPQ<T>::UnlockQueue()
-{
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailure, pmThreadFailure::MUTEX_UNLOCK_FAILURE );
-
-	return pmSuccess;
 }
 
 }

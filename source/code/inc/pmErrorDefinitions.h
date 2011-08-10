@@ -18,7 +18,7 @@ namespace pm
 			virtual pmStatus GetStatusCode() = 0;
 	};
 
-	class pmInitExceptionMPI : pmException
+	class pmMpiInitException : pmException
 	{
 		public:
 			pmStatus GetStatusCode() {return pmNetworkInitError;}
@@ -40,7 +40,7 @@ namespace pm
 			pmStatus GetStatusCode() {return pmFatalError;}
 	};
 
-	class pmThreadFailure : pmException
+	class pmThreadFailureException : pmException
 	{
 		public:
 			typedef enum failureTypes
@@ -57,12 +57,42 @@ namespace pm
 				THREAD_CANCEL_ERROR
 			} failureTypes;
 
-			pmThreadFailure(failureTypes pFailureId, int pErrorCode) {mFailureId = pFailureId;}
+			pmThreadFailureException(failureTypes pFailureId, int pErrorCode) {mFailureId = pFailureId;}
 			pmStatus GetStatusCode() {return pmThreadingLibraryFailure;}
 
 		private:
-			ushort mFailureId;
+			failureTypes mFailureId;
 			int mErrorCode;
+	};
+
+	class pmUnknownMachineException : pmException
+	{
+		public:
+			pmUnknownMachineException(uint pMachineId) {mMachineId = pMachineId;}
+			pmStatus GetStatusCode() {return pmInvalidIndex;}
+
+		private:
+			uint mMachineId;
+	};
+
+	class pmTimerException : pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				ALREADY_RUNNING,
+				ALREADY_STOPPED,
+				ALREADY_PAUSED,
+				NOT_STARTED,
+				NOT_PAUSED,
+				INVALID_STATE
+			} failureTypes;
+
+			pmTimerException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmTimerFailure;}
+
+		private:
+			failureTypes mFailureId;
 	};
 
 } // end namespace pm

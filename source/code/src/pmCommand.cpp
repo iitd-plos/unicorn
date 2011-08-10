@@ -1,6 +1,7 @@
 
 #include "pmCommand.h"
 #include "pmSignalWait.h"
+#include "pmResourceLock.h"
 
 namespace pm
 {
@@ -17,39 +18,81 @@ pmCommand::pmCommand(ushort pCommandId, void* pCommandData /* = NULL */, ulong p
 
 pmStatus pmCommand::SetData(void* pCommandData, ulong pDataLength)
 {
+	mResourceLock.Lock();
+
 	mCommandData = pCommandData;
 	mDataLength = pDataLength;
+
+	mResourceLock.Unlock();
 	
 	return pmSuccess;
 }
 
 pmStatus pmCommand::SetStatus(pmStatus pStatus)
 {
+	mResourceLock.Lock();
 	mStatus = pStatus;
+	mResourceLock.Unlock();
 
-	if(mStatus != pmStatusUnavailable)
+	return pmSuccess;
+}
+
+pmStatus pmCommand::WaitForFinish()
+{
+	mResourceLock.Lock();
+
+	if(mStatus == pmStatusUnavailable)
 	{
-		if(mSignalWait)
-		{
-			mSignalWait->Signal();
+		mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
+		
+		mResourceLock.Unlock();
 
-			delete mSignalWait;
-			mSignalWait = NULL;
-		}
+		mSignalWait->Wait();
+	}
+	else
+	{
+		mResourceLock.Unlock();
 	}
 
 	return pmSuccess;
 }
 
-pmStatus pmCommand::WaitForStatus()
+pmStatus pmCommand::MarkExecutionStart()
 {
-	if(mStatus == pmStatusUnavailable)
-	{
-		mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
-		mSignalWait->Wait();
-	}
+	mResourceLock.Lock();
+	mTimer.Start();
+	mResourceLock.Unlock();
 
 	return pmSuccess;
+}
+
+pmStatus pmCommand::MarkExecutionEnd(pmStatus pStatus)
+{
+	mResourceLock.Lock();
+	mTimer.Stop();
+
+	mStatus = pStatus;
+
+	if(mSignalWait)
+	{
+		mSignalWait->Signal();
+
+		delete mSignalWait;
+		mSignalWait = NULL;
+	}
+
+	mResourceLock.Unlock();
+
+	return pmSuccess;
+}
+
+double pmCommand::GetExecutionTimeInSecs()
+{
+	mResourceLock.Lock();
+	double lTime = mTimer.GetElapsedTimeInSecs();
+	mResourceLock.Unlock();
+
+	return lTime;
 }
 
 /* class pmCommunicatorCommand */
