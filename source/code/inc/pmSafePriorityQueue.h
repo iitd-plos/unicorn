@@ -3,6 +3,7 @@
 #define __PM_SAFE_PRIORITY_QUEUE__
 
 #include "pmInternalDefinitions.h"
+#include "pmResourceLock.h"
 
 #include<vector>
 #include<queue>
@@ -11,8 +12,6 @@
 
 namespace pm
 {
-
-class RESOURCE_LOCK_IMPLEMENTATION_CLASS;
 
 /**
  * \brief An STL based thread safe priority queue implementation

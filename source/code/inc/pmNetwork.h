@@ -3,6 +3,8 @@
 #define __PM_NETWORK__
 
 #include "pmInternalDefinitions.h"
+#include "pmResourceLock.h"
+
 #include "mpi.h"
 
 #include <vector>
@@ -13,7 +15,6 @@ namespace pm
 
 class pmCluster;
 class pmCommunicatorCommand;
-class RESOURCE_LOCK_IMPLEMENTATION_CLASS;
 
 /**
  * \brief The base network class of PMLIB.

@@ -1,6 +1,5 @@
 
 #include "pmSafePriorityQueue.h"
-#include "pmResourceLock.h"
 
 namespace pm
 {

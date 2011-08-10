@@ -3,12 +3,11 @@
 #define __PM_DEVICE_POOL__
 
 #include "pmInternalDefinitions.h"
+#include "pmResourceLock.h"
 #include <vector>
 
 namespace pm
 {
-
-class RESOURCE_LOCK_IMPLEMENTATION_CLASS;
 
 /**
  * \brief The record of all devices and their last updated status

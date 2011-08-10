@@ -3,14 +3,14 @@
 #define __PM_COMMAND__
 
 #include "pmInternalDefinitions.h"
+#include "pmTimer.h"
+#include "pmResourceLock.h"
 #include TIMER_IMPLEMENTATION_HEADER
 
 namespace pm
 {
 
 class pmSignalWait;
-class TIMER_IMPLEMENTATION_CLASS;
-class RESOURCE_LOCK_IMPLEMENTATION_CLASS;
 
 /**
  * \brief The command class of PMLIB. Serves as an interface between various PMLIB components like pmControllers.

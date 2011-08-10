@@ -1,7 +1,6 @@
 
 #include "pmCommand.h"
 #include "pmSignalWait.h"
-#include "pmResourceLock.h"
 
 namespace pm
 {
