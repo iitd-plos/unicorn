@@ -25,6 +25,7 @@ namespace pm
 		pmInvalidCommand,
 		pmThreadingLibraryFailure,
 		pmTimerFailure,
+		pmMemoryError,
 		pmMaxStatusValues
 	} pmStatus;
 

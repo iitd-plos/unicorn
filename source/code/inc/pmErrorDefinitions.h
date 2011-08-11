@@ -18,13 +18,13 @@ namespace pm
 			virtual pmStatus GetStatusCode() = 0;
 	};
 
-	class pmMpiInitException : pmException
+	class pmMpiInitException : public pmException
 	{
 		public:
 			pmStatus GetStatusCode() {return pmNetworkInitError;}
 	};
 
-	class pmInvalidCommandIdException : pmException
+	class pmInvalidCommandIdException : public pmException
 	{
 		public:
 			pmInvalidCommandIdException(ushort pCommandId) {mCommandId = pCommandId;}
@@ -34,13 +34,13 @@ namespace pm
 			ushort mCommandId;
 	};
 
-	class pmFatalErrorException : pmException
+	class pmFatalErrorException : public pmException
 	{
 		public:
 			pmStatus GetStatusCode() {return pmFatalError;}
 	};
 
-	class pmThreadFailureException : pmException
+	class pmThreadFailureException : public pmException
 	{
 		public:
 			typedef enum failureTypes
@@ -65,7 +65,7 @@ namespace pm
 			int mErrorCode;
 	};
 
-	class pmUnknownMachineException : pmException
+	class pmUnknownMachineException : public pmException
 	{
 		public:
 			pmUnknownMachineException(uint pMachineId) {mMachineId = pMachineId;}
@@ -75,7 +75,7 @@ namespace pm
 			uint mMachineId;
 	};
 
-	class pmTimerException : pmException
+	class pmTimerException : public pmException
 	{
 		public:
 			typedef enum failureTypes
@@ -90,6 +90,25 @@ namespace pm
 
 			pmTimerException(failureTypes pFailureId) {mFailureId = pFailureId;}
 			pmStatus GetStatusCode() {return pmTimerFailure;}
+
+		private:
+			failureTypes mFailureId;
+	};
+
+	class pmMemoryException : public pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				ALLOCATION_FAILED,
+				MEM_ALIGN_FAILED,
+				MEM_PROT_NONE_FAILED,
+				SEGFAULT_HANDLER_INSTALL_FAILED,
+				SEGFAULT_HANDLER_UNINSTALL_FAILED
+			} failureTypes;
+
+			pmMemoryException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmMemoryError;}
 
 		private:
 			failureTypes mFailureId;

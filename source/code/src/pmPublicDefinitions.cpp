@@ -31,7 +31,8 @@ static const char* pmErrorMessages[] =
 	"Index out of bounds",
 	"PMLIB internal command object decoding failure",
 	"Internal failure in threading library",
-	"Failure in time measurement"
+	"Failure in time measurement",
+	"Memory allocation/management failure"
 };
 
 const char* pmGetLastError()

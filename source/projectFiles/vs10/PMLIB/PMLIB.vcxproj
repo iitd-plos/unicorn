@@ -93,6 +93,7 @@
     <ClCompile Include="..\..\..\code\src\pmSignalWait.cpp" />
     <ClCompile Include="..\..\..\code\src\pmThread.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTimer.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmMemoryManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\code\inc\pmCluster.h" />
@@ -110,6 +111,7 @@
     <ClInclude Include="..\..\..\code\inc\pmSignalWait.h" />
     <ClInclude Include="..\..\..\code\inc\pmThread.h" />
     <ClInclude Include="..\..\..\code\inc\pmTimer.h" />
+    <ClInclude Include="..\..\..\code\inc\pmMemoryManager.h" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\..\..\build\linux\Makefile" />

@@ -17,6 +17,12 @@
 #define TIMER_IMPLEMENTATION_CLASS pmLinuxTimer
 #define TIMER_IMPLEMENTATION_HEADER <sys/time.h>
 
+#define VM_IMPLEMENTATION_HEADER1 <sys/mman.h>
+#define VM_IMPLEMENTATION_HEADER2 <signal.h>
+#define VM_IMPLEMENTATION_HEADER3 <unistd.h>
+
+#define MEMORY_MANAGER_IMPLEMENTATION_CLASS pmLinuxMemoryManager
+
 #define THREADING_IMPLEMENTATION_CLASS pmPThread	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
 #define SIGNAL_WAIT_IMPLEMENTATION_CLASS pmPThreadSignalWait	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
 #define RESOURCE_LOCK_IMPLEMENTATION_CLASS pmPThreadResourceLock	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
@@ -36,5 +42,8 @@
 ///////////////////////////////////////////////////////////
 
 #define MPI_TRANSFER_MAX_LIMIT __MAX(int)
+
+
+#define TRACK_MEMORY_ALLOCATIONS
 
 #endif
