@@ -90,7 +90,9 @@
     <ClCompile Include="..\..\..\code\src\pmPublicDefinitions.cpp" />
     <ClCompile Include="..\..\..\code\src\pmResourceLock.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSafePriorityQueue.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmScheduler.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSignalWait.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmTaskManager.cpp" />
     <ClCompile Include="..\..\..\code\src\pmThread.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTimer.cpp" />
     <ClCompile Include="..\..\..\code\src\pmMemoryManager.cpp" />
@@ -108,7 +110,9 @@
     <ClInclude Include="..\..\..\code\inc\pmPublicDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmResourceLock.h" />
     <ClInclude Include="..\..\..\code\inc\pmSafePriorityQueue.h" />
+    <ClInclude Include="..\..\..\code\inc\pmScheduler.h" />
     <ClInclude Include="..\..\..\code\inc\pmSignalWait.h" />
+    <ClInclude Include="..\..\..\code\inc\pmTaskManager.h" />
     <ClInclude Include="..\..\..\code\inc\pmThread.h" />
     <ClInclude Include="..\..\..\code\inc\pmTimer.h" />
     <ClInclude Include="..\..\..\code\inc\pmMemoryManager.h" />

@@ -55,7 +55,9 @@ OBJECTS= $(OUTDIR)/pmCluster.o \
 	 $(OUTDIR)/pmSignalWait.o \
 	 $(OUTDIR)/pmThread.o \
 	 $(OUTDIR)/pmTimer.o \
-	 $(OUTDIR)/pmMemoryManager.o
+	 $(OUTDIR)/pmMemoryManager.o \
+	 $(OUTDIR)/pmScheduler.o \
+	 $(OUTDIR)/pmTaskManager.o
 
 INCLUDES= -I../../source/code/inc $(MPI_INCLUDE)
 #INCLUDES += -I/usr/local/cuda/include
