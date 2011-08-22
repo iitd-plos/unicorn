@@ -15,6 +15,50 @@ pmCommand::pmCommand(ushort pCommandId, void* pCommandData /* = NULL */, ulong p
 	mSignalWait = NULL;
 }
 
+ushort pmCommand::GetId()
+{
+	mResourceLock.Lock();
+
+	ushort lCommandId = mCommandId;
+
+	mResourceLock.Unlock();
+
+	return lCommandId;
+}
+
+void* pmCommand::GetData()
+{
+	mResourceLock.Lock();
+
+	void* lCommandData = mCommandData;
+
+	mResourceLock.Unlock();
+
+	return lCommandData;
+}
+
+ulong pmCommand::GetDataLength()
+{
+	mResourceLock.Lock();
+
+	ulong lDataLength = mDataLength;
+
+	mResourceLock.Unlock();
+
+	return lDataLength;
+}
+
+pmStatus pmCommand::GetStatus()
+{
+	mResourceLock.Lock();
+
+	pmStatus lStatus = mStatus;
+
+	mResourceLock.Unlock();
+
+	return lStatus;
+}
+
 pmStatus pmCommand::SetData(void* pCommandData, ulong pDataLength)
 {
 	mResourceLock.Lock();
@@ -47,11 +91,11 @@ pmStatus pmCommand::WaitForFinish()
 		mResourceLock.Unlock();
 
 		mSignalWait->Wait();
+
+		return mStatus;
 	}
-	else
-	{
-		mResourceLock.Unlock();
-	}
+
+	mResourceLock.Unlock();
 
 	return pmSuccess;
 }

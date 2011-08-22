@@ -32,7 +32,8 @@ static const char* pmErrorMessages[] =
 	"PMLIB internal command object decoding failure",
 	"Internal failure in threading library",
 	"Failure in time measurement",
-	"Memory allocation/management failure"
+	"Memory allocation/management failure",
+	"Error in network communication"
 };
 
 const char* pmGetLastError()

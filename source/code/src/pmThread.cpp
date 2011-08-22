@@ -41,7 +41,8 @@ pmStatus pmPThread::ThreadCommandLoop()
 
 		mCondEnforcer = false;
 
-		mCommand->SetStatus( ThreadSwitchCallback(mCommand) );
+		if(mCommand)
+			mCommand->SetStatus( ThreadSwitchCallback(mCommand) );
 	}
 
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );

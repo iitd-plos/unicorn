@@ -51,9 +51,15 @@ pmMPI::pmMPI()
 
 	mTotalHosts = lHosts;
 	mHostId = lId;
+
+	MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN);
+
+	mDummyReceiveRequest = NULL;
+
+	SwitchThread(NULL);	// Create an infinite loop in a new thread
 }
 
-pmStatus pmMPI::Send(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmMPI::SendNonBlocking(pmCommunicatorCommand* pCommand, pmHardware pHardware)
 {
 	void* lData = pCommand->GetData();
 	ulong lLength = pCommand->GetDataLength();
@@ -66,25 +72,22 @@ pmStatus pmMPI::Send(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool
 	int lLastBlockLength = lLength - lBlocks * MPI_TRANSFER_MAX_LIMIT;
 
 	for(ulong i=0; i<lBlocks; ++i)
-		SendInternal(pCommand, (void*)((char*)lData + i*MPI_TRANSFER_MAX_LIMIT), MPI_TRANSFER_MAX_LIMIT, pHardware, pBlocking);
+		SendNonBlockingInternal(pCommand, (void*)((char*)lData + i*MPI_TRANSFER_MAX_LIMIT), MPI_TRANSFER_MAX_LIMIT, pHardware);
 
 	if(lLastBlockLength)
-		SendInternal(pCommand, (void*)((char*)lData + lBlocks*MPI_TRANSFER_MAX_LIMIT), lLastBlockLength, pHardware, pBlocking);
-
-	if(pBlocking)
-		SendComplete(pCommand, pmSuccess);
+		SendNonBlockingInternal(pCommand, (void*)((char*)lData + lBlocks*MPI_TRANSFER_MAX_LIMIT), lLastBlockLength, pHardware);
 
 	return pmSuccess;
 }
 
-pmStatus pmMPI::Broadcast(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmMPI::BroadcastNonBlocking(pmCommunicatorCommand* pCommand, pmHardware pHardware)
 {
 	// Call pmMPI::Send from here on MPI_COMM_WORLD or use an MPI API directly and add other code as in pmMPI::Send
 
 	return pmSuccess;
 }
 
-pmStatus pmMPI::Receive(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmMPI::ReceiveNonBlocking(pmCommunicatorCommand* pCommand, pmHardware pHardware)
 {
 	void* lData = pCommand->GetData();
 	ulong lLength = pCommand->GetDataLength();
@@ -97,66 +100,68 @@ pmStatus pmMPI::Receive(pmCommunicatorCommand* pCommand, pmHardware pHardware, b
 	int lLastBlockLength = lLength - lBlocks * MPI_TRANSFER_MAX_LIMIT;
 
 	for(ulong i=0; i<lBlocks; ++i)
-		ReceiveInternal(pCommand, (void*)((char*)lData + i*MPI_TRANSFER_MAX_LIMIT), MPI_TRANSFER_MAX_LIMIT, pHardware, pBlocking);
+		ReceiveNonBlockingInternal(pCommand, (void*)((char*)lData + i*MPI_TRANSFER_MAX_LIMIT), MPI_TRANSFER_MAX_LIMIT, pHardware);
 
 	if(lLastBlockLength)
-		ReceiveInternal(pCommand, (void*)((char*)lData + lBlocks*MPI_TRANSFER_MAX_LIMIT), lLastBlockLength, pHardware, pBlocking);
-
-	if(pBlocking)
-		ReceiveComplete(pCommand, pmSuccess);
+		ReceiveNonBlockingInternal(pCommand, (void*)((char*)lData + lBlocks*MPI_TRANSFER_MAX_LIMIT), lLastBlockLength, pHardware);
 
 	return pmSuccess;
 }
 
-pmStatus pmMPI::SendInternal(pmCommunicatorCommand* pCommand, void* pData, int pLength, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmMPI::SendNonBlockingInternal(pmCommunicatorCommand* pCommand, void* pData, int pLength, pmHardware pHardware)
 {
+	std::map<pmCommunicatorCommand*, int>::iterator lIter;
+
 	pCommand->MarkExecutionStart();
 
-	if(pBlocking)
-	{
-		//int lStatus = MPI_Send(pData, pLength, MPI_BYTE, lDest, lTag, lMpiComm);
-		// Throw from here if any error
-	}
-	else
-	{
-		MPI_Request* lRequest = NULL;
+	MPI_Request lRequest;
 	
-		//int lStatus = MPI_Isend(pData, pLength, MPI_BYTE, lDest, lTag, lMpiComm, lRequest);
-		// Throw from here if any error
+	//int lStatus = MPI_Isend(pData, pLength, MPI_BYTE, lDest, lTag, lMpiComm, &lRequest);
+	// Throw from here if any error
 
-		mResourceLock.Lock();
-		mNonBlockingRequestMap[lRequest] = pCommand;
-		mResourceLock.Unlock();
-	}
+	if(!lRequest)
+		throw pmNetworkException(pmNetworkException::SEND_ERROR);
 
-	// Call SendComplete and throw from here if any error
+	mResourceLock.Lock();
+	mNonBlockingRequestVector.push_back(std::pair<MPI_Request, pmCommunicatorCommand*>(lRequest, pCommand));
+	
+	std::map<pmCommunicatorCommand*, size_t>::iterator lIter = mRequestCountMap.find(pCommand);
+	if(lIter == mRequestCountMap.end())
+		mRequestCountMap[pCommand] = 0;
+	else
+		mRequestCountMap[pCommand] = mRequestCountMap[pCommand] + 1;
+
+	CancelDummyRequest();	// Signal the other thread to handle the created request
+
+	mResourceLock.Unlock();
 
 	return pmSuccess;
 }
 
-pmStatus pmMPI::ReceiveInternal(pmCommunicatorCommand* pCommand, void* pData, int pLength, pmHardware pHardware, bool pBlocking /* = false */)
+pmStatus pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommand* pCommand, void* pData, int pLength, pmHardware pHardware)
 {
 	pCommand->MarkExecutionStart();
 
-	if(pBlocking)
-	{
-		//MPI_Status lMpiStatus;
+	MPI_Request lRequest = NULL;
 
-		//int lStatus = MPI_Recv(pData, pLength, MPI_BYTE, lDest, lTag, lMpiComm, lMpiStatus);
-	}
+	//int lStatus = MPI_Irecv(pData, pLength, MPI_BYTE, lDest, lTag, lMpiComm, &lRequest);
+	// Throw from here if any error
+
+	if(!lRequest)
+		throw pmNetworkException(pmNetworkException::RECEIVE_ERROR);
+
+	mResourceLock.Lock();
+	mNonBlockingRequestVector.push_back(std::pair<MPI_Request, pmCommunicatorCommand*>(lRequest, pCommand));
+	
+	std::map<pmCommunicatorCommand*, size_t>::iterator lIter = mRequestCountMap.find(pCommand);
+	if(lIter == mRequestCountMap.end())
+		mRequestCountMap[pCommand] = 0;
 	else
-	{
-		MPI_Request* lRequest = NULL;
+		mRequestCountMap[pCommand] = mRequestCountMap[pCommand] + 1;
 
-		//int lStatus = MPI_Irecv(pData, pLength, MPI_BYTE, lDest, lTag, lMpiComm, lRequest);
-		// Throw from here if any error
+	CancelDummyRequest();	// Signal the other thread to handle the created request
 
-		mResourceLock.Lock();
-		mNonBlockingRequestMap[lRequest] = pCommand;
-		mResourceLock.Unlock();
-	}
-
-	// Call ReceiveComplete and throw from here if any error
+	mResourceLock.Unlock();
 
 	return pmSuccess;
 }
@@ -169,7 +174,7 @@ pmStatus pmMPI::SendComplete(pmCommunicatorCommand* pCommand, pmStatus pStatus)
 	pmDevicePool* lDevicePool;
 	SAFE_GET_DEVICE_POOL(lDevicePool);
 
-	lDevicePool->RegisterSendCompletion(lMachineId, pCommand->GetDataLength(), pCommand->GetExecutionTimeInSecs());
+	lDevicePool->RegisterSendCompletion(lDestMachineId, pCommand->GetDataLength(), pCommand->GetExecutionTimeInSecs());
 	*/
 
 	return pmSuccess;
@@ -183,8 +188,134 @@ pmStatus pmMPI::ReceiveComplete(pmCommunicatorCommand* pCommand, pmStatus pStatu
 	pmDevicePool* lDevicePool;
 	SAFE_GET_DEVICE_POOL(lDevicePool);
 
-	lDevicePool->RegisterReceiveCompletion(lMachineId, pCommand->GetDataLength(), pCommand->GetExecutionTimeInSecs());
+	lDevicePool->RegisterReceiveCompletion(lSourceMachineId, pCommand->GetDataLength(), pCommand->GetExecutionTimeInSecs());
 	*/
+
+	return pmSuccess;
+}
+
+/* Must be called with mResourceLock acquired */
+pmStatus pmMPI::SetupDummyRequest()
+{
+	if(!mDummyReceiveRequest)
+	{
+		void* lDummyBuffer;
+		if( MPI_Irecv(lDummyBuffer, 1, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, mDummyReceiveRequest) != MPI_SUCCESS )
+			throw pmNetworkException(pmNetworkException::DUMMY_REQUEST_CREATION_ERROR);
+	}
+
+	return pmSuccess;
+}
+
+/* Must be called with mResourceLock acquired */
+pmStatus pmMPI::CancelDummyRequest()
+{
+	if(mDummyReceiveRequest)
+	{
+		if( MPI_Cancel(mDummyReceiveRequest) != MPI_SUCCESS )
+			throw pmNetworkException(pmNetworkException::DUMMY_REQUEST_CANCEL_ERROR);
+	}
+
+	mDummyReceiveRequest = NULL;
+}
+
+pmStatus pmMPI::ThreadSwitchCallback(pmThreadCommand* pCommand)
+{
+	/* Do not use pCommand in this function as it is NULL (passed in the constructor above) */
+	
+	// This loop terminates with the pmThread's destruction
+	while(1)
+	{
+		mResourceLock.Lock();
+
+		SetupDummyRequest();
+
+		size_t lRequestCount = mNonBlockingRequestVector.size();
+		++lRequestCount; // Adding one for dummy request
+
+		MPI_Request* lRequestArray = new MPI_Request[lRequestCount];
+		
+		typedef pmCommunicatorCommand* pmCommunicatorCommandPtr;
+		pmCommunicatorCommandPtr* lCommandArray = new pmCommunicatorCommandPtr[lRequestCount];
+
+		lRequestArray[0] = *mDummyReceiveRequest;
+		lCommandArray[0] = NULL;
+
+		for(size_t i=0; i<lRequestCount-1; ++i)
+		{
+			lRequestArray[i+1] = mNonBlockingRequestVector[i].first;
+			lCommandArray[i+1] = mNonBlockingRequestVector[i].second;
+		}
+
+		mResourceLock.Unlock();
+
+		size_t lFinishingRequestIndex;
+		MPI_Status lFinishingRequestStatus;
+
+		if( MPI_Waitany(lRequestCount, lRequestArray, &lFinishingRequestIndex, &lFinishingRequestStatus) != MPI_SUCCESS )
+		{
+			delete[] lCommandArray;
+			delete[] lRequestArray;
+			throw pmNetworkException(pmNetworkException::WAIT_ERROR);
+		}
+
+		delete[] lRequestArray;
+
+		if(lFinishingRequestIndex == 0)		// Dummy Request
+		{
+			int lFlag = 0;
+			if( MPI_Test_cancelled(&lFinishingRequestStatus, &lFlag) != MPI_SUCCESS )
+			{
+				delete[] lCommandArray;
+				throw pmNetworkException(pmNetworkException::CANCELLATION_TEST_ERROR);
+			}
+
+			if(!lFlag)
+			{
+				delete[] lCommandArray;
+				throw pmNetworkException(pmNetworkException::INVALID_DUMMY_REQUEST_STATUS_ERROR);
+			}
+		}
+		else
+		{
+			pmCommunicatorCommand* lCommand = lCommandArray[lFinishingRequestIndex];
+			if(mRequestCountMap.find(lCommand) == mRequestCountMap.end())
+			{
+				delete[] lCommandArray;
+				throw pmFatalErrorException();
+			}
+
+			mRequestCountMap[lCommand] = mRequestCountMap[lCommand] - 1;
+			if(mRequestCountMap[lCommand] == 0)
+			{
+				ushort lCommandId = lCommand->GetId();
+
+				switch(lCommandId)
+				{
+					case pmCommunicatorCommand::SEND:
+					case pmCommunicatorCommand::BROADCAST:
+					{
+						SendComplete(lCommand, pmSuccess);
+						break;
+					}
+
+					case pmCommunicatorCommand::RECEIVE:
+					{
+						ReceiveComplete(lCommand, pmSuccess);
+						break;
+					}
+
+					default:
+					{
+						delete[] lCommandArray;
+						throw pmFatalErrorException();
+					}
+				}
+			}
+		}
+
+		delete[] lCommandArray;
+	}
 
 	return pmSuccess;
 }

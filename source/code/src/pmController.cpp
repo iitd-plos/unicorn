@@ -4,6 +4,8 @@
 #include "pmDevicePool.h"
 #include "pmNetwork.h"
 #include "pmMemoryManager.h"
+#include "pmTaskManager.h"
+#include "pmScheduler.h"
 
 namespace pm
 {
@@ -22,6 +24,8 @@ pmController* pmController::GetController()
 			|| !pmCommunicator::GetCommunicator()
 			|| !pmDevicePool::GetDevicePool()
 			|| !MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()
+			|| !pmTaskManager::GetTaskManager()
+			|| !pmScheduler::GetScheduler()
 			)
 				throw pmFatalErrorException();
 		}
@@ -32,6 +36,8 @@ pmController* pmController::GetController()
 
 pmStatus pmController::DestroyController()
 {
+	SAFE_DESTROY(pmScheduler::GetScheduler(), DestroyScheduler);
+	SAFE_DESTROY(pmTaskManager::GetTaskManager(), DestroyTaskManager);
 	SAFE_DESTROY(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager(), DestroyMemoryManager);
 	SAFE_DESTROY(pmDevicePool::GetDevicePool(), DestroyDevicePool);
 	SAFE_DESTROY(pmCommunicator::GetCommunicator(), DestroyCommunicator);
@@ -47,7 +53,10 @@ pmStatus pmController::CreateAndInitializeController()
 {
 	mController = new pmController();
 
-	return pmSuccess;
+	if(mController)
+		return pmSuccess;
+
+	return pmFatalError;
 }
 
 pmStatus pmController::FetchMemoryRegion(void* pStartAddress, size_t pOffset, size_t pLength)

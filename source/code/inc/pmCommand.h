@@ -33,10 +33,10 @@ class pmCommand
 
 		virtual bool IsValid() = 0;
 
-		virtual ushort GetId() {return mCommandId;}
-		virtual void* GetData() {return mCommandData;}
-		virtual ulong GetDataLength() {return mDataLength;}
-		virtual pmStatus GetStatus() {return mStatus;}
+		virtual ushort GetId();
+		virtual void* GetData();
+		virtual ulong GetDataLength();
+		virtual pmStatus GetStatus();
 
 		virtual pmStatus SetData(void* pCommandData, ulong pDataLength);
 		virtual pmStatus SetStatus(pmStatus pStatus);
@@ -59,7 +59,7 @@ class pmCommand
 	protected:
 		ushort mCommandId;
 		void* mCommandData;
-		ulong mDataLength;
+		size_t mDataLength;
 		pmStatus mStatus;
 		pmSignalWait* mSignalWait;
 	
@@ -72,7 +72,9 @@ class pmCommunicatorCommand : public pmCommand
 	public:
 		typedef enum pmCommunicatorCommands
 		{
-			NETWORK_COMMUNICATION_COMMAND,
+			SEND,
+			RECEIVE,
+			BROADCAST,
 			MAX_COMMUNICATOR_COMMANDS
 		} pmCommunicatorCommands;
 

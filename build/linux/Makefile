@@ -48,16 +48,18 @@ OBJECTS= $(OUTDIR)/pmCluster.o \
 	 $(OUTDIR)/pmCommunicator.o \
 	 $(OUTDIR)/pmController.o \
 	 $(OUTDIR)/pmDevicePool.o \
+	 $(OUTDIR)/pmExecutionStub.o \
+	 $(OUTDIR)/pmMemoryManager.o \
 	 $(OUTDIR)/pmNetwork.o \
 	 $(OUTDIR)/pmPublicDefinitions.o \
 	 $(OUTDIR)/pmResourceLock.o \
 	 $(OUTDIR)/pmSafePriorityQueue.o \
-	 $(OUTDIR)/pmSignalWait.o \
-	 $(OUTDIR)/pmThread.o \
-	 $(OUTDIR)/pmTimer.o \
-	 $(OUTDIR)/pmMemoryManager.o \
 	 $(OUTDIR)/pmScheduler.o \
-	 $(OUTDIR)/pmTaskManager.o
+	 $(OUTDIR)/pmSignalWait.o \
+	 $(OUTDIR)/pmTask.o \
+	 $(OUTDIR)/pmTaskManager.o \
+	 $(OUTDIR)/pmThread.o \
+	 $(OUTDIR)/pmTimer.o
 
 INCLUDES= -I../../source/code/inc $(MPI_INCLUDE)
 #INCLUDES += -I/usr/local/cuda/include

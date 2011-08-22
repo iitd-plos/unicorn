@@ -3,33 +3,32 @@
 #define __PM_SCHEDULER__
 
 #include "pmInternalDefinitions.h"
+#include "pmThread.h"
 
 namespace pm
 {
 
+class pmThreadCommand;
+
 /**
- * \brief The task scheduler
- * An instance of this scheduler runs on all machines
-*/
-class pmScheduler
+ * \brief This class schedules, load balances and executes all tasks on this machine.
+ * Only one object of this class is created for each machine. This class is thread safe.
+ */
+
+class pmScheduler : public THREADING_IMPLEMENTATION_CLASS
 {
 	public:
-		static pmScheduler* GetScheduler
-			();
-		pmStatus DestroyController();
+		static pmScheduler* GetScheduler();
+		pmStatus DestroyScheduler();
 
-		pmStatus FetchMemoryRegion(void* pStartAddress, size_t pOffset, size_t pLength);
+		pmStatus SubmitTask();
 
-		pmStatus SetLastErrorCode(uint pErrorCode) {mLastErrorCode = pErrorCode; return pmSuccess;}
-		uint GetLastErrorCode() {return mLastErrorCode;}
+		virtual pmStatus ThreadSwitchCallback(pmThreadCommand* pCommand);
 
 	private:
-		pmController() {mLastErrorCode = 0;}
-	
-		static pmStatus CreateAndInitializeController();
+		pmScheduler();
 
-		static pmController* mController;
-		uint mLastErrorCode;
+		static pmScheduler* mScheduler;
 };
 
 } // end namespace pm

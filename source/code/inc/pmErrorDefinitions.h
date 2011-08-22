@@ -114,6 +114,28 @@ namespace pm
 			failureTypes mFailureId;
 	};
 
+	class pmNetworkException : public pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				SEND_ERROR,
+				RECEIVE_ERROR,
+				STATUS_TEST_ERROR,
+				DUMMY_REQUEST_CREATION_ERROR,
+				WAIT_ERROR,
+				CANCELLATION_TEST_ERROR,
+				INVALID_DUMMY_REQUEST_STATUS_ERROR,
+				DUMMY_REQUEST_CANCEL_ERROR
+			} failureTypes;
+
+			pmNetworkException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmNetworkError;}
+
+		private:
+			failureTypes mFailureId;
+	};
+
 } // end namespace pm
 
 #endif

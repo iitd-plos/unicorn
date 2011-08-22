@@ -86,12 +86,14 @@
     <ClCompile Include="..\..\..\code\src\pmCommunicator.cpp" />
     <ClCompile Include="..\..\..\code\src\pmController.cpp" />
     <ClCompile Include="..\..\..\code\src\pmDevicePool.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmExecutionStub.cpp" />
     <ClCompile Include="..\..\..\code\src\pmNetwork.cpp" />
     <ClCompile Include="..\..\..\code\src\pmPublicDefinitions.cpp" />
     <ClCompile Include="..\..\..\code\src\pmResourceLock.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSafePriorityQueue.cpp" />
     <ClCompile Include="..\..\..\code\src\pmScheduler.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSignalWait.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmTask.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTaskManager.cpp" />
     <ClCompile Include="..\..\..\code\src\pmThread.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTimer.cpp" />
@@ -105,6 +107,7 @@
     <ClInclude Include="..\..\..\code\inc\pmDataTypes.h" />
     <ClInclude Include="..\..\..\code\inc\pmDevicePool.h" />
     <ClInclude Include="..\..\..\code\inc\pmErrorDefinitions.h" />
+    <ClInclude Include="..\..\..\code\inc\pmExecutionStub.h" />
     <ClInclude Include="..\..\..\code\inc\pmInternalDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmNetwork.h" />
     <ClInclude Include="..\..\..\code\inc\pmPublicDefinitions.h" />
@@ -112,6 +115,7 @@
     <ClInclude Include="..\..\..\code\inc\pmSafePriorityQueue.h" />
     <ClInclude Include="..\..\..\code\inc\pmScheduler.h" />
     <ClInclude Include="..\..\..\code\inc\pmSignalWait.h" />
+    <ClInclude Include="..\..\..\code\inc\pmTask.h" />
     <ClInclude Include="..\..\..\code\inc\pmTaskManager.h" />
     <ClInclude Include="..\..\..\code\inc\pmThread.h" />
     <ClInclude Include="..\..\..\code\inc\pmTimer.h" />

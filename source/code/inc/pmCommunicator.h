@@ -17,28 +17,12 @@ class pmThreadCommand;
  * different machines. All PMLIB components (like scheduler) talk to pmController which sends pmCommands
  * to other pmControllers using pmCommunicator's API. pmCommunicator only allows pmCommand objects to be
  * sent or received by various pmControllers. This is a per machine singleton class i.e. only one instance
- * of pmCommunicator exists on each machine. All pmCommunicators run in a separate thread.
+ * of pmCommunicator exists on each machine.
 */
 
-class pmCommunicator: public THREADING_IMPLEMENTATION_CLASS
+class pmCommunicator
 {
 	public:
-		typedef enum internalIdentifier
-		{
-			SEND,
-			BROADCAST,
-			RECEIVE,
-			MAX_IDENTIFIER_COMMANDS
-		} internalIdentifier;
-
-		typedef struct commandWrapper
-		{
-			internalIdentifier id;
-			pmHardware hardware;
-			bool blocking;
-			pmCommunicatorCommand* communicatorCommand;
-		} commandWrapper;
-
 		static pmCommunicator* GetCommunicator();
 		pmStatus DestroyCommunicator();
 
@@ -46,16 +30,8 @@ class pmCommunicator: public THREADING_IMPLEMENTATION_CLASS
 		pmStatus Broadcast(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
 		pmStatus Receive(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
 
-		pmStatus BuildThreadCommand(pmCommunicatorCommand* pCommunicatorCommand, pmThreadCommand* pThreadCommand, internalIdentifier pId, pmHardware pHardware, bool pBlocking);
-
-		virtual pmStatus ThreadSwitchCallback(pmThreadCommand* pThreadCommand);
-
 	private:
 		pmCommunicator();
-
-		pmStatus SendInternal(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
-		pmStatus BroadcastInternal(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
-		pmStatus ReceiveInternal(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
 
 		static pmCommunicator* mCommunicator;
 };
