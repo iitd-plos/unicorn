@@ -7,6 +7,10 @@
 namespace pm
 {
 
+class pmMemSection;
+class pmCluster;
+class pmCallbackChain;
+
 /**
  * \brief The representation of a parallel task.
  */
@@ -18,6 +22,13 @@ class pmTask
 		~pmTask();
 
 	private:
+		pmHardware mOriginatingHost;
+		pmMemSection mMemRO;
+		pmMemSection mMemRW;
+		ulong mSubtaskCount;
+		pmCluster mCluster;
+		pmCallbackChain mChain;
+		ushort mPriority;
 };
 
 } // end namespace pm

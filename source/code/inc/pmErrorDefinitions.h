@@ -136,6 +136,21 @@ namespace pm
 			failureTypes mFailureId;
 	};
 
+	class pmCallbackException : public pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				INVALID_CHAIN_INDEX
+			} failureTypes;
+
+			pmCallbackException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmInvalidIndex;}
+
+		private:
+			failureTypes mFailureId;
+	};
+
 } // end namespace pm
 
 #endif

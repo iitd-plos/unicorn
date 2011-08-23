@@ -81,12 +81,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\..\code\src\pmCallback.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmCallbackChain.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmCallbackUnit.cpp" />
     <ClCompile Include="..\..\..\code\src\pmCluster.cpp" />
     <ClCompile Include="..\..\..\code\src\pmCommand.cpp" />
     <ClCompile Include="..\..\..\code\src\pmCommunicator.cpp" />
     <ClCompile Include="..\..\..\code\src\pmController.cpp" />
     <ClCompile Include="..\..\..\code\src\pmDevicePool.cpp" />
     <ClCompile Include="..\..\..\code\src\pmExecutionStub.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmMemSection.cpp" />
     <ClCompile Include="..\..\..\code\src\pmNetwork.cpp" />
     <ClCompile Include="..\..\..\code\src\pmPublicDefinitions.cpp" />
     <ClCompile Include="..\..\..\code\src\pmResourceLock.cpp" />
@@ -100,6 +104,9 @@
     <ClCompile Include="..\..\..\code\src\pmMemoryManager.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\..\code\inc\pmCallback.h" />
+    <ClInclude Include="..\..\..\code\inc\pmCallbackChain.h" />
+    <ClInclude Include="..\..\..\code\inc\pmCallbackUnit.h" />
     <ClInclude Include="..\..\..\code\inc\pmCluster.h" />
     <ClInclude Include="..\..\..\code\inc\pmCommand.h" />
     <ClInclude Include="..\..\..\code\inc\pmCommunicator.h" />
@@ -109,6 +116,7 @@
     <ClInclude Include="..\..\..\code\inc\pmErrorDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmExecutionStub.h" />
     <ClInclude Include="..\..\..\code\inc\pmInternalDefinitions.h" />
+    <ClInclude Include="..\..\..\code\inc\pmMemSection.h" />
     <ClInclude Include="..\..\..\code\inc\pmNetwork.h" />
     <ClInclude Include="..\..\..\code\inc\pmPublicDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmResourceLock.h" />

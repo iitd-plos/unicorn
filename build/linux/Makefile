@@ -43,13 +43,17 @@ else
 	PROGRAM=$(OUTDIR)/libpmlib.so
 endif
 
-OBJECTS= $(OUTDIR)/pmCluster.o \
+OBJECTS= $(OUTDIR)/pmCallback.o \
+	 $(OUTDIR)/pmCallbackChain.o \
+	 $(OUTDIR)/pmCallbackUnit.o \
+	 $(OUTDIR)/pmCluster.o \
 	 $(OUTDIR)/pmCommand.o \
 	 $(OUTDIR)/pmCommunicator.o \
 	 $(OUTDIR)/pmController.o \
 	 $(OUTDIR)/pmDevicePool.o \
 	 $(OUTDIR)/pmExecutionStub.o \
 	 $(OUTDIR)/pmMemoryManager.o \
+	 $(OUTDIR)/pmMemSection.o \
 	 $(OUTDIR)/pmNetwork.o \
 	 $(OUTDIR)/pmPublicDefinitions.o \
 	 $(OUTDIR)/pmResourceLock.o \
