@@ -32,10 +32,10 @@ pmStatus pmPThread::SwitchThread(pmThreadCommand* pCommand)
 
 pmStatus pmPThread::ThreadCommandLoop()
 {
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_LOCK_FAILURE );
-
 	while(1)
 	{
+		THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_LOCK_FAILURE );
+	
 		while(!mCondEnforcer)
 			THROW_ON_NON_ZERO_RET_VAL( pthread_cond_wait(&mCondVariable, &mMutex), pmThreadFailureException, pmThreadFailureException::COND_VAR_WAIT_FAILURE );
 
@@ -43,9 +43,9 @@ pmStatus pmPThread::ThreadCommandLoop()
 
 		if(mCommand)
 			mCommand->SetStatus( ThreadSwitchCallback(mCommand) );
-	}
 
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
+		THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
+	}
 
 	return pmSuccess;
 }

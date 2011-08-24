@@ -7,6 +7,8 @@
 namespace pm
 {
 
+class pmTask;
+
 /**
  * \brief This class manages all tasks executing on this machine. A task may originate locally or remotely.
  * Only one object of this class is created for each machine. This class is thread safe.

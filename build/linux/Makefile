@@ -60,6 +60,7 @@ OBJECTS= $(OUTDIR)/pmCallback.o \
 	 $(OUTDIR)/pmSafePriorityQueue.o \
 	 $(OUTDIR)/pmScheduler.o \
 	 $(OUTDIR)/pmSignalWait.o \
+	 $(OUTDIR)/pmStubManager.o \
 	 $(OUTDIR)/pmTask.o \
 	 $(OUTDIR)/pmTaskManager.o \
 	 $(OUTDIR)/pmThread.o \

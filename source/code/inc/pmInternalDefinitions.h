@@ -43,6 +43,9 @@
 
 #define MPI_TRANSFER_MAX_LIMIT __MAX(int)
 
+#define MAX_PRIORITY_LEVEL 0
+#define MIN_PRIORITY_LEVEL __MAX(ushort)
+
 #define NETWORK_THREAD_SLEEP_TIME 1000	// in ms
 
 #define TRACK_MEMORY_ALLOCATIONS

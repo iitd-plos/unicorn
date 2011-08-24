@@ -34,7 +34,7 @@ class pmCallback
 		ushort mCallbackType;
 };
 
-static pmCallback PM_CALLBACK_NOP(pmCallback::NOP);		/* The NULL callback */
+extern pmCallback PM_CALLBACK_NOP;		/* The NULL callback */
 
 class pmPreSubtaskCB : public pmCallback
 {

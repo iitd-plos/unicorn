@@ -23,8 +23,9 @@ class pmCluster
 		
 
 	private:
-		pmCluster* mGlobalCluster;
 };
+
+extern pmCluster PM_GLOBAL_CLUSTER;	/* The cluster of all machines */
 
 class pmMPICluster : public pmCluster
 {

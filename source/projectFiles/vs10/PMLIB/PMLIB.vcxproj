@@ -97,6 +97,7 @@
     <ClCompile Include="..\..\..\code\src\pmSafePriorityQueue.cpp" />
     <ClCompile Include="..\..\..\code\src\pmScheduler.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSignalWait.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmStubManager.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTask.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTaskManager.cpp" />
     <ClCompile Include="..\..\..\code\src\pmThread.cpp" />
@@ -115,6 +116,7 @@
     <ClInclude Include="..\..\..\code\inc\pmDevicePool.h" />
     <ClInclude Include="..\..\..\code\inc\pmErrorDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmExecutionStub.h" />
+    <ClInclude Include="..\..\..\code\inc\pmStubManager.h" />
     <ClInclude Include="..\..\..\code\inc\pmInternalDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmMemSection.h" />
     <ClInclude Include="..\..\..\code\inc\pmNetwork.h" />

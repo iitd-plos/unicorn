@@ -89,7 +89,7 @@ class pmThreadCommand : public pmCommand
 	public:
 		typedef enum pmThreadCommands
 		{
-			CONTROLLER_COMMAND_WRAPPER,
+			STUB_COMMAND_WRAPPER,
 			MAX_THREAD_COMMANDS
 		} pmThreadCommands;
 
