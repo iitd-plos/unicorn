@@ -26,7 +26,7 @@ template<typename T>
 bool operator< (const pair<ushort, T>& pData1, const pair<ushort, T>& pData2);
 
 template<typename T>
-class pmSafePQ
+class pmSafePQ : public pmBase
 {
 	public:
 		typedef pair<ushort, T> PQDT;

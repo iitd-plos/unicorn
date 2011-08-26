@@ -2,11 +2,15 @@
 #ifndef __PM_INTERNAL_DEFINITIONS__
 #define __PM_INTERNAL_DEFINITIONS__
 
-#include "pmErrorDefinitions.h"
+#include "pmBase.h"
 #include "pmDataTypes.h"
 
 #include <stdio.h>
 #include <iostream>
+
+#define SYSTEM_CONFIGURATION_HEADER <unistd.h>
+
+#define SUPPORT_CUDA
 
 /** 
  * The actual implementations to be used in the build for abstract factory based classes

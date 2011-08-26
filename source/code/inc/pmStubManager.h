@@ -15,20 +15,34 @@ class pmExecutionStub;
  * \brief The representation of a parallel task.
  */
 
-class pmStubManager
+class pmStubManager : public pmBase
 {
 	public:
+		static pmStubManager* GetStubManager();
+		pmStatus DestroyStubManager();
+
+		size_t GetProcessingElementsCPU();
+		size_t GetProcessingElementsGPU();
+		size_t GetStubCount();
+
+		pmExecutionStub* GetStubAtIndex(ulong pIndex);
+
+	private:
 		pmStubManager();
 		~pmStubManager();
 
-		ulong GetStubCount();
-		pmExecutionStub* GetStubAtIndex(ulong Index);
-
-	private:
 		pmStatus CreateExecutionStubs();
 		pmStatus DestroyExecutionStubs();
 
+		pmStatus CountAndProbeProcessingElements();
+
 		std::vector<pmExecutionStub*> mStubVector;
+		
+		size_t mProcessingElementsCPU;
+		size_t mProcessingElementsGPU;
+		size_t mStubCount;
+
+		static pmStubManager* mStubManager;
 };
 
 } // end namespace pm

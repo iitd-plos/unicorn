@@ -87,6 +87,15 @@
     <ClCompile Include="..\..\..\code\src\pmStubManager.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\..\code\src\pmBase.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\code\src\pmDispatcherGPU.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\..\code\src\pmLogger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\..\code\inc\pmCluster.h">
@@ -164,10 +173,22 @@
     <ClInclude Include="..\..\..\code\inc\pmStubManager.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\..\code\inc\pmBase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\inc\pmDispatcherGPU.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\..\code\inc\pmLogger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\..\..\build\linux\Makefile">
       <Filter>Build Files\Linux</Filter>
+    </None>
+    <None Include="..\..\..\code\src\pmDispatcherCUDA.cu">
+      <Filter>Source Files</Filter>
     </None>
   </ItemGroup>
 </Project>

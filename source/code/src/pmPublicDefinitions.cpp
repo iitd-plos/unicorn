@@ -3,6 +3,7 @@
 #include "pmErrorDefinitions.h"
 
 #include "pmController.h"
+#include "pmLogger.h"
 
 namespace pm
 {
@@ -33,7 +34,9 @@ static const char* pmErrorMessages[] =
 	"Internal failure in threading library",
 	"Failure in time measurement",
 	"Memory allocation/management failure",
-	"Error in network communication"
+	"Error in network communication",
+	"Minor problem. Exceution can continue.",
+	"Problem with GPU card or driver software"
 };
 
 const char* pmGetLastError()
@@ -59,6 +62,9 @@ const char* pmGetLastError()
 
 pmStatus pmInitialize()
 {
+	pmStatus lStatus = pmSuccess;
+
+
 	try
 	{
 		pmController* lController;
@@ -66,10 +72,12 @@ pmStatus pmInitialize()
 	}
 	catch(pmException& e)
 	{
-		return e.GetStatusCode();
+		lStatus = e.GetStatusCode();
+		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::ERROR, pmErrorMessages[lStatus]);
+		return lStatus;
 	}
 
-	return pmSuccess;
+	return lStatus;
 }
 
 pmStatus pmFinalize()
@@ -85,7 +93,9 @@ pmStatus pmFinalize()
 	}
 	catch(pmException& e)
 	{
-		return e.GetStatusCode();
+		lStatus = e.GetStatusCode();
+		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::ERROR, pmErrorMessages[lStatus]);
+		return lStatus;
 	}
 
 	return lStatus;

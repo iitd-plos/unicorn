@@ -95,7 +95,7 @@ namespace pm
 			failureTypes mFailureId;
 	};
 
-	class pmMemoryException : public pmException
+	class pmVirtualMemoryException : public pmException
 	{
 		public:
 			typedef enum failureTypes
@@ -107,7 +107,7 @@ namespace pm
 				SEGFAULT_HANDLER_UNINSTALL_FAILED
 			} failureTypes;
 
-			pmMemoryException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmVirtualMemoryException(failureTypes pFailureId) {mFailureId = pFailureId;}
 			pmStatus GetStatusCode() {return pmMemoryError;}
 
 		private:
@@ -148,6 +148,67 @@ namespace pm
 			pmStatus GetStatusCode() {return pmInvalidIndex;}
 
 		private:
+			failureTypes mFailureId;
+	};
+
+	class pmStubException : public pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				INVALID_STUB_INDEX
+			} failureTypes;
+
+			pmStubException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmInvalidIndex;}
+
+		private:
+			failureTypes mFailureId;
+	};
+
+	class pmOutOfMemoryException : public pmException
+	{
+		public:
+			pmOutOfMemoryException() {}
+			pmStatus GetStatusCode() {return pmMemoryError;}
+
+		private:
+	};
+
+	class pmIgnorableException : public pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				LIBRARY_CLOSE_FAILURE
+			} failureTypes;
+
+			pmIgnorableException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmIgnorableError;}
+
+		private:
+			failureTypes mFailureId;
+	};
+
+	class pmExceptionGPU : public pmException
+	{
+		public:
+			typedef enum gpuTypes
+			{
+				NVIDIA_CUDA
+			} gpuTypes;
+
+			typedef enum failureTypes
+			{
+				LIBRARY_OPEN_FAILURE,
+				RUNTIME_ERROR
+			} failureTypes;
+
+			pmExceptionGPU(gpuTypes pIdGPU, failureTypes pFailureId) {mIdGPU = pIdGPU; mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmGraphicsCardError;}
+
+		private:
+			gpuTypes mIdGPU;
 			failureTypes mFailureId;
 	};
 

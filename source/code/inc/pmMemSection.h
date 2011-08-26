@@ -11,7 +11,7 @@ namespace pm
  * \brief Encapsulation of task memory
  */
 
-class pmMemSection
+class pmMemSection : public pmBase
 {
 	public:
 		pmMemSection();

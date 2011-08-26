@@ -12,7 +12,7 @@ namespace pm
 * \brief The set defining all callbacks applicable to a task 
 */
 
-class pmCallbackUnit
+class pmCallbackUnit : public pmBase
 {
 	public:
 		pmCallbackUnit(pmPreSubtaskCB pPreSubtaskCB, pmSubtaskCB pSubtaskCB, pmReductionCB pReductionCB, pmDeviceSelectionCB pDeviceSelectionCB,

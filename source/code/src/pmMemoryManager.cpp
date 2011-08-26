@@ -39,7 +39,7 @@ void* pmLinuxMemoryManager::AllocateMemory(size_t pLength)
 	void* lPtr = ::malloc(pLength);
 
 	if(!lPtr)
-		throw pmMemoryException(pmMemoryException::ALLOCATION_FAILED);
+		throw pmVirtualMemoryException(pmVirtualMemoryException::ALLOCATION_FAILED);
 
 	return lPtr;
 }
@@ -51,12 +51,12 @@ void* pmLinuxMemoryManager::AllocateLazyMemory(size_t pLength)
 	void* lPtr = NULL;
 	void** lRef = (void**)(&lPtr);
 	if(::posix_memalign(lRef, lPageSize, pLength) != 0)
-		throw pmMemoryException(pmMemoryException::MEM_ALIGN_FAILED);
+		throw pmVirtualMemoryException(pmVirtualMemoryException::MEM_ALIGN_FAILED);
 
 	if(::mprotect(lPtr, pLength, PROT_NONE) != 0)
 	{
 		::free(lPtr);
-		throw pmMemoryException(pmMemoryException::MEM_PROT_NONE_FAILED);
+		throw pmVirtualMemoryException(pmVirtualMemoryException::MEM_PROT_NONE_FAILED);
 	}
 
 	mLazyMemoryMap[lPtr] = pLength;
@@ -155,7 +155,7 @@ pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
 	lSigAction.sa_sigaction = SegFaultHandler;
 
 	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
-		throw pmMemoryException(pmMemoryException::SEGFAULT_HANDLER_INSTALL_FAILED);
+		throw pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_INSTALL_FAILED);
 
 	return pmSuccess;
 }
@@ -169,7 +169,7 @@ pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
 	lSigAction.sa_sigaction = SIG_DFL;
 
 	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
-		throw pmMemoryException(pmMemoryException::SEGFAULT_HANDLER_UNINSTALL_FAILED);
+		throw pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_UNINSTALL_FAILED);
 
 	return pmSuccess;
 }

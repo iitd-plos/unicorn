@@ -14,11 +14,6 @@ pmExecutionStub::~pmExecutionStub()
 {
 }
 
-bool pmExecutionStub::IsProcessingElementFree()
-{
-	return mSignalWait.IsWaiting();
-}
-
 pmStatus pmExecutionStub::Execute(pmScheduler::subtaskRange pRange)
 {
 	pmScheduler::subtaskRange* lRange = new pmScheduler::subtaskRange(pRange);
@@ -30,8 +25,6 @@ pmStatus pmExecutionStub::Execute(pmScheduler::subtaskRange pRange)
 pmStatus pmExecutionStub::ThreadSwitchCallback(pmThreadCommand* pCommand)
 {
 	pmScheduler::subtaskRange* lRange = (pmScheduler::subtaskRange*)(pCommand->GetData());
-
-	mSignalWait.Wait();
 
 	delete lRange;
 	delete pCommand;

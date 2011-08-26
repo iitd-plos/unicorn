@@ -26,7 +26,7 @@ namespace pm
  * \brief Memory Management Routines and Virtual Memory Optimizations
  * This class provides an implementation of lazy arrays which fill their VM pages on access.
 */
-class pmMemoryManager
+class pmMemoryManager : public pmBase
 {
 	public:
 		virtual pmStatus DestroyMemoryManager() = 0;

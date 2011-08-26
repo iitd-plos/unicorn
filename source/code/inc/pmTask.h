@@ -16,7 +16,7 @@ class pmCallbackChain;
  * \brief The representation of a parallel task.
  */
 
-class pmTask
+class pmTask : public pmBase
 {
 	public:
 		pmTask(pmMemSection pMemRO, pmMemSection pMemRW, ulong pSubtaskCount, pmCallbackChain pChain, pmHardware pOriginatingHost = pmNetwork::GetNetwork()->GetHostId(),

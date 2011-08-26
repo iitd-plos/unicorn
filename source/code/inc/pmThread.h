@@ -28,7 +28,7 @@ void* ThreadLoop(void* pThreadData);
  * the first one returns.
 */
 
-class pmThread
+class pmThread : public pmBase
 {
 	public:
 		virtual pmStatus SwitchThread(pmThreadCommand* pCommand) = 0;

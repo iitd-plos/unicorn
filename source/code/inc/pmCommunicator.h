@@ -20,7 +20,7 @@ class pmThreadCommand;
  * of pmCommunicator exists on each machine.
 */
 
-class pmCommunicator
+class pmCommunicator : public pmBase
 {
 	public:
 		static pmCommunicator* GetCommunicator();

@@ -6,6 +6,9 @@
 #include "pmMemoryManager.h"
 #include "pmTaskManager.h"
 #include "pmScheduler.h"
+#include "pmDispatcherGPU.h"
+#include "pmStubManager.h"
+#include "pmLogger.h"
 
 namespace pm
 {
@@ -20,12 +23,15 @@ pmController* pmController::GetController()
 	{
 		if(CreateAndInitializeController() == pmSuccess)
 		{
-			if(!NETWORK_IMPLEMENTATION_CLASS::GetNetwork() 
+			if(!pmDispatcherGPU::GetDispatcherGPU()
+			|| !pmStubManager::GetStubManager()
+			|| !NETWORK_IMPLEMENTATION_CLASS::GetNetwork() 
 			|| !pmCommunicator::GetCommunicator()
 			|| !pmDevicePool::GetDevicePool()
 			|| !MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()
 			|| !pmTaskManager::GetTaskManager()
 			|| !pmScheduler::GetScheduler()
+			|| !pmLogger::GetLogger()
 			)
 				throw pmFatalErrorException();
 		}
@@ -36,12 +42,15 @@ pmController* pmController::GetController()
 
 pmStatus pmController::DestroyController()
 {
+	SAFE_DESTROY(pmLogger::GetLogger(), DestroyLogger);
 	SAFE_DESTROY(pmScheduler::GetScheduler(), DestroyScheduler);
 	SAFE_DESTROY(pmTaskManager::GetTaskManager(), DestroyTaskManager);
 	SAFE_DESTROY(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager(), DestroyMemoryManager);
 	SAFE_DESTROY(pmDevicePool::GetDevicePool(), DestroyDevicePool);
 	SAFE_DESTROY(pmCommunicator::GetCommunicator(), DestroyCommunicator);
 	SAFE_DESTROY(NETWORK_IMPLEMENTATION_CLASS::GetNetwork(), DestroyNetwork);
+	SAFE_DESTROY(pmStubManager::GetStubManager(), DestroyStubManager);
+	SAFE_DESTROY(pmDispatcherGPU::GetDispatcherGPU(), DestroyDispatcherGPU);
 	
 	delete mController;
 	mController = NULL;

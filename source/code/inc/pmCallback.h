@@ -11,7 +11,7 @@ namespace pm
  * \brief The user callback for a task (wrapper for DataDistribution (PreSubtask, PostSubtask), Subtask, DeviceSelection, DataTransfer, etc. callbacks)
  */
 
-class pmCallback
+class pmCallback : public pmBase
 {
 	public:
 		typedef enum callbackType

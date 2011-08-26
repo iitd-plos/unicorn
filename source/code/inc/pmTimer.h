@@ -13,7 +13,7 @@ namespace pm
  * \brief A mechanism to find elapsed time between two events.
 */
 
-class pmTimer
+class pmTimer : public pmBase
 {
 	public:
 		typedef enum timerState

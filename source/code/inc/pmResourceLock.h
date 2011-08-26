@@ -16,7 +16,7 @@ namespace pm
  * guard all accesses to shared resources inside Lock/Unlock calls.
 */
 
-class pmResourceLock
+class pmResourceLock : public pmBase
 {
 	public:
 		virtual pmStatus Lock() = 0;

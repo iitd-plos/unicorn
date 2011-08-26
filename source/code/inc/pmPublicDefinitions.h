@@ -27,6 +27,8 @@ namespace pm
 		pmTimerFailure,
 		pmMemoryError,
 		pmNetworkError,
+		pmIgnorableError,
+		pmGraphicsCardError,
 		pmMaxStatusValues
 	} pmStatus;
 

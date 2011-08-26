@@ -24,7 +24,7 @@ namespace pm
  * 7. Number of data send events from the machine
  * 8. Number of data receive events to the machine
 */
-class pmDevicePool
+class pmDevicePool : public pmBase
 {
 	public:
 		typedef struct pmMachineData

@@ -30,7 +30,7 @@ class pmSignalWait;
  * Only one instance of pmNetwork class is created on each machine.
 */
 
-class pmNetwork
+class pmNetwork : public pmBase
 {
 	public:
 		virtual pmStatus SendNonBlocking(pmCommunicatorCommand* pCommand, pmHardware pHardware) = 0;

@@ -15,7 +15,7 @@ namespace pm
  * The faulting machines will not be considered by PMLIB for task execution. Once pmController's are created
  * all services are setup and managed by it. The controllers shut down when application finalizes the library.
 */
-class pmController
+class pmController : public pmBase
 {
 	public:
 		static pmController* GetController();

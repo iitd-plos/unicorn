@@ -14,7 +14,7 @@ class pmTask;
  * Only one object of this class is created for each machine. This class is thread safe.
  */
 
-class pmTaskManager
+class pmTaskManager : public pmBase
 {
 	public:
 		static pmTaskManager* GetTaskManager();

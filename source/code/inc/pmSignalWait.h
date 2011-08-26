@@ -13,7 +13,7 @@ namespace pm
  * \brief An implementation of wait and signal mechanism.
 */
 
-class pmSignalWait
+class pmSignalWait : public pmBase
 {
 	public:
 		virtual pmStatus Wait() = 0;

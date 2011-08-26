@@ -17,7 +17,7 @@ namespace pm
  * other clusters.
 */
 
-class pmCluster
+class pmCluster : public pmBase
 {
 	public:
 		

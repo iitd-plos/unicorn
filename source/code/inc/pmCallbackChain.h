@@ -13,7 +13,7 @@ class pmCallbackUnit;
  * \brief The list of callbacks to be called for the task.
  */
 
-class pmCallbackChain
+class pmCallbackChain : public pmBase
 {
 	public:
 		pmCallbackChain(uint pChainLength, pmCallbackUnit* pCallbackUnits);

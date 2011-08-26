@@ -22,7 +22,6 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS
 		pmExecutionStub();
 		~pmExecutionStub();
 
-		virtual bool IsProcessingElementFree();
 		virtual pmStatus Execute(pmScheduler::subtaskRange pRange);
 
 		virtual pmStatus ThreadSwitchCallback(pmThreadCommand* pCommand);

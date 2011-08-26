@@ -26,7 +26,7 @@ class pmSignalWait;
  * up any awaiting threads.
 */
 
-class pmCommand
+class pmCommand : public pmBase
 {
 	public:
 		pmCommand(ushort pCommandId, void* pCommandData = NULL, ulong pDataLength = 0);
