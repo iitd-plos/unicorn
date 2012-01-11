@@ -127,14 +127,14 @@ double pmLinuxTimer::GetElapsedTimeInSecs()
 
 double pmLinuxTimer::GetCurrentTimeInSecs()
 {
-    struct timeval lTimeVal;
-    struct timezone lTimeZone;
+	struct timeval lTimeVal;
+	struct timezone lTimeZone;
 
-    ::gettimeofday(&lTimeVal, &lTimeZone);
+	::gettimeofday(&lTimeVal, &lTimeZone);
 
-    double lCurrentTime = ((double)(lTimeVal.tv_sec * 1000000 + lTimeVal.tv_usec))/1000000;
+	double lCurrentTime = ((double)(lTimeVal.tv_sec * 1000000 + lTimeVal.tv_usec))/1000000;
 
-    return lCurrentTime;
+	return lCurrentTime;
 }
 
 }

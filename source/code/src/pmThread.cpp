@@ -2,6 +2,8 @@
 #include "pmThread.h"
 #include "pmCommand.h"
 
+#include SYSTEM_CONFIGURATION_HEADER
+
 namespace pm
 {
 
@@ -25,7 +27,7 @@ pmPThread::~pmPThread()
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_destroy(&mCondVariable), pmThreadFailureException, pmThreadFailureException::COND_VAR_DESTROY_FAILURE );
 }
 
-pmStatus pmPThread::SwitchThread(pmThreadCommand* pCommand)
+pmStatus pmPThread::SwitchThread(pmThreadCommandPtr pCommand)
 {
 	return SubmitCommand(pCommand);
 }
@@ -50,7 +52,7 @@ pmStatus pmPThread::ThreadCommandLoop()
 	return pmSuccess;
 }
 
-pmStatus pmPThread::SubmitCommand(pmThreadCommand* pCommand)
+pmStatus pmPThread::SubmitCommand(pmThreadCommandPtr pCommand)
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_LOCK_FAILURE );
 	
@@ -59,6 +61,25 @@ pmStatus pmPThread::SubmitCommand(pmThreadCommand* pCommand)
 
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_signal(&mCondVariable), pmThreadFailureException, pmThreadFailureException::COND_VAR_SIGNAL_FAILURE );
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
+
+	return pmSuccess;
+}
+
+pmStatus pmPThread::SetProcessorAffinity(int pProcesorId)
+{
+	pthread_t lThread = pthread_self();
+	cpu_set_t lSetCPU;
+
+	CPU_ZERO(&lSetCPU);
+	CPU_SET(pProcessorId, &lSetCPU);
+
+	THROW_ON_NON_ZERO_RET_VAL( pthread_setaffinity_np(lThread, sizeof(cpu_set_t), &lSetCPU), pmThreadFailureException, pmThreadFailureException::THREAD_AFFINITY_ERROR );
+
+#ifdef _DEBUG
+	THROW_ON_NON_ZERO_RET_VAL( pthread_getaffinity_np(lThread, sizeof(cpu_set_t), &lSetCPU), pmThreadFailureException, pmThreadFailureException::THREAD_AFFINITY_ERROR );
+	if(!CPU_ISSET(pProcessorId, &lSetCPU))
+		throw pmFatalErrorException();
+#endif
 
 	return pmSuccess;
 }

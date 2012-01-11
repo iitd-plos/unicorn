@@ -19,7 +19,7 @@ class pmSignalWait : public pmBase
 		virtual pmStatus Wait() = 0;
 		virtual pmStatus Signal() = 0;
 
-		virtual bool IsWaiting() = 0;
+		virtual pmStatus WaitTillAllBlockedThreadsWakeup() = 0;
 
 	private:
 };
@@ -32,13 +32,13 @@ class pmPThreadSignalWait : public pmSignalWait
 
 		virtual pmStatus Wait();
 		virtual pmStatus Signal();
-		virtual bool IsWaiting();
+		virtual pmStatus WaitTillAllBlockedThreadsWakeup();
 
 	private:
 		pthread_mutex_t mMutex;
 		pthread_cond_t mCondVariable;
 		bool mCondEnforcer;
-		bool mIsWaiting;
+		uint mWaitingThreadCount;
 };
 
 } // end namespace pm

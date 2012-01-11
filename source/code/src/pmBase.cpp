@@ -1,16 +1,27 @@
 
+#include <stdlib.h>
+#include <time.h>
 #include "pmBase.h"
 #include "dlfcn.h"	// For dlopen/dlclose/dlsym
 
 namespace pm
 {
 
-void* pmBase::operator new(size_t  pSize)
+pmBase::pmBase()
+{
+	srand(time(NULL));
+}
+
+pmBase::~pmBase()
+{
+}
+
+void* pmBase::operator new (size_t  pSize)
 {
 	return AllocateMemory(pSize);
 }
 
-void pmBase::operator delete(void *pPtr)
+void pmBase::operator delete (void *pPtr)
 {	
 	DeallocateMemory(pPtr);	
 }
@@ -61,6 +72,11 @@ void* pmBase::GetExportedSymbol(void* pLibHandle, char* pSymbol)
 		return NULL;
 
 	return dlsym(pLibHandle, pSymbol);
+}
+
+uint pmBase::GetRandomInt(uint pMaxLimit)
+{
+	return rand() % pMaxLimit;
 }
 
 };

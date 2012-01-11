@@ -3,6 +3,11 @@
 #define __PM_CLUSTER__
 
 #include "pmInternalDefinitions.h"
+#include "pmHardware.h"
+#include "pmNetwork.h"
+#include "mpi.h"
+
+#include <set>
 
 namespace pm
 {
@@ -17,22 +22,40 @@ namespace pm
  * other clusters.
 */
 
-class pmCluster : public pmBase
+class pmCluster : public pmHardware
 {
 	public:
-		
+		bool ContainsMachine(pmMachine* pMachine);
+
+	protected:
+		pmCluster();	/* Only used for creating Global Cluster; Machine list is not stored for this cluster */
+		pmCluster(std::set<pmMachine*>& pMachines);
+		virtual ~pmCluster();
 
 	private:
+		std::set<pmMachine*> mMachines;
 };
 
-extern pmCluster PM_GLOBAL_CLUSTER;	/* The cluster of all machines */
+extern pmCluster* PM_GLOBAL_CLUSTER;	/* The cluster of all machines */
 
-class pmMPICluster : public pmCluster
+class pmClusterMPI : public pmCluster
 {
-	public:
-
+	friend class pmMPI;
 
 	private:
+		pmClusterMPI();	/* Creates Global Cluster; Access it using PM_GLOBAL_CLUSTER */
+
+	public:		
+		pmClusterMPI(std::set<pmMachine*>& pMachines);
+		virtual ~pmClusterMPI();
+
+		virtual MPI_Comm GetCommunicator();
+		virtual uint GetRankInCommunicator(pmMachine* pMachine);
+
+		virtual bool operator==(pmClusterMPI& pClusterMPI);
+
+	private:
+		MPI_Comm mCommunicator;
 };
 
 } // end namespace pm

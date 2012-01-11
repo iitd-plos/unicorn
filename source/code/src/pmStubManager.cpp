@@ -28,8 +28,6 @@ pmStatus pmStubManager::DestroyStubManager()
 
 pmStubManager::pmStubManager()
 {
-	CountAndProbeProcessingElements();
-
 	CreateExecutionStubs();
 }
 
@@ -53,7 +51,14 @@ size_t pmStubManager::GetStubCount()
 	return mStubCount;
 }
 
-pmExecutionStub* pmStubManager::GetStubAtIndex(ulong pIndex)
+pmExecutionStub* pmStubManager::GetStub(pmProcessingElement* pDevice)
+{
+	size_t pIndex = (size_t)(pDevice->GetDeviceIndexInMachine());
+
+	return GetStub(pIndex);
+}
+
+pmExecutionStub* pmStubManager::GetStub(uint pIndex)
 {
 	if(pIndex >= mStubVector.size())
 		throw pmStubException(pmStubException::INVALID_STUB_INDEX);
@@ -63,19 +68,6 @@ pmExecutionStub* pmStubManager::GetStubAtIndex(ulong pIndex)
 
 pmStatus pmStubManager::CreateExecutionStubs()
 {
-	mStubVector.resize(mStubCount);
-	for(size_t i=0; i<mStubCount; ++i)
-		mStubVector[i] = new pmExecutionStub();
-}
-
-pmStatus pmStubManager::DestroyExecutionStubs()
-{
-	for(size_t i=0; i<mStubCount; ++i)
-		delete mStubVector[i];
-}
-
-pmStatus pmStubManager::CountAndProbeProcessingElements()
-{
 	/* WIN 32 Code
 	SYSTEM_INFO sysinfo;
 	GetSystemInfo(&sysinfo);
@@ -83,9 +75,20 @@ pmStatus pmStubManager::CountAndProbeProcessingElements()
 	*/
 
 	mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
-	mProcessingElementsGPU = pmDispatcherGPU::GetDispatcherGPU()->GetCountGPU();
+	for(size_t i=0; i<mProcessingElementsCPU; ++i)
+		mStubVector.push_back(new pmStubCPU(i, mStubVector.size()));
+
+	mProcessingElementsGPU = pmDispatcherGPU::GetDispatcherGPU()->ProbeProcessingElementsAndCreateStubs(mStubVector);
 
 	mStubCount = mProcessingElementsCPU + mProcessingElementsGPU;
+
+	return pmSuccess;
+}
+
+pmStatus pmStubManager::DestroyExecutionStubs()
+{
+	for(size_t i=0; i<mStubCount; ++i)
+		delete mStubVector[i];
 
 	return pmSuccess;
 }

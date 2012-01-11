@@ -31,10 +31,12 @@ void* ThreadLoop(void* pThreadData);
 class pmThread : public pmBase
 {
 	public:
-		virtual pmStatus SwitchThread(pmThreadCommand* pCommand) = 0;
+		virtual pmStatus SwitchThread(pmThreadCommandPtr pCommand) = 0;
+
+		virtual pmStatus SetProcessorAffinity(int pProcesorId) = 0;
 		
 		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(pmThreadCommand* pCommand) = 0;
+		virtual pmStatus ThreadSwitchCallback(pmThreadCommandPtr pCommand) = 0;
 };
 
 class pmPThread : pmThread
@@ -43,22 +45,24 @@ class pmPThread : pmThread
 		pmPThread();
 		virtual ~pmPThread();
 
-		virtual pmStatus SwitchThread(pmThreadCommand* pCommand);
+		virtual pmStatus SwitchThread(pmThreadCommandPtr pCommand);
+
+		virtual pmStatus SetProcessorAffinity(int pProcesorId);
 
 		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(pmThreadCommand* pCommand) = 0;
+		virtual pmStatus ThreadSwitchCallback(pmThreadCommandPtr pCommand) = 0;
 
 		friend void* ThreadLoop(void* pThreadData);
 
 	private:
-		virtual pmStatus SubmitCommand(pmThreadCommand* pCommand);
+		virtual pmStatus SubmitCommand(pmThreadCommandPtr pCommand);
 		virtual pmStatus ThreadCommandLoop();
 
 		pthread_mutex_t mMutex;
 		pthread_cond_t mCondVariable;
 		bool mCondEnforcer;
 
-		pmThreadCommand* mCommand;
+		pmThreadCommandPtr mCommand;
 		pthread_t mThread;
 };
 

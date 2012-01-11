@@ -4,17 +4,23 @@
 
 #include "pmInternalDefinitions.h"
 #include "pmResourceLock.h"
+#include "pmHardware.h"
+#include "pmCommand.h"
+
 #include <vector>
+#include <set>
+#include <string>
 
 namespace pm
 {
 
+class pmCluster;
+
 /**
- * \brief The record of all devices and their last updated status
- * This is a per machine singleton class i.e. exactly one instance of pmDevicePool exists per machine.
- * Every machine maintains a list of resources in the entire MPI cluster.
- * The device pool is maintained as a vector each of which is a set of following
- * parameters for the machine -
+ * \brief The record of all machines/devices and their last updated status
+ * This is a per machine singleton class i.e. exactly one instance of pmMachinePool
+ * and pmDevicePool exists per machine.
+ * The machine pool records the following parameters for each machine -
  * 1. No. of CPU Cores
  * 2. No. of GPU Cards
  * 3. Data Sent (in bytes)
@@ -24,12 +30,11 @@ namespace pm
  * 7. Number of data send events from the machine
  * 8. Number of data receive events to the machine
 */
-class pmDevicePool : public pmBase
+class pmMachinePool : public pmBase
 {
 	public:
 		typedef struct pmMachineData
 		{
-			/* All entries are initialized in InitializeMachineData */
 			uint cpuCores;
 			uint gpuCards;
 			ulong  dataSent;
@@ -40,25 +45,72 @@ class pmDevicePool : public pmBase
 			ulong receiveCount;
 		} pmMachineData;
 
+		virtual ~pmMachinePool();
+
+		static pmMachinePool* GetMachinePool();
+		pmStatus DestroyMachinePool();
+
+		pmMachine* GetMachine(uint pIndex);
+		pmMachineData& GetMachineData(uint pIndex);
+		pmMachineData& GetMachineData(pmMachine* pMachine);
+
+		pmStatus GetAllDevicesOnMachine(uint pMachineIndex, std::vector<pmProcessingElement*>& pDevices);
+		pmStatus GetAllDevicesOnMachine(pmMachine* pMachine, std::vector<pmProcessingElement*>& pDevices);
+
+		uint GetFirstDeviceIndexOnMachine(uint pMachineIndex);
+		uint GetFirstDeviceIndexOnMachine(pmMachine* pMachine);
+
+		std::vector<pmMachine*>& GetAllMachines();
+
+		pmStatus RegisterSendCompletion(pmMachine* pMachine, ulong pDataSent, double pSendTime);
+		pmStatus RegisterReceiveCompletion(pmMachine* pMachine, ulong pDataReceived, double pReceiveTime);
+
+	private:
+		pmMachinePool(uint pMachineCount);
+
+		pmStatus All2AllMachineData(pmCommunicatorCommand::machinePool* pAll2AllBuffer);
+
+		static pmMachinePool* mMachinePool;
+		std::vector<uint> mFirstDeviceIndexOnMachine;
+		std::vector<pmMachine*> mMachinesVector;
+		std::vector<pmMachineData> mMachineDataVector;
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	/* For dynamically updating parameters */
+};
+
+class pmDevicePool : public pmBase
+{
+	public:
+		typedef struct pmDeviceData
+		{
+			std::string name;
+			std::string description;	/* All other parameters in a comma separated string */
+		} pmDeviceData;
+
+		virtual ~pmDevicePool();
+
 		static pmDevicePool* GetDevicePool();
 		pmStatus DestroyDevicePool();
 
-		pmStatus InitializeDevicePool(uint pMachineCount);
-		pmStatus SetMachineData(uint pMachineId, pmMachineData& pMachineData);
+		uint GetDeviceCount();
+
+		pmStatus CreateMachineDevices(pmMachine* pMachine, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount);
+
+		pmDeviceData& GetDeviceData(pmProcessingElement* pDevice);
+		std::vector<pmProcessingElement*>& GetAllDevices();
+
+		pmProcessingElement* GetDeviceAtMachineIndex(pmMachine* pMachine, uint pDeviceIndexOnMachine);
+		pmProcessingElement* GetDeviceAtGlobalIndex(uint pGlobalDeviceIndex);
+
+		pmStatus BroadcastDeviceData(pmMachine* pMachine, pmCommunicatorCommand::devicePool* pDeviceArray, uint pDeviceCount);
+
+		pmStatus GetAllDevicesOfTypeInCluster(pmDeviceTypes pType, pmCluster* pCluster, std::set<pmProcessingElement*>& pDevices);
 		
-		pmStatus RegisterSendCompletion(uint pMachineId, ulong pDataSent, double pSendTime);
-		pmStatus RegisterReceiveCompletion(uint pMachineId, ulong pDataReceived, double pReceiveTime);
-
 	private:
-		pmDevicePool() {mMachineCount = 0;}
-
-		pmStatus InitializeMachineData(uint pMachineId);
-
-		uint mMachineCount;
+		pmDevicePool();
 
 		static pmDevicePool* mDevicePool;
-		std::vector<pmMachineData> mPool;
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+		std::vector<pmProcessingElement*> mDevicesVector;
+		std::vector<pmDeviceData> mDeviceDataVector;
 };
 
 } // end namespace pm

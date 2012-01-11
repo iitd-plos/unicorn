@@ -5,6 +5,10 @@
 #include "pmInternalDefinitions.h"
 #include "pmThread.h"
 
+#include "pmResourceLock.h"
+
+#include <map>
+
 namespace pm
 {
 
@@ -26,14 +30,21 @@ class pmCommunicator : public pmBase
 		static pmCommunicator* GetCommunicator();
 		pmStatus DestroyCommunicator();
 
-		pmStatus Send(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
-		pmStatus Broadcast(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
-		pmStatus Receive(pmCommunicatorCommand* pCommand, pmHardware pHardware, bool pBlocking = false);
-
+		pmStatus Send(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
+		pmStatus Receive(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);	// If no source is provided, any machine is assumed (MPI_ANY) 
+		//pmStatus ReceivePacked(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);	// If no source is provided, any machine is assumed (MPI_ANY) 
+		pmStatus SendPacked(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
+		pmStatus ReceivePacked(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);	// If no source is provided, any machine is assumed (MPI_ANY) 
+		pmStatus Broadcast(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
+		pmStatus All2All(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
+		
 	private:
 		pmCommunicator();
 
 		static pmCommunicator* mCommunicator;
+
+		std::map<pmCommunicatorCommand::communicatorCommandTags, pmListenerCallback> mListenerMap;
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

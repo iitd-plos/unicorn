@@ -5,12 +5,22 @@
 #include "pmInternalDefinitions.h"
 #include "pmTimer.h"
 #include "pmResourceLock.h"
+#include "pmHardware.h"
+#include "pmScheduler.h"
 #include TIMER_IMPLEMENTATION_HEADER
+
+#include <memory>	// For std::tr1
 
 namespace pm
 {
 
 class pmSignalWait;
+class pmLocalTask;
+
+class pmCommand;
+typedef std::tr1::shared_ptr<pmCommand> pmCommandPtr;
+
+typedef pmStatus (*pmCommandCompletionCallback)(pmCommandPtr pCommand);
 
 /**
  * \brief The command class of PMLIB. Serves as an interface between various PMLIB components like pmControllers.
@@ -29,21 +39,26 @@ class pmSignalWait;
 class pmCommand : public pmBase
 {
 	public:
-		pmCommand(ushort pCommandId, void* pCommandData = NULL, ulong pDataLength = 0);
+		pmCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0, pmCommandCompletionCallback pCallback = NULL);
+		virtual ~pmCommand();
 
 		virtual bool IsValid() = 0;
 
-		virtual ushort GetId();
+		virtual ushort GetType();
 		virtual void* GetData();
 		virtual ulong GetDataLength();
 		virtual pmStatus GetStatus();
+		virtual ushort GetPriority();
+		virtual pmCommandCompletionCallback GetCommandCompletionCallback();
 
 		virtual pmStatus SetData(void* pCommandData, ulong pDataLength);
 		virtual pmStatus SetStatus(pmStatus pStatus);
+		virtual pmStatus SetCommandCompletionCallback(pmCommandCompletionCallback pCallback);
 	
 		/**
 		 * The following functions must be called by clients for
 		 * command execution time measurement and status reporting
+		 * and callback calling
 		*/
 		virtual pmStatus MarkExecutionStart();
 		virtual pmStatus MarkExecutionEnd(pmStatus pStatus);
@@ -57,44 +72,378 @@ class pmCommand : public pmBase
 		virtual pmStatus WaitForFinish();
 
 	protected:
-		ushort mCommandId;
+		ushort mCommandType;
 		void* mCommandData;
 		size_t mDataLength;
+		pmCommandCompletionCallback mCallback;
 		pmStatus mStatus;
 		pmSignalWait* mSignalWait;
+		ushort mPriority;
 	
 		TIMER_IMPLEMENTATION_CLASS mTimer;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
+class pmCommunicatorCommand;
+typedef std::tr1::shared_ptr<pmCommunicatorCommand> pmCommunicatorCommandPtr;
+
 class pmCommunicatorCommand : public pmCommand
 {
 	public:
-		typedef enum pmCommunicatorCommands
+		typedef struct machinePool
+		{
+			uint cpuCores;
+			uint gpuCards;
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 2
+			} fieldCount;
+
+		} machinePool;
+
+		typedef struct devicePool
+		{
+			char name[MAX_NAME_STR_LEN];
+			char description[MAX_DESC_STR_LEN];
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 2
+			} fieldCount;
+
+		} devicePool;
+
+		typedef struct remoteTaskAssignStruct
+		{
+			uint taskConfLength;
+			ulong taskId;
+			ulong inputMemLength;
+			ulong outputMemLength;
+			ushort isOutputMemReadWrite;
+			ulong subtaskCount;
+			char callbackKey[MAX_CB_KEY_LEN];
+			uint assignedDeviceCount;
+			uint originatingHost;
+			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ushort priority;
+			ushort schedModel;
+			ulong inputMemAddr;
+			ulong outputMemAddr;
+
+			remoteTaskAssignStruct();
+			remoteTaskAssignStruct(pmLocalTask* pLocalTask);
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 14
+			} fieldCount;
+
+		} remoteTaskAssignStruct;
+
+		typedef struct dataPtr
+		{
+			void* ptr;
+			uint length;
+		} dataPtr;
+
+		typedef struct remoteTaskAssignPacked
+		{
+			remoteTaskAssignPacked(pmLocalTask* pLocalTask = NULL);
+			~remoteTaskAssignPacked();
+
+			remoteTaskAssignStruct taskStruct;
+			dataPtr taskConf;
+			dataPtr devices;
+		} remoteTaskAssignPacked;
+
+		typedef struct remoteSubtaskAssignStruct
+		{
+			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong startSubtask;
+			ulong endSubtask;
+			uint originatingHost;
+			uint targetDeviceGlobalIndex;
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 5
+			} fieldCount;
+	
+		} remoteSubtaskAssignStruct;
+
+		typedef struct sendAcknowledgementStruct
+		{
+			uint sourceDeviceGlobalIndex;
+			uint originatingHost;
+			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong startSubtask;
+			ulong endSubtask;
+			uint execStatus;
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 6
+			} fieldCount;
+	
+		} sendAcknowledgementStruct;
+
+		typedef enum taskEvents
+		{
+			TASK_FINISH_EVENT,
+			TASK_CANCEL_EVENT
+		} taskEvents;
+
+		typedef struct taskEventStruct
+		{
+			uint taskEvent;			// Map to enum taskEvents
+			uint originatingHost;
+			ulong internalTaskId;	// memory address of local task object (on originating host)
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 3
+			} fieldCount;
+	
+		} taskEventStruct;
+
+		typedef struct stealRequestStruct
+		{
+			uint stealingDeviceGlobalIndex;
+			uint targetDeviceGlobalIndex;
+			uint originatingHost;
+			ulong internalTaskId;	// memory address of local task object (on originating host)
+			double stealingDeviceExecutionRate;
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 5
+			} fieldCount;
+	
+		} stealRequestStruct;
+
+		typedef enum stealResponseType
+		{
+			STEAL_SUCCESS_RESPONSE,
+			STEAL_FAILURE_RESPONSE
+		} stealResponseType;
+
+		typedef struct stealResponseStruct
+		{
+			uint stealingDeviceGlobalIndex;
+			uint targetDeviceGlobalIndex;
+			uint originatingHost;
+			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ushort success;			// enum stealResponseType
+			ulong startSubtask;
+			ulong endSubtask;			
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 7
+			} fieldCount;
+	
+		} stealResponseStruct;
+
+		typedef struct memorySubscriptionRequest
+		{
+			ulong addr;
+			ulong offset;
+			ulong length;
+			ulong transferId;	// MPI tag to be used for memory transfer
+			uint destHost;		// Host that will receive the memory (generally same as the requesting host)
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 5
+			} fieldCount;
+	
+		} memorySubscriptionRequest;
+
+		typedef struct subtaskReduceStruct
+		{
+			uint originatingHost;
+			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong subtaskId;
+			ulong subtaskMemLength;
+			ulong subscriptionOffset;
+	
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 5
+			} fieldCount;
+	
+		} subtaskReduceStruct;
+
+		typedef struct subtaskReducePacked
+		{
+			subtaskReducePacked();
+			subtaskReducePacked(pmTask* pTask, ulong pSubtaskId);
+			~subtaskReducePacked();
+
+			subtaskReduceStruct reduceStruct;
+			dataPtr subtaskMem;
+		} subtaskReducePacked;
+
+		typedef enum communicatorCommandTypes
 		{
 			SEND,
 			RECEIVE,
 			BROADCAST,
-			MAX_COMMUNICATOR_COMMANDS
-		} pmCommunicatorCommands;
+			ALL2ALL,
+			MAX_COMMUNICATOR_COMMAND_TYPES
+		} communicatorCommandTypes;
 
-		pmCommunicatorCommand(ushort pCommandId, void* pCommandData = NULL, ulong pDataLength = 0) : pmCommand(pCommandId, pCommandData, pDataLength) {}
+		typedef enum communicatorCommandTags
+		{
+			MACHINE_POOL_TRANSFER,
+			DEVICE_POOL_TRANSFER,
+			REMOTE_TASK_ASSIGNMENT,
+			REMOTE_SUBTASK_ASSIGNMENT,
+			SEND_ACKNOWLEDGEMENT_TAG,
+			TASK_EVENT_TAG,
+			STEAL_REQUEST_TAG,
+			STEAL_RESPONSE_TAG,
+			MEMORY_SUBSCRIPTION_TAG,
+			SUBTASK_REDUCE_TAG,
+			UNKNOWN_LENGTH_TAG,
+			MAX_COMMUNICATOR_COMMAND_TAGS
+		} communicatorCommandTags;
+
+		typedef enum communicatorDataTypes
+		{
+			BYTE,
+			INT,
+			UINT,
+			MACHINE_POOL_STRUCT,
+			DEVICE_POOL_STRUCT,
+			REMOTE_TASK_ASSIGN_STRUCT,
+			REMOTE_TASK_ASSIGN_PACKED,
+			REMOTE_SUBTASK_ASSIGN_STRUCT,
+			SEND_ACKNOWLEDGEMENT_STRUCT,
+			TASK_EVENT_STRUCT,
+			STEAL_REQUEST_STRUCT,
+			STEAL_RESPONSE_STRUCT,
+			MEMORY_SUBSCRIPTION_STRUCT,
+			SUBTASK_REDUCE_STRUCT,
+			SUBTASK_REDUCE_PACKED,
+			MAX_COMMUNICATOR_DATA_TYPES
+		} communicatorDataTypes;
+
+		static pmCommunicatorCommandPtr CreateSharedPtr(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
+			void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
+
+		virtual ~pmCommunicatorCommand() {}
+
+		virtual pmStatus SetTag(communicatorCommandTags pTag);
+		virtual pmStatus SetSecondaryData(void* pSecondaryData, ulong pSecondaryLength);
+		virtual communicatorCommandTags GetTag();
+		virtual pmHardware* GetDestination();
+		virtual communicatorDataTypes GetDataType();
+		virtual void* GetSecondaryData();
+		virtual ulong GetSecondaryDataLength();
 		virtual bool IsValid();
 
+		static int GetNextDynamicTag();
+
+	protected:
+		pmCommunicatorCommand(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
+			void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
+
 	private:
+		communicatorCommandTags mCommandTag;
+		communicatorDataTypes mDataType;
+		pmHardware* mDestination;
+		void* mSecondaryData;
+		ulong mSecondaryDataLength;
+
+		static int mNextDynamicTag;
+		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
+
+class pmPersistentCommunicatorCommand;
+typedef std::tr1::shared_ptr<pmPersistentCommunicatorCommand> pmPersistentCommunicatorCommandPtr;
+
+class pmPersistentCommunicatorCommand : public pmCommunicatorCommand
+{
+public:
+	static pmPersistentCommunicatorCommandPtr CreateSharedPtr(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
+		void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
+
+	virtual ~pmPersistentCommunicatorCommand();
+
+protected:
+	pmPersistentCommunicatorCommand(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
+		void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
+
+private:
+};
+
+class pmThreadCommand;
+typedef std::tr1::shared_ptr<pmThreadCommand> pmThreadCommandPtr;
 
 class pmThreadCommand : public pmCommand
 {
 	public:
-		typedef enum pmThreadCommands
+		typedef enum threadCommandTypes
 		{
-			STUB_COMMAND_WRAPPER,
-			MAX_THREAD_COMMANDS
-		} pmThreadCommands;
+			COMMAND_WRAPPER,
+			MAX_THREAD_COMMAND_TYPES
+		} threadCommandTypes;
 
-		pmThreadCommand(ushort pCommandId, void* pCommandData = NULL, ulong pDataLength = 0) : pmCommand(pCommandId, pCommandData, pDataLength) {}
+		static pmThreadCommandPtr CreateSharedPtr(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0);
+		virtual ~pmThreadCommand() {}
+
 		virtual bool IsValid();
+
+	protected:
+		pmThreadCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0) : pmCommand(pPriority, pCommandType, pCommandData, pDataLength) {}
+
+	private:
+};
+
+class pmTaskCommand;
+typedef std::tr1::shared_ptr<pmTaskCommand> pmTaskCommandPtr;
+
+class pmTaskCommand : public pmCommand
+{
+	public:
+		typedef enum taskCommandTypes
+		{
+			BASIC_TASK,
+			MAX_TASK_COMMAND_TYPES
+		} taskCommandTypes;
+		
+		static pmTaskCommandPtr CreateSharedPtr(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0);
+		virtual ~pmTaskCommand();
+
+		virtual bool IsValid();
+
+	protected:
+		pmTaskCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0) : pmCommand(pPriority, pCommandType, pCommandData, pDataLength) {}
+
+	private:
+};
+
+class pmSubtaskRangeCommand;
+typedef std::tr1::shared_ptr<pmSubtaskRangeCommand> pmSubtaskRangeCommandPtr;
+
+class pmSubtaskRangeCommand : public pmCommand
+{
+	public:
+		typedef enum subtaskRangeCommandTypes
+		{
+			BASIC_SUBTASK_RANGE,
+			MAX_TASK_COMMAND_TYPES
+		} subtaskRangeCommandTypes;
+		
+		static pmSubtaskRangeCommandPtr CreateSharedPtr(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0);
+		virtual ~pmSubtaskRangeCommand();
+
+		virtual bool IsValid();
+
+	protected:
+		pmSubtaskRangeCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0) : pmCommand(pPriority, pCommandType, pCommandData, pDataLength) {}
 
 	private:
 };

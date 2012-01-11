@@ -4,88 +4,85 @@
 namespace pm
 {
 
-pmCallbackUnit::pmCallbackUnit(pmPreSubtaskCB pPreSubtaskCB, pmSubtaskCB pSubtaskCB, pmReductionCB pReductionCB, pmDeviceSelectionCB pDeviceSelectionCB,
-	pmPreDataTransferCB pPreDataTransferCB, pmPostDataTransferCB pPostDataTransferCB, pmDataDistributionCB pDataDistributionCB)
+pmCallbackUnit::pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
+	pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB)
 {
-	mPreSubtaskCB = pPreSubtaskCB;
+	mDataDistributionCB = pDataDistributionCB;
 	mSubtaskCB = pSubtaskCB;
-	mReductionCB = pReductionCB;
+	mDataReductionCB = pDataReductionCB;
 	mDeviceSelectionCB = pDeviceSelectionCB;
 	mPreDataTransferCB = pPreDataTransferCB;
 	mPostDataTransferCB = pPostDataTransferCB;
-	mDataDistributionCB = pDataDistributionCB;
-}
 
-pmCallbackUnit::pmCallbackUnit(pmPreSubtaskCB pPreSubtaskCB, pmSubtaskCB pSubtaskCB)
-{
-	mPreSubtaskCB = pPreSubtaskCB;
-	mSubtaskCB = pSubtaskCB;
-	mReductionCB = PM_CALLBACK_NOP;
-	mDeviceSelectionCB = PM_CALLBACK_NOP;
-	mPreDataTransferCB = PM_CALLBACK_NOP;
-	mPostDataTransferCB = PM_CALLBACK_NOP;
-	mDataDistributionCB = PM_CALLBACK_NOP;
-}
+	mKey = pKey;
 
-pmCallbackUnit::pmCallbackUnit(pmPreSubtaskCB pPreSubtaskCB, pmSubtaskCB pSubtaskCB, pmReductionCB pReductionCB)
-{
-	mPreSubtaskCB = pPreSubtaskCB;
-	mSubtaskCB = pSubtaskCB;
-	mReductionCB = pReductionCB;
-	mDeviceSelectionCB = PM_CALLBACK_NOP;
-	mPreDataTransferCB = PM_CALLBACK_NOP;
-	mPostDataTransferCB = PM_CALLBACK_NOP;
-	mDataDistributionCB = PM_CALLBACK_NOP;
-}
+	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
+	if(mKeyMap.find(mKey) != mKeyMap.end())
+		throw pmInvalidKeyException();
 
-pmCallbackUnit::pmCallbackUnit(pmSubtaskCB pSubtaskCB, pmDataDistributionCB pDataDistributionCB)
-{
-	mPreSubtaskCB = PM_CALLBACK_NOP;
-	mSubtaskCB = pSubtaskCB;
-	mReductionCB = PM_CALLBACK_NOP;
-	mDeviceSelectionCB = PM_CALLBACK_NOP;
-	mPreDataTransferCB = PM_CALLBACK_NOP;
-	mPostDataTransferCB = PM_CALLBACK_NOP;
-	mDataDistributionCB = pDataDistributionCB;
+	mKeyMap[mKey] = this;
 }
 
 pmCallbackUnit::~pmCallbackUnit()
 {
+	mResourceLock.Lock();
+	mKeyMap.erase(mKey);
+	mResourceLock.Unlock();
 }
 
-pmCallback pmCallbackUnit::GetPreSubtaskCB()
+pmDataDistributionCB* pmCallbackUnit::GetDataDistributionCB()
 {
-	return mPreSubtaskCB;
+	return mDataDistributionCB;
 }
 
-pmCallback pmCallbackUnit::GetSubtaskCB()
+pmSubtaskCB* pmCallbackUnit::GetSubtaskCB()
 {
 	return mSubtaskCB;
 }
 
-pmCallback pmCallbackUnit::GetReductionCB()
+pmDataReductionCB* pmCallbackUnit::GetDataReductionCB()
 {
-	return mReductionCB;
+	return mDataReductionCB;
 }
 
-pmCallback pmCallbackUnit::GetDeviceSelectionCB()
+pmDataScatterCB* pmCallbackUnit::GetDataScatterCB()
+{
+	return mDataScatterCB;
+}
+
+pmDeviceSelectionCB* pmCallbackUnit::GetDeviceSelectionCB()
 {
 	return mDeviceSelectionCB;
 }
 
-pmCallback pmCallbackUnit::GetPreDataTransferCB()
+pmPreDataTransferCB* pmCallbackUnit::GetPreDataTransferCB()
 {
 	return mPreDataTransferCB;
 }
 
-pmCallback pmCallbackUnit::GetPostDataTransferCB()
+pmPostDataTransferCB* pmCallbackUnit::GetPostDataTransferCB()
 {
 	return mPostDataTransferCB;
 }
 
-pmCallback pmCallbackUnit::GetDataDistributionCB()
+const char* pmCallbackUnit::GetKey()
 {
-	return mDataDistributionCB;
+	return mKey.c_str();
+}
+
+pmCallbackUnit* pmCallbackUnit::FindCallbackUnit(char* pKey)
+{
+	std::string lStr(pKey);
+
+	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
+
+	std::map<std::string, pmCallbackUnit*>::iterator lIter = mKeyMap.find(lStr);
+	if(lIter == mKeyMap.end())
+		throw pmInvalidKeyException();
+
+	pmCallbackUnit* lCallbackUnit = mKeyMap[lStr];
+
+	return lCallbackUnit;
 }
 
 };

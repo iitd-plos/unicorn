@@ -3,6 +3,7 @@
 #define __PM_STUB_MANAGER__
 
 #include "pmInternalDefinitions.h"
+#include "pmHardware.h"
 
 #include <vector>
 
@@ -25,11 +26,12 @@ class pmStubManager : public pmBase
 		size_t GetProcessingElementsGPU();
 		size_t GetStubCount();
 
-		pmExecutionStub* GetStubAtIndex(ulong pIndex);
+		pmExecutionStub* GetStub(pmProcessingElement* pDevice);
+		pmExecutionStub* GetStub(uint pIndex);
 
 	private:
 		pmStubManager();
-		~pmStubManager();
+		virtual ~pmStubManager();
 
 		pmStatus CreateExecutionStubs();
 		pmStatus DestroyExecutionStubs();

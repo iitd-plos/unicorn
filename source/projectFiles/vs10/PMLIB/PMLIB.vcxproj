@@ -83,7 +83,6 @@
   <ItemGroup>
     <ClCompile Include="..\..\..\code\src\pmBase.cpp" />
     <ClCompile Include="..\..\..\code\src\pmCallback.cpp" />
-    <ClCompile Include="..\..\..\code\src\pmCallbackChain.cpp" />
     <ClCompile Include="..\..\..\code\src\pmCallbackUnit.cpp" />
     <ClCompile Include="..\..\..\code\src\pmCluster.cpp" />
     <ClCompile Include="..\..\..\code\src\pmCommand.cpp" />
@@ -92,16 +91,21 @@
     <ClCompile Include="..\..\..\code\src\pmDevicePool.cpp" />
     <ClCompile Include="..\..\..\code\src\pmDispatcherGPU.cpp" />
     <ClCompile Include="..\..\..\code\src\pmExecutionStub.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmHardware.cpp" />
     <ClCompile Include="..\..\..\code\src\pmLogger.cpp" />
     <ClCompile Include="..\..\..\code\src\pmMemSection.cpp" />
     <ClCompile Include="..\..\..\code\src\pmNetwork.cpp" />
     <ClCompile Include="..\..\..\code\src\pmPublicDefinitions.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmReducer.cpp" />
     <ClCompile Include="..\..\..\code\src\pmResourceLock.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSafePriorityQueue.cpp" />
     <ClCompile Include="..\..\..\code\src\pmScheduler.cpp" />
     <ClCompile Include="..\..\..\code\src\pmSignalWait.cpp" />
     <ClCompile Include="..\..\..\code\src\pmStubManager.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmSubscriptionManager.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTask.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmSubtaskManager.cpp" />
+    <ClCompile Include="..\..\..\code\src\pmTaskExecStats.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTaskManager.cpp" />
     <ClCompile Include="..\..\..\code\src\pmThread.cpp" />
     <ClCompile Include="..\..\..\code\src\pmTimer.cpp" />
@@ -110,7 +114,6 @@
   <ItemGroup>
     <ClInclude Include="..\..\..\code\inc\pmBase.h" />
     <ClInclude Include="..\..\..\code\inc\pmCallback.h" />
-    <ClInclude Include="..\..\..\code\inc\pmCallbackChain.h" />
     <ClInclude Include="..\..\..\code\inc\pmCallbackUnit.h" />
     <ClInclude Include="..\..\..\code\inc\pmCluster.h" />
     <ClInclude Include="..\..\..\code\inc\pmCommand.h" />
@@ -121,7 +124,9 @@
     <ClInclude Include="..\..\..\code\inc\pmDispatcherGPU.h" />
     <ClInclude Include="..\..\..\code\inc\pmErrorDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmExecutionStub.h" />
+    <ClInclude Include="..\..\..\code\inc\pmHardware.h" />
     <ClInclude Include="..\..\..\code\inc\pmLogger.h" />
+    <ClInclude Include="..\..\..\code\inc\pmReducer.h" />
     <ClInclude Include="..\..\..\code\inc\pmStubManager.h" />
     <ClInclude Include="..\..\..\code\inc\pmInternalDefinitions.h" />
     <ClInclude Include="..\..\..\code\inc\pmMemSection.h" />
@@ -131,7 +136,10 @@
     <ClInclude Include="..\..\..\code\inc\pmSafePriorityQueue.h" />
     <ClInclude Include="..\..\..\code\inc\pmScheduler.h" />
     <ClInclude Include="..\..\..\code\inc\pmSignalWait.h" />
+    <ClInclude Include="..\..\..\code\inc\pmSubscriptionManager.h" />
     <ClInclude Include="..\..\..\code\inc\pmTask.h" />
+    <ClInclude Include="..\..\..\code\inc\pmSubtaskManager.h" />
+    <ClInclude Include="..\..\..\code\inc\pmTaskExecStats.h" />
     <ClInclude Include="..\..\..\code\inc\pmTaskManager.h" />
     <ClInclude Include="..\..\..\code\inc\pmThread.h" />
     <ClInclude Include="..\..\..\code\inc\pmTimer.h" />

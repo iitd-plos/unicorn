@@ -8,15 +8,15 @@
 #include <stdio.h>
 #include <iostream>
 
-#define SYSTEM_CONFIGURATION_HEADER <unistd.h>
+#define PMLIB_VERSION "1.0.0" /* Format MajorVersion_MinorVersion_Update */
 
-#define SUPPORT_CUDA
+#define SYSTEM_CONFIGURATION_HEADER <unistd.h>
 
 /** 
  * The actual implementations to be used in the build for abstract factory based classes
 */
 #define NETWORK_IMPLEMENTATION_CLASS pmMPI
-#define CLUSTER_IMPLEMENTATION_CLASS pmMPICluster
+#define CLUSTER_IMPLEMENTATION_CLASS pmClusterMPI
 
 #define TIMER_IMPLEMENTATION_CLASS pmLinuxTimer
 #define TIMER_IMPLEMENTATION_HEADER <sys/time.h>
@@ -35,7 +35,6 @@
 
 #define THROW_ON_NON_ZERO_RET_VAL(x, y, z) { int __ret_val__ = x; if(!__ret_val__) throw y(z, __ret_val__); }
 
-
 /* This code is taken from http://www.fefe.de/intof.html */
 #define __HALF_MAX_SIGNED(type) ((type)1 << (sizeof(type)*8-2))
 #define __MAX_SIGNED(type) (__HALF_MAX_SIGNED(type) - 1 + __HALF_MAX_SIGNED(type))
@@ -47,11 +46,26 @@
 
 #define MPI_TRANSFER_MAX_LIMIT __MAX(int)
 
-#define MAX_PRIORITY_LEVEL 0
+#define MAX_CONTROL_PRIORITY 0
+#define MAX_PRIORITY_LEVEL MAX_CONTROL_PRIORITY+1	// 0 is used for control messages
 #define MIN_PRIORITY_LEVEL __MAX(ushort)
+#define CONTROL_EVENT_PRIORITY 0
+#define DEFAULT_PRIORITY_LEVEL 5
 
-#define NETWORK_THREAD_SLEEP_TIME 1000	// in ms
+#define DEFAULT_SCHEDULING_MODEL pmScheduler::PUSH
 
 #define TRACK_MEMORY_ALLOCATIONS
+
+#define SLOW_START_SCHEDULING_INITIAL_SUBTASK_COUNT 1	 // must be a power of 2
+#define SLOW_START_SCHEDULING_UPPER_LIMIT_EXEC_TIME_PER_ALLOCATION 15	// in seconds
+#define SLOW_START_SCHEDULING_LOWER_LIMIT_EXEC_TIME_PER_ALLOCATION 8	// in seconds
+
+#define MAX_STEAL_ATTEMPTS 25
+
+#define PROPAGATE_FAILURE_RET_STATUS(x) {pmStatus dRetStatus = x; if(dRetStatus != pmSuccess) return dRetStatus;}
+
+#define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (reinterpret_cast<size_t>(memAddr) % pageSize))
+
+#define USE_LAZY_MEMORY
 
 #endif

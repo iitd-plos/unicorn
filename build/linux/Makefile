@@ -45,7 +45,6 @@ endif
 
 OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmCallback.o \
-	$(OUTDIR)/pmCallbackChain.o \
 	$(OUTDIR)/pmCallbackUnit.o \
 	$(OUTDIR)/pmCluster.o \
 	$(OUTDIR)/pmCommand.o \
@@ -54,17 +53,22 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmDevicePool.o \
 	$(OUTDIR)/pmDispatcherGPU.o \
 	$(OUTDIR)/pmExecutionStub.o \
-	$(OUTDIR)/pmMemoryManager.o \
+	$(OUTDIR)/pmHardware.o \
 	$(OUTDIR)/pmLogger.o \
+	$(OUTDIR)/pmMemoryManager.o \
 	$(OUTDIR)/pmMemSection.o \
 	$(OUTDIR)/pmNetwork.o \
+	$(OUTDIR)/pmReducer.o \
 	$(OUTDIR)/pmPublicDefinitions.o \
 	$(OUTDIR)/pmResourceLock.o \
 	$(OUTDIR)/pmSafePriorityQueue.o \
 	$(OUTDIR)/pmScheduler.o \
 	$(OUTDIR)/pmSignalWait.o \
 	$(OUTDIR)/pmStubManager.o \
+	$(OUTDIR)/pmSubscriptionManager.o \
+	$(OUTDIR)/pmSubtaskManager.o \
 	$(OUTDIR)/pmTask.o \
+	$(OUTDIR)/pmTaskExecStats.o \
 	$(OUTDIR)/pmTaskManager.o \
 	$(OUTDIR)/pmThread.o \
 	$(OUTDIR)/pmTimer.o

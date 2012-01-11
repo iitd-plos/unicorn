@@ -4,9 +4,11 @@
 
 #include "pmPublicDefinitions.h"
 #include "pmDataTypes.h"
+#include "pmHardware.h"
 
 namespace pm
 {
+
 	/**
 	  * Exceptions thrown internally by PMLIB
 	  * These are mapped to pmStatus errors and are not sent to applications
@@ -15,7 +17,7 @@ namespace pm
 	class pmException
 	{
 		public:
-			virtual pmStatus GetStatusCode() = 0;
+			virtual pmStatus GetStatusCode() {return pmFatalError;}
 	};
 
 	class pmMpiInitException : public pmException
@@ -54,7 +56,8 @@ namespace pm
 				COND_VAR_WAIT_FAILURE,
 				COND_VAR_DESTROY_FAILURE,
 				THREAD_CREATE_ERROR,
-				THREAD_CANCEL_ERROR
+				THREAD_CANCEL_ERROR,
+				THREAD_AFFINITY_ERROR
 			} failureTypes;
 
 			pmThreadFailureException(failureTypes pFailureId, int pErrorCode) {mFailureId = pFailureId;}
@@ -68,11 +71,21 @@ namespace pm
 	class pmUnknownMachineException : public pmException
 	{
 		public:
-			pmUnknownMachineException(uint pMachineId) {mMachineId = pMachineId;}
+			pmUnknownMachineException(uint pIndex) {mIndex = pIndex;}
 			pmStatus GetStatusCode() {return pmInvalidIndex;}
 
 		private:
-			uint mMachineId;
+			uint mIndex;
+	};
+
+	class pmUnknownDeviceException : public pmException
+	{
+		public:
+			pmUnknownDeviceException(uint pIndex) {mIndex = pIndex;}
+			pmStatus GetStatusCode() {return pmInvalidIndex;}
+
+		private:
+			uint mIndex;
 	};
 
 	class pmTimerException : public pmException
@@ -119,13 +132,22 @@ namespace pm
 		public:
 			typedef enum failureTypes
 			{
+				REQUEST_CREATION_ERROR,
+				REQUEST_FREE_ERROR,
 				SEND_ERROR,
 				RECEIVE_ERROR,
+				BROADCAST_ERROR,
+				ALL2ALL_ERROR,
 				STATUS_TEST_ERROR,
 				DUMMY_REQUEST_CREATION_ERROR,
 				WAIT_ERROR,
 				CANCELLATION_TEST_ERROR,
 				INVALID_DUMMY_REQUEST_STATUS_ERROR,
+				DATA_TYPE_REGISTRATION,
+				DATA_PACK_ERROR,
+				DATA_UNPACK_ERROR,
+				PROBE_ERROR,
+				GET_COUNT_ERROR,
 				DUMMY_REQUEST_CANCEL_ERROR
 			} failureTypes;
 
@@ -175,6 +197,15 @@ namespace pm
 		private:
 	};
 
+	class pmMemoryFetchException : public pmException
+	{
+		public:
+			pmMemoryFetchException() {}
+			pmStatus GetStatusCode() {return pmMemoryError;}
+
+		private:
+	};
+
 	class pmIgnorableException : public pmException
 	{
 		public:
@@ -211,6 +242,55 @@ namespace pm
 			gpuTypes mIdGPU;
 			failureTypes mFailureId;
 	};
+
+	class pmBeyondComputationalLimitsException : public pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				MPI_MAX_MACHINES,
+				MPI_MAX_TRANSFER_LENGTH
+			} failureTypes;
+
+			pmBeyondComputationalLimitsException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmBeyondComputationalLimits;}
+
+		private:
+			failureTypes mFailureId;
+	};
+
+	class pmUnrecognizedMemoryException : public pmException
+	{
+		public:
+			pmStatus GetStatusCode() {return pmUnrecognizedMemory;}
+
+		private:
+	};
+
+	class pmInvalidKeyException : public pmException
+	{
+		public:
+			pmStatus GetStatusCode() {return pmInvalidKey;}
+
+		private:
+	};
+
+	class pmDataProcessingException : public pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				DATA_PACKING_FAILED,
+				DATA_UNPACKING_FAILED
+			} failureTypes;
+
+			pmDataProcessingException(failureTypes pFailureId) {mFailureId = pFailureId;}
+			pmStatus GetStatusCode() {return pmDataProcessingFailure;}
+
+		private:
+			failureTypes mFailureId;
+	};
+
 
 } // end namespace pm
 

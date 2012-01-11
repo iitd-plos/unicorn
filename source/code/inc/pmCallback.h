@@ -14,84 +14,10 @@ namespace pm
 class pmCallback : public pmBase
 {
 	public:
-		typedef enum callbackType
-		{
-			NOP,				/* No Callback */
-			PreSubtask,			/* Called before Subtask callback (used for declaring RO and RW memory subscriptions) */
-			Subtask,			/* The actual user callback for the task */
-			Reduction,			/* Called after Subtask callback (used for reducing conflicting writes and to rollback transactions) */
-			DeviceSelection,	/* Called before PreSubtask callback (used to decide the devices participating in a task) */
-			PreDataTransfer,	/* Called before every network data transfer operation (used for compression and encryption) */
-			PostDataTransfer,	/* Called after every network data transfer operation (used for uncompression and decryption) */
-			DataDistribution,	/* A unified replacement for PreSubtask and Reduction callbacks */
-			MAX_CALLBACK_TYPES
-		};
 
-		pmCallback(ushort pCallbackType) {mCallbackType = pCallbackType;}
-		~pmCallback();
-
-	private:
-		ushort mCallbackType;
-};
-
-extern pmCallback PM_CALLBACK_NOP;		/* The NULL callback */
-
-class pmPreSubtaskCB : public pmCallback
-{
-	public:
-		pmPreSubtaskCB(ushort pCallbackType) : pmCallback(pCallbackType) {}
-
-		typedef pmStatus (*callback)();
-
-	private:
-};
-
-class pmSubtaskCB : public pmCallback
-{
-	public:
-		pmSubtaskCB(ushort pCallbackType) : pmCallback(pCallbackType) {}
-
-		typedef pmStatus (*callback)();
-
-	private:
-};
-
-class pmReductionCB : public pmCallback
-{
-	public:
-		pmReductionCB(ushort pCallbackType) : pmCallback(pCallbackType) {}
-
-		typedef pmStatus (*callback)();
-
-	private:
-};
-
-class pmDeviceSelectionCB : public pmCallback
-{
-	public:
-		pmDeviceSelectionCB(ushort pCallbackType) : pmCallback(pCallbackType) {}
-
-		typedef pmStatus (*callback)();
-
-	private:
-};
-
-class pmPreDataTransferCB : public pmCallback
-{
-	public:
-		pmPreDataTransferCB(ushort pCallbackType) : pmCallback(pCallbackType) {}
-
-		typedef pmStatus (*callback)();
-
-	private:
-};
-
-class pmPostDataTransferCB : public pmCallback
-{
-	public:
-		pmPostDataTransferCB(ushort pCallbackType) : pmCallback(pCallbackType) {}
-
-		typedef pmStatus (*callback)();
+	protected:
+		pmCallback();
+		virtual ~pmCallback();
 
 	private:
 };
@@ -99,11 +25,88 @@ class pmPostDataTransferCB : public pmCallback
 class pmDataDistributionCB : public pmCallback
 {
 	public:
-		pmDataDistributionCB(ushort pCallbackType) : pmCallback(pCallbackType) {}
+		pmDataDistributionCB(pmDataDistributionCallback pCallback);
+		virtual ~pmDataDistributionCB();
 
-		typedef pmStatus (*callback)();
+		virtual pmStatus Invoke(pmTask* pTask, ulong pSubtaskId);
 
 	private:
+		pmDataDistributionCallback mCallback;
+};
+
+class pmSubtaskCB : public pmCallback
+{
+	public:
+		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA);
+		virtual ~pmSubtaskCB();
+
+		virtual pmStatus Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId);
+
+		virtual bool IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType);
+
+	private:
+		pmSubtaskCallback_CPU mCallback_CPU;
+		pmSubtaskCallback_GPU_CUDA mCallback_GPU_CUDA;
+};
+
+class pmDataReductionCB : public pmCallback
+{
+	public:
+		pmDataReductionCB(pmDataReductionCallback pCallback);
+		virtual ~pmDataReductionCB();
+
+		virtual pmStatus Invoke(pmTask* pTask, ulong pSubtaskId1, ulong pSubtaskId2);
+
+	private:
+		pmDataReductionCallback mCallback;
+};
+
+class pmDataScatterCB : public pmCallback
+{
+	public:
+		pmDataScatterCB(pmDataScatterCallback pCallback);
+		virtual ~pmDataScatterCB();
+
+		virtual pmStatus Invoke(pmTask* pTask);
+
+	private:
+		pmDataScatterCallback mCallback;
+};
+
+class pmDeviceSelectionCB : public pmCallback
+{
+	public:
+		pmDeviceSelectionCB(pmDeviceSelectionCallback pCallback);
+		virtual ~pmDeviceSelectionCB();
+
+		virtual bool Invoke(pmTask* pTask, pmProcessingElement* pProcessingElement);
+
+	private:
+		pmDeviceSelectionCallback mCallback;
+};
+
+class pmPreDataTransferCB : public pmCallback
+{
+	public:
+		pmPreDataTransferCB(pmPreDataTransferCallback pCallback);
+		virtual ~pmPreDataTransferCB();
+
+		virtual pmStatus Invoke();
+
+	private:
+		pmPreDataTransferCallback mCallback;
+};
+
+class pmPostDataTransferCB : public pmCallback
+{
+	public:
+		pmPostDataTransferCB(pmPostDataTransferCallback pCallback);
+		virtual ~pmPostDataTransferCB();
+
+		virtual pmStatus Invoke();
+
+	private:
+		pmPostDataTransferCallback mCallback;
 };
 
 } // end namespace pm

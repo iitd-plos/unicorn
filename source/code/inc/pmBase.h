@@ -15,8 +15,11 @@ namespace pm
 class pmBase
 {
 	public:
-		void* operator new(size_t pSize);		//implicitly declared as a static member function
-		void operator delete(void *pPtr);		//implicitly declared as a static member function
+		pmBase();
+		virtual ~pmBase();
+
+		void* operator new (size_t pSize);		//implicitly declared as a static member function
+		void operator delete (void *pPtr);		//implicitly declared as a static member function
 		void* operator new [] (size_t pSize);	//implicitly declared as a static member function
 		void operator delete [] (void* pPtr);	//implicitly declared as a static member function
 
@@ -24,10 +27,11 @@ class pmBase
 		pmStatus CloseLibrary(void* pLibHandle);
 		void* GetExportedSymbol(void* pLibHandle, char* pSymbol);
 
+		uint GetRandomInt(uint pMaxLimit);
+
 	private:
 		static void* AllocateMemory(size_t pSize);
 		static void DeallocateMemory(void* pPtr);
-
 };
 
 } // end namespace pm

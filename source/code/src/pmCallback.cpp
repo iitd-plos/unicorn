@@ -1,9 +1,207 @@
 
 #include "pmCallback.h"
+#include "pmDispatcherGPU.h"
 
 namespace pm
 {
 
-pmCallback PM_CALLBACK_NOP(pmCallback::NOP);		/* The NULL callback */
+/* class pmCallback */
+pmCallback::pmCallback()
+{
+}
+
+pmCallback::~pmCallback()
+{
+}
+
+/* class pmDataDistributionCB */
+pmDataDistributionCB::pmDataDistributionCB(pmDataDistributionCallback pCallback)
+{
+	mCallback = pCallback;
+}
+
+pmDataDistributionCB::~pmDataDistributionCB()
+{
+}
+
+pmStatus pmDataDistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId)
+{
+	if(!mCallback)
+		return pmSuccess;
+
+	return mCallback(pTask->GetTaskInfo() ,pSubtaskId);
+}
+
+
+/* class pmSubtaskCB */
+pmSubtaskCB::pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA)
+{
+	mCallback_CPU = pCallback_CPU;
+	mCallback_GPU_CUDA = pCallback_GPU_CUDA;
+}
+
+pmSubtaskCB::~pmSubtaskCB()
+{
+}
+
+bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
+{
+	switch(pDeviceType)
+	{
+		case pmDeviceTypes::CPU:
+		{
+			if(mCallback_CPU)
+				return true;
+			
+			break;
+		}
+
+#ifdef SUPPORT_CUDA
+		case pmDeviceTypes::GPU_CUDA:
+		{
+			if(mCallback_GPU_CUDA)
+				return true;
+
+			break;
+		}
+#endif
+	}
+
+	return false;
+}
+
+pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId)
+{
+	switch(pDeviceType)
+	{
+		case pmDeviceTypes::CPU:
+		{
+			if(!mCallback_CPU)
+				return pmSuccess;
+
+			pmSubtaskInfo lSubtaskInfo;
+			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo);
+			return mCallback_CPU(pTask->GetTaskInfo(), lSubtaskInfo);
+
+			break;
+		}
+
+		case pmDeviceTypes::GPU_CUDA:
+		{
+			if(!mCallback_GPU_CUDA)
+				return pmSuccess;
+
+			pmSubtaskInfo lSubtaskInfo;
+			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo);
+			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask->GetTaskInfo(), lSubtaskInfo, mCallback_GPU_CUDA);
+
+			break;
+		}
+	}
+
+	return pmSuccess;
+}
+
+
+/* class pmDataReductionCB */
+pmDataReductionCB::pmDataReductionCB(pmDataReductionCallback pCallback)
+{
+	mCallback = pCallback;
+}
+
+pmDataReductionCB::~pmDataReductionCB()
+{
+}
+
+pmStatus pmDataReductionCB::Invoke(pmTask* pTask, ulong pSubtaskId1, ulong pSubtaskId2)
+{
+	if(!mCallback)
+		return pmSuccess;
+
+	pmSubtaskInfo lSubtaskInfo1, lSubtaskInfo2;
+	pTask->GetSubtaskInfo(pSubtaskId1, lSubtaskInfo1);
+	pTask->GetSubtaskInfo(pSubtaskId2, lSubtaskInfo2);
+
+	return mCallback(pTask->GetTaskInfo(), lSubtaskInfo1, lSubtaskInfo2);
+}
+
+
+/* class pmDataScatterCB */
+pmDataScatterCB::pmDataScatterCB(pmDataScatterCallback pCallback)
+{
+	mCallback = pCallback;
+}
+
+pmDataScatterCB::~pmDataScatterCB()
+{
+}
+
+pmStatus pmDataScatterCB::Invoke(pmTask* pTask)
+{
+	if(!mCallback)
+		return pmSuccess;
+
+	return mCallback(pTask->GetTaskInfo());
+}
+
+
+/* class pmDeviceSelectionCB */
+pmDeviceSelectionCB::pmDeviceSelectionCB(pmDeviceSelectionCallback pCallback)
+{
+	mCallback = pCallback;
+}
+
+pmDeviceSelectionCB::~pmDeviceSelectionCB()
+{
+}
+
+bool pmDeviceSelectionCB::Invoke(pmTask* pTask, pmProcessingElement* pProcessingElement)
+{
+	if(!mCallback)
+		return pmSuccess;
+
+	return mCallback(pTask->GetTaskInfo(), pProcessingElement->GetDeviceInfo());
+}
+
+
+/* class pmPreDataTransferCB */
+pmPreDataTransferCB::pmPreDataTransferCB(pmPreDataTransferCallback pCallback)
+{
+	mCallback = pCallback;
+}
+
+pmPreDataTransferCB::~pmPreDataTransferCB()
+{
+}
+
+pmStatus pmPreDataTransferCB::Invoke()
+{
+	if(!mCallback)
+		return pmSuccess;
+
+	return pmSuccess;
+	//return mCallback();
+}
+
+
+/* class pmPostDataTransferCB */
+pmPostDataTransferCB::pmPostDataTransferCB(pmPostDataTransferCallback pCallback)
+{
+	mCallback = pCallback;
+}
+
+pmPostDataTransferCB::~pmPostDataTransferCB()
+{
+}
+
+pmStatus pmPostDataTransferCB::Invoke()
+{
+	if(!mCallback)
+		return pmSuccess;
+
+	return pmSuccess;
+	//return mCallback();
+}
 
 };
+

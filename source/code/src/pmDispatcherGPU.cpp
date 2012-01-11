@@ -1,5 +1,6 @@
 
 #include "pmDispatcherGPU.h"
+#include "pmExecutionStub.h"
 #include "pmLogger.h"
 
 #define CUDA_LIBRARY_CUTIL "libcutil.so"
@@ -42,8 +43,6 @@ pmDispatcherGPU::pmDispatcherGPU()
 #else
 	mDispatcherCUDA = NULL;
 #endif
-
-	CountAndProbeProcessingElements();
 }
 
 pmDispatcherGPU::~pmDispatcherGPU()
@@ -51,18 +50,28 @@ pmDispatcherGPU::~pmDispatcherGPU()
 	delete mDispatcherCUDA;
 }
 
+pmDispatcherCUDA* pmDispatcherGPU::GetDispatcherCUDA()
+{
+	return mDispatcherCUDA;
+}
+
 size_t pmDispatcherGPU::GetCountGPU()
 {
 	return mCountGPU;
 }
 
-pmStatus pmDispatcherGPU::CountAndProbeProcessingElements()
+size_t pmDispatcherGPU::ProbeProcessingElementsAndCreateStubs(std::vector<pmExecutionStub*>& pStubVector)
 {
-	mCountGPU = 0;
+	size_t lCountCUDA = 0;
 	if(mDispatcherCUDA)
-		mCountGPU += mDispatcherCUDA->GetCountCUDA();
+	{
+		lCountCUDA = mDispatcherCUDA->GetCountCUDA();
+		for(size_t i=0; i<lCountCUDA; ++i)
+			pStubVector.push_back(new pmStubCUDA(i, pStubVector.size()));
+	}
 
-	return pmSuccess;
+	mCountGPU = lCountCUDA;
+	return mCountGPU;
 }
 
 /* class pmDispatcherCUDA */
@@ -98,6 +107,6 @@ pmDispatcherCUDA::~pmDispatcherCUDA()
 size_t pmDispatcherCUDA::GetCountCUDA()
 {
 	return mCountCUDA;
-}	
+}
 
 }

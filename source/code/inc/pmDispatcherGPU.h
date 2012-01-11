@@ -12,6 +12,8 @@
 namespace pm
 {
 
+class pmExecutionStub;
+
 /**
  * \brief The class responsible for all GPU related operations on various graphics cards
  */
@@ -24,9 +26,15 @@ class pmDispatcherCUDA : public pmGraphicsBase
 {
 	public:
 		pmDispatcherCUDA();
-		~pmDispatcherCUDA();
+		virtual ~pmDispatcherCUDA();
+
+		pmStatus BindToDevice(size_t pDeviceIndex);
 
 		size_t GetCountCUDA();
+
+		std::string GetDeviceName(size_t pDeviceIndex);
+		std::string GetDeviceDescription(size_t pDeviceIndex);
+		pmStatus InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmSubtaskCallback_GPU_CUDA pKernelPtr);
 	
 	private:
 		pmStatus CountAndProbeProcessingElements();
@@ -46,14 +54,15 @@ class pmDispatcherGPU : public pmGraphicsBase
 		static pmDispatcherGPU* GetDispatcherGPU();
 		pmStatus DestroyDispatcherGPU();
 
+		size_t ProbeProcessingElementsAndCreateStubs(std::vector<pmExecutionStub*>& pStubVector);
+		pmDispatcherCUDA* GetDispatcherCUDA();
+
 		size_t GetCountGPU();
 
 	private:
 		pmDispatcherGPU();
-		~pmDispatcherGPU();
-		
-		pmStatus CountAndProbeProcessingElements();
-		
+		virtual ~pmDispatcherGPU();
+				
 		static pmDispatcherGPU* mDispatcherGPU;
 
 		size_t mCountGPU;

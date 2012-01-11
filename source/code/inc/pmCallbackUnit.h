@@ -4,6 +4,10 @@
 
 #include "pmInternalDefinitions.h"
 #include "pmCallback.h"
+#include "pmResourceLock.h"
+
+#include <string>
+#include <map>
 
 namespace pm
 {
@@ -15,32 +19,36 @@ namespace pm
 class pmCallbackUnit : public pmBase
 {
 	public:
-		pmCallbackUnit(pmPreSubtaskCB pPreSubtaskCB, pmSubtaskCB pSubtaskCB, pmReductionCB pReductionCB, pmDeviceSelectionCB pDeviceSelectionCB,
-			pmPreDataTransferCB pPreDataTransferCB, pmPostDataTransferCB pPostDataTransferCB, pmDataDistributionCB pDataDistributionCB);
+		pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
+			pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB);
 
-		pmCallbackUnit(pmPreSubtaskCB pPreSubtaskCB, pmSubtaskCB pSubtaskCB);
-		pmCallbackUnit(pmPreSubtaskCB pPreSubtaskCB, pmSubtaskCB pSubtaskCB, pmReductionCB pReductionCB);
-		pmCallbackUnit(pmSubtaskCB pSubtaskCB, pmDataDistributionCB pDataDistributionCB);
+		virtual ~pmCallbackUnit();
 
-		~pmCallbackUnit();
+		pmDataDistributionCB* GetDataDistributionCB();
+		pmSubtaskCB* GetSubtaskCB();
+		pmDataReductionCB* GetDataReductionCB();
+		pmDataScatterCB* GetDataScatterCB();
+		pmDeviceSelectionCB* GetDeviceSelectionCB();
+		pmPreDataTransferCB* GetPreDataTransferCB();
+		pmPostDataTransferCB* GetPostDataTransferCB();
 
-		pmCallback GetPreSubtaskCB();
-		pmCallback GetSubtaskCB();
-		pmCallback GetReductionCB();
-		pmCallback GetDeviceSelectionCB();
-		pmCallback GetPreDataTransferCB();
-		pmCallback GetPostDataTransferCB();
-		pmCallback GetDataDistributionCB();
+		const char* GetKey();
+
+		static pmCallbackUnit* FindCallbackUnit(char* pKey);
 
 	private:
-		/* Not defining callbacks to specific types so that PM_CALLBACK_NOP can be assigned to the undefined ones */
-		pmCallback mPreSubtaskCB;
-		pmCallback mSubtaskCB;
-		pmCallback mReductionCB;
-		pmCallback mDeviceSelectionCB;
-		pmCallback mPreDataTransferCB;
-		pmCallback mPostDataTransferCB;
-		pmCallback mDataDistributionCB;
+		pmDataDistributionCB* mDataDistributionCB;
+		pmSubtaskCB* mSubtaskCB;
+		pmDataReductionCB* mDataReductionCB;
+		pmDataScatterCB* mDataScatterCB;
+		pmDeviceSelectionCB* mDeviceSelectionCB;
+		pmPreDataTransferCB* mPreDataTransferCB;
+		pmPostDataTransferCB* mPostDataTransferCB;
+
+		std::string mKey;
+
+		static std::map<std::string, pmCallbackUnit*> mKeyMap;
+		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

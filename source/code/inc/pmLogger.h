@@ -35,7 +35,7 @@ class pmLogger : public pmBase
 
 	private:
 		pmLogger(logLevel pLogLevel);
-		~pmLogger();
+		virtual ~pmLogger();
 
 		ushort mLogLevel;
 		static pmLogger* mLogger;
