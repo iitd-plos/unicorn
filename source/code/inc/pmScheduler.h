@@ -74,6 +74,7 @@ P			 *  acknowledgement is sent back upon completion of the allotted subtasks. T
 			TASK_CANCEL,
 			TASK_FINISH,
 			SUBTASK_REDUCE,
+			MEMORY_TRANSFER,
 			COMMAND_COMPLETION
 		} eventIdentifier;
 
@@ -162,6 +163,16 @@ P			 *  acknowledgement is sent back upon completion of the allotted subtasks. T
 			ulong subtaskId;
 		} subtaskReduce;
 
+		typedef struct memTransfer
+		{
+			pmMemSection* memSection;
+			ulong offset;
+			ulong length;
+			pmMachine* machine;
+			ulong destMemBaseAddr;
+			ushort priority;
+		} memTransfer;
+
 		typedef struct commandCompletion
 		{
 			pmCommandPtr command;
@@ -185,6 +196,7 @@ P			 *  acknowledgement is sent back upon completion of the allotted subtasks. T
 				taskCancel taskCancelDetails;
 				taskFinish taskFinishDetails;
 				subtaskReduce subtaskReduceDetails;
+				memTransfer memTransferDetails;
 			};
 
 			commandCompletion commandCompletionDetails;		// Can't make this part of union as C++ standard does not allow anything with non-trivial constructor/copy-constructor/assignment to be part of an union
@@ -216,6 +228,7 @@ P			 *  acknowledgement is sent back upon completion of the allotted subtasks. T
 		pmStatus TaskCancelEvent(pmTask* pTask);
 		pmStatus TaskFinishEvent(pmTask* pTask);
 		pmStatus ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId);
+		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority);
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
 
 		pmStatus HandleCommandCompletion(pmCommandPtr pCommand);
@@ -235,6 +248,7 @@ P			 *  acknowledgement is sent back upon completion of the allotted subtasks. T
 		pmStatus SetupNewTaskEventReception();
 		pmStatus SetupNewStealRequestReception();
 		pmStatus SetupNewStealResponseReception();
+		pmStatus SetupNewMemSubscriptionRequestReception();
 
 		pmStatus ProcessEvent(schedulerEvent& pEvent);
 
@@ -268,6 +282,7 @@ P			 *  acknowledgement is sent back upon completion of the allotted subtasks. T
 		pmPersistentCommunicatorCommandPtr mTaskEventRecvCommand;
 		pmPersistentCommunicatorCommandPtr mStealRequestRecvCommand;
 		pmPersistentCommunicatorCommandPtr mStealResponseRecvCommand;
+		pmPersistentCommunicatorCommandPtr mMemSubscriptionRequestCommand;
 
 		static pmScheduler* mScheduler;
 };

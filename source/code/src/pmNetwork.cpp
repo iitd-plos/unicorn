@@ -194,6 +194,32 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 			break;
 		}
 
+		case pmCommunicatorCommand::MEMORY_RECEIVE_PACKED:
+		{
+			pmCommunicatorCommand::memoryReceivePacked* lData = (pmCommunicatorCommand::memoryReceivePacked*)(pCommand->GetData());
+			if(!lData)
+				throw pmFatalErrorException();
+
+			pmCommunicatorCommand::memoryReceiveStruct lStruct = lData->receiveStruct;
+			lLength += sizeof(lStruct) + lData->mem.length;
+
+			if(lLength > __MAX_SIGNED(int))
+				throw pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH);
+
+			lPackedData = new char[lLength];
+			int lPos = 0;
+			MPI_Comm lCommunicator;
+			SAFE_GET_MPI_COMMUNICATOR(lCommunicator, pCommand->GetDestination());
+	
+			if( MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS )
+				throw pmNetworkException(pmNetworkException::DATA_PACK_ERROR);
+
+			if( MPI_Pack(lData->mem.ptr, lData->mem.length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS )
+				throw pmNetworkException(pmNetworkException::DATA_PACK_ERROR);
+
+			break;
+		}
+
 		default:
 			throw pmFatalErrorException();
 	}
@@ -248,6 +274,21 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 			lPackedTask->subtaskMem.length = lPackedTask->reduceStruct.subtaskMemLength;
 				
 			if( MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->subtaskMem.ptr, lPackedTask->subtaskMem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS )
+				throw pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR);
+
+			break;
+		}
+
+		case pmCommunicatorCommand::MEMORY_RECEIVE_PACKED:
+		{
+			pmCommunicatorCommand::memoryReceivePacked* lPackedTask = new pmCommunicatorCommand::memoryReceivePacked();
+			if( MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedTask->receiveStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT), lCommunicator) != MPI_SUCCESS )
+				throw pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR);
+
+			lPackedTask->mem.ptr = new char[lPackedTask->receiveStruct.length];
+			lPackedTask->mem.length = lPackedTask->receiveStruct.length;
+				
+			if( MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->mem.ptr, lPackedTask->mem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS )
 				throw pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR);
 
 			break;
@@ -577,6 +618,7 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 
 		case pmCommunicatorCommand::REMOTE_TASK_ASSIGN_PACKED:
 		case pmCommunicatorCommand::SUBTASK_REDUCE_PACKED:
+		case pmCommunicatorCommand::MEMORY_RECEIVE_PACKED:
 			return MPI_PACKED;
 			break;
 
@@ -721,11 +763,11 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 		case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::memorySubscriptionRequest, lData, lDataMPI);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.addr, lAddrMPI, MPI_UNSIGNED_LONG, 0, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.transferId, lTransferIdMPI, MPI_UNSIGNED_LONG, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.ownerBaseAddr, lOwnerBaseAddrMPI, MPI_UNSIGNED_LONG, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receiverBaseAddr, lReceiverBaseAddrMPI, MPI_UNSIGNED_LONG, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 5, 1);
 
 			break;
 		}
@@ -738,6 +780,16 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskId, lSubtaskIdMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskMemLength, lSubtaskMemLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subscriptionOffset, lSubscriptionOffsetMPI, MPI_UNSIGNED_LONG, 4, 1);
+
+			break;
+		}
+
+		case pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT:
+		{
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::memoryReceiveStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receivingMemBaseAddr, lReceivingMemBaseAddrMPI, MPI_UNSIGNED_LONG, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 2, 1);
 
 			break;
 		}
@@ -1026,9 +1078,15 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(pmThreadComma
 			case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT:
 				lDataType = pmCommunicatorCommand::REMOTE_TASK_ASSIGN_PACKED;
 				break;
+	
 			case pmCommunicatorCommand::SUBTASK_REDUCE_TAG:
 				lDataType = pmCommunicatorCommand::SUBTASK_REDUCE_PACKED;
 				break;
+			
+			case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
+				lDataType = pmCommunicatorCommand::MEMORY_RECEIVE_PACKED;
+				break;
+			
 			default:
 				delete[] lPackedData;
 				continue;

@@ -128,8 +128,8 @@ class pmCommunicatorCommand : public pmCommand
 			ulong internalTaskId;	// memory address of local task object (on originating host)
 			ushort priority;
 			ushort schedModel;
-			ulong inputMemAddr;
-			ulong outputMemAddr;
+			ulong inputMemAddr;		// Actual base addr of input memory
+			ulong outputMemAddr;	// Actual base addr of output memory
 
 			remoteTaskAssignStruct();
 			remoteTaskAssignStruct(pmLocalTask* pLocalTask);
@@ -247,11 +247,11 @@ class pmCommunicatorCommand : public pmCommand
 
 		typedef struct memorySubscriptionRequest
 		{
-			ulong addr;
+			ulong ownerBaseAddr;	// Actual base memory address on serving host
+			ulong receiverBaseAddr;	// Actual base memory address on receiving host (on destHost)
 			ulong offset;
 			ulong length;
-			ulong transferId;	// MPI tag to be used for memory transfer
-			uint destHost;		// Host that will receive the memory (generally same as the requesting host)
+			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
 
 			typedef enum fieldCount
 			{
@@ -285,6 +285,29 @@ class pmCommunicatorCommand : public pmCommand
 			dataPtr subtaskMem;
 		} subtaskReducePacked;
 
+		typedef struct memoryReceiveStruct
+		{
+			ulong receivingMemBaseAddr;
+			ulong offset;
+			ulong length;
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 3
+			} fieldCount;
+	
+		} memoryReceiveStruct;
+
+		typedef struct memoryReceivePacked
+		{
+			memoryReceivePacked();
+			memoryReceivePacked(ulong pReceivingMemBaseAddr, ulong pOffset, ulong pLength, void* pMemPtr);
+			~memoryReceivePacked();
+
+			memoryReceiveStruct receiveStruct;
+			dataPtr mem;
+		} memoryReceivePacked;
+
 		typedef enum communicatorCommandTypes
 		{
 			SEND,
@@ -305,6 +328,7 @@ class pmCommunicatorCommand : public pmCommand
 			STEAL_REQUEST_TAG,
 			STEAL_RESPONSE_TAG,
 			MEMORY_SUBSCRIPTION_TAG,
+			MEMORY_RECEIVE_TAG,
 			SUBTASK_REDUCE_TAG,
 			UNKNOWN_LENGTH_TAG,
 			MAX_COMMUNICATOR_COMMAND_TAGS
@@ -327,6 +351,8 @@ class pmCommunicatorCommand : public pmCommand
 			MEMORY_SUBSCRIPTION_STRUCT,
 			SUBTASK_REDUCE_STRUCT,
 			SUBTASK_REDUCE_PACKED,
+			MEMORY_RECEIVE_STRUCT,
+			MEMORY_RECEIVE_PACKED,
 			MAX_COMMUNICATOR_DATA_TYPES
 		} communicatorDataTypes;
 

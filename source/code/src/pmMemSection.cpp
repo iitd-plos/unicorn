@@ -6,7 +6,7 @@ namespace pm
 {
 
 /* class pmMemSection */
-pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerMemSectionAddr)
+pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr)
 {
 	mRequestedLength = pLength;
 
@@ -20,7 +20,8 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerMemSec
 
 	vmRangeOwner lRangeOwner;
 	lRangeOwner.host = pOwner?pOwner:PM_LOCAL_MACHINE;
-	lRangeOwner.hostMemSection = pOwner?pOwnerMemSectionAddr:(ulong)this;
+	lRangeOwner.hostBaseAddr = pOwner?pOwnerBaseMemAddr:(ulong)mMem;
+
 	mOwnershipMap[0] = std::pair<size_t, vmRangeOwner>(pLength, lRangeOwner);
 
 	if(mMem)
@@ -62,25 +63,116 @@ pmMemSection* pmMemSection::FindMemSection(void* pMem)
 	return NULL;
 }
 
-pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerMemSectionAddr, ulong pOffset, ulong pLength)
+pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength)
 {
 	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
 
+	if(mShadowOwnershipMap.empty())
+		mShadowOwnershipMap = mOwnershipMap;
 
+	// Remove present ownership
+	size_t lLastAddr = pOffset + pLength - 1;
+
+	pmMemOwnership::iterator lStartIter, lEndIter;
+	pmMemOwnership::iterator* lStartIterAddr = &lStartIter;
+	pmMemOwnership::iterator* lEndIterAddr = &lEndIter;
+
+	FIND_FLOOR_ELEM(pmMemOwnership, mShadowOwnershipMap, pOffset, lStartIterAddr);
+	FIND_FLOOR_ELEM(pmMemOwnership, mShadowOwnershipMap, lLastAddr, lEndIterAddr);
+
+	if(!lStartIterAddr || !lEndIterAddr)
+		throw pmFatalErrorException();
+
+	assert(lStartIter->first <= pOffset);
+	assert(lEndIter->first <= lLastAddr);
+	assert(lStartIter->first + lStartIter->second.first > pOffset);
+	assert(lEndIter->first + lEndIter->second.first > lLastAddr);
+
+	size_t lStartOffset = lStartIter->first;
+	size_t lStartLength = lStartIter->second.first;
+	vmRangeOwner lStartOwner = lStartIter->second.second;
+
+	size_t lEndOffset = lEndIter->first;
+	size_t lEndLength = lEndIter->second.first;
+	vmRangeOwner lEndOwner = lEndIter->second.second;
+
+	mShadowOwnershipMap.erase(lStartIter, lEndIter);
+
+	bool lKeepStart = false;
+	bool lKeepEnd = false;
+
+	if(lStartOffset < pOffset)
+	{
+		if(lStartOwner.host == pOwner && lStartOwner.hostBaseAddr == pOwnerBaseMemAddr)
+			pOffset = lStartOffset;		// Combine with previous range
+		else
+			mShadowOwnershipMap[lStartOffset] = std::pair<size_t, vmRangeOwner>(pOffset-lStartOffset, lStartOwner);
+	}
+
+	if(lEndOffset + lEndLength - 1 > lLastAddr)
+	{
+		if(lEndOwner.host == pOwner && lEndOwner.hostBaseAddr == pOwnerBaseMemAddr)
+			lLastAddr = lEndOffset + lEndLength - 1;	// Combine with following range
+		else
+			mShadowOwnershipMap[lLastAddr + 1] = std::pair<size_t, vmRangeOwner>(lEndOffset + lEndLength - 1 - lLastAddr, lEndOwner);
+	}
 
 	vmRangeOwner lRangeOwner;
 	lRangeOwner.host = pOwner;
-	lRangeOwner.hostMemSection = pOwnerMemSectionAddr;
-	mOwnershipMap[pOffset] = std::pair<size_t, vmRangeOwner>(pLength, lRangeOwner);
+	lRangeOwner.hostBaseAddr = pOwnerBaseMemAddr;
+	mShadowOwnershipMap[pOffset] = std::pair<size_t, vmRangeOwner>(lLastAddr - pOffset + 1, lRangeOwner);
 
 	return pmSuccess;
 }
 
-pmStatus pmMemSection::GetOwner(pmMachine*& pHost, ulong& pAddr)
+pmStatus pmMemSection::FlushOwnerships()
 {
-	FINALIZE_RESOURCE_PTR(dSectionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSectionLock, Lock(), Unlock());
-	pHost = mMemOrganizationMap[0].host;
-	pAddr = mMemOrganizationMap[0].addr;
+	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+
+	if(!mShadowOwnershipMap.empty())
+	{
+		mOwnershipMap = mShadowOwnershipMap;
+		mShadowOwnershipMap.clear();
+	}
+}
+
+pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships)
+{
+	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+
+	pmMemOwnership* lTargetMap = NULL;
+	if(mShadowOwnershipMap.empty())
+		lTargetMap = &mOwnershipMap;
+	else
+		lTargetMap = &mShadowOwnershipMap;
+
+	pmMemOwnership lMap = *lTargetMap;
+
+	ulong lLastAddr = pOffset + pLength - 1;
+
+	pmMemOwnership::iterator lStartIter, lEndIter;
+	pmMemOwnership::iterator* lStartIterAddr = &lStartIter;
+	pmMemOwnership::iterator* lEndIterAddr = &lEndIter;
+
+	FIND_FLOOR_ELEM(pmMemOwnership, lMap, pOffset, lStartIterAddr);
+	FIND_FLOOR_ELEM(pmMemOwnership, lMap, lLastAddr, lEndIterAddr);
+
+	if(!lStartIterAddr || !lEndIterAddr)
+		throw pmFatalErrorException();
+
+	pOwnerships[pOffset] = lStartIter->second;
+	
+	pmMemOwnership::iterator lIter = lStartIter;
+	++lIter;
+
+	if(lStartIter != lEndIter)
+	{
+		for(; lIter != lEndIter; ++lIter)
+			pOwnerships[lIter->first] = lIter->second;
+	}
+
+	vmRangeOwner lLastOwner = lEndIter->second.second;
+	pOwnerships[lEndIter->first] = std::pair<size_t, vmRangeOwner>(lLastAddr - lEndIter->first + 1, lLastOwner);
 
 	return pmSuccess;
 }

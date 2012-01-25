@@ -2,7 +2,10 @@
 #include <stdlib.h>
 #include <time.h>
 #include "pmBase.h"
+
+#ifdef UNIX
 #include "dlfcn.h"	// For dlopen/dlclose/dlsym
+#endif
 
 namespace pm
 {

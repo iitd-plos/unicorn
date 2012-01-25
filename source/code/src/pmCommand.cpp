@@ -318,8 +318,8 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
 	internalTaskId = (ulong)pLocalTask;
 	priority = pLocalTask->GetPriority();
 	schedModel = (ushort)(pLocalTask->GetSchedulingModel());
-	inputMemAddr = lInputSection?((ulong)lInputSection):0x0;
-	outputMemAddr = lOutputSection?((ulong)lOutputSection):0x0;
+	inputMemAddr = lInputSection?((ulong)(lInputSection->GetMem())):0x0;
+	outputMemAddr = lOutputSection?((ulong)(lOutputSection->GetMem())):0x0;
 }
 
 pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct()
@@ -394,6 +394,23 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmTask* pTask, u
 }
 
 pmCommunicatorCommand::subtaskReducePacked::~subtaskReducePacked()
+{
+}
+
+pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked()
+{
+}
+
+pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked(ulong pReceivingMemBaseAddr, ulong pOffset, ulong pLength, void* pMemPtr)
+{
+	this->receiveStruct.receivingMemBaseAddr = pReceivingMemBaseAddr;
+	this->receiveStruct.offset = pOffset;
+	this->receiveStruct.length = pLength;
+	this->mem.ptr = pMemPtr;
+	this->mem.length = pLength;
+}
+
+pmCommunicatorCommand::memoryReceivePacked::~memoryReceivePacked()
 {
 }
 

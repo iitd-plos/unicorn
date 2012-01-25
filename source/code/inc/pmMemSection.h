@@ -34,19 +34,23 @@ class pmMemSection : public pmBase
 		typedef struct vmRangeOwner
 		{
 			pmMachine* host;		// Host where memory page lives
-			ulong hostMemSection;	// Address of mem section on host
-		} vmPageData;
+			ulong hostBaseAddr;		// Actual base addr on host
+		} vmRangeOwner;
+
+		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
 		virtual ~pmMemSection();
 		void* GetMem();
 		size_t GetLength();
 
 		static pmMemSection* FindMemSection(void* pMem);
-		pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerMemSectionAddr, ulong pOffset, ulong pLength);
-		pmStatus GetOwner(pmMachine*& pHost, ulong& pAddr);
+	
+		pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength);
+		pmStatus FlushOwnerships();
+		pmStatus GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
 
 	protected:
-		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerMemSectionAddr);
+		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr);
 
 	private:
 		void* mMem;
@@ -54,8 +58,8 @@ class pmMemSection : public pmBase
 		size_t mAllocatedLength;
 		size_t mVMPageCount;
 
-		std::map<size_t, std::pair<size_t, vmRangeOwner> > mOwnershipMap;		// offset versus pair (of length of region and vmRangeOwner)
-		std::map<size_t, std::pair<size_t, vmRangeOwner> > mShadowOwnershipMap;	// Map of subscriptions; updated to mOwnershipMap after task finishes
+		pmMemOwnership mOwnershipMap;		// offset versus pair (of length of region and vmRangeOwner)
+		pmMemOwnership mShadowOwnershipMap;	// Map of subscriptions; updated to mOwnershipMap after task finishes
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
 
 		static std::map<void*, pmMemSection*> mMemSectionMap;	// Maps actual allocated memory regions to pmMemSection objects

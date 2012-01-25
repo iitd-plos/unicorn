@@ -47,6 +47,12 @@ pmTask::~pmTask()
 {
 	if(mReducer)
 		delete mReducer;
+
+	if(mMemRO)
+		mMemRO->FlushOwnerships();
+
+	if(mMemRW)
+		mMemRW->FlushOwnerships();
 }
 
 void* pmTask::GetTaskConfiguration()

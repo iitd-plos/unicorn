@@ -8,6 +8,7 @@
 #include "pmExecutionStub.h"
 #include "pmSubtaskManager.h"
 #include "pmCommunicator.h"
+#include "pmMemoryManager.h"
 
 namespace pm
 {
@@ -24,7 +25,7 @@ pmScheduler* pmScheduler::mScheduler = NULL;
 
 pmScheduler::pmScheduler()
 {
-	mRemoteSubtaskRecvCommand = mAcknowledgementRecvCommand = mTaskEventRecvCommand = mStealRequestRecvCommand = mStealResponseRecvCommand = NULL;
+	mRemoteSubtaskRecvCommand = mAcknowledgementRecvCommand = mTaskEventRecvCommand = mStealRequestRecvCommand = mStealResponseRecvCommand = mMemSubscriptionRequestCommand = NULL;
 
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT);
@@ -33,6 +34,8 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::STEAL_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 
 	SetupPersistentCommunicationCommands();
 
@@ -48,6 +51,8 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::STEAL_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 }
@@ -83,6 +88,7 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	pmCommunicatorCommand::taskEventStruct* lTaskEventRecvData;
 	pmCommunicatorCommand::stealRequestStruct* lStealRequestRecvData;
 	pmCommunicatorCommand::stealResponseStruct* lStealResponseRecvData;
+	pmCommunicatorCommand::memorySubscriptionRequest* lMemSubscriptionRequestData;
 
 	START_DESTROY_ON_EXCEPTION(dBlock);
 
@@ -92,12 +98,20 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealRequestRecvData, new pmCommunicatorCommand::stealRequestStruct());
 	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealResponseRecvData, new pmCommunicatorCommand::stealResponseStruct());
 
-	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT, REMOTE_SUBTASK_ASSIGN_STRUCT, lSubtaskAssignRecvData, remoteSubtaskAssignStruct));
-	mAcknowledgementRecvCommand = PERSISTENT_RECV_COMMAND(SEND_ACKNOWLEDGEMENT_TAG, SEND_ACKNOWLEDGEMENT_STRUCT, lSendAckRecvData, sendAcknowledgementStruct));
-	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, lTaskEventRecvData, taskEventStruct));
-	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	lStealRequestRecvData, stealRequestStruct));
-	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, lStealResponseRecvData, stealResponseStruct));
+	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT, REMOTE_SUBTASK_ASSIGN_STRUCT, lSubtaskAssignRecvData, remoteSubtaskAssignStruct);
+	mAcknowledgementRecvCommand = PERSISTENT_RECV_COMMAND(SEND_ACKNOWLEDGEMENT_TAG, SEND_ACKNOWLEDGEMENT_STRUCT, lSendAckRecvData, sendAcknowledgementStruct);
+	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, lTaskEventRecvData, taskEventStruct);
+	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	lStealRequestRecvData, stealRequestStruct);
+	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, lStealResponseRecvData, stealResponseStruct);
+	mMemSubscriptionRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_SUBSCRIPTION_TAG, MEMORY_SUBSCRIPTION_STRUCT, lMemSubscriptionRequestData, memorySubscriptionRequest);
 	
+	SetupNewRemoteSubtaskReception();
+	SetupNewAcknowledgementReception();
+	SetupNewTaskEventReception();
+	SetupNewStealRequestReception();
+	SetupNewStealResponseReception();
+	SetupNewMemSubscriptionRequestReception();
+
 	END_DESTROY_ON_EXCEPTION(dBlock);
 }
 
@@ -108,6 +122,7 @@ pmStatus pmScheduler::DestroyPersistentCommunicationCommands()
 	delete mTaskEventRecvCommand->GetData();
 	delete mStealRequestRecvCommand->GetData();
 	delete mStealResponseRecvCommand->GetData();
+	delete mMemSubscriptionRequestCommand->GetData();
 }
 
 pmStatus pmScheduler::SetupNewRemoteSubtaskReception()
@@ -133,6 +148,11 @@ pmStatus pmScheduler::SetupNewStealRequestReception()
 pmStatus pmScheduler::SetupNewStealResponseReception()
 {
 	return pmCommunicator::GetCommunicator()->Receive(mStealResponseRecvCommand, false);
+}
+
+pmStatus pmScheduler::SetupNewMemSubscriptionRequestReception()
+{
+	return pmCommunicator::GetCommunicator()->Receive(mMemSubscriptionRequestCommand, false);
 }
 
 pmStatus pmScheduler::SubmitTaskEvent(pmLocalTask* pLocalTask)
@@ -324,6 +344,24 @@ pmStatus pmScheduler::ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine,
 	return lStatus;	
 }
 
+pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority)
+{
+	schedulerEvent lEvent;
+	lEvent.eventId = MEMORY_TRANSFER;
+	lEvent.memTransferDetails.memSection = pSrcMemSection;
+	lEvent.memTransferDetails.offset = pOffset;
+	lEvent.memTransferDetails.length = pLength;
+	lEvent.memTransferDetails.machine = pDestMachine;
+	lEvent.memTransferDetails.destMemBaseAddr = pDestMemBaseAddr;
+	lEvent.memTransferDetails.priority = pPriority;
+
+	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pPriority);
+
+	mSignalWait.Signal();
+
+	return lStatus;		
+}
+
 pmStatus pmScheduler::CommandCompletionEvent(pmCommandPtr pCommand)
 {
 	schedulerEvent lEvent;
@@ -490,6 +528,23 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
 			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::SUBTASK_REDUCE_TAG, 
 				lEventDetails.machine, pmCommunicatorCommand::SUBTASK_REDUCE_PACKED, lPackedData, sizeof(lPackedData), NULL, 0, gCommandCompletionCallback);
+
+			pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+
+			break;
+		}
+
+		case MEMORY_TRANSFER:
+		{
+			memTransfer& lEventDetails = pEvent.memTransferDetails;
+			
+			pmCommunicatorCommand::memoryReceivePacked* lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+
+			if(dynamic_cast<pmOutputMemSection*>(lEventDetails.memSection))
+				lEventDetails.memSection->SetRangeOwner(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length);
+
+			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, 
+				lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, sizeof(lPackedData), NULL, 0, gCommandCompletionCallback);
 
 			pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
 
@@ -1013,6 +1068,23 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					break;
 				}
 
+				case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
+				{
+					pmCommunicatorCommand::memoryReceivePacked* lData = (pmCommunicatorCommand::memoryReceivePacked*)(lCommunicatorCommand->GetData());
+
+					void* lMem = (void*)(lData->receiveStruct.receivingMemBaseAddr);
+					pmMemSection* lMemSection = pmMemSection::FindMemSection(lMem);
+					
+					if(lMemSection)		// If memory still exists
+						MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lMem, lMemSection, lData->receiveStruct.offset, lData->receiveStruct.length, lData->mem.ptr);
+				
+					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
+					delete[] lData->mem.ptr;
+					delete[] lData;
+
+					break;
+				}
+
 				case pmCommunicatorCommand::STEAL_REQUEST_STRUCT:
 				{
 					pmTask* lTask;
@@ -1075,6 +1147,21 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					}
 
 					SetupNewStealResponseReception();
+
+					break;
+				}
+
+				case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT:
+				{
+					pmCommunicatorCommand::memorySubscriptionRequest* lData = (pmCommunicatorCommand::memorySubscriptionRequest*)(lCommunicatorCommand->GetData());
+
+					pmMemSection* lMemSection = pmMemSection::FindMemSection((void*)(lData->ownerBaseAddr));
+					if(!lMemSection)
+						throw pmFatalErrorException();
+
+					MemTransferEvent(lMemSection, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, MAX_CONTROL_PRIORITY);
+
+					SetupNewMemSubscriptionRequestReception();
 
 					break;
 				}

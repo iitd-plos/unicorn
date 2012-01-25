@@ -49,6 +49,7 @@ class pmMemoryManager : public pmBase
 		virtual ulong GetHigherPageSizeMultiple(ulong pNum) = 0;
 
 		virtual pmStatus LoadLazyMemory(void* pLazyMem, ulong pLoadOffset, ulong pLoadLength) = 0;
+		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
 
 		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength) = 0;
 		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength) = 0;
@@ -91,6 +92,8 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		virtual ulong GetLowerPageSizeMultiple(ulong pNum);
 		virtual ulong GetHigherPageSizeMultiple(ulong pNum);
 
+		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
+
 		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength);
 		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength);
 
@@ -98,7 +101,7 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		pmLinuxMemoryManager();
 		virtual ~pmLinuxMemoryManager();
 
-		virtual pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength);
+		virtual pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr);
 
 		size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
 

@@ -27,7 +27,6 @@ class pmSubscriptionManager : public pmBase
 		pmSubscriptionManager(pmTask* pTask);
 		virtual ~pmSubscriptionManager();
 
-		pmStatus SetupNewMemRequestReceiveReception();
 		pmStatus SetDefaultSubscriptions(ulong pSubtaskId);
 		pmStatus RegisterSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo);
 		pmStatus FetchSubtaskSubscriptions(ulong pSubtaskId);
@@ -46,7 +45,6 @@ class pmSubscriptionManager : public pmBase
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mOutputMemResourceLock;
 
 		pmTask* mTask;
-		pmCommunicatorCommandPtr mMemRequestReceiveCommand;
 };
 
 } // end namespace pm

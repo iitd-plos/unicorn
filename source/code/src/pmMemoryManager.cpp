@@ -254,6 +254,30 @@ ulong pmLinuxMemoryManager::GetHigherPageSizeMultiple(ulong pNum)
 	return (((pNum/lPageSize) + 1) * lPageSize);
 }
 
+pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem)
+{
+	FINALIZE_RESOURCE(dInFlightLock, mInFlightLock.Lock(), mInFlightLock.Unlock());
+
+	//if(::mprotect((void*)(pSigInfo->si_addr), 1, PROT_READ | PROT_WRITE) != 0)
+	//	lMemoryManager->UninstallSegFaultHandler();
+	// Receive this after removing memory protection from page under mInFlightLock
+
+	char* lAddr = (char*)pDestMem;
+	lAddr += pOffset;
+
+	memcpy((void*)lAddr, pSrcMem, pLength);
+
+	std::map<void*, std::pair<size_t, regionFetchData> >::iterator lIter;
+	if(mInFlightMemoryMap.find(lAddr) == mInFlightMemoryMap.end())
+		throw pmFatalErrorException();
+
+	regionFetchData& lData = mInFlightMemoryMap[lAddr].second;
+	delete lData.sendCommand->GetData();
+	lData.receiveCommand->MarkExecutionEnd(pmSuccess);
+
+	return pmSuccess;
+}
+
 #ifdef USE_LAZY_MEMORY
 pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(void* pLazyMemAddr)
 {
@@ -415,7 +439,31 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 
 	size_t lRegionCount = lRegionsToBeFetched.size();
 	for(size_t i=0; i<lRegionCount; ++i)
-		lCommandVector.push_back(FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lRegionsToBeFetched[i].first-(ulong)pMem, lRegionsToBeFetched[i].second - lRegionsToBeFetched[i].first+ 1));
+	{
+		ulong lOffset = lRegionsToBeFetched[i].first-(ulong)pMem;
+		ulong lLength = lRegionsToBeFetched[i].second - lRegionsToBeFetched[i].first+ 1;
+
+		pmMemSection::pmMemOwnership lOwnerships;
+		lMemSection->GetOwners(lOffset, lLength, lOwnerships);
+
+		pmMemSection::pmMemOwnership::iterator lStartIter, lEndIter, lIter;
+		lStartIter = lOwnerships.begin();
+		lEndIter = lOwnerships.end();
+
+		for(lIter = lStartIter; lIter != lEndIter; ++lIter)
+		{
+			ulong lInternalOffset = lIter->first;
+			ulong lInternalLength = lIter->second.first;
+			pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
+
+			if(lRangeOwner.host != PM_LOCAL_MACHINE)
+			{
+				pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr);
+				if(lCommand)
+					lCommandVector.push_back(lCommand);
+			}
+		}
+	}
 
 	mInFlightLock.Unlock();
 
@@ -433,43 +481,34 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(pm
 	return FetchMemoryRegion(lMem, pPriority, pOffset, pLength);
 }
 
-pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength)
+pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr)
 {
-	pmMachine* lOwner = NULL;
-	ulong lOwnerAddr;
-	pMemSection->GetOwner(lOwner, lOwnerAddr);
-
-	if(lOwner == PM_LOCAL_MACHINE)
-		return NULL;	// success; memory already available
+	if(pOwnerMachine == PM_LOCAL_MACHINE)
+		return NULL;	// memory already available
+	
+	regionFetchData lFetchData;
+	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG,
+		pOwnerMachine, pmCommunicatorCommand::BYTE,	NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
 
 	pmCommunicatorCommand::memorySubscriptionRequest* lData = new pmCommunicatorCommand::memorySubscriptionRequest();
-	
-	lData->addr = lOwnerAddr;	// already page aligned
+	lData->ownerBaseAddr = pOwnerBaseMemAddr;	// page aligned
+	lData->receiverBaseAddr = (ulong)pMem;		// page aligned
 	lData->offset = pOffset;
 	lData->length = pLength;
-	lData->transferId = pmCommunicatorCommand::GetNextDynamicTag();
 	lData->destHost = *PM_LOCAL_MACHINE;
 
-	regionFetchData lFetchData;
-
-	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, lOwner,
-		pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, sizeof(pmCommunicatorCommand::memorySubscriptionRequest), NULL, 0, gCommandCompletionCallback);
+	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine,
+		pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, sizeof(pmCommunicatorCommand::memorySubscriptionRequest), NULL, 0);
 
 	char* lAddr = (char*)pMem;
 	lAddr += lData->offset;
 
-	//if(::mprotect((void*)(pSigInfo->si_addr), 1, PROT_READ | PROT_WRITE) != 0)
-	//	lMemoryManager->UninstallSegFaultHandler();
-	// Receive this after removing memory protection from page under mInFlightLock
-	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, (pmCommunicatorCommand::communicatorCommandTags)(lData->transferId), lOwner, pmCommunicatorCommand::BYTE,
-		lAddr, lData->length, NULL, 0, gCommandCompletionCallback);
-
 	pmCommunicator::GetCommunicator()->Send(lFetchData.sendCommand);
-	pmCommunicator::GetCommunicator()->Receive(lFetchData.receiveCommand);
 
 	std::pair<size_t, regionFetchData> lPair(lData->length, lFetchData);
 	mInFlightMemoryMap[lAddr] = lPair;
 
+	lFetchData.receiveCommand->MarkExecutionStart();
 	return lFetchData.receiveCommand;
 }
 

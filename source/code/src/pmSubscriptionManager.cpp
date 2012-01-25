@@ -9,32 +9,11 @@ namespace pm
 
 pmSubscriptionManager::pmSubscriptionManager(pmTask* pTask)
 {
-	mMemRequestReceiveCommand = NULL;
-
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
-
 	mTask = pTask;
-
-	SetupNewMemRequestReceiveReception();
 }
 
 pmSubscriptionManager::~pmSubscriptionManager()
 {
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
-
-	delete mMemRequestReceiveCommand->GetData();
-}
-
-pmStatus pmSubscriptionManager::SetupNewMemRequestReceiveReception()
-{
-	delete mMemRequestReceiveCommand->GetData();
-
-	pmCommunicatorCommand::memorySubscriptionRequest* lData = new pmCommunicatorCommand::memorySubscriptionRequest();
-
-	mMemRequestReceiveCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, 
-		NULL, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, sizeof(pmCommunicatorCommand::memorySubscriptionRequest), this, sizeof(this), gCommandCompletionCallback);
-
-	return pmCommunicator::GetCommunicator()->Receive(mMemRequestReceiveCommand, false);
 }
 
 pmStatus pmSubscriptionManager::SetDefaultSubscriptions(ulong pSubtaskId)
@@ -166,6 +145,7 @@ pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInpu
 		lMemSection = mTask->GetMemSectionRW();
 
 	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length);
+	lMemSection->SetRangeOwner(PM_LOCAL_MACHINE, (ulong)(lMemSection->GetMem()), pSubscriptionInfo.offset, pSubscriptionInfo.length);
 
 	return pmSuccess;
 }
