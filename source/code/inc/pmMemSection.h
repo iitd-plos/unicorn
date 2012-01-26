@@ -2,7 +2,7 @@
 #ifndef __PM_MEM_SECTION__
 #define __PM_MEM_SECTION__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
 
 #include <map>
@@ -23,6 +23,8 @@
 
 namespace pm
 {
+
+class pmMachine;
 
 /**
  * \brief Encapsulation of task memory

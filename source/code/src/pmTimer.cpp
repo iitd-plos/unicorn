@@ -16,6 +16,8 @@ pmStatus pmTimer::SetState(pmTimer::timerState pState)
 		throw pmTimerException(pmTimerException::INVALID_STATE);
 
 	mState = pState;
+
+	return pmSuccess;
 }
 
 pmTimer::timerState pmTimer::GetState()

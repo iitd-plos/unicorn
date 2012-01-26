@@ -2,8 +2,9 @@
 #ifndef __PM_VIRTUAL_MEMORY__
 #define __PM_VIRTUAL_MEMORY__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
+#include "pmCommand.h"
 
 #include <map>
 #include <stdlib.h>
@@ -20,6 +21,11 @@
 
 namespace pm
 {
+
+class pmMemSection;
+
+class pmMachine;
+extern pmMachine* PM_LOCAL_MACHINE;
 
 #ifdef USE_LAZY_MEMORY
 	void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
@@ -48,7 +54,7 @@ class pmMemoryManager : public pmBase
 		virtual ulong GetLowerPageSizeMultiple(ulong pNum) = 0;
 		virtual ulong GetHigherPageSizeMultiple(ulong pNum) = 0;
 
-		virtual pmStatus LoadLazyMemory(void* pLazyMem, ulong pLoadOffset, ulong pLoadLength) = 0;
+		virtual pmStatus LoadLazyMemoryPage(void* pLazyMemAddr) = 0;
 		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
 
 		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength) = 0;

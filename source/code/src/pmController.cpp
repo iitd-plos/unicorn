@@ -12,6 +12,7 @@
 #include "pmCallbackUnit.h"
 #include "pmCallback.h"
 #include "pmMemSection.h"
+#include "pmTask.h"
 
 namespace pm
 {
@@ -113,6 +114,8 @@ pmStatus pmController::ReleaseCallbacks_Public(pmCallbackHandle* pCallbackHandle
 	delete lCallbackUnit->GetPreDataTransferCB();
 	delete lCallbackUnit->GetPostDataTransferCB();
 	delete lCallbackUnit;
+
+	return pmSuccess;
 }
 
 pmStatus pmController::CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMem)

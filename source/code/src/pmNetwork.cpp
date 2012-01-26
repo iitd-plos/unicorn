@@ -114,7 +114,8 @@ pmMPI::pmMPI() : pmNetwork(), mReceiveThread(this)
 
 	mDummyReceiveRequest = NULL;
 
-	SwitchThread(NULL);	// Create an infinite loop in a new thread
+	std::tr1::shared_ptr<pmThreadCommand> lSharedPtr((pmThreadCommand*)NULL);
+	SwitchThread(lSharedPtr);	// Create an infinite loop in a new thread
 }
 
 pmMPI::~pmMPI()
@@ -641,8 +642,8 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 
 #define REGISTER_MPI_DATA_TYPE_HELPER_HEADER(cDataType, cName, headerMpiName) cDataType cName; \
 	lBlockLength = new int[cDataType::FIELD_COUNT_VALUE]; \
-	lDisplacement = new int[cDataType::FIELD_COUNT_VALUE]; \
-	lDataType = new int[cDataType::FIELD_COUNT_VALUE]; \
+	lDisplacement = new MPI_Aint[cDataType::FIELD_COUNT_VALUE]; \
+	lDataType = new MPI_Datatype[cDataType::FIELD_COUNT_VALUE]; \
 	MPI_Aint headerMpiName; \
 	SAFE_GET_MPI_ADDRESS(&cName, &headerMpiName);
 
@@ -878,7 +879,7 @@ pmStatus pmMPI::SetupDummyRequest()
 	{
 		mDummyReceiveRequest = new MPI_Request();
 
-		void* lDummyBuffer;
+		void* lDummyBuffer = NULL;
 		if( MPI_Irecv(lDummyBuffer, 1, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, mDummyReceiveRequest) != MPI_SUCCESS )
 			throw pmNetworkException(pmNetworkException::DUMMY_REQUEST_CREATION_ERROR);
 	}
@@ -897,6 +898,8 @@ pmStatus pmMPI::CancelDummyRequest()
 
 	delete mDummyReceiveRequest;
 	mDummyReceiveRequest = NULL;
+
+	return pmSuccess;
 }
 
 pmStatus pmMPI::ThreadSwitchCallback(pmThreadCommandPtr pCommand)
@@ -918,7 +921,7 @@ pmStatus pmMPI::ThreadSwitchCallback(pmThreadCommandPtr pCommand)
 		pmCommunicatorCommandPtr* lCommandArray = new pmCommunicatorCommandPtr[lRequestCount];
 
 		lRequestArray[0] = *mDummyReceiveRequest;
-		lCommandArray[0] = NULL;
+		lCommandArray[0] = std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)NULL);
 
 		for(size_t i=0; i<lRequestCount-1; ++i)
 		{
@@ -1009,7 +1012,7 @@ pmStatus pmMPI::ThreadSwitchCallback(pmThreadCommandPtr pCommand)
 pmMPI::pmUnknownLengthReceiveThread::pmUnknownLengthReceiveThread(pmMPI* pMPI)
 {
 	mMPI = pMPI;
-	SwitchThread(NULL);	// Create an infinite loop in a new thread
+	SwitchThread(std::tr1::shared_ptr<pmThreadCommand>((pmThreadCommand*)NULL));	// Create an infinite loop in a new thread
 }
 
 pmMPI::pmUnknownLengthReceiveThread::~pmUnknownLengthReceiveThread()

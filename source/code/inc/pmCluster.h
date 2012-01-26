@@ -2,7 +2,7 @@
 #ifndef __PM_CLUSTER__
 #define __PM_CLUSTER__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmHardware.h"
 #include "pmNetwork.h"
 #include "mpi.h"

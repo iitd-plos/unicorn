@@ -2,10 +2,11 @@
 #ifndef __PM_DISPATCHER_GPU__
 #define __PM_DISPATCHER_GPU__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 
 #ifdef SUPPORT_CUDA
 #include "cuda.h"
+#include "cuda_runtime_api.h"
 #include <vector>
 #endif
 

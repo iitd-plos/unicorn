@@ -5,11 +5,10 @@
 #include "pmMemSection.h"
 #include "pmCallbackUnit.h"
 #include "pmHardware.h"
+#include "pmNetwork.h"
 
 namespace pm
 {
-
-int pmCommunicatorCommand::mNextDynamicTag = pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS;
 
 /* class pmCommand */
 pmCommand::pmCommand(ushort pPriority, ushort pCommandType, void* pCommandData /* = NULL */, ulong pDataLength /* = 0 */, pmCommandCompletionCallback pCallback /* = NULL */)
@@ -144,7 +143,7 @@ pmStatus pmCommand::MarkExecutionEnd(pmStatus pStatus)
 	mResourceLock.Unlock();
 
 	if(mCallback)
-		mCallback(this);
+		mCallback(std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)this));
 
 	return pmSuccess;
 }
@@ -233,12 +232,12 @@ pmPersistentCommunicatorCommand::pmPersistentCommunicatorCommand(ushort pPriorit
 	void* pCommandData, ulong pDataUnits, void* pSecondaryData /* = NULL */, ulong pSecondaryDataUnits /* = 0 */, pmCommandCompletionCallback pCallback /* = NULL */)
 	: pmCommunicatorCommand(pPriority, pCommandType, pCommandTag, pDestination, pDataType, pCommandData, pDataUnits, pSecondaryData, pSecondaryDataUnits, pCallback)
 {
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->InitializePersistentCommand(this);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->InitializePersistentCommand(std::tr1::shared_ptr<pmPersistentCommunicatorCommand>((pmPersistentCommunicatorCommand*)this));
 }
 
 pmPersistentCommunicatorCommand::~pmPersistentCommunicatorCommand()
 {
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->TerminatePersistentCommand(this);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->TerminatePersistentCommand(std::tr1::shared_ptr<pmPersistentCommunicatorCommand>((pmPersistentCommunicatorCommand*)this));
 }
 
 pmPersistentCommunicatorCommandPtr pmPersistentCommunicatorCommand::CreateSharedPtr(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
@@ -312,7 +311,6 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
 	outputMemLength = lOutputSection?((ulong)(lOutputSection->GetLength())):0;
 	isOutputMemReadWrite = (ushort)(((pmOutputMemSection*)(pLocalTask->GetMemSectionRW()))->GetAccessType() == pmOutputMemSection::READ_WRITE);
 	subtaskCount = pLocalTask->GetSubtaskCount();
-	strlcpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN);
 	assignedDeviceCount = pLocalTask->GetAssignedDeviceCount();
 	originatingHost = *(pLocalTask->GetOriginatingHost());
 	internalTaskId = (ulong)pLocalTask;
@@ -320,6 +318,9 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
 	schedModel = (ushort)(pLocalTask->GetSchedulingModel());
 	inputMemAddr = lInputSection?((ulong)(lInputSection->GetMem())):0x0;
 	outputMemAddr = lOutputSection?((ulong)(lOutputSection->GetMem())):0x0;
+
+	strncpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN-1);
+	callbackKey[MAX_CB_KEY_LEN-1] = '\0';
 }
 
 pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct()
@@ -362,7 +363,7 @@ pmCommunicatorCommand::remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTas
 
 pmCommunicatorCommand::remoteTaskAssignPacked::~remoteTaskAssignPacked()
 {
-	delete[] devices.ptr;
+	delete[] (uint*)(devices.ptr);
 }
 
 /* struct pmCommunicatorCommand::subtaskReducePacked */
@@ -412,22 +413,6 @@ pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked(ulong pReceiving
 
 pmCommunicatorCommand::memoryReceivePacked::~memoryReceivePacked()
 {
-}
-
-int pmCommunicatorCommand::GetNextDynamicTag()
-{
-	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
-
-	int lTag = mNextDynamicTag;
-	++mNextDynamicTag;
-
-	if(mNextDynamicTag < lTag)
-	{
-		mNextDynamicTag = pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS;
-		throw pmFatalErrorException();
-	}
-
-	return lTag;
 }
 
 } // end namespace pm

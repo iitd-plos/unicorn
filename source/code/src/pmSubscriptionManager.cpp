@@ -3,6 +3,8 @@
 #include "pmCommunicator.h"
 #include "pmTaskManager.h"
 #include "pmMemoryManager.h"
+#include "pmMemSection.h"
+#include "pmTask.h"
 
 namespace pm
 {

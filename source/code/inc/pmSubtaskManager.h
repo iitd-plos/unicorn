@@ -2,9 +2,9 @@
 #ifndef __PM_SUBTASK_MANAGER__
 #define __PM_SUBTASK_MANAGER__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
-#include "pmHardware.h"
+#include "pmCommand.h"
 
 #include <set>
 #include <map>
@@ -14,6 +14,7 @@ namespace pm
 
 class pmLocalTask;
 class pmSubtaskRangeCommand;
+class pmProcessingElement;
 
 class pmSubtaskManager : public pmBase
 {

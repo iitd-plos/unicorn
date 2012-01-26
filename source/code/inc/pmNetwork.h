@@ -2,7 +2,7 @@
 #ifndef __PM_NETWORK__
 #define __PM_NETWORK__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
 #include "pmThread.h"
 #include "pmCommand.h"
@@ -46,7 +46,7 @@ class pmNetwork : public pmBase
 		virtual pmStatus UnregisterTransferDataType(pmCommunicatorCommand::communicatorDataTypes pDataType) = 0;
 	
 		virtual pmStatus PackData(pmCommunicatorCommandPtr pCommand) = 0;
-		virtual pmStatus UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData, int pDataLength) = 0;
+		virtual pmStatus UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData, int pDataLength, int pPos) = 0;
 
 		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommandPtr pCommand) = 0;
 		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommandPtr pCommand) = 0;

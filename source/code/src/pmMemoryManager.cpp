@@ -2,10 +2,15 @@
 #include "pmMemoryManager.h"
 #include "pmController.h"
 #include "pmCommunicator.h"
+#include "pmMemSection.h"
+#include "pmHardware.h"
+
+#include <string.h>
 
 namespace pm
 {
 
+/*
 pmStatus MemoryManagerCommandCompletionCallback(pmCommandPtr pCommand)
 {
 	pmCommunicatorCommandPtr lCommunicatorCommand = std::tr1::dynamic_pointer_cast<pmCommunicatorCommand>(pCommand);
@@ -48,6 +53,7 @@ pmStatus MemoryManagerCommandCompletionCallback(pmCommandPtr pCommand)
 }
 
 static pmCommandCompletionCallback gCommandCompletionCallback = MemoryManagerCommandCompletionCallback;
+*/
 
 /* class pmLinuxMemoryManager */
 pmMemoryManager* pmLinuxMemoryManager::mMemoryManager = NULL;
@@ -68,7 +74,7 @@ pmLinuxMemoryManager::pmLinuxMemoryManager()
 	mTotalLazySegFaults = 0;
 #endif
 
-	mPageSize = ::getPageSize();
+	mPageSize = ::getpagesize();
 }
 
 pmLinuxMemoryManager::~pmLinuxMemoryManager()
@@ -272,7 +278,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
 		throw pmFatalErrorException();
 
 	regionFetchData& lData = mInFlightMemoryMap[lAddr].second;
-	delete lData.sendCommand->GetData();
+	delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
 	lData.receiveCommand->MarkExecutionEnd(pmSuccess);
 
 	return pmSuccess;
@@ -300,7 +306,7 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(void* pLazyMemAddr)
 	char* lMemAddr = static_cast<char*>(pLazyMemAddr);
 	char* lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
 
-	size_t lOffset = lPageAddr - lStartAddr;
+	//size_t lOffset = lPageAddr - lStartAddr;
 	size_t lLeftoverLength = lLastAddr - lPageAddr;
 
 	if(lLeftoverLength > lPageSize)
@@ -326,7 +332,7 @@ pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
 	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
 		throw pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_INSTALL_FAILED);
 
-	return pSuccess;
+	return pmSuccess;
 }
 
 pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
@@ -335,7 +341,7 @@ pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
 
 	lSigAction.sa_flags = SA_SIGINFO;
 	sigemptyset(&lSigAction.sa_mask);
-	lSigAction.sa_sigaction = SIG_DFL;
+	lSigAction.sa_handler = SIG_DFL;
 
 	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
 		throw pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_UNINSTALL_FAILED);
@@ -372,7 +378,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 	// Both start and end of new range fall prior to all ranges in flight
 	if(!lStartIterAddr && !lEndIterAddr)
 	{
-		lRegionsToBeFetched.push_back(std::pair<ulong, ulong>(lFetchAddress, lLastFetchAddress));
+		lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, (ulong)lLastFetchAddress));
 	}
 	else
 	{
@@ -380,7 +386,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 		if(!lStartIterAddr)
 		{
 			char* lFirstAddr = (char*)(mInFlightMemoryMap.begin()->first);
-			lRegionsToBeFetched.push_back(std::pair<ulong, ulong>(lFetchAddress, ((ulong)lFirstAddr)-1));
+			lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, ((ulong)lFirstAddr)-1));
 			lFetchAddress = lFirstAddr;
 			lStartIter = mInFlightMemoryMap.begin();
 		}
@@ -404,9 +410,9 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 			{
 				// If start of new range is within an in flight range and that range is just prior to the end of new range
 				if(lStartInside && !lEndInside)
-					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>(((char*)(lStartIter->first) + lStartIter->second.first), lLastFetchAddress));
+					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lStartIter->first) + lStartIter->second.first), (ulong)lLastFetchAddress));
 				else	// If both start and end of new range have the same in flight range just prior to them and they don't fall within that range
-					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>(lFetchAddress, lLastFetchAddress));
+					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, (ulong)lLastFetchAddress));
 			}
 		}
 		else
@@ -417,12 +423,12 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 			if(!lStartInside)
 			{
 				++lStartIter;
-				lRegionsToBeFetched.push_back(std::pair<ulong, ulong>(lFetchAddress, ((ulong)(lStartIter->first))-1));
+				lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, ((ulong)(lStartIter->first))-1));
 			}
 
 			// If end of new range does not fall within the in flight range
 			if(!lEndInside)
-				lRegionsToBeFetched.push_back(std::pair<ulong, ulong>(((char*)(lEndIter->first) + lEndIter->second.first), lLastFetchAddress));
+				lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lEndIter->first) + lEndIter->second.first), (ulong)lLastFetchAddress));
 
 			// Fetch all non in flight data between in flight ranges
 			if(lStartIter != lEndIter)
@@ -431,7 +437,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 				{
 					mapType::iterator lNextIter = lTempIter;
 					++lNextIter;
-					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>(((char*)(lTempIter->first) + lTempIter->second.first), ((ulong)(lNextIter->first))-1)));			
+					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lTempIter->first) + lTempIter->second.first), ((ulong)(lNextIter->first))-1));
 				}
 			}
 		}
@@ -484,7 +490,10 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(pm
 pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr)
 {
 	if(pOwnerMachine == PM_LOCAL_MACHINE)
-		return NULL;	// memory already available
+	{
+		std::tr1::shared_ptr<pmCommunicatorCommand> lSharedPtr((pmCommunicatorCommand*)NULL);
+		return lSharedPtr;	// memory already available
+	}
 	
 	regionFetchData lFetchData;
 	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG,
@@ -514,8 +523,8 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 
 pmLinuxMemoryManager::regionFetchData::regionFetchData()
 {
-	sendCommand = NULL;
-	receiveCommand = NULL;
+	sendCommand = std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)NULL);
+	receiveCommand = std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)NULL);
 }
 
 void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)

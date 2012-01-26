@@ -20,15 +20,15 @@ pmStatus pmSafePQ<T>::InsertItem(T& pItem, ushort pPriority)
 {
 	LockQueue();
 
-	map<ushort, vector<T> >::iterator lIter = mQueue.find(pPriority);
+	typename priorityQueueType::iterator lIter = mQueue.find(pPriority);
 	if(lIter != mQueue.end())
 	{
-		vector<T>& lVector = mQueue[pPriority];
+		typename std::vector<T>& lVector = mQueue[pPriority];
 		lVector.insert(lVector.begin(), pItem);
 	}
 	else
 	{
-		vector<T> lVector;
+		typename std::vector<T> lVector;
 		lVector.push_back(pItem);
 		mQueue[pPriority] = lVector;
 	}
@@ -43,14 +43,14 @@ pmStatus pmSafePQ<T>::GetTopItem(T& pItem)
 {
 	LockQueue();
 
-	map<ushort, typename vector<T> >::iterator lIter = mQueue.begin();
+	typename priorityQueueType::iterator lIter = mQueue.begin();
 	if(lIter == mQueue.end())
 	{
 		UnlockQueue();
 		throw pmFatalErrorException();
 	}
 
-	vector<T>& lVector = lIter->second;
+	typename std::vector<T>& lVector = lIter->second;
 	pItem = lVector.back();
 	lVector.pop_back();
 
@@ -72,7 +72,7 @@ bool pmSafePQ<T>::IsHighPriorityElementPresent(ushort pPriority)
 		return false;
 	}
 
-	map<ushort, typename vector<T> >::iterator lIter = mQueue.begin();
+	typename priorityQueueType::iterator lIter = mQueue.begin();
 
 	bool lTest = (lIter->first < pPriority);
 	UnlockQueue();
@@ -105,14 +105,14 @@ pmStatus pmSafePQ<T>::DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchF
 {
 	LockQueue();
 
-	map<ushort, typename vector<T> >::iterator lIter = mQueue.find(pPriority);
+	typename priorityQueueType::iterator lIter = mQueue.find(pPriority);
 	if(lIter == mQueue.end())
 	{
 		UnlockQueue();
 		return true;
 	}
 
-	vector<T>& lVector = lIter->second;
+	typename std::vector<T>& lVector = lIter->second;
 	size_t lSize = lVector.size();
 	for(size_t i=lSize-1; i>=0; --i)
 	{
@@ -126,18 +126,18 @@ pmStatus pmSafePQ<T>::DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchF
 }
 
 template<typename T>
-const T& pmSafePQ<T>::DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
+T& pmSafePQ<T>::DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
 	LockQueue();
 
-	map<ushort, typename vector<T> >::iterator lIter = mQueue.find(pPriority);
+	typename priorityQueueType::iterator lIter = mQueue.find(pPriority);
 	if(lIter == mQueue.end())
 	{
 		UnlockQueue();
 		return true;
 	}
 
-	vector<T>& lVector = lIter->second;
+	typename std::vector<T>& lVector = lIter->second;
 	size_t lSize = lVector.size();
 	for(size_t i=lSize-1; i>=0; --i)
 	{

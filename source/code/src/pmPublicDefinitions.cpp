@@ -1,4 +1,5 @@
 
+#include "pmPublicDefinitions.h"
 #include "pmInternalDefinitions.h"
 #include "pmErrorDefinitions.h"
 

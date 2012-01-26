@@ -2,20 +2,21 @@
 #ifndef __PM_COMMAND__
 #define __PM_COMMAND__
 
-#include "pmInternalDefinitions.h"
-#include "pmTimer.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
-#include "pmHardware.h"
-#include "pmScheduler.h"
+#include "pmTimer.h"
 #include TIMER_IMPLEMENTATION_HEADER
 
-#include <memory>	// For std::tr1
+#include <tr1/memory>	// For std::tr1
 
 namespace pm
 {
 
+class pmTask;
 class pmSignalWait;
 class pmLocalTask;
+class pmHardware;
+class pmMachine;
 
 class pmCommand;
 typedef std::tr1::shared_ptr<pmCommand> pmCommandPtr;
@@ -370,8 +371,6 @@ class pmCommunicatorCommand : public pmCommand
 		virtual ulong GetSecondaryDataLength();
 		virtual bool IsValid();
 
-		static int GetNextDynamicTag();
-
 	protected:
 		pmCommunicatorCommand(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
 			void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
@@ -383,7 +382,6 @@ class pmCommunicatorCommand : public pmCommand
 		void* mSecondaryData;
 		ulong mSecondaryDataLength;
 
-		static int mNextDynamicTag;
 		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 

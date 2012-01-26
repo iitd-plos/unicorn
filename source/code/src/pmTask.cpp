@@ -8,6 +8,8 @@
 #include "pmHardware.h"
 #include "pmTaskManager.h"
 #include "pmSubtaskManager.h"
+#include "pmReducer.h"
+#include "pmMemSection.h"
 
 #include <vector>
 #include <algorithm>
@@ -221,6 +223,8 @@ pmStatus pmTask::IncrementSubtasksExecuted(ulong pSubtaskCount)
 	FINALIZE_RESOURCE_PTR(dExecLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mExecLock, Lock(), Unlock());
 
 	mSubtasksExecuted += pSubtaskCount;
+
+	return pmSuccess;
 }
 
 ulong pmTask::GetSubtasksExecuted()
@@ -308,7 +312,7 @@ pmStatus pmTask::DestroySubtaskShadowMem(ulong pSubtaskId)
 
 /* class pmLocalTask */
 pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, 
-	pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = MAX_PRIORITY_LEVEL,
+	pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
 	pmScheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel)
 {
@@ -384,7 +388,7 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
 	pmSubtaskCB* lSubtaskCB = GetCallbackUnit()->GetSubtaskCB();
 	if(lSubtaskCB)
 	{
-		for(uint i=0; i<pmDeviceTypes::MAX_DEVICE_TYPES; ++i)
+		for(uint i=0; i<MAX_DEVICE_TYPES; ++i)
 		{
 			if(lSubtaskCB->IsCallbackDefinedForDevice((pmDeviceTypes)i))
 				lDevicePool->GetAllDevicesOfTypeInCluster((pmDeviceTypes)i, GetCluster(), pDevices);
@@ -401,8 +405,8 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
 			std::set<pmProcessingElement*>::iterator lIter;
 			for(lIter = pDevices.begin(); lIter != pDevices.end(); ++lIter)
 			{
-				if(lDeviceSelectionCB->Invoke(this, lIter._Mynode()->_Myval))
-					lDevices.insert(lIter._Mynode()->_Myval);
+				if(lDeviceSelectionCB->Invoke(this, *lIter))
+					lDevices.insert(*lIter);
 			}
 
 			pDevices = lDevices;
@@ -420,7 +424,7 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
 	std::set<pmProcessingElement*>::iterator lIter = pDevices.begin();
 	for(ulong i=0; i<lFinalCount; ++i)
 	{
-		mDevices.push_back(lIter._Mynode()->_Myval);
+		mDevices.push_back(*lIter);
 		++lIter;
 	}
 
@@ -440,7 +444,7 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 /* class pmRemoteTask */
 pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit,
-	uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pInternalTaskId, pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = MAX_PRIORITY_LEVEL,
+	uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pInternalTaskId, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
 	pmScheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel)
 {
@@ -464,6 +468,8 @@ pmStatus pmRemoteTask::MarkSubtaskExecutionFinished()
 	{
 		pmTask::MarkSubtaskExecutionFinished();
 	}
+
+	return pmSuccess;
 }
 
 ulong pmRemoteTask::GetInternalTaskId()

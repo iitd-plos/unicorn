@@ -2,7 +2,7 @@
 #ifndef __PM_RESOURCE_LOCK__
 #define __PM_RESOURCE_LOCK__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 
 #include THREADING_IMPLEMENTATION_HEADER
 

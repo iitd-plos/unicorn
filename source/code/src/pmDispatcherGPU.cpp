@@ -3,8 +3,8 @@
 #include "pmExecutionStub.h"
 #include "pmLogger.h"
 
-#define CUDA_LIBRARY_CUTIL "libcutil.so"
-#define CUDA_LIBRARY_CUDART "libcudart.so"
+#define CUDA_LIBRARY_CUTIL (char*)"libcutil.so"
+#define CUDA_LIBRARY_CUDART (char*)"libcudart.so"
 
 namespace pm
 {

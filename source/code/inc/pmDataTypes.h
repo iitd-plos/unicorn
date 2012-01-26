@@ -74,7 +74,7 @@ namespace pm
 			{ \
 				destruction; \
 			} \
-	} name##_obj();
+	} name##_obj;
 
 	#define FINALIZE_RESOURCE_PTR(name, ptrType, ptr, acquisition, destruction) \
 	class name \
@@ -117,11 +117,11 @@ namespace pm
 				}
 			}
 
-			pmStatus AddPtr(void* pPtr) {mPtrs.push_back(pPtr);}
-			pmStatus AddPtrArray(void* pPtrArray) {mPtrArrays.push_back(pPtrArray);}
-			pmStatus AddFreePtr(void* pPtr) {mFreePtrs.push_back(pPtr);}
+			void AddPtr(void* pPtr) {mPtrs.push_back(pPtr);}
+			void AddPtrArray(void* pPtrArray) {mPtrArrays.push_back(pPtrArray);}
+			void AddFreePtr(void* pPtr) {mFreePtrs.push_back(pPtr);}
 
-			bool SetDestroy(bool pDestroy) {mDestroy = pDestroy;}
+			void SetDestroy(bool pDestroy) {mDestroy = pDestroy;}
 
 		private:
 			bool mDestroy;

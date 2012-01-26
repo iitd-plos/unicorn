@@ -7,6 +7,7 @@
 #include "pmDevicePool.h"
 #include "pmCommand.h"
 #include "pmCallbackUnit.h"
+#include "pmReducer.h"
 
 #include SYSTEM_CONFIGURATION_HEADER // for sched_setaffinity
 
@@ -27,7 +28,9 @@ namespace pm
 pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
 {
 	mDeviceIndexOnMachine = pDeviceIndexOnMachine;
-	SwitchThread(NULL);	// Create an infinite loop in a new thread
+
+	pmThreadCommandPtr lSharedPtr((pmThreadCommand*)NULL);
+	SwitchThread(lSharedPtr);	// Create an infinite loop in a new thread
 }
 
 pmExecutionStub::~pmExecutionStub()
@@ -36,7 +39,7 @@ pmExecutionStub::~pmExecutionStub()
 
 pmProcessingElement* pmExecutionStub::GetProcessingElement()
 {
-	pmDevicePool::GetDevicePool()->GetDeviceAtMachineIndex(PM_LOCAL_MACHINE, mDeviceIndexOnMachine);
+	return pmDevicePool::GetDevicePool()->GetDeviceAtMachineIndex(PM_LOCAL_MACHINE, mDeviceIndexOnMachine);
 }
 
 pmStatus pmExecutionStub::Push(pmScheduler::subtaskRange pRange)
@@ -48,7 +51,8 @@ pmStatus pmExecutionStub::Push(pmScheduler::subtaskRange pRange)
 	subtaskExec lExecDetails;
 	lExecDetails.range = pRange;
 	lExecDetails.rangeExecutedOnce = false;
-	lEvent.eventId = eventIdentifier::SUBTASK_EXEC;
+	lExecDetails.lastExecutedSubtaskId = 0;
+	lEvent.eventId = SUBTASK_EXEC;
 	lEvent.execDetails = lExecDetails;
 
 	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pRange.task->GetPriority());
@@ -65,7 +69,7 @@ pmStatus pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, ulong
 	lReduceDetails.task = pTask;
 	lReduceDetails.subtaskId1 = pSubtaskId1;
 	lReduceDetails.subtaskId2 = pSubtaskId2;
-	lEvent.eventId = eventIdentifier::SUBTASK_REDUCE;
+	lEvent.eventId = SUBTASK_REDUCE;
 	lEvent.reduceDetails = lReduceDetails;
 
 	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
@@ -82,7 +86,7 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
 	lStealDetails.requestingDevice = pRequestingDevice;
 	lStealDetails.requestingDeviceExecutionRate = pExecutionRate;
 	lStealDetails.task = pTask;
-	lEvent.eventId = eventIdentifier::SUBTASK_STEAL;
+	lEvent.eventId = SUBTASK_STEAL;
 	lEvent.stealDetails = lStealDetails;
 
 	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority() - 1);	// Steal events are sent at one higher priority level than the task
@@ -98,7 +102,7 @@ pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
 	subtaskCancel lCancelDetails;
 	lCancelDetails.task = pTask;
 	lCancelDetails.priority = pTask->GetPriority();
-	lEvent.eventId = eventIdentifier::SUBTASK_CANCEL;
+	lEvent.eventId = SUBTASK_CANCEL;
 	lEvent.cancelDetails = lCancelDetails;
 
 	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, CONTROL_EVENT_PRIORITY);
@@ -137,7 +141,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			pmScheduler::subtaskRange lRange = pEvent.execDetails.range;
 			ulong lCompletedCount, lLastExecutedSubtaskId;
 
-			pmSubtaskRangeCommand lCommand(lRange.task->GetPriority(), pmSubtaskRangeCommand::BASIC_SUBTASK_RANGE);
+			pmSubtaskRangeCommandPtr lCommand = pmSubtaskRangeCommand::CreateSharedPtr(lRange.task->GetPriority(), pmSubtaskRangeCommand::BASIC_SUBTASK_RANGE);
 
 			pmScheduler::subtaskRange lCurrentRange;
 			if(pEvent.execDetails.rangeExecutedOnce)
@@ -151,9 +155,9 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 				lCurrentRange = lRange;
 			}
 
-			lCommand.MarkExecutionStart();
+			lCommand->MarkExecutionStart();
 			pmStatus lExecStatus = Execute(lCurrentRange, lLastExecutedSubtaskId);
-			lCommand.MarkExecutionEnd(lExecStatus);
+			lCommand->MarkExecutionEnd(lExecStatus);
 
 			if(lLastExecutedSubtaskId < lRange.startSubtask || lLastExecutedSubtaskId > lRange.endSubtask)
 				throw pmFatalErrorException();
@@ -173,7 +177,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			pEvent.execDetails.rangeExecutedOnce = true;
 			pEvent.execDetails.lastExecutedSubtaskId = lLastExecutedSubtaskId;
 
-			lRange.task->GetTaskExecStats().RecordSubtaskExecutionStats(this, lCompletedCount, lCommand.GetExecutionTimeInSecs());
+			lRange.task->GetTaskExecStats().RecordSubtaskExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
 
 			if(lLastExecutedSubtaskId == lRange.endSubtask)
 				pmScheduler::GetScheduler()->SendAcknowledment(GetProcessingElement(), lRange, lExecStatus);
@@ -367,7 +371,7 @@ pmStatus pmStubCPU::Execute(pmScheduler::subtaskRange pRange, ulong& pLastExecut
 pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId)
 {
 	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId));
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, pmDeviceTypes::CPU, pTask, pSubtaskId);
+	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, CPU, pTask, pSubtaskId);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
 	
 	return pmSuccess;
@@ -434,7 +438,7 @@ pmStatus pmStubCUDA::Execute(pmScheduler::subtaskRange pRange, ulong& pLastExecu
 pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId)
 {
 	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId));
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, pmDeviceTypes::GPU_CUDA, pTask, pSubtaskId);
+	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, GPU_CUDA, pTask, pSubtaskId);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
 
 	return pmSuccess;

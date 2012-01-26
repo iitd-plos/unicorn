@@ -2,15 +2,16 @@
 #ifndef __PM_SUBSCRIPTION_MANAGER__
 #define __PM_SUBSCRIPTION_MANAGER__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
-#include "pmTask.h"
 #include "pmCommand.h"
 
 #include <map>
 
 namespace pm
 {
+
+class pmTask;
 
 typedef struct subscriptionData
 {

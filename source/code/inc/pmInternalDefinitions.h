@@ -2,9 +2,6 @@
 #ifndef __PM_INTERNAL_DEFINITIONS__
 #define __PM_INTERNAL_DEFINITIONS__
 
-#include "pmBase.h"
-#include "pmDataTypes.h"
-
 #include <stdio.h>
 #include <iostream>
 

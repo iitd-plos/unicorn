@@ -3,6 +3,8 @@
 #include "pmStubManager.h"
 #include "pmExecutionStub.h"
 
+#include <string.h>
+
 namespace pm
 {
 
@@ -95,7 +97,7 @@ pmStatus pmProcessingElement::GetMachines(std::set<pmProcessingElement*>& pDevic
 {
 	std::set<pmProcessingElement*>::iterator lIter;
 	for(lIter = pDevices.begin(); lIter != pDevices.end(); ++lIter)
-		pMachines.insert(lIter._Mynode()->_Myval->GetMachine());
+		pMachines.insert((*lIter)->GetMachine());
 
 	return pmSuccess;
 }

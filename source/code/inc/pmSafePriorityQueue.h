@@ -2,7 +2,7 @@
 #ifndef __PM_SAFE_PRIORITY_QUEUE__
 #define __PM_SAFE_PRIORITY_QUEUE__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
 
 #include <vector>
@@ -47,7 +47,8 @@ class pmSafePQ : public pmBase
 		pmStatus LockQueue();
 		pmStatus UnlockQueue();
 
-		map<ushort, typename vector<T> > mQueue;
+		typedef map<ushort, typename std::vector<T> > priorityQueueType;
+		priorityQueueType mQueue;
 
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };

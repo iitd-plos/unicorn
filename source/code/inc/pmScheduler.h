@@ -2,10 +2,10 @@
 #ifndef __PM_SCHEDULER__
 #define __PM_SCHEDULER__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmThread.h"
 #include "pmSafePriorityQueue.h"
-#include "pmTask.h"
+#include "pmSignalWait.h"
 
 #include <set>
 
@@ -15,7 +15,9 @@ namespace pm
 class pmThreadCommand;
 class pmCommunicatorCommand;
 class pmHardware;
-class SIGNAL_WAIT_IMPLEMENTATION_CLASS;
+class pmTask;
+class pmProcessingElement;
+class pmMemSection;
 
 /**
  * \brief This class schedules, load balances and executes all tasks on this machine.

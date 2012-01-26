@@ -2,8 +2,7 @@
 #ifndef __PM_SIGNAL_WAIT__
 #define __PM_SIGNAL_WAIT__
 
-#include "pmInternalDefinitions.h"
-
+#include "pmBase.h"
 #include THREADING_IMPLEMENTATION_HEADER
 
 namespace pm

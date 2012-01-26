@@ -12,6 +12,7 @@
 SUPPORT_CUDA=1
 DEBUG=0
 
+STD_TR1_INCLUDE= -I/usr/include/c++/4.4.3
 MPI_INCLUDE= -I/usr/lib/openmpi/include
 MPI_LIBS= -L/usr/lib/openmpi/lib -lmpi -lmpi_cxx
 
@@ -31,7 +32,7 @@ ifeq ($(DEBUG), 1)
 	CUDAFLAGS += -DDEBUG -D_DEBUG -g
 	BUILD=debug
 else
-	FLAGS += -O3
+	FLAGS += -O3 -DNDEBUG
 	BUILD=release
 endif
 
@@ -73,6 +74,7 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmThread.o \
 	$(OUTDIR)/pmTimer.o
 
+
 CUDA_OBJECTS = $(OUTDIR)/pmDispatcherCUDA.o
 
 ifeq ($(SUPPORT_CUDA), 1)
@@ -83,7 +85,7 @@ OBJECTS += $(CUDA_OBJECTS)
 #LIBRARIES += -L/usr/local/cuda/lib64 -L/usr/local/cuda/lib -lcudart
 endif
 
-INCLUDES= -I../../source/code/inc $(MPI_INCLUDE)
+INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(STD_TR1_INCLUDE)
 
 all: prebuild compile link postbuild final
 
@@ -113,7 +115,7 @@ $(OUTDIR)/%.o: ../../source/code/src/%.cpp
 	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $@
 
 $(OUTDIR)/%.o: ../../source/code/src/%.cu
-	$(NVCC_COMPILER) $(CUDA_FLAGS) $(INCLUDES) -c $< -o $@
+	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
 
 strip: $(PROGRAM)
 	@echo "\n*** Stripping ***"

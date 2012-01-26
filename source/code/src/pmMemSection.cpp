@@ -2,6 +2,8 @@
 #include "pmMemSection.h"
 #include "pmMemoryManager.h"
 
+#include <string.h>
+
 namespace pm
 {
 
@@ -89,7 +91,7 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 	assert(lEndIter->first + lEndIter->second.first > lLastAddr);
 
 	size_t lStartOffset = lStartIter->first;
-	size_t lStartLength = lStartIter->second.first;
+	//size_t lStartLength = lStartIter->second.first;
 	vmRangeOwner lStartOwner = lStartIter->second.second;
 
 	size_t lEndOffset = lEndIter->first;
@@ -97,9 +99,6 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 	vmRangeOwner lEndOwner = lEndIter->second.second;
 
 	mShadowOwnershipMap.erase(lStartIter, lEndIter);
-
-	bool lKeepStart = false;
-	bool lKeepEnd = false;
 
 	if(lStartOffset < pOffset)
 	{
@@ -134,6 +133,8 @@ pmStatus pmMemSection::FlushOwnerships()
 		mOwnershipMap = mShadowOwnershipMap;
 		mShadowOwnershipMap.clear();
 	}
+
+	return pmSuccess;
 }
 
 pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships)

@@ -2,7 +2,6 @@
 #ifndef __PM_STUB_MANAGER__
 #define __PM_STUB_MANAGER__
 
-#include "pmInternalDefinitions.h"
 #include "pmHardware.h"
 
 #include <vector>

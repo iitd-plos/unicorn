@@ -1,6 +1,9 @@
 
+#include "pmBase.h"
 #include "pmCallback.h"
 #include "pmDispatcherGPU.h"
+#include "pmTask.h"
+#include "pmHardware.h"
 
 namespace pm
 {
@@ -48,7 +51,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
 {
 	switch(pDeviceType)
 	{
-		case pmDeviceTypes::CPU:
+		case CPU:
 		{
 			if(mCallback_CPU)
 				return true;
@@ -57,7 +60,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
 		}
 
 #ifdef SUPPORT_CUDA
-		case pmDeviceTypes::GPU_CUDA:
+		case GPU_CUDA:
 		{
 			if(mCallback_GPU_CUDA)
 				return true;
@@ -65,6 +68,9 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
 			break;
 		}
 #endif
+	
+		case MAX_DEVICE_TYPES:
+			throw pmFatalErrorException();
 	}
 
 	return false;
@@ -74,7 +80,7 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 {
 	switch(pDeviceType)
 	{
-		case pmDeviceTypes::CPU:
+		case CPU:
 		{
 			if(!mCallback_CPU)
 				return pmSuccess;
@@ -86,7 +92,7 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 			break;
 		}
 
-		case pmDeviceTypes::GPU_CUDA:
+		case GPU_CUDA:
 		{
 			if(!mCallback_GPU_CUDA)
 				return pmSuccess;
@@ -97,6 +103,9 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 
 			break;
 		}
+		
+		case MAX_DEVICE_TYPES:
+			throw pmFatalErrorException();
 	}
 
 	return pmSuccess;

@@ -2,8 +2,7 @@
 #ifndef __PM_HARDWARE__
 #define __PM_HARDWARE__
 
-#include "pmInternalDefinitions.h"
-#include "pmDevicePool.h"
+#include "pmBase.h"
 
 #include <set>
 #include <vector>
@@ -12,6 +11,7 @@ namespace pm
 {
 
 class pmExecutionStub;
+class pmDevicePool;
 
 /**
  * \brief The unique identifier for a machine, cluster/sub-cluster or a processing element in the entire cluster

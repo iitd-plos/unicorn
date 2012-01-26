@@ -2,9 +2,9 @@
 #ifndef __PM_DEVICE_POOL__
 #define __PM_DEVICE_POOL__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
-#include "pmHardware.h"
+#include "pmScheduler.h"
 #include "pmCommand.h"
 
 #include <vector>
@@ -14,6 +14,8 @@
 namespace pm
 {
 
+class pmMachine;
+class pmProcessingElement;
 class pmCluster;
 
 /**

@@ -7,11 +7,11 @@
  * PMLIB namespace. All PMLIB definitions are present in this namespace.
 */
 
+#include <stdlib.h>
+
 #define MAX_NAME_STR_LEN 256
 #define MAX_DESC_STR_LEN 1024
 #define MAX_CB_KEY_LEN 128
-
-#define SUPPORT_CUDA
 
 namespace pm
 {

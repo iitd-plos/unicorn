@@ -2,15 +2,18 @@
 #ifndef __PM_TASK__
 #define __PM_TASK__
 
-#include "pmInternalDefinitions.h"
-#include "pmCluster.h"
-#include "pmNetwork.h"
-#include "pmMemSection.h"
+#include "pmBase.h"
 #include "pmScheduler.h"
 #include "pmTaskExecStats.h"
 #include "pmSubscriptionManager.h"
+
+/*
+#include "pmCluster.h"
+#include "pmNetwork.h"
+#include "pmMemSection.h"
 #include "pmReducer.h"
 #include "pmResourceLock.h"
+*/
 
 #include <map>
 #include <set>
@@ -22,6 +25,13 @@ namespace pm
 class pmCallbackUnit;
 class pmTaskCommand;
 class pmSubtaskManager;
+class pmMemSection;
+class pmMachine;
+class pmCluster;
+class pmReducer;
+
+extern pmMachine* PM_LOCAL_MACHINE;
+extern pmCluster* PM_GLOBAL_CLUSTER;
 
 /**
  * \brief The representation of a parallel task.

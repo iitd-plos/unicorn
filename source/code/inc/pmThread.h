@@ -2,14 +2,13 @@
 #ifndef __PM_THREAD__
 #define __PM_THREAD__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
+#include "pmCommand.h"
 
 #include THREADING_IMPLEMENTATION_HEADER
 
 namespace pm
 {
-
-class pmThreadCommand;
 
 void* ThreadLoop(void* pThreadData);
 
@@ -39,7 +38,7 @@ class pmThread : public pmBase
 		virtual pmStatus ThreadSwitchCallback(pmThreadCommandPtr pCommand) = 0;
 };
 
-class pmPThread : pmThread
+class pmPThread : public pmThread
 {
 	public:
 		pmPThread();

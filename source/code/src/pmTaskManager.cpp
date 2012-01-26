@@ -7,6 +7,7 @@
 #include "pmCommand.h"
 #include "pmCallbackUnit.h"
 #include "pmDevicePool.h"
+#include "pmMemSection.h"
 
 namespace pm
 {
@@ -41,6 +42,8 @@ pmStatus pmTaskManager::SubmitTask(pmLocalTask* pLocalTask)
 
 	pLocalTask->MarkTaskStart();
 	pmScheduler::GetScheduler()->SubmitTaskEvent(pLocalTask);
+
+	return pmSuccess;
 }
 
 pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskAssignPacked* pRemoteTaskData)
@@ -136,12 +139,12 @@ uint pmTaskManager::FindPendingLocalTaskCount()
 {
 	FINALIZE_RESOURCE(dResourceLock, mLocalTaskResourceLock.Lock(), mLocalTaskResourceLock.Unlock());
 
-	uint lPendingCount;
+	uint lPendingCount = 0;
 	std::set<pmLocalTask*>::iterator lIter;
 
 	for(lIter = mLocalTasks.begin(); lIter != mLocalTasks.end(); ++lIter)
 	{
-		if(lIter._Mynode()->_Myval->GetStatus() == pmStatusUnavailable)
+		if((*lIter)->GetStatus() == pmStatusUnavailable)
 			++lPendingCount;
 	}
 
@@ -155,7 +158,7 @@ pmRemoteTask* pmTaskManager::FindRemoteTask(pmMachine* pOriginatingHost, ulong p
 	std::set<pmRemoteTask*>::iterator lIter;
 	for(lIter = mRemoteTasks.begin(); lIter != mRemoteTasks.end(); ++lIter)
 	{
-		pmRemoteTask* lRemoteTask = lIter._Mynode()->_Myval;
+		pmRemoteTask* lRemoteTask = *lIter;
 		if(lRemoteTask->GetInternalTaskId() == pInternalTaskId && lRemoteTask->GetOriginatingHost() == pOriginatingHost)
 			return lRemoteTask;
 	}

@@ -2,10 +2,6 @@
 #ifndef __PM_ERROR_DEFINITIONS__
 #define __PM_ERROR_DEFINITIONS__
 
-#include "pmPublicDefinitions.h"
-#include "pmDataTypes.h"
-#include "pmHardware.h"
-
 namespace pm
 {
 
@@ -232,7 +228,8 @@ namespace pm
 			typedef enum failureTypes
 			{
 				LIBRARY_OPEN_FAILURE,
-				RUNTIME_ERROR
+				RUNTIME_ERROR,
+				UNDEFINED_SYMBOL
 			} failureTypes;
 
 			pmExceptionGPU(gpuTypes pIdGPU, failureTypes pFailureId) {mIdGPU = pIdGPU; mFailureId = pFailureId;}

@@ -2,7 +2,6 @@
 #ifndef __PM_TASK_MANAGER__
 #define __PM_TASK_MANAGER__
 
-#include "pmInternalDefinitions.h"
 #include "pmResourceLock.h"
 #include "pmCommand.h"
 

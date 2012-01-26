@@ -2,8 +2,7 @@
 #ifndef __PM_TIMER__
 #define __PM_TIMER__
 
-#include "pmInternalDefinitions.h"
-
+#include "pmBase.h"
 #include TIMER_IMPLEMENTATION_HEADER
 
 namespace pm

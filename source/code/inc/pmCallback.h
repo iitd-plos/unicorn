@@ -2,7 +2,7 @@
 #ifndef __PM_CALLBACK__
 #define __PM_CALLBACK__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 
 namespace pm
 {
@@ -10,6 +10,9 @@ namespace pm
 /**
  * \brief The user callback for a task (wrapper for DataDistribution (PreSubtask, PostSubtask), Subtask, DeviceSelection, DataTransfer, etc. callbacks)
  */
+
+class pmTask;
+class pmProcessingElement;
 
 class pmCallback : public pmBase
 {

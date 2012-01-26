@@ -3,6 +3,8 @@
 #include "pmCommunicator.h"
 #include "pmStubManager.h"
 #include "pmHardware.h"
+#include "pmTask.h"
+#include "pmExecutionStub.h"
 
 #include <algorithm>
 

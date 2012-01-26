@@ -2,10 +2,13 @@
 #ifndef __PM_CONTROLLER__
 #define __PM_CONTROLLER__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 
 namespace pm
 {
+
+class pmCluster;
+extern pmCluster* PM_GLOBAL_CLUSTER;
 
 /**
  * \brief The top level control object on each machine

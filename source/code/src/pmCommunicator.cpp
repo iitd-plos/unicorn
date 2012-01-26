@@ -104,7 +104,7 @@ pmStatus pmCommunicator::ReceivePacked(pmCommunicatorCommandPtr pCommand, bool p
 }
 */
 
-pmStatus pmCommunicator::All2All(pmCommunicatorCommandPtr pCommand, bool pBlocking = false)
+pmStatus pmCommunicator::All2All(pmCommunicatorCommandPtr pCommand, bool pBlocking /* = false */)
 {
 	pmNetwork* lNetwork;
 	SAFE_GET_NETWORK(lNetwork);

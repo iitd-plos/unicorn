@@ -32,7 +32,7 @@ pmSubtaskManager::pmUnfinishedPartition::pmUnfinishedPartition(ulong pFirstSubta
 {
 	firstSubtaskIndex = pFirstSubtaskIndex;
 	lastSubtaskIndex = pLastSubtaskIndex;
-								Reg
+
 	if(lastSubtaskIndex < firstSubtaskIndex)
 		throw pmFatalErrorException();
 }
@@ -100,7 +100,7 @@ pmPushSchedulingManager::~pmPushSchedulingManager()
 	std::set<pmUnfinishedPartition*>::iterator lIter1 = mUnassignedPartitions.begin();
 	std::set<pmUnfinishedPartition*>::iterator lEndIter1 = mUnassignedPartitions.end();
 	for(; lIter1 != lEndIter1; ++lIter1)
-		delete lIter1._Mynode()->_Myval;
+		delete *lIter1;
 
 	std::map<pmProcessingElement*, std::pair<pmUnfinishedPartition*, pmSubtaskRangeCommandPtr> >::iterator lIter2 = mAssignedPartitions.begin();
 	std::map<pmProcessingElement*, std::pair<pmUnfinishedPartition*, pmSubtaskRangeCommandPtr> >::iterator lEndIter2 = mAssignedPartitions.end();
@@ -405,12 +405,12 @@ pmPullSchedulingManager::~pmPullSchedulingManager()
 	std::set<pmUnfinishedPartition*>::iterator lIter1 = mSubtaskPartitions.begin();
 	std::set<pmUnfinishedPartition*>::iterator lEndIter1 = mSubtaskPartitions.end();
 	for(; lIter1 != lEndIter1; ++lIter1)
-		delete lIter1._Mynode()->_Myval;
+		delete *lIter1;
 
 	std::set<pmUnfinishedPartition*>::iterator lIter2 = mUnacknowledgedPartitions.begin();
 	std::set<pmUnfinishedPartition*>::iterator lEndIter2 = mUnacknowledgedPartitions.end();
 	for(; lIter2 != lEndIter2; ++lIter2)
-		delete lIter2._Mynode()->_Myval;
+		delete *lIter2;
 }
 
 bool pmPullSchedulingManager::HasTaskFinished()
@@ -422,7 +422,7 @@ pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 {
 	FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	pmUnfinishedPartition* lPartition = mIter._Mynode()->_Myval;
+	pmUnfinishedPartition* lPartition = *mIter;
 
 	pStartingSubtask = lPartition->firstSubtaskIndex;
 	pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
@@ -445,7 +445,7 @@ pmStatus pmPullSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement*
 	pmUnfinishedPartition* lTargetPartition = NULL;
 	for(; lIter != lEndIter; ++lIter)
 	{
-		pmUnfinishedPartition* lPartition = lIter._Mynode()->_Myval;
+		pmUnfinishedPartition* lPartition = *lIter;
 		if(lPartition->firstSubtaskIndex <= pStartingSubtask && lPartition->lastSubtaskIndex >= pStartingSubtask + pSubtaskCount - 1)
 		{
 			mUnacknowledgedPartitions.erase(lIter);

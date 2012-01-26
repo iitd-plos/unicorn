@@ -2,7 +2,6 @@
 #ifndef __PM_CALLBACK_UNIT__
 #define __PM_CALLBACK_UNIT__
 
-#include "pmInternalDefinitions.h"
 #include "pmCallback.h"
 #include "pmResourceLock.h"
 

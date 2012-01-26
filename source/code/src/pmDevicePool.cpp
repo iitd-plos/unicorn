@@ -118,7 +118,7 @@ pmMachinePool::pmMachineData& pmMachinePool::GetMachineData(uint pIndex)
 
 pmMachinePool::pmMachineData& pmMachinePool::GetMachineData(pmMachine* pMachine)
 {
-	return GetMachineData((uint)pMachine);
+	return GetMachineData(*pMachine);
 }
 
 pmMachine* pmMachinePool::GetMachine(uint pIndex)
@@ -140,7 +140,7 @@ pmStatus pmMachinePool::GetAllDevicesOnMachine(pmMachine* pMachine, std::vector<
 
 	pmDevicePool* lDevicePool = pmDevicePool::GetDevicePool();
 	uint lTotalDevices = lDevicePool->GetDeviceCount();
-	uint lGlobalIndex = mFirstDeviceIndexOnMachine[(uint)pMachine];
+	uint lGlobalIndex = mFirstDeviceIndexOnMachine[*pMachine];
 
 	for(uint i=lGlobalIndex; i<lTotalDevices; ++i)
 	{
@@ -170,12 +170,12 @@ uint pmMachinePool::GetFirstDeviceIndexOnMachine(uint pMachineIndex)
 
 uint pmMachinePool::GetFirstDeviceIndexOnMachine(pmMachine* pMachine)
 {
-	return GetFirstDeviceIndexOnMachine((uint)pMachine);
+	return GetFirstDeviceIndexOnMachine(*pMachine);
 }
 
 pmStatus pmMachinePool::RegisterSendCompletion(pmMachine* pMachine, ulong pDataSent, double pSendTime)
 {
-	size_t lIndex = (size_t)((uint)pMachine);
+	size_t lIndex = (size_t)(*pMachine);
 
 	if(lIndex >= (uint)mMachinesVector.size())
 		throw pmUnknownMachineException(lIndex);
@@ -193,7 +193,7 @@ pmStatus pmMachinePool::RegisterSendCompletion(pmMachine* pMachine, ulong pDataS
 
 pmStatus pmMachinePool::RegisterReceiveCompletion(pmMachine* pMachine, ulong pDataReceived, double pReceiveTime)
 {
-	size_t lIndex = (size_t)((uint)pMachine);
+	size_t lIndex = (size_t)(*pMachine);
 
 	if(lIndex >= (uint)mMachinesVector.size())
 		throw pmUnknownMachineException(lIndex);
@@ -264,8 +264,11 @@ pmStatus pmDevicePool::BroadcastDeviceData(pmMachine* pMachine, pmCommunicatorCo
 	{
 		for(uint i=0; i<pDeviceCount; ++i)
 		{
-			strlcpy(pDeviceArray[i].name, lManager->GetStub(i)->GetDeviceName(), MAX_NAME_STR_LEN);
-			strlcpy(pDeviceArray[i].description, lManager->GetStub(i)->GetDeviceDescription(), MAX_DESC_STR_LEN);
+			strncpy(pDeviceArray[i].name, lManager->GetStub(i)->GetDeviceName().c_str(), MAX_NAME_STR_LEN-1);
+			strncpy(pDeviceArray[i].description, lManager->GetStub(i)->GetDeviceDescription().c_str(), MAX_DESC_STR_LEN-1);
+
+			pDeviceArray[i].name[MAX_NAME_STR_LEN-1] = '\0';
+			pDeviceArray[i].description[MAX_DESC_STR_LEN-1] = '\0';
 		}
 	}
 	

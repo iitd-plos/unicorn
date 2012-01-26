@@ -2,7 +2,11 @@
 #ifndef __PM_BASE__
 #define __PM_BASE__
 
+#include "pmPublicDefinitions.h"
 #include "pmErrorDefinitions.h"
+#include "pmDataTypes.h"
+#include "pmInternalDefinitions.h"
+#include <assert.h>
 
 namespace pm
 {

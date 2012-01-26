@@ -2,14 +2,15 @@
 #ifndef __PM_TASK_EXEC_STATS__
 #define __PM_TASK_EXEC_STATS__
 
-#include "pmInternalDefinitions.h"
-#include "pmExecutionStub.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
 
 #include <map>
 
 namespace pm
 {
+
+class pmExecutionStub;
 
 class pmTaskExecStats : public pmBase
 {

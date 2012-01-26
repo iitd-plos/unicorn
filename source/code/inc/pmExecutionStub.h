@@ -2,7 +2,7 @@
 #ifndef __PM_EXECUTION_STUB__
 #define __PM_EXECUTION_STUB__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmThread.h"
 #include "pmScheduler.h"
 #include "pmSafePriorityQueue.h"
@@ -14,6 +14,8 @@ class SIGNAL_WAIT_IMPLEMENTATION_CLASS;
 class pmThreadCommand;
 class pmTask;
 class pmProcessingElement;
+class pmSubscriptionManager;
+class pmReducer;
 
 /**
  * \brief The controlling thread of each processing element.

@@ -2,15 +2,16 @@
 #ifndef __PM_REDUCER__
 #define __PM_REDUCER__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 #include "pmResourceLock.h"
-#include "pmTask.h"
-#include "pmCommand.h"
 
 #include <vector>
 
 namespace pm
 {
+
+class pmTask;
+class pmMachine;
 
 class pmReducer : public pmBase
 {

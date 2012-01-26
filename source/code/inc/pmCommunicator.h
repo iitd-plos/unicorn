@@ -2,18 +2,11 @@
 #ifndef __PM_COMMUNICATOR__
 #define __PM_COMMUNICATOR__
 
-#include "pmInternalDefinitions.h"
-#include "pmThread.h"
-
-#include "pmResourceLock.h"
-
-#include <map>
+#include "pmBase.h"
+#include "pmCommand.h"
 
 namespace pm
 {
-
-class pmCommunicatorCommand;
-class pmThreadCommand;
 
 /**
  * \brief The communicator class of PMLIB. Controllers on different machines talk through communicator.
@@ -42,9 +35,6 @@ class pmCommunicator : public pmBase
 		pmCommunicator();
 
 		static pmCommunicator* mCommunicator;
-
-		std::map<pmCommunicatorCommand::communicatorCommandTags, pmListenerCallback> mListenerMap;
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

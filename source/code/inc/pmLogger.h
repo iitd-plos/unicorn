@@ -2,7 +2,7 @@
 #ifndef __PM_LOGGER__
 #define __PM_LOGGER__
 
-#include "pmInternalDefinitions.h"
+#include "pmBase.h"
 
 namespace pm
 {

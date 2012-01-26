@@ -14,7 +14,7 @@ pmPThread::pmPThread()
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_init(&mCondVariable, NULL), pmThreadFailureException, pmThreadFailureException::COND_VAR_INIT_FAILURE );
 	
 	mCondEnforcer = false;
-	mCommand = NULL;
+	mCommand = std::tr1::shared_ptr<pmThreadCommand>((pmThreadCommand*)NULL);
 
 	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
 }
@@ -65,7 +65,7 @@ pmStatus pmPThread::SubmitCommand(pmThreadCommandPtr pCommand)
 	return pmSuccess;
 }
 
-pmStatus pmPThread::SetProcessorAffinity(int pProcesorId)
+pmStatus pmPThread::SetProcessorAffinity(int pProcessorId)
 {
 	pthread_t lThread = pthread_self();
 	cpu_set_t lSetCPU;
