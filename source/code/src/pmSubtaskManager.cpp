@@ -73,7 +73,7 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 
 			lFirstSubtask = lLastSubtask + 1;
 
-			DESTROY_PTR_ON_EXCEPTION(dBlock, lUnfinishedPartition, new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
+			DESTROY_PTR_ON_EXCEPTION(dBlock, lUnfinishedPartition, pmSubtaskManager::pmUnfinishedPartition, new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
 
 			mSortedUnassignedPartitions[lUnfinishedPartition] = *lIter;
 			mUnassignedPartitions.insert(lUnfinishedPartition);
@@ -372,7 +372,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 	{
 		START_DESTROY_ON_EXCEPTION(dBlock)
 
-		DESTROY_PTR_ON_EXCEPTION(dBlock, lUnacknowledgedPartition, new pmSubtaskManager::pmUnfinishedPartition(0, lSubtaskCount-1));
+		DESTROY_PTR_ON_EXCEPTION(dBlock, lUnacknowledgedPartition, pmSubtaskManager::pmUnfinishedPartition, new pmSubtaskManager::pmUnfinishedPartition(0, lSubtaskCount-1));
 
 		for(ulong i=0; i<lPartitionCount; ++i)
 		{				
@@ -383,7 +383,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 
 			lFirstSubtask = lLastSubtask + 1;
 
-			DESTROY_PTR_ON_EXCEPTION(dBlock, lUnfinishedPartition, new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
+			DESTROY_PTR_ON_EXCEPTION(dBlock, lUnfinishedPartition, pmSubtaskManager::pmUnfinishedPartition, new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
 
 			mSubtaskPartitions.insert(lUnfinishedPartition);
 		}
@@ -462,10 +462,10 @@ pmStatus pmPullSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement*
 	
 	START_DESTROY_ON_EXCEPTION(dBlock)
 		if(lTargetPartition->firstSubtaskIndex < pStartingSubtask)
-			DESTROY_PTR_ON_EXCEPTION(dBlock, lPartition1, new pmUnfinishedPartition(lTargetPartition->firstSubtaskIndex, pStartingSubtask - 1))
+			DESTROY_PTR_ON_EXCEPTION(dBlock, lPartition1, pmUnfinishedPartition, new pmUnfinishedPartition(lTargetPartition->firstSubtaskIndex, pStartingSubtask - 1))
 
 		if(lTargetPartition->lastSubtaskIndex > pStartingSubtask + pSubtaskCount - 1)
-			DESTROY_PTR_ON_EXCEPTION(dBlock, lPartition2, new pmUnfinishedPartition(pStartingSubtask + pSubtaskCount, lTargetPartition->lastSubtaskIndex))
+			DESTROY_PTR_ON_EXCEPTION(dBlock, lPartition2, pmUnfinishedPartition, new pmUnfinishedPartition(pStartingSubtask + pSubtaskCount, lTargetPartition->lastSubtaskIndex))
 	END_DESTROY_ON_EXCEPTION(dBlock)
 
 	if(lPartition1)

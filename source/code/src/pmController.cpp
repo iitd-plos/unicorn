@@ -89,13 +89,13 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	*pCallbackHandle = NULL;
 
 	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataDistribution, new pmDataDistributionCB(pCallbacks.dataDistribution));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, new pmDataReductionCB(pCallbacks.dataReduction));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDeviceSelection, new pmDeviceSelectionCB(pCallbacks.deviceSelection));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPreDataTransfer, new pmPreDataTransferCB(pCallbacks.preDataTransfer));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPostDataTransfer, new pmPostDataTransferCB(pCallbacks.postDataTransfer));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lPreDataTransfer, lPostDataTransfer));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataDistribution, pmDataDistributionCB, new pmDataDistributionCB(pCallbacks.dataDistribution));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, pmSubtaskCB, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, pmDataReductionCB, new pmDataReductionCB(pCallbacks.dataReduction));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDeviceSelection, pmDeviceSelectionCB, new pmDeviceSelectionCB(pCallbacks.deviceSelection));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPreDataTransfer, pmPreDataTransferCB, new pmPreDataTransferCB(pCallbacks.preDataTransfer));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPostDataTransfer, pmPostDataTransferCB, new pmPostDataTransferCB(pCallbacks.postDataTransfer));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lPreDataTransfer, lPostDataTransfer));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
 	*pCallbackHandle = lCallbackUnit;
@@ -160,10 +160,9 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 	if(pTaskDetails.taskConfLength == 0)
 		pTaskDetails.taskConf = NULL;
 
-	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, *pTaskHandle, new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority));
-		pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
-	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority);
+
+	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 
 	return pmSuccess;
 }

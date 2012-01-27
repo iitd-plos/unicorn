@@ -97,11 +97,11 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 
 	START_DESTROY_ON_EXCEPTION(dBlock);
 
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lSubtaskAssignRecvData, new pmCommunicatorCommand::remoteSubtaskAssignStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lSendAckRecvData, new pmCommunicatorCommand::sendAcknowledgementStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lTaskEventRecvData, new pmCommunicatorCommand::taskEventStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealRequestRecvData, new pmCommunicatorCommand::stealRequestStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealResponseRecvData, new pmCommunicatorCommand::stealResponseStruct());
+	DESTROY_PTR_ON_EXCEPTION(dBlock, lSubtaskAssignRecvData, pmCommunicatorCommand::remoteSubtaskAssignStruct, new pmCommunicatorCommand::remoteSubtaskAssignStruct());
+	DESTROY_PTR_ON_EXCEPTION(dBlock, lSendAckRecvData, pmCommunicatorCommand::sendAcknowledgementStruct, new pmCommunicatorCommand::sendAcknowledgementStruct());
+	DESTROY_PTR_ON_EXCEPTION(dBlock, lTaskEventRecvData, pmCommunicatorCommand::taskEventStruct, new pmCommunicatorCommand::taskEventStruct());
+	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealRequestRecvData, pmCommunicatorCommand::stealRequestStruct, new pmCommunicatorCommand::stealRequestStruct());
+	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealResponseRecvData, pmCommunicatorCommand::stealResponseStruct, new pmCommunicatorCommand::stealResponseStruct());
 
 	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT, REMOTE_SUBTASK_ASSIGN_STRUCT, lSubtaskAssignRecvData, remoteSubtaskAssignStruct);
 	mAcknowledgementRecvCommand = PERSISTENT_RECV_COMMAND(SEND_ACKNOWLEDGEMENT_TAG, SEND_ACKNOWLEDGEMENT_STRUCT, lSendAckRecvData, sendAcknowledgementStruct);

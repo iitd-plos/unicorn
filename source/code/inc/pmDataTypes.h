@@ -20,7 +20,7 @@ namespace pm
 
 			~finalize_ptr()
 			{
-				delete mMem;
+				delete (T*)(mMem);
 			}
 
 			T* get_ptr()
@@ -42,7 +42,7 @@ namespace pm
 
 			~finalize_ptr_array()
 			{
-				delete[] mMem;
+				delete[] (T*)(mMem);
 			}
 
 			T* get_ptr()
@@ -93,48 +93,112 @@ namespace pm
 			ptrType* mPtr; \
 	} name##_obj(ptr);
 
+	class selective_finalize_base
+	{
+		public:
+			virtual void SetDelete(bool pDelete) = 0;
+	};
+
+        template<typename T>
+        class selective_finalize_ptr : public selective_finalize_base
+        {
+                public:
+                        selective_finalize_ptr<T>(T* pMem) : mMem(pMem), mDeleteMem(true)
+                        {
+                        }
+
+                        ~selective_finalize_ptr()
+                        {
+				if(mDeleteMem)
+                                	delete (T*)(mMem);
+                        }
+			
+			virtual void SetDelete(bool pDelete)
+			{
+				mDeleteMem = pDelete;
+			}
+
+                        T* get_ptr()
+                        {
+                                return mMem;
+                        }
+
+                private:
+                        T* mMem;
+			bool mDeleteMem;
+        };
+
+        template<typename T>
+        class selective_finalize_ptr_array : public selective_finalize_base
+        {
+                public:
+                        selective_finalize_ptr_array<T>(T* pMem) : mMem(pMem), mDeleteMem(true)
+                        {
+                        }
+
+                        ~selective_finalize_ptr_array()
+                        {
+				if(mDeleteMem)
+                                	delete[] (T*)(mMem);
+                        }
+
+			virtual void SetDelete(bool pDelete)
+			{
+				mDeleteMem = pDelete;
+			}
+
+                        T* get_ptr()
+                        {
+                                return mMem;
+                        }
+
+                private:
+                        T* mMem;
+			bool mDeleteMem;
+        };
+
 	typedef class pmDestroyOnException
 	{
 		public:
-			pmDestroyOnException() {mDestroy = false;}
+			pmDestroyOnException() {mDestroy = true;}
 			virtual ~pmDestroyOnException()
 			{
 				if(mDestroy)
 				{
-					size_t i;
-
-					size_t lSize = mPtrs.size();
-					for(i=0; i<lSize; ++i)
-						delete mPtrs[i];
-
-					lSize = mPtrArrays.size();
-					for(i=0; i<lSize; ++i)
-						delete[] mPtrArrays[i];
-
+					size_t i, lSize;
 					lSize = mFreePtrs.size();
 					for(i=0; i<lSize; ++i)
-						free(mPtrs[i]);
+						free(mFreePtrs[i]);
 				}
 			}
 
-			void AddPtr(void* pPtr) {mPtrs.push_back(pPtr);}
-			void AddPtrArray(void* pPtrArray) {mPtrArrays.push_back(pPtrArray);}
 			void AddFreePtr(void* pPtr) {mFreePtrs.push_back(pPtr);}
+			void AddDeletePtr(selective_finalize_base* pDeletePtr) {mDeletePtrs.push_back(pDeletePtr);}
+			void SetDestroy(bool pDestroy)
+			{
+				mDestroy = pDestroy;
+				if(!mDestroy)
+				{
+					size_t i, lSize;
+					lSize = mDeletePtrs.size();
+					for(i=0; i<lSize; ++i)
+						mDeletePtrs[i]->SetDelete(false);
+				}
+			}
 
-			void SetDestroy(bool pDestroy) {mDestroy = pDestroy;}
+			bool shouldDelete() {return mDestroy;}
 
 		private:
 			bool mDestroy;
-			std::vector<void*> mPtrs;
-			std::vector<void*> mPtrArrays;
+			std::vector<selective_finalize_base*> mDeletePtrs;
 			std::vector<void*> mFreePtrs;
 	} pmDestroyOnException;
 
 	#define START_DESTROY_ON_EXCEPTION(blockName) pmDestroyOnException blockName; try {
 	#define FREE_PTR_ON_EXCEPTION(blockName, name, ptr) name = ptr; blockName.AddFreePtr(name);
-	#define DESTROY_PTR_ON_EXCEPTION(blockName, name, ptr) name = ptr; blockName.AddPtr(name);
-	#define DESTROY_PTR_ARRAY_ON_EXCEPTION(blockName, name, ptr) name = ptr; blockName.AddPtrArray(name);
-	#define END_DESTROY_ON_EXCEPTION(blockName) } catch(pmException dException) {blockName.SetDestroy(true); throw dException;}
+	#define DESTROY_PTR_ON_EXCEPTION(blockName, name, dataType, ptr) name = ptr; selective_finalize_ptr<dataType> name##_obj(ptr); blockName.AddDeletePtr(&(name##_obj));
+	#define DESTROY_PTR_ARRAY_ON_EXCEPTION(blockName, name, dataType, ptr) name = ptr; selective_finalize_ptr_array<dataType> name##_obj(ptr); blockName.AddDeletePtr(&(name##_obj));
+	#define END_DESTROY_ON_EXCEPTION(blockName) blockName.SetDestroy(false); } catch(pmException dException) {throw dException;}
 
 	#define SAFE_FREE(ptr) if(ptr) free(ptr);
 
