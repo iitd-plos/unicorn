@@ -13,18 +13,17 @@ namespace pm
 
 class pmTask;
 
-typedef struct subscriptionData
-{
-	std::vector<pmCommunicatorCommandPtr> receiveCommandVector;
-
-	subscriptionData();
-} subscriptionData;
 
 #define MAP_VALUE_DATA_TYPE std::pair<std::vector<pmSubscriptionInfo>, std::vector<subscriptionData> >
 
 class pmSubscriptionManager : public pmBase
 {
 	public:
+		typedef struct subscriptionData
+		{
+			std::vector<pmCommunicatorCommandPtr> receiveCommandVector;
+		} subscriptionData;
+
 		pmSubscriptionManager(pmTask* pTask);
 		virtual ~pmSubscriptionManager();
 

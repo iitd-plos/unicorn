@@ -23,6 +23,7 @@ namespace pm
 	typedef enum pmStatus
 	{
 		pmSuccess = 0,
+		pmOk,
 		pmStatusUnavailable,
 		pmFatalError,
 		pmInitializationFailure,

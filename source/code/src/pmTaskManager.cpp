@@ -13,6 +13,10 @@ namespace pm
 {
 
 pmTaskManager* pmTaskManager::mTaskManager = NULL;
+RESOURCE_LOCK_IMPLEMENTATION_CLASS pmTaskManager::mLocalTaskResourceLock;
+RESOURCE_LOCK_IMPLEMENTATION_CLASS pmTaskManager::mRemoteTaskResourceLock;
+std::set<pmLocalTask*> pmTaskManager::mLocalTasks;
+std::set<pmRemoteTask*> pmTaskManager::mRemoteTasks;
 
 pmTaskManager::pmTaskManager()
 {

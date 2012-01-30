@@ -4,6 +4,9 @@
 namespace pm
 {
 
+std::map<std::string, pmCallbackUnit*> pmCallbackUnit::mKeyMap;
+RESOURCE_LOCK_IMPLEMENTATION_CLASS pmCallbackUnit::mResourceLock;
+
 pmCallbackUnit::pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
 	pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB)
 {

@@ -38,6 +38,8 @@ extern pmMachine* PM_LOCAL_MACHINE;
 class pmMemoryManager : public pmBase
 {
 	public:
+		virtual ~pmMemoryManager() {}
+
 		virtual pmStatus DestroyMemoryManager() = 0;
 
 		virtual void* AllocateMemory(size_t& pLength, size_t& pPageCount) = 0;
@@ -55,7 +57,7 @@ class pmMemoryManager : public pmBase
 		virtual ulong GetHigherPageSizeMultiple(ulong pNum) = 0;
 
 		virtual pmStatus LoadLazyMemoryPage(void* pLazyMemAddr) = 0;
-		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
+		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
 
 		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength) = 0;
 		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength) = 0;

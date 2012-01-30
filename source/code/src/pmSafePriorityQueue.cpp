@@ -1,6 +1,4 @@
 
-#include "pmSafePriorityQueue.h"
-
 namespace pm
 {
 
@@ -109,7 +107,7 @@ pmStatus pmSafePQ<T>::DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchF
 	if(lIter == mQueue.end())
 	{
 		UnlockQueue();
-		return true;
+		return pmSuccess;
 	}
 
 	typename std::vector<T>& lVector = lIter->second;
@@ -126,7 +124,7 @@ pmStatus pmSafePQ<T>::DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchF
 }
 
 template<typename T>
-T& pmSafePQ<T>::DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
+pmStatus pmSafePQ<T>::DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem)
 {
 	LockQueue();
 
@@ -134,7 +132,7 @@ T& pmSafePQ<T>::DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMa
 	if(lIter == mQueue.end())
 	{
 		UnlockQueue();
-		return true;
+		return pmOk;
 	}
 
 	typename std::vector<T>& lVector = lIter->second;
@@ -143,17 +141,17 @@ T& pmSafePQ<T>::DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMa
 	{
 		if(pMatchFunc(lVector[i], pMatchCriterion))
 		{
-			T lElem = lVector[i];
+			pItem = lVector[i];
 			lVector.erase(lVector.begin()+i);
 			
 			UnlockQueue();
-			return lElem;
+			return pmSuccess;
 		}
 	}
 
 	UnlockQueue();
 
-	return pmSuccess;
+	return pmOk;
 }
 
 template<typename T>

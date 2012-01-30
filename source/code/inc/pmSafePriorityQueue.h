@@ -35,7 +35,7 @@ class pmSafePQ : public pmBase
 		pmStatus InsertItem(T& pItem, ushort pPriority);
 		pmStatus GetTopItem(T& pItem);
 
-		T& DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
+		pmStatus DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
 		pmStatus DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
 
 		bool IsHighPriorityElementPresent(ushort pPriority);
@@ -54,5 +54,7 @@ class pmSafePQ : public pmBase
 };
 
 } // end namespace pm
+
+#include "../src/pmSafePriorityQueue.cpp"
 
 #endif

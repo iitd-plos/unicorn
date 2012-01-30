@@ -439,7 +439,7 @@ class pmTaskCommand : public pmCommand
 		} taskCommandTypes;
 		
 		static pmTaskCommandPtr CreateSharedPtr(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0);
-		virtual ~pmTaskCommand();
+		virtual ~pmTaskCommand() {}
 
 		virtual bool IsValid();
 
@@ -462,7 +462,7 @@ class pmSubtaskRangeCommand : public pmCommand
 		} subtaskRangeCommandTypes;
 		
 		static pmSubtaskRangeCommandPtr CreateSharedPtr(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0);
-		virtual ~pmSubtaskRangeCommand();
+		virtual ~pmSubtaskRangeCommand() {}
 
 		virtual bool IsValid();
 

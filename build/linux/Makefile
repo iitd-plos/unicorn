@@ -22,7 +22,7 @@ COMPILER=g++
 NVCC_COMPILER=nvcc
 STRIP=strip
 FLAGS=-Wall -fPIC -DUNIX -DLINUX
-CUDAFLAGS = -DUNIX --compiler-options -fPIC
+CUDAFLAGS= -DUNIX --compiler-options -fPIC
 SO_FLAGS=-Wall -DUNIX -DLINUX -shared -Wl,-soname,pmlib.so
 
 LIBRARIES= -lstdc++ -lm $(PTHREAD_LIBS) $(MPI_LIBS)
@@ -62,7 +62,6 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmReducer.o \
 	$(OUTDIR)/pmPublicDefinitions.o \
 	$(OUTDIR)/pmResourceLock.o \
-	$(OUTDIR)/pmSafePriorityQueue.o \
 	$(OUTDIR)/pmScheduler.o \
 	$(OUTDIR)/pmSignalWait.o \
 	$(OUTDIR)/pmStubManager.o \
@@ -82,7 +81,7 @@ FLAGS += -DSUPPORT_CUDA
 CUDAFLAGS += -DSUPPORT_CUDA
 INCLUDES += -I/usr/local/cuda/include
 OBJECTS += $(CUDA_OBJECTS)
-#LIBRARIES += -L/usr/local/cuda/lib64 -L/usr/local/cuda/lib -lcudart
+LIBRARIES += -L/usr/local/cuda/lib64 -lcudart
 endif
 
 INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(STD_TR1_INCLUDE)

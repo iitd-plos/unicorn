@@ -10,6 +10,11 @@
 namespace pm
 {
 
+RESOURCE_LOCK_IMPLEMENTATION_CLASS pmLinuxMemoryManager::mInFlightLock;
+std::map<void*, size_t> pmLinuxMemoryManager::mLazyMemoryMap;
+RESOURCE_LOCK_IMPLEMENTATION_CLASS pmLinuxMemoryManager::mResourceLock;
+std::map<void*, std::pair<size_t, pmLinuxMemoryManager::regionFetchData> > pmLinuxMemoryManager::mInFlightMemoryMap;
+
 /*
 pmStatus MemoryManagerCommandCompletionCallback(pmCommandPtr pCommand)
 {

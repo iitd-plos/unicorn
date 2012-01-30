@@ -205,46 +205,47 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
 		case SUBTASK_STEAL:	/* Comes from scheduler thread */
 		{
+			bool lStealSuccess = false;
 			pmTask* lTask = pEvent.stealDetails.task;
 			ushort lPriority = lTask->GetPriority();
 
-			stubEvent lTaskEvent = mPriorityQueue.DeleteAndGetFirstMatchingItem(lPriority, execEventMatchFunc, lTask);
-			
-			double lLocalRate = lTask->GetTaskExecStats().GetStubExecutionRate(this);
-			double lRemoteRate = lTaskEvent.stealDetails.requestingDeviceExecutionRate;
-			double lTotalExecRate = lLocalRate + lRemoteRate;
-			
-			ulong lAvailableSubtasks;
-			if(lTaskEvent.execDetails.rangeExecutedOnce)
-				lAvailableSubtasks = lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.lastExecutedSubtaskId;
-			else
-				lAvailableSubtasks = lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.range.startSubtask + 1;
-
-			double lOverheadTime = 0;	// Add network and other overheads here
-
-			double lTotalExecutionTimeRequired = lAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
-			double lLocalExecutionTimeForAllSubtasks = lAvailableSubtasks / lLocalRate;	// if all subtasks are executed locally, how much time it will take
-			double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired + lOverheadTime;
-
-			bool lStealSuccess = false;
-
-			if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
+			stubEvent lTaskEvent;
+			if(mPriorityQueue.DeleteAndGetFirstMatchingItem(lPriority, execEventMatchFunc, lTask, lTaskEvent) == pmSuccess)
 			{
-				double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
-				ulong lStealCount = (ulong)(lTimeDiff * lLocalRate);
+				double lLocalRate = lTask->GetTaskExecStats().GetStubExecutionRate(this);
+				double lRemoteRate = lTaskEvent.stealDetails.requestingDeviceExecutionRate;
+				double lTotalExecRate = lLocalRate + lRemoteRate;
+			
+				ulong lAvailableSubtasks;
+				if(lTaskEvent.execDetails.rangeExecutedOnce)
+					lAvailableSubtasks = lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.lastExecutedSubtaskId;
+				else
+					lAvailableSubtasks = lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.range.startSubtask + 1;
 
-				if(lStealCount)
+				double lOverheadTime = 0;	// Add network and other overheads here
+
+				double lTotalExecutionTimeRequired = lAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
+				double lLocalExecutionTimeForAllSubtasks = lAvailableSubtasks / lLocalRate;	// if all subtasks are executed locally, how much time it will take
+				double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired + lOverheadTime;
+
+				if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
 				{
-					pmScheduler::subtaskRange lStolenRange;
-					lStolenRange.task = lTask;
-					lStolenRange.startSubtask = (lTaskEvent.execDetails.range.endSubtask - lStealCount) + 1;
-					lStolenRange.endSubtask = lTaskEvent.execDetails.range.endSubtask;
+					double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
+					ulong lStealCount = (ulong)(lTimeDiff * lLocalRate);
 
-					lTaskEvent.execDetails.range.endSubtask -= lStealCount;
-					Push(lTaskEvent.execDetails.range);
+					if(lStealCount)
+					{
+						pmScheduler::subtaskRange lStolenRange;
+						lStolenRange.task = lTask;
+						lStolenRange.startSubtask = (lTaskEvent.execDetails.range.endSubtask - lStealCount) + 1;
+						lStolenRange.endSubtask = lTaskEvent.execDetails.range.endSubtask;
 
-					lStealSuccess = true;
-					return pmScheduler::GetScheduler()->StealSuccessEvent(pEvent.stealDetails.requestingDevice, GetProcessingElement(), lStolenRange);
+						lTaskEvent.execDetails.range.endSubtask -= lStealCount;
+						Push(lTaskEvent.execDetails.range);
+
+						lStealSuccess = true;
+						return pmScheduler::GetScheduler()->StealSuccessEvent(pEvent.stealDetails.requestingDevice, GetProcessingElement(), lStolenRange);
+					}
 				}
 			}
 

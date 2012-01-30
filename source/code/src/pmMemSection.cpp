@@ -7,6 +7,9 @@
 namespace pm
 {
 
+std::map<void*, pmMemSection*> pmMemSection::mMemSectionMap;
+RESOURCE_LOCK_IMPLEMENTATION_CLASS pmMemSection::mResourceLock;
+
 /* class pmMemSection */
 pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr)
 {
