@@ -23,7 +23,12 @@ NVCC_COMPILER=nvcc
 STRIP=strip
 FLAGS=-Wall -fPIC -DUNIX -DLINUX
 CUDAFLAGS= -DUNIX --compiler-options -fPIC
-SO_FLAGS=-Wall -DUNIX -DLINUX -shared -Wl,-soname,pmlib.so
+
+ifeq ($(DEBUG), 1)
+SO_FLAGS=-Wall -DUNIX -DLINUX -shared -Wl,-soname,libpmlib_g.so
+else
+SO_FLAGS=-Wall -DUNIX -DLINUX -shared -Wl,-soname,libpmlib.so
+endif
 
 LIBRARIES= -lstdc++ -lm $(PTHREAD_LIBS) $(MPI_LIBS)
 

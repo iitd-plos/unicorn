@@ -29,7 +29,7 @@ cudaError_t (*gFuncPtr_cudaFree)(void* pCudaPtr);
 		{ \
 			std::string dStr("Undefined CUDA Symbol "); \
 			dStr += symbol; \
-			pmLogger::GetLogger()->Log(pmLogger::DEBUG, pmLogger::ERROR, dStr.c_str()); \
+			pmLogger::GetLogger()->Log(pmLogger::DEBUG_INTERNAL, pmLogger::ERROR, dStr.c_str()); \
 			throw pmExceptionGPU(pmExceptionGPU::NVIDIA_CUDA, pmExceptionGPU::UNDEFINED_SYMBOL); \
 		} \
 		*(void**)(&prototype) = dSymbolPtr; \

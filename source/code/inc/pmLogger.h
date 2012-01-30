@@ -18,7 +18,7 @@ class pmLogger : public pmBase
 		{
 			MINIMAL,
 			DEATILED,
-			DEBUG	/* Internal use Only; Not for production builds */
+			DEBUG_INTERNAL	/* Internal use Only; Not for production builds */
 		} logLevel;
 
 		typedef enum logType
