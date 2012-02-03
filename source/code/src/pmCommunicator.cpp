@@ -6,7 +6,7 @@
 namespace pm
 {
 
-#define SAFE_GET_NETWORK(x) { x = NETWORK_IMPLEMENTATION_CLASS::GetNetwork(); if(!x) throw pmFatalErrorException(); }
+#define SAFE_GET_NETWORK(x) { x = NETWORK_IMPLEMENTATION_CLASS::GetNetwork(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 pmCommunicator* pmCommunicator::mCommunicator = NULL;
 
@@ -53,7 +53,7 @@ pmStatus pmCommunicator::SendPacked(pmCommunicatorCommandPtr pCommand, bool pBlo
 	pCommand->MarkExecutionStart();
 
 	if(lNetwork->PackData(pCommand) != pmSuccess)
-		throw pmDataProcessingException(pmDataProcessingException::DATA_PACKING_FAILED);
+		PMTHROW(pmDataProcessingException(pmDataProcessingException::DATA_PACKING_FAILED));
 
 	lStatus = lNetwork->SendNonBlocking(pCommand);
 

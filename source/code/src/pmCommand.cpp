@@ -123,36 +123,40 @@ pmStatus pmCommand::WaitForFinish()
 
 pmStatus pmCommand::MarkExecutionStart()
 {
-	mResourceLock.Lock();
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
 	mTimer.Start();
-	mResourceLock.Unlock();
 
 	return pmSuccess;
 }
 
-pmStatus pmCommand::MarkExecutionEnd(pmStatus pStatus)
+pmStatus pmCommand::MarkExecutionEnd(pmStatus pStatus, pmCommandPtr pSharedPtr)
 {
-	mResourceLock.Lock();
-	mTimer.Stop();
+	assert(pSharedPtr.get() == this);
 
-	mStatus = pStatus;
+	// Auto Lock/Release Scope
+	{
+		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	if(mSignalWait)
-		mSignalWait->Signal();
-				   
-	mResourceLock.Unlock();
+		mTimer.Stop();
+
+		mStatus = pStatus;
+
+		if(mSignalWait)
+			mSignalWait->Signal();
+	}
 
 	if(mCallback)
-		mCallback(std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)this));
+		mCallback(pSharedPtr);
 
 	return pmSuccess;
 }
 
 double pmCommand::GetExecutionTimeInSecs()
 {
-	mResourceLock.Lock();
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
 	double lTime = mTimer.GetElapsedTimeInSecs();
-	mResourceLock.Unlock();
 
 	return lTime;
 }
@@ -232,12 +236,12 @@ pmPersistentCommunicatorCommand::pmPersistentCommunicatorCommand(ushort pPriorit
 	void* pCommandData, ulong pDataUnits, void* pSecondaryData /* = NULL */, ulong pSecondaryDataUnits /* = 0 */, pmCommandCompletionCallback pCallback /* = NULL */)
 	: pmCommunicatorCommand(pPriority, pCommandType, pCommandTag, pDestination, pDataType, pCommandData, pDataUnits, pSecondaryData, pSecondaryDataUnits, pCallback)
 {
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->InitializePersistentCommand(std::tr1::shared_ptr<pmPersistentCommunicatorCommand>((pmPersistentCommunicatorCommand*)this));
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->InitializePersistentCommand(this);
 }
 
 pmPersistentCommunicatorCommand::~pmPersistentCommunicatorCommand()
 {
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->TerminatePersistentCommand(std::tr1::shared_ptr<pmPersistentCommunicatorCommand>((pmPersistentCommunicatorCommand*)this));
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->TerminatePersistentCommand(this);
 }
 
 pmPersistentCommunicatorCommandPtr pmPersistentCommunicatorCommand::CreateSharedPtr(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 

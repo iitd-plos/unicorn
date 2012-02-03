@@ -17,7 +17,7 @@
 namespace pm
 {
 
-#define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) throw pmFatalErrorException(); }
+#define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
 pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount /* = 0 */,
@@ -240,7 +240,7 @@ pmStatus pmTask::SaveFinalReducedOutput(ulong pSubtaskId)
 	if(!mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pSubtaskId, lSubscriptionInfo))
 	{
 		DestroySubtaskShadowMem(pSubtaskId);
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 	}
 
 	subtaskShadowMem& lShadowMem = GetSubtaskShadowMem(pSubtaskId);
@@ -260,7 +260,7 @@ pmStatus pmTask::CreateSubtaskShadowMem(ulong pSubtaskId)
 	pmSubscriptionInfo lSubscriptionInfo;
 
 	if(mShadowMemMap.find(pSubtaskId) != mShadowMemMap.end() || !mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pSubtaskId, lSubscriptionInfo))
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	mShadowMemMap[pSubtaskId].addr = new char[lSubscriptionInfo.length];
 	mShadowMemMap[pSubtaskId].length = lSubscriptionInfo.length;
@@ -277,7 +277,7 @@ pmStatus pmTask::CreateSubtaskShadowMem(ulong pSubtaskId, char* pMem, size_t pMe
 	pmSubscriptionInfo lSubscriptionInfo;
 
 	if(mShadowMemMap.find(pSubtaskId) != mShadowMemMap.end() || !mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pSubtaskId, lSubscriptionInfo))
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	mShadowMemMap[pSubtaskId].addr = new char[pMemLength];
 	mShadowMemMap[pSubtaskId].length = pMemLength;
@@ -292,7 +292,7 @@ pmTask::subtaskShadowMem& pmTask::GetSubtaskShadowMem(ulong pSubtaskId)
 	FINALIZE_RESOURCE_PTR(dShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mShadowMemLock, Lock(), Unlock());
 
 	if(mShadowMemMap.find(pSubtaskId) == mShadowMemMap.end())
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 	
 	return mShadowMemMap[pSubtaskId];
 }
@@ -302,7 +302,7 @@ pmStatus pmTask::DestroySubtaskShadowMem(ulong pSubtaskId)
 	FINALIZE_RESOURCE_PTR(dShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mShadowMemLock, Lock(), Unlock());
 
 	if(mShadowMemMap.find(pSubtaskId) == mShadowMemMap.end())
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	delete[] mShadowMemMap[pSubtaskId].addr;
 
@@ -341,7 +341,7 @@ pmStatus pmLocalTask::InitializeSubtaskManager(pmScheduler::schedulingModel pSch
 			break;
 
 		default:
-			throw pmFatalErrorException();
+			PMTHROW(pmFatalErrorException());
 	}
 
 	return pmSuccess;
@@ -369,7 +369,7 @@ pmStatus pmLocalTask::MarkTaskStart()
 
 pmStatus pmLocalTask::MarkTaskEnd(pmStatus pStatus)
 {
-	return mTaskCommand->MarkExecutionEnd(pStatus);
+	return mTaskCommand->MarkExecutionEnd(pStatus, std::tr1::static_pointer_cast<pmCommand>(mTaskCommand));
 }
 
 pmStatus pmLocalTask::GetStatus()
@@ -484,7 +484,7 @@ pmStatus pmRemoteTask::AddAssignedDevice(pmProcessingElement* pDevice)
 	uint lCount = GetAssignedDeviceCount();
 	uint lSize = (uint)(mDevices.size());
 	if(lSize > lCount)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	if(lSize == lCount && GetSchedulingModel() == pmScheduler::PULL)
 		RandomizeDevices(mDevices);

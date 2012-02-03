@@ -2,7 +2,7 @@
 #ifndef __PM_LOGGER__
 #define __PM_LOGGER__
 
-#include "pmBase.h"
+#include "pmPublicDefinitions.h"
 
 namespace pm
 {
@@ -11,7 +11,7 @@ namespace pm
  * \brief The output/error logger
  */
 
-class pmLogger : public pmBase
+class pmLogger
 {
 	public:
 		typedef enum logLevel
@@ -31,6 +31,8 @@ class pmLogger : public pmBase
 		static pmLogger* GetLogger();
 		pmStatus DestroyLogger();
 
+		pmStatus SetHostId(uint pHostId);
+
 		pmStatus Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg);
 
 	private:
@@ -38,6 +40,7 @@ class pmLogger : public pmBase
 		virtual ~pmLogger();
 
 		ushort mLogLevel;
+		uint mHostId;
 		static pmLogger* mLogger;
 };
 

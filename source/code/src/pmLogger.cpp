@@ -27,6 +27,7 @@ pmStatus pmLogger::DestroyLogger()
 
 pmLogger::pmLogger(logLevel pLogLevel)
 {
+	mHostId = (uint)-1;	// Unknown initially
 	mLogLevel = pLogLevel;
 }
 
@@ -34,16 +35,21 @@ pmLogger::~pmLogger()
 {
 }
 
+pmStatus pmLogger::SetHostId(uint pHostId)
+{
+	mHostId = pHostId;
+
+	return pmSuccess;
+}
+
 pmStatus pmLogger::Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg)
 {
 	if(pMsgLevel <= mLogLevel)
 	{
-		uint lHostId = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
-
 		if(pMsgType == INFORMATION)
-			fprintf(stdout, "PMLIB [Host %d] %s\n", lHostId, pMsg);
+			fprintf(stdout, "PMLIB [Host %d] %s\n", mHostId, pMsg);
 		else
-			fprintf(stderr, "PMLIB [Host %d] %s\n", lHostId, pMsg);
+			fprintf(stderr, "PMLIB [Host %d] %s\n", mHostId, pMsg);
 	}
 
 	return pmSuccess;

@@ -45,7 +45,7 @@ pmProcessingElement* pmExecutionStub::GetProcessingElement()
 pmStatus pmExecutionStub::Push(pmScheduler::subtaskRange pRange)
 {
 	if(pRange.endSubtask < pRange.startSubtask)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	stubEvent lEvent;
 	subtaskExec lExecDetails;
@@ -157,15 +157,15 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
 			lCommand->MarkExecutionStart();
 			pmStatus lExecStatus = Execute(lCurrentRange, lLastExecutedSubtaskId);
-			lCommand->MarkExecutionEnd(lExecStatus);
+			lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
 
 			if(lLastExecutedSubtaskId < lRange.startSubtask || lLastExecutedSubtaskId > lRange.endSubtask)
-				throw pmFatalErrorException();
+				PMTHROW(pmFatalErrorException());
 
 			if(pEvent.execDetails.rangeExecutedOnce)
 			{
 				if(lLastExecutedSubtaskId <= pEvent.execDetails.lastExecutedSubtaskId)
-					throw pmFatalErrorException();
+					PMTHROW(pmFatalErrorException());
 
 				lCompletedCount = lLastExecutedSubtaskId - pEvent.execDetails.lastExecutedSubtaskId;
 			}

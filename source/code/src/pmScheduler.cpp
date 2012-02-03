@@ -29,9 +29,6 @@ pmScheduler* pmScheduler::mScheduler = NULL;
 
 pmScheduler::pmScheduler()
 {
-	mRemoteSubtaskRecvCommand = mAcknowledgementRecvCommand = mTaskEventRecvCommand = std::tr1::shared_ptr<pmPersistentCommunicatorCommand>((pmPersistentCommunicatorCommand*)NULL);
-	mStealRequestRecvCommand = mStealResponseRecvCommand = mMemSubscriptionRequestCommand = std::tr1::shared_ptr<pmPersistentCommunicatorCommand>((pmPersistentCommunicatorCommand*)NULL);
-
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT);
@@ -102,6 +99,7 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	DESTROY_PTR_ON_EXCEPTION(dBlock, lTaskEventRecvData, pmCommunicatorCommand::taskEventStruct, new pmCommunicatorCommand::taskEventStruct());
 	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealRequestRecvData, pmCommunicatorCommand::stealRequestStruct, new pmCommunicatorCommand::stealRequestStruct());
 	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealResponseRecvData, pmCommunicatorCommand::stealResponseStruct, new pmCommunicatorCommand::stealResponseStruct());
+	DESTROY_PTR_ON_EXCEPTION(dBlock, lMemSubscriptionRequestData, pmCommunicatorCommand::memorySubscriptionRequest, new pmCommunicatorCommand::memorySubscriptionRequest());
 
 	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT, REMOTE_SUBTASK_ASSIGN_STRUCT, lSubtaskAssignRecvData, remoteSubtaskAssignStruct);
 	mAcknowledgementRecvCommand = PERSISTENT_RECV_COMMAND(SEND_ACKNOWLEDGEMENT_TAG, SEND_ACKNOWLEDGEMENT_STRUCT, lSendAckRecvData, sendAcknowledgementStruct);
@@ -507,7 +505,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 					pmExecutionStub* lStub = lManager->GetStub(lDevices[i]);
 
 					if(!lStub)
-						throw pmFatalErrorException();
+						PMTHROW(pmFatalErrorException());
 
 					lStub->CancelSubtasks(lTask);
 				}
@@ -522,7 +520,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 			pmTask* lTask = lEventDetails.task;
 
 			if(lTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
-				throw pmFatalErrorException();	// On local machine, task is cleared when user explicitly deletes that
+				PMTHROW(pmFatalErrorException());	// On local machine, task is cleared when user explicitly deletes that
 
 			((pmRemoteTask*)lTask)->MarkSubtaskExecutionFinished();
 
@@ -737,7 +735,7 @@ pmStatus pmScheduler::PushToStub(pmProcessingElement* pDevice, subtaskRange pRan
 	pmExecutionStub* lStub = lManager->GetStub(pDevice);
 
 	if(!lStub)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	return lStub->Push(pRange);
 }
@@ -748,7 +746,7 @@ pmProcessingElement* pmScheduler::RandomlySelectStealTarget(pmProcessingElement*
 	pmExecutionStub* lStub = lManager->GetStub(pStealingDevice);
 
 	if(!lStub)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	pmTaskExecStats lTaskExecStats = pTask->GetTaskExecStats();
 	
@@ -888,7 +886,7 @@ pmStatus pmScheduler::ReceiveFailedStealResponse(pmProcessingElement* pStealingD
 	pmExecutionStub* lStub = lManager->GetStub(pStealingDevice);
 
 	if(!lStub)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	pmTaskExecStats lTaskExecStats = pTask->GetTaskExecStats();
 	
@@ -927,7 +925,7 @@ pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, subtaskRan
 		pmExecutionStub* lStub = lManager->GetStub(pDevice);
 
 		if(!lStub)
-			throw pmFatalErrorException();
+			PMTHROW(pmFatalErrorException());
 
 		pmTaskExecStats lTaskExecStats = pRange.task->GetTaskExecStats();
 		lTaskExecStats.ClearStealAttempts(lStub);
@@ -988,7 +986,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					delete (pmCommunicatorCommand::subtaskReduceStruct*)(lCommunicatorCommand->GetData());
 					break;
 				default:
-					throw pmFatalErrorException();
+					PMTHROW(pmFatalErrorException());
 			}
 		}
 
@@ -1000,7 +998,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				case pmCommunicatorCommand::DEVICE_POOL_TRANSFER:
 				case pmCommunicatorCommand::UNKNOWN_LENGTH_TAG:
 				case pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS:
-					throw pmFatalErrorException();
+					PMTHROW(pmFatalErrorException());
 					break;
 
 				case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT:
@@ -1075,7 +1073,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 						}
 
 						default:
-							throw pmFatalErrorException();
+							PMTHROW(pmFatalErrorException());
 					}
 								 
 					SetupNewTaskEventReception();
@@ -1185,7 +1183,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 						}
 
 						default:
-							throw pmFatalErrorException();
+							PMTHROW(pmFatalErrorException());
 					}
 
 					SetupNewStealResponseReception();
@@ -1199,7 +1197,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					pmMemSection* lMemSection = pmMemSection::FindMemSection((void*)(lData->ownerBaseAddr));
 					if(!lMemSection)
-						throw pmFatalErrorException();
+						PMTHROW(pmFatalErrorException());
 
 					MemTransferEvent(lMemSection, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, MAX_CONTROL_PRIORITY);
 
@@ -1209,14 +1207,14 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				}
 
 				default:
-					throw pmFatalErrorException();
+					PMTHROW(pmFatalErrorException());
 			}
 
 			break;
 		}
 
 		default:
-			throw pmFatalErrorException();
+			PMTHROW(pmFatalErrorException());
 	}
 
 	return pmSuccess;

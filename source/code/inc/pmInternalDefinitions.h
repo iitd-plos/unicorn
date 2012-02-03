@@ -49,7 +49,7 @@
 
 #endif
 
-#define THROW_ON_NON_ZERO_RET_VAL(x, y, z) { int __ret_val__ = x; if(__ret_val__) throw y(z, __ret_val__); }
+#define THROW_ON_NON_ZERO_RET_VAL(x, y, z) { int __ret_val__ = x; if(__ret_val__) PMTHROW(y(z, __ret_val__)); }
 
 /* This code is taken from http://www.fefe.de/intof.html */
 #define __HALF_MAX_SIGNED(type) ((type)1 << (sizeof(type)*8-2))

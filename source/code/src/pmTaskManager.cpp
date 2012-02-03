@@ -63,7 +63,7 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskA
 	{
 		lTaskConf = malloc(pRemoteTaskData->taskStruct.taskConfLength);
 		if(!lTaskConf)
-			throw pmOutOfMemoryException();
+			PMTHROW(pmOutOfMemoryException());
 
 		memcpy(lTaskConf, pRemoteTaskData->taskConf.ptr, pRemoteTaskData->taskConf.length);
 	}
@@ -167,7 +167,7 @@ pmRemoteTask* pmTaskManager::FindRemoteTask(pmMachine* pOriginatingHost, ulong p
 			return lRemoteTask;
 	}
 
-	throw pmFatalErrorException();
+	PMTHROW(pmFatalErrorException());
 
 	return NULL;
 }

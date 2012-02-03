@@ -30,6 +30,7 @@ void* ThreadLoop(void* pThreadData);
 class pmThread : public pmBase
 {
 	public:
+		virtual ~pmThread() {}
 		virtual pmStatus SwitchThread(pmThreadCommandPtr pCommand) = 0;
 
 		virtual pmStatus SetProcessorAffinity(int pProcesorId) = 0;

@@ -27,17 +27,66 @@ pmController* pmController::GetController()
 	{
 		if(CreateAndInitializeController() == pmSuccess)
 		{
-			if(!pmDispatcherGPU::GetDispatcherGPU()
-			|| !pmStubManager::GetStubManager()
-			|| !NETWORK_IMPLEMENTATION_CLASS::GetNetwork() 
-			|| !pmCommunicator::GetCommunicator()
-			|| !pmMachinePool::GetMachinePool()
-			|| !MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()
-			|| !pmTaskManager::GetTaskManager()
-			|| !pmScheduler::GetScheduler()
-			|| !pmLogger::GetLogger()
-			)
-				throw pmFatalErrorException();
+			if(!pmLogger::GetLogger())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Logger Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+
+			if(!pmDispatcherGPU::GetDispatcherGPU())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Dispatcher Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+				
+			if(!pmStubManager::GetStubManager())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Stub Manager Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+
+			if(!NETWORK_IMPLEMENTATION_CLASS::GetNetwork())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Network Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+
+			if(!pmCommunicator::GetCommunicator())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Communicator Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+
+			if(!pmMachinePool::GetMachinePool())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Machine Pool Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+
+			if(!MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Memory Manager Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+
+			if(!pmTaskManager::GetTaskManager())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Task Manager Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+
+			if(!pmScheduler::GetScheduler())
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Scheduler Initialization Failed");
+				PMTHROW(pmFatalErrorException());
+			}
+
+			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Successful Initialization");
+		}
+		else
+		{
+			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Controller Initialization Failed");
+			PMTHROW(pmFatalErrorException());
 		}
 	}
 
@@ -46,7 +95,6 @@ pmController* pmController::GetController()
 
 pmStatus pmController::DestroyController()
 {
-	SAFE_DESTROY(pmLogger::GetLogger(), DestroyLogger);
 	SAFE_DESTROY(pmScheduler::GetScheduler(), DestroyScheduler);
 	SAFE_DESTROY(pmTaskManager::GetTaskManager(), DestroyTaskManager);
 	SAFE_DESTROY(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager(), DestroyMemoryManager);
@@ -55,6 +103,7 @@ pmStatus pmController::DestroyController()
 	SAFE_DESTROY(NETWORK_IMPLEMENTATION_CLASS::GetNetwork(), DestroyNetwork);
 	SAFE_DESTROY(pmStubManager::GetStubManager(), DestroyStubManager);
 	SAFE_DESTROY(pmDispatcherGPU::GetDispatcherGPU(), DestroyDispatcherGPU);
+	SAFE_DESTROY(pmLogger::GetLogger(), DestroyLogger);
 	
 	delete mController;
 	mController = NULL;
@@ -84,7 +133,7 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	pmCallbackUnit* lCallbackUnit;
 
 	if(strlen(pKey) >= MAX_CB_KEY_LEN)
-		throw pmMaxKeyLengthExceeded;
+		PMTHROW(pmMaxKeyLengthExceeded);
 
 	*pCallbackHandle = NULL;
 
@@ -153,7 +202,7 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 	pmMemSection* lOutputMem = pmMemSection::FindMemSection(pTaskDetails.outputMem);
 
 	if(!dynamic_cast<pmInputMemSection*>(lInputMem) || !dynamic_cast<pmOutputMemSection*>(lOutputMem))
-		throw pmUnrecognizedMemoryException();
+		PMTHROW(pmUnrecognizedMemoryException());
 
 	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(*(pTaskDetails.callbackHandle));
 
@@ -196,7 +245,7 @@ pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong 
 uint pmController::GetHostId_Public()
 {
 	if(!NETWORK_IMPLEMENTATION_CLASS::GetNetwork())
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	return NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
 }
@@ -204,7 +253,7 @@ uint pmController::GetHostId_Public()
 uint pmController::GetHostCount_Public()
 {
 	if(!NETWORK_IMPLEMENTATION_CLASS::GetNetwork())
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	return NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 }

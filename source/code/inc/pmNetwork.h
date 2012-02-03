@@ -48,15 +48,15 @@ class pmNetwork : public pmBase
 		virtual pmStatus PackData(pmCommunicatorCommandPtr pCommand) = 0;
 		virtual pmStatus UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData, int pDataLength, int pPos) = 0;
 
-		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommandPtr pCommand) = 0;
-		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommandPtr pCommand) = 0;
+		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommand* pCommand) = 0;
+		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommand* pCommand) = 0;
 
 		pmNetwork();
 		virtual ~pmNetwork();
 
 	private:
-		virtual MPI_Request GetPersistentSendRequest(pmPersistentCommunicatorCommandPtr pCommand) = 0;
-		virtual MPI_Request GetPersistentRecvRequest(pmPersistentCommunicatorCommandPtr pCommand) = 0;
+		virtual MPI_Request GetPersistentSendRequest(pmPersistentCommunicatorCommand* pCommand) = 0;
+		virtual MPI_Request GetPersistentRecvRequest(pmPersistentCommunicatorCommand* pCommand) = 0;
 };
 
 class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS
@@ -70,9 +70,10 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS
 		typedef class pmUnknownLengthReceiveThread : public THREADING_IMPLEMENTATION_CLASS
 		{
 			public:
-				pmUnknownLengthReceiveThread(pmMPI* pMPI);
+				pmUnknownLengthReceiveThread();
 				virtual ~pmUnknownLengthReceiveThread();
 
+				pmStatus Start(pmMPI* pMPI);
 				virtual pmStatus ThreadSwitchCallback(pmThreadCommandPtr pCommand);
 				//pmStatus EnqueueReceiveCommand(pmCommunicatorCommandPtr pCommand);
 
@@ -104,8 +105,8 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS
 
 		virtual pmStatus ReceiveAllocateUnpackNonBlocking(pmCommunicatorCommandPtr pCommand);		// Receive Packed Data of unknown size
 
-		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommandPtr pCommand);
-		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommandPtr pCommand);
+		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommand* pCommand);
+		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommand* pCommand);
 
 	private:
 		pmMPI();
@@ -117,8 +118,8 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS
 		pmStatus SendComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus);
 		pmStatus ReceiveComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus);
 
-		virtual MPI_Request GetPersistentSendRequest(pmPersistentCommunicatorCommandPtr pCommand);
-		virtual MPI_Request GetPersistentRecvRequest(pmPersistentCommunicatorCommandPtr pCommand);
+		virtual MPI_Request GetPersistentSendRequest(pmPersistentCommunicatorCommand* pCommand);
+		virtual MPI_Request GetPersistentRecvRequest(pmPersistentCommunicatorCommand* pCommand);
 
 		pmStatus SetupDummyRequest();
 		pmStatus CancelDummyRequest();
@@ -135,8 +136,8 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS
 
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	   // Resource lock on mDummyReceiveRequest, mNonBlockingRequestVector and mResourceCountMap
 
-		std::map<pmPersistentCommunicatorCommandPtr, MPI_Request> mPersistentSendRequest;
-		std::map<pmPersistentCommunicatorCommandPtr, MPI_Request> mPersistentRecvRequest;
+		std::map<pmPersistentCommunicatorCommand*, MPI_Request> mPersistentSendRequest;
+		std::map<pmPersistentCommunicatorCommand*, MPI_Request> mPersistentRecvRequest;
 
 		pmUnknownLengthReceiveThread mReceiveThread;
 };

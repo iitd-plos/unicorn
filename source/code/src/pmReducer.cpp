@@ -38,14 +38,14 @@ pmStatus pmReducer::PopulateExternalMachineList()
 
 	std::vector<pmMachine*>::iterator lIter = std::find(lMachines.begin(), lMachines.end(), mTask->GetOriginatingHost());
 	if(lIter == lMachines.end())
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	// Make originating host the first element of the vector
 	std::rotate(lMachines.begin(), lIter, lMachines.end());
 
 	lIter = std::find(lMachines.begin(), lMachines.end(), PM_LOCAL_MACHINE);
 	if(lIter == lMachines.end())
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	uint lLocalMachineIndex = (uint)(lIter - lMachines.begin());
 
@@ -143,7 +143,7 @@ pmStatus pmReducer::CheckReductionFinish(bool pAlreadyLocked /* = false */)
 		if(mSendToMachine)
 		{
 			if(mSendToMachine == PM_LOCAL_MACHINE)
-				throw pmFatalErrorException();
+				PMTHROW(pmFatalErrorException());
 
 			// Send mLastSubtaskId to machine mSendToMachine for reduction
 			return pmScheduler::GetScheduler()->ReduceRequestEvent(mTask, mSendToMachine, mLastSubtaskId);

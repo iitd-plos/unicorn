@@ -62,7 +62,7 @@ class pmCommand : public pmBase
 		 * and callback calling
 		*/
 		virtual pmStatus MarkExecutionStart();
-		virtual pmStatus MarkExecutionEnd(pmStatus pStatus);
+		virtual pmStatus MarkExecutionEnd(pmStatus pStatus, pmCommandPtr pSharedPtr);
 
 		double GetExecutionTimeInSecs();
 

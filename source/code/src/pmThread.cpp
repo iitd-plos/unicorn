@@ -14,7 +14,6 @@ pmPThread::pmPThread()
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_init(&mCondVariable, NULL), pmThreadFailureException, pmThreadFailureException::COND_VAR_INIT_FAILURE );
 	
 	mCondEnforcer = false;
-	mCommand = std::tr1::shared_ptr<pmThreadCommand>((pmThreadCommand*)NULL);
 
 	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
 }
@@ -22,6 +21,10 @@ pmPThread::pmPThread()
 pmPThread::~pmPThread()
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cancel(mThread), pmThreadFailureException, pmThreadFailureException::THREAD_CANCEL_ERROR );
+
+	// A locked mutex and in wait cond variable can not be deleted
+	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
+	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_signal(&mCondVariable), pmThreadFailureException, pmThreadFailureException::COND_VAR_SIGNAL_FAILURE );
 
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_destroy(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_DESTROY_FAILURE );
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_destroy(&mCondVariable), pmThreadFailureException, pmThreadFailureException::COND_VAR_DESTROY_FAILURE );
@@ -43,8 +46,9 @@ pmStatus pmPThread::ThreadCommandLoop()
 
 		mCondEnforcer = false;
 
+		pmStatus lStatus = ThreadSwitchCallback(mCommand);
 		if(mCommand)
-			mCommand->SetStatus( ThreadSwitchCallback(mCommand) );
+			mCommand->SetStatus(lStatus);
 
 		THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
 	}
@@ -78,7 +82,7 @@ pmStatus pmPThread::SetProcessorAffinity(int pProcessorId)
 #ifdef _DEBUG
 	THROW_ON_NON_ZERO_RET_VAL( pthread_getaffinity_np(lThread, sizeof(cpu_set_t), &lSetCPU), pmThreadFailureException, pmThreadFailureException::THREAD_AFFINITY_ERROR );
 	if(!CPU_ISSET(pProcessorId, &lSetCPU))
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 #endif
 
 	return pmSuccess;

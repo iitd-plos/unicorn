@@ -21,7 +21,7 @@ pmCallbackUnit::pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributi
 
 	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
 	if(mKeyMap.find(mKey) != mKeyMap.end())
-		throw pmInvalidKeyException();
+		PMTHROW(pmInvalidKeyException());
 
 	mKeyMap[mKey] = this;
 }
@@ -81,7 +81,7 @@ pmCallbackUnit* pmCallbackUnit::FindCallbackUnit(char* pKey)
 
 	std::map<std::string, pmCallbackUnit*>::iterator lIter = mKeyMap.find(lStr);
 	if(lIter == mKeyMap.end())
-		throw pmInvalidKeyException();
+		PMTHROW(pmInvalidKeyException());
 
 	pmCallbackUnit* lCallbackUnit = mKeyMap[lStr];
 

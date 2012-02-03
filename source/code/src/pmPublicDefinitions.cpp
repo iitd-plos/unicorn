@@ -43,6 +43,7 @@ namespace pm
 static const char* pmErrorMessages[] =
 {
 	"No Error",
+	"No Error",
 	"Execution status unknown or can't be determined.",
 	"Fatal error inside library. Can't continue.",
 	"Error in PMLIB initialization",

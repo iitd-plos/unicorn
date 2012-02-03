@@ -175,7 +175,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 				if(lCommand)
 				{
 					if(lCommand->WaitForFinish() != pmSuccess)
-						throw pmMemoryFetchException();
+						PMTHROW(pmMemoryFetchException());
 				}
 			}
 		}
@@ -200,7 +200,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 				if(lCommand)
 				{
 					if(lCommand->WaitForFinish() != pmSuccess)
-						throw pmMemoryFetchException();
+						PMTHROW(pmMemoryFetchException());
 				}
 			}
 		}

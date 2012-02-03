@@ -13,7 +13,7 @@ pmTimer::pmTimer()
 pmStatus pmTimer::SetState(pmTimer::timerState pState)
 {
 	if(pState == pmTimer::NOT_STARTED || pState >= pmTimer::MAX_STATES)
-		throw pmTimerException(pmTimerException::INVALID_STATE);
+		PMTHROW(pmTimerException(pmTimerException::INVALID_STATE));
 
 	mState = pState;
 
@@ -35,7 +35,7 @@ pmLinuxTimer::pmLinuxTimer()
 pmStatus pmLinuxTimer::Start()
 {
 	if(GetState() != pmTimer::NOT_STARTED)
-		throw pmTimerException(pmTimerException::ALREADY_RUNNING);
+		PMTHROW(pmTimerException(pmTimerException::ALREADY_RUNNING));
 
 	mStartTime = GetCurrentTimeInSecs();
 
@@ -49,7 +49,7 @@ pmStatus pmLinuxTimer::Stop()
 	pmTimer::timerState lState = GetState();
 
 	if(lState == pmTimer::NOT_STARTED)
-		throw pmTimerException(pmTimerException::NOT_STARTED);
+		PMTHROW(pmTimerException(pmTimerException::NOT_STARTED));
 
 	SetState(pmTimer::STOPPED);
 
@@ -64,7 +64,7 @@ pmStatus pmLinuxTimer::Stop()
 pmStatus pmLinuxTimer::Reset()
 {
 	if(GetState() == pmTimer::NOT_STARTED)
-		throw pmTimerException(pmTimerException::NOT_STARTED);
+		PMTHROW(pmTimerException(pmTimerException::NOT_STARTED));
 
 	mStartTime = GetCurrentTimeInSecs();
 	mUnpausedTime = 0;
@@ -79,13 +79,13 @@ pmStatus pmLinuxTimer::Pause()
 	pmTimer::timerState lState = GetState();
 
 	if(lState == pmTimer::NOT_STARTED)
-		throw pmTimerException(pmTimerException::NOT_STARTED);
+		PMTHROW(pmTimerException(pmTimerException::NOT_STARTED));
 
 	if(lState == pmTimer::PAUSED)
-		throw pmTimerException(pmTimerException::ALREADY_PAUSED);
+		PMTHROW(pmTimerException(pmTimerException::ALREADY_PAUSED));
 
 	if(lState == pmTimer::STOPPED)
-		throw pmTimerException(pmTimerException::ALREADY_STOPPED);
+		PMTHROW(pmTimerException(pmTimerException::ALREADY_STOPPED));
 
 	mUnpausedTime += GetElapsedTimeInSecs();
 
@@ -99,13 +99,13 @@ pmStatus pmLinuxTimer::Resume()
 	pmTimer::timerState lState = GetState();
 
 	if(lState == pmTimer::NOT_STARTED)
-		throw pmTimerException(pmTimerException::NOT_STARTED);
+		PMTHROW(pmTimerException(pmTimerException::NOT_STARTED));
 
 	if(lState == pmTimer::STOPPED)
-		throw pmTimerException(pmTimerException::ALREADY_STOPPED);
+		PMTHROW(pmTimerException(pmTimerException::ALREADY_STOPPED));
 
 	if(lState != pmTimer::PAUSED)
-		throw pmTimerException(pmTimerException::NOT_PAUSED);
+		PMTHROW(pmTimerException(pmTimerException::NOT_PAUSED));
 
 	mStartTime = GetCurrentTimeInSecs();
 	
@@ -119,7 +119,7 @@ double pmLinuxTimer::GetElapsedTimeInSecs()
 	pmTimer::timerState lState = GetState();
 
 	if(lState == pmTimer::NOT_STARTED)
-		throw pmTimerException(pmTimerException::NOT_STARTED);
+		PMTHROW(pmTimerException(pmTimerException::NOT_STARTED));
 
 	if(lState == pmTimer::PAUSED || lState == pmTimer::STOPPED)
 		return mUnpausedTime;

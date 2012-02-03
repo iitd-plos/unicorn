@@ -43,7 +43,7 @@ void* pmBase::AllocateMemory(size_t pSize)
 {
 	void* lPtr = ::malloc(pSize);
 	if(!lPtr)
-		throw pmOutOfMemoryException();
+		PMTHROW(pmOutOfMemoryException());
 
 	return lPtr;
 }
@@ -63,7 +63,7 @@ pmStatus pmBase::CloseLibrary(void* pLibHandle)
 	if(pLibHandle)
 	{
 		if(dlclose(pLibHandle) != 0)
-			throw pmIgnorableException(pmIgnorableException::LIBRARY_CLOSE_FAILURE);
+			PMTHROW(pmIgnorableException(pmIgnorableException::LIBRARY_CLOSE_FAILURE));
 	}
 
 	return pmSuccess;

@@ -2,8 +2,28 @@
 #ifndef __PM_ERROR_DEFINITIONS__
 #define __PM_ERROR_DEFINITIONS__
 
+#include "pmLogger.h"
+
+#ifdef DEBUG
+#include <stdio.h>	// For sprintf
+#endif
+
 namespace pm
 {
+
+
+#ifdef DEBUG
+#define PMTHROW(x) { \
+			char lInteger[64]; \
+			sprintf(lInteger, " %d", __LINE__); \
+			std::string lStr("Generating Exception "); \
+			lStr += __FILE__; \
+			lStr += lInteger; \
+			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, lStr.c_str()); throw x; \
+		}
+#else
+#define PMTHROW(x) throw x;
+#endif
 
 	/**
 	  * Exceptions thrown internally by PMLIB

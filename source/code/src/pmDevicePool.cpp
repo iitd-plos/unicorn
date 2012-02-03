@@ -43,10 +43,6 @@ pmMachinePool::pmMachinePool(uint pMachineCount)
 
 	All2AllMachineData(fAll2AllBuffer);
 
-	mMachinesVector.resize(pMachineCount);
-	mMachineDataVector.resize(pMachineCount);
-	mFirstDeviceIndexOnMachine.resize(pMachineCount);
-
 	uint lLocalId = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
 
 	for(i=0; i<pMachineCount; ++i)
@@ -111,7 +107,7 @@ pmStatus pmMachinePool::All2AllMachineData(pmCommunicatorCommand::machinePool* p
 pmMachinePool::pmMachineData& pmMachinePool::GetMachineData(uint pIndex)
 {
 	if(pIndex >= (uint)mMachinesVector.size())
-		throw pmUnknownMachineException(pIndex);
+		PMTHROW(pmUnknownMachineException(pIndex));
 	
 	return mMachineDataVector[pIndex];
 }
@@ -124,7 +120,7 @@ pmMachinePool::pmMachineData& pmMachinePool::GetMachineData(pmMachine* pMachine)
 pmMachine* pmMachinePool::GetMachine(uint pIndex)
 {
 	if(pIndex >= (uint)mMachinesVector.size())
-		throw pmUnknownMachineException(pIndex);
+		PMTHROW(pmUnknownMachineException(pIndex));
 
 	return mMachinesVector[pIndex];
 }
@@ -163,7 +159,7 @@ std::vector<pmMachine*>& pmMachinePool::GetAllMachines()
 uint pmMachinePool::GetFirstDeviceIndexOnMachine(uint pMachineIndex)
 {
 	if(pMachineIndex >= (uint)mMachinesVector.size())
-		throw pmUnknownMachineException(pMachineIndex);
+		PMTHROW(pmUnknownMachineException(pMachineIndex));
 
 	return mFirstDeviceIndexOnMachine[pMachineIndex];
 }
@@ -178,7 +174,7 @@ pmStatus pmMachinePool::RegisterSendCompletion(pmMachine* pMachine, ulong pDataS
 	size_t lIndex = (size_t)(*pMachine);
 
 	if(lIndex >= (uint)mMachinesVector.size())
-		throw pmUnknownMachineException(lIndex);
+		PMTHROW(pmUnknownMachineException(lIndex));
 
 	mResourceLock.Lock();
 
@@ -196,7 +192,7 @@ pmStatus pmMachinePool::RegisterReceiveCompletion(pmMachine* pMachine, ulong pDa
 	size_t lIndex = (size_t)(*pMachine);
 
 	if(lIndex >= (uint)mMachinesVector.size())
-		throw pmUnknownMachineException(lIndex);
+		PMTHROW(pmUnknownMachineException(lIndex));
 
 	mResourceLock.Lock();
 
@@ -290,7 +286,7 @@ pmDevicePool::pmDeviceData& pmDevicePool::GetDeviceData(pmProcessingElement* pDe
 {
 	uint lGlobalIndex = pDevice->GetGlobalDeviceIndex();
 	if(lGlobalIndex >= (uint)mDevicesVector.size())
-		throw pmUnknownDeviceException(lGlobalIndex);
+		PMTHROW(pmUnknownDeviceException(lGlobalIndex));
 
 	return mDeviceDataVector[lGlobalIndex];
 }
@@ -304,11 +300,11 @@ pmProcessingElement* pmDevicePool::GetDeviceAtMachineIndex(pmMachine* pMachine, 
 {
 	uint lGlobalIndex = pmMachinePool::GetMachinePool()->GetFirstDeviceIndexOnMachine(pMachine) + pDeviceIndexOnMachine;
 	if(lGlobalIndex >= (uint)mDevicesVector.size())
-		throw pmUnknownDeviceException(lGlobalIndex);
+		PMTHROW(pmUnknownDeviceException(lGlobalIndex));
 
 	pmProcessingElement* lDevice = GetDeviceAtGlobalIndex(lGlobalIndex);
 	if(lDevice->GetMachine() != pMachine)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	return lDevice;
 }
@@ -316,7 +312,7 @@ pmProcessingElement* pmDevicePool::GetDeviceAtMachineIndex(pmMachine* pMachine, 
 pmProcessingElement* pmDevicePool::GetDeviceAtGlobalIndex(uint pGlobalDeviceIndex)
 {
 	if(pGlobalDeviceIndex >= (uint)mDevicesVector.size())
-		throw pmUnknownDeviceException(pGlobalDeviceIndex);
+		PMTHROW(pmUnknownDeviceException(pGlobalDeviceIndex));
 
 	return mDevicesVector[pGlobalDeviceIndex];
 }

@@ -63,7 +63,7 @@ pmMemSection* pmMemSection::FindMemSection(void* pMem)
 	if(lIter != mMemSectionMap.end())
 		return lIter->second;
 
-	throw pmUnrecognizedMemoryException();
+	PMTHROW(pmUnrecognizedMemoryException());
 
 	return NULL;
 }
@@ -86,7 +86,7 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 	FIND_FLOOR_ELEM(pmMemOwnership, mShadowOwnershipMap, lLastAddr, lEndIterAddr);
 
 	if(!lStartIterAddr || !lEndIterAddr)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	assert(lStartIter->first <= pOffset);
 	assert(lEndIter->first <= lLastAddr);
@@ -162,7 +162,7 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmM
 	FIND_FLOOR_ELEM(pmMemOwnership, lMap, lLastAddr, lEndIterAddr);
 
 	if(!lStartIterAddr || !lEndIterAddr)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	pOwnerships[pOffset] = lStartIter->second;
 	

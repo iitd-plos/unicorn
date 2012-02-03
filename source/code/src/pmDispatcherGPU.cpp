@@ -85,7 +85,7 @@ pmDispatcherCUDA::pmDispatcherCUDA()
 		CloseLibrary(mCutilHandle);
 		CloseLibrary(mRuntimeHandle);
 		
-		throw pmExceptionGPU(pmExceptionGPU::NVIDIA_CUDA, pmExceptionGPU::LIBRARY_OPEN_FAILURE);
+		PMTHROW(pmExceptionGPU(pmExceptionGPU::NVIDIA_CUDA, pmExceptionGPU::LIBRARY_OPEN_FAILURE));
 	}
 
 	CountAndProbeProcessingElements();

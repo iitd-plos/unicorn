@@ -70,7 +70,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
 #endif
 	
 		case MAX_DEVICE_TYPES:
-			throw pmFatalErrorException();
+			PMTHROW(pmFatalErrorException());
 	}
 
 	return false;
@@ -105,7 +105,7 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 		}
 		
 		case MAX_DEVICE_TYPES:
-			throw pmFatalErrorException();
+			PMTHROW(pmFatalErrorException());
 	}
 
 	return pmSuccess;

@@ -45,7 +45,7 @@ pmStatus pmSafePQ<T>::GetTopItem(T& pItem)
 	if(lIter == mQueue.end())
 	{
 		UnlockQueue();
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 	}
 
 	typename std::vector<T>& lVector = lIter->second;

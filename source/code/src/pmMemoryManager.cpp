@@ -20,7 +20,7 @@ pmStatus MemoryManagerCommandCompletionCallback(pmCommandPtr pCommand)
 {
 	pmCommunicatorCommandPtr lCommunicatorCommand = std::tr1::dynamic_pointer_cast<pmCommunicatorCommand>(pCommand);
 	if(!lCommunicatorCommand)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	switch(lCommunicatorCommand->GetType())
 	{
@@ -51,7 +51,7 @@ pmStatus MemoryManagerCommandCompletionCallback(pmCommandPtr pCommand)
 		}
 
 		default:
-			throw pmFatalErrorException();
+			PMTHROW(pmFatalErrorException());
 	}
 
 	return pmSuccess;
@@ -117,10 +117,10 @@ void* pmLinuxMemoryManager::AllocateMemory(size_t& pLength, size_t& pPageCount)
 	void* lPtr = NULL;
 	void** lRef = (void**)(&lPtr);
 	if(::posix_memalign(lRef, lPageSize, pLength) != 0)
-		throw pmVirtualMemoryException(pmVirtualMemoryException::MEM_ALIGN_FAILED);
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MEM_ALIGN_FAILED));
 
 	if(!lPtr)
-		throw pmVirtualMemoryException(pmVirtualMemoryException::ALLOCATION_FAILED);
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::ALLOCATION_FAILED));
 
 #ifdef TRACK_MEMORY_ALLOCATIONS
 	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
@@ -144,15 +144,15 @@ void* pmLinuxMemoryManager::AllocateLazyMemory(size_t& pLength, size_t& pPageCou
 	void* lPtr = NULL;
 	void** lRef = (void**)(&lPtr);
 	if(::posix_memalign(lRef, lPageSize, pLength) != 0)
-		throw pmVirtualMemoryException(pmVirtualMemoryException::MEM_ALIGN_FAILED);
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MEM_ALIGN_FAILED));
 
 	if(!lPtr)
-		throw pmVirtualMemoryException(pmVirtualMemoryException::ALLOCATION_FAILED);
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::ALLOCATION_FAILED));
 
 	if(::mprotect(lPtr, pLength, PROT_NONE) != 0)
 	{
 		::free(lPtr);
-		throw pmVirtualMemoryException(pmVirtualMemoryException::MEM_PROT_NONE_FAILED);
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MEM_PROT_NONE_FAILED));
 	}
 
 #ifdef TRACK_MEMORY_ALLOCATIONS
@@ -280,11 +280,11 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
 
 	std::map<void*, std::pair<size_t, regionFetchData> >::iterator lIter;
 	if(mInFlightMemoryMap.find(lAddr) == mInFlightMemoryMap.end())
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	regionFetchData& lData = mInFlightMemoryMap[lAddr].second;
 	delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
-	lData.receiveCommand->MarkExecutionEnd(pmSuccess);
+	lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
 
 	return pmSuccess;
 }
@@ -335,7 +335,7 @@ pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
 	lSigAction.sa_sigaction = SegFaultHandler;
 
 	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
-		throw pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_INSTALL_FAILED);
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_INSTALL_FAILED));
 
 	return pmSuccess;
 }
@@ -349,7 +349,7 @@ pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
 	lSigAction.sa_handler = SIG_DFL;
 
 	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
-		throw pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_UNINSTALL_FAILED);
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_UNINSTALL_FAILED));
 
 	return pmSuccess;
 }
@@ -360,7 +360,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 
 	pmMemSection* lMemSection = pmMemSection::FindMemSection(pMem);
 	if(!lMemSection)
-		throw pmFatalErrorException();
+		PMTHROW(pmFatalErrorException());
 
 	pOffset = GetLowerPageSizeMultiple(pOffset);
 	pLength = GetHigherPageSizeMultiple(pLength);
