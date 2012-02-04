@@ -6,7 +6,7 @@ namespace pm
 template<typename T>
 pmPThread<T>::pmPThread()
 {
-	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
+	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop<T>, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
 }
 
 template<typename T>

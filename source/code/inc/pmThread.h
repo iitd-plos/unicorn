@@ -10,6 +10,7 @@
 namespace pm
 {
 
+template<typename T>
 void* ThreadLoop(void* pThreadData);
 
 /**
@@ -88,7 +89,7 @@ class pmPThread : public pmThread<T>
 		/* To be implemented by client */
 		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
 		
-		friend void* ThreadLoop(void* pThreadData);
+		friend void* ThreadLoop <T> (void* pThreadData);
 
 	private:
 		virtual pmStatus SubmitCommand(typename pmThread<T>::internalType& pInternalCommand, ushort pPriority);
