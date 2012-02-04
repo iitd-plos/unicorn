@@ -54,6 +54,7 @@ pmStatus pmPThread<T>::ThreadCommandLoop()
 			switch(lInternalCommand.msg)
 			{
 				case pmThread<T>::TERMINATE:
+					pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Thread Exiting");
 					return pmSuccess;
 				
 				case pmThread<T>::DISPATCH_COMMAND:
@@ -70,6 +71,7 @@ template<typename T>
 pmStatus pmPThread<T>::SubmitCommand(typename pmThread<T>::internalType& pInternalCommand, ushort pPriority)
 {
 	this->mSafePQ.InsertItem(pInternalCommand, pPriority);
+        mSignalWait.Signal();
 
 	return pmSuccess;
 }

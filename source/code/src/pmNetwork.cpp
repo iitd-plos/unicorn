@@ -1106,7 +1106,7 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::SendDummyProbeCancellationMessage(
 {
 	char lData[1];
 
-	if( MPI_CALL("MPI_Send", (MPI_Send(&lData, 1, MPI_CHAR, *PM_LOCAL_MACHINE, pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD) != MPI_SUCCESS)) )
+	if( MPI_CALL("MPI_Send", (MPI_Send(&lData, 1, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
 
 	return pmSuccess;
@@ -1117,7 +1117,7 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ReceiveDummyProbeCancellationMessa
 	MPI_Status lStatus;
 	char lData[1];
 
-	if( MPI_CALL("MPI_Recv", (MPI_Recv(&lData, 1, MPI_CHAR, *PM_LOCAL_MACHINE, pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lStatus) != MPI_SUCCESS)) )
+	if( MPI_CALL("MPI_Recv", (MPI_Recv(&lData, 1, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lStatus) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 
 	return pmSuccess;
