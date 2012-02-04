@@ -3,7 +3,7 @@
 #define __PM_SIGNAL_WAIT__
 
 #include "pmBase.h"
-#include THREADING_IMPLEMENTATION_HEADER
+#include "pmResourceLock.h"
 
 namespace pm
 {
@@ -18,9 +18,8 @@ class pmSignalWait : public pmBase
 		virtual pmStatus Wait() = 0;
 		virtual pmStatus Signal() = 0;
 
-		virtual pmStatus WaitTillAllBlockedThreadsWakeup() = 0;
-
 	private:
+		virtual pmStatus WaitTillAllBlockedThreadsWakeup() = 0;
 };
 
 class pmPThreadSignalWait : public pmSignalWait
@@ -31,11 +30,14 @@ class pmPThreadSignalWait : public pmSignalWait
 
 		virtual pmStatus Wait();
 		virtual pmStatus Signal();
-		virtual pmStatus WaitTillAllBlockedThreadsWakeup();
 
 	private:
-		pthread_mutex_t mMutex;
+		virtual pmStatus WaitTillAllBlockedThreadsWakeup();
+
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 		pthread_cond_t mCondVariable;
+
+		bool mExiting;
 		bool mCondEnforcer;
 		uint mWaitingThreadCount;
 };

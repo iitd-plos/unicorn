@@ -8,6 +8,7 @@
 #include "pmCommand.h"
 #include "pmCallbackUnit.h"
 #include "pmReducer.h"
+#include "pmScheduler.h"
 
 #include SYSTEM_CONFIGURATION_HEADER // for sched_setaffinity
 
@@ -24,13 +25,18 @@
 namespace pm
 {
 
+using namespace execStub;
+
 /* class pmExecutionStub */
 pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
 {
 	mDeviceIndexOnMachine = pDeviceIndexOnMachine;
 
-	pmThreadCommandPtr lSharedPtr((pmThreadCommand*)NULL);
-	SwitchThread(lSharedPtr);	// Create an infinite loop in a new thread
+	stubEvent lEvent;
+	threadBind lBindDetails;
+	lBindDetails.dummy = true;
+	lEvent.bindDetails = lBindDetails;
+	SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
 }
 
 pmExecutionStub::~pmExecutionStub()
@@ -42,7 +48,7 @@ pmProcessingElement* pmExecutionStub::GetProcessingElement()
 	return pmDevicePool::GetDevicePool()->GetDeviceAtMachineIndex(PM_LOCAL_MACHINE, mDeviceIndexOnMachine);
 }
 
-pmStatus pmExecutionStub::Push(pmScheduler::subtaskRange pRange)
+pmStatus pmExecutionStub::Push(pmSubtaskRange pRange)
 {
 	if(pRange.endSubtask < pRange.startSubtask)
 		PMTHROW(pmFatalErrorException());
@@ -55,11 +61,7 @@ pmStatus pmExecutionStub::Push(pmScheduler::subtaskRange pRange)
 	lEvent.eventId = SUBTASK_EXEC;
 	lEvent.execDetails = lExecDetails;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pRange.task->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
 
 pmStatus pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, ulong pSubtaskId2)
@@ -72,11 +74,7 @@ pmStatus pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, ulong
 	lEvent.eventId = SUBTASK_REDUCE;
 	lEvent.reduceDetails = lReduceDetails;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;	
+	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
 pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pExecutionRate)
@@ -89,11 +87,7 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
 	lEvent.eventId = SUBTASK_STEAL;
 	lEvent.stealDetails = lStealDetails;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority() - 1);	// Steal events are sent at one higher priority level than the task
-
-	mSignalWait.Signal();
-
-	return lStatus;	
+	return SwitchThread(lEvent, pTask->GetPriority() - 1);	// Steal events are sent at one higher priority level than the task
 }
 
 pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
@@ -105,45 +99,32 @@ pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
 	lEvent.eventId = SUBTASK_CANCEL;
 	lEvent.cancelDetails = lCancelDetails;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, CONTROL_EVENT_PRIORITY);
-
-	mSignalWait.Signal();
-
-	return lStatus;	
+	return SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
 }
 
-pmStatus pmExecutionStub::ThreadSwitchCallback(pmThreadCommandPtr pCommand)
+pmStatus pmExecutionStub::ThreadSwitchCallback(stubEvent& pEvent)
 {
-	BindToProcessingElement();
-	
-	while(1)
-	{
-		mSignalWait.Wait();
-
-		while(mPriorityQueue.GetSize() != 0)
-		{
-			stubEvent lEvent;
-			mPriorityQueue.GetTopItem(lEvent);
-
-			ProcessEvent(lEvent);
-		}
-	}
-
-	return pmSuccess;
+	return ProcessEvent(pEvent);
 }
 
 pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 {
 	switch(pEvent.eventId)
 	{
+		case THREAD_BIND:
+		{
+			BindToProcessingElement();
+			break;
+		}
+	
 		case SUBTASK_EXEC:	/* Comes from scheduler thread */
 		{
-			pmScheduler::subtaskRange lRange = pEvent.execDetails.range;
+			pmSubtaskRange lRange = pEvent.execDetails.range;
 			ulong lCompletedCount, lLastExecutedSubtaskId;
 
 			pmSubtaskRangeCommandPtr lCommand = pmSubtaskRangeCommand::CreateSharedPtr(lRange.task->GetPriority(), pmSubtaskRangeCommand::BASIC_SUBTASK_RANGE);
 
-			pmScheduler::subtaskRange lCurrentRange;
+			pmSubtaskRange lCurrentRange;
 			if(pEvent.execDetails.rangeExecutedOnce)
 			{
 				lCurrentRange.task = lRange.task;
@@ -198,7 +179,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			pmTask* lTask = pEvent.cancelDetails.task;
 			ushort lPriority = pEvent.cancelDetails.priority;
 
-			mPriorityQueue.DeleteMatchingItems(lPriority, execEventMatchFunc, lTask);
+			DeleteMatchingCommands(lPriority, execEventMatchFunc, lTask);
 
 			break;
 		}
@@ -210,7 +191,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			ushort lPriority = lTask->GetPriority();
 
 			stubEvent lTaskEvent;
-			if(mPriorityQueue.DeleteAndGetFirstMatchingItem(lPriority, execEventMatchFunc, lTask, lTaskEvent) == pmSuccess)
+			if(DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, lTask, lTaskEvent) == pmSuccess)
 			{
 				double lLocalRate = lTask->GetTaskExecStats().GetStubExecutionRate(this);
 				double lRemoteRate = lTaskEvent.stealDetails.requestingDeviceExecutionRate;
@@ -235,7 +216,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
 					if(lStealCount)
 					{
-						pmScheduler::subtaskRange lStolenRange;
+						pmSubtaskRange lStolenRange;
 						lStolenRange.task = lTask;
 						lStolenRange.startSubtask = (lTaskEvent.execDetails.range.endSubtask - lStealCount) + 1;
 						lStolenRange.endSubtask = lTaskEvent.execDetails.range.endSubtask;
@@ -261,7 +242,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
 bool pmExecutionStub::IsHighPriorityEventWaiting(ushort pPriority)
 {
-	return mPriorityQueue.IsHighPriorityElementPresent(pPriority);
+	return GetPriorityQueue().IsHighPriorityElementPresent(pPriority);
 }
 
 pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
@@ -353,7 +334,7 @@ pmDeviceTypes pmStubCPU::GetType()
 	return CPU;
 }
 
-pmStatus pmStubCPU::Execute(pmScheduler::subtaskRange pRange, ulong& pLastExecutedSubtaskId)
+pmStatus pmStubCPU::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
 {
 	ulong index = pRange.startSubtask;
 	for(; index < pRange.endSubtask; ++index)
@@ -420,7 +401,7 @@ pmDeviceTypes pmStubCUDA::GetType()
 	return GPU_CUDA;
 }
 
-pmStatus pmStubCUDA::Execute(pmScheduler::subtaskRange pRange, ulong& pLastExecutedSubtaskId)
+pmStatus pmStubCUDA::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
 {
 	ulong index = pRange.startSubtask;
 	for(; index < pRange.endSubtask; ++index)
@@ -446,9 +427,9 @@ pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId)
 }
 
 
-bool execEventMatchFunc(pmExecutionStub::stubEvent& pEvent, void* pCriterion)
+bool execEventMatchFunc(stubEvent& pEvent, void* pCriterion)
 {
-	if(pEvent.eventId == pmExecutionStub::SUBTASK_EXEC && pEvent.execDetails.range.task == (pmTask*)pCriterion)
+	if(pEvent.eventId == SUBTASK_EXEC && pEvent.execDetails.range.task == (pmTask*)pCriterion)
 		return true;
 
 	return false;

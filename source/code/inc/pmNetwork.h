@@ -16,6 +16,15 @@ namespace pm
 
 class pmCluster;
 
+namespace network
+{
+
+typedef struct networkEvent
+{
+} networkEvent;
+
+}
+
 /**
  * \brief The base network class of PMLIB.
  * This class implements non-blocking send, receive and broadcast operations
@@ -59,7 +68,7 @@ class pmNetwork : public pmBase
 		virtual MPI_Request GetPersistentRecvRequest(pmPersistentCommunicatorCommand* pCommand) = 0;
 };
 
-class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS
+class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
 {
 	public:
 		enum pmRequestTag
@@ -67,14 +76,13 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS
 			PM_MPI_DUMMY_TAG = pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS
 		};
 
-		typedef class pmUnknownLengthReceiveThread : public THREADING_IMPLEMENTATION_CLASS
+		typedef class pmUnknownLengthReceiveThread : public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
 		{
 			public:
-				pmUnknownLengthReceiveThread();
+				pmUnknownLengthReceiveThread(pmMPI* mMPI);
 				virtual ~pmUnknownLengthReceiveThread();
 
-				pmStatus Start(pmMPI* pMPI);
-				virtual pmStatus ThreadSwitchCallback(pmThreadCommandPtr pCommand);
+				virtual pmStatus ThreadSwitchCallback(network::networkEvent& pCommand);
 				//pmStatus EnqueueReceiveCommand(pmCommunicatorCommandPtr pCommand);
 
 			private:
@@ -101,7 +109,7 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS
 		virtual pmStatus RegisterTransferDataType(pmCommunicatorCommand::communicatorDataTypes pDataType);
 		virtual pmStatus UnregisterTransferDataType(pmCommunicatorCommand::communicatorDataTypes pDataType);
 
-		virtual pmStatus ThreadSwitchCallback(pmThreadCommandPtr pCommand);
+		virtual pmStatus ThreadSwitchCallback(network::networkEvent& pCommand);
 
 		virtual pmStatus ReceiveAllocateUnpackNonBlocking(pmCommunicatorCommandPtr pCommand);		// Receive Packed Data of unknown size
 

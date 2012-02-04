@@ -40,8 +40,7 @@ extern pmCluster* PM_GLOBAL_CLUSTER;
 class pmTask : public pmBase
 {
 	protected:
-		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,
-			pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, pmScheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
+		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE, pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
 
 	public:		
 		virtual ~pmTask();
@@ -63,7 +62,7 @@ class pmTask : public pmBase
 		uint GetAssignedDeviceCount();
 		void* GetTaskConfiguration();
 		uint GetTaskConfigurationLength();
-		pmScheduler::schedulingModel GetSchedulingModel();
+		scheduler::schedulingModel GetSchedulingModel();
 		pmTaskExecStats& GetTaskExecStats();
 		pmTaskInfo& GetTaskInfo();
 		pmStatus GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo);
@@ -98,7 +97,7 @@ class pmTask : public pmBase
 		ushort mPriority;
 		void* mTaskConf;
 		uint mTaskConfLength;
-		pmScheduler::schedulingModel mSchedulingModel;
+		scheduler::schedulingModel mSchedulingModel;
 		pmTaskInfo mTaskInfo;
 		pmSubscriptionManager mSubscriptionManager;
 		pmTaskExecStats mTaskExecStats;
@@ -121,7 +120,7 @@ class pmLocalTask : public pmTask
 	public:
 		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, 
 			pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL,
-			pmScheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
+			scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
 
 		virtual ~pmLocalTask();
 
@@ -137,7 +136,7 @@ class pmLocalTask : public pmTask
 
 		std::vector<pmProcessingElement*>& GetAssignedDevices();
 
-		pmStatus InitializeSubtaskManager(pmScheduler::schedulingModel pSchedulingModel);
+		pmStatus InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel);
 		pmSubtaskManager* GetSubtaskManager();
 
 	private:
@@ -152,7 +151,7 @@ class pmRemoteTask : public pmTask
 		pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, 
 			pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pInternalTaskId,
 			pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL,
-			pmScheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
+			scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
 
 		virtual ~pmRemoteTask();
 

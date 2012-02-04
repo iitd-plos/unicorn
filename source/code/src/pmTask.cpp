@@ -20,9 +20,7 @@ namespace pm
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
-pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount /* = 0 */,
-	pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
-	pmScheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount /* = 0 */, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
 	: mOriginatingHost(pOriginatingHost), mCluster(pCluster), mSubscriptionManager(this)
 {
 	mTaskConf = pTaskConf;
@@ -35,8 +33,8 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 	mAssignedDeviceCount = pAssignedDeviceCount;
 	mSchedulingModel = pSchedulingModel;
 
-	if(pPriority == 0)
-		mPriority = 1;	// priority 0 is used for control messages only
+	if(pPriority < MAX_PRIORITY_LEVEL)
+		mPriority = MAX_PRIORITY_LEVEL;
 	else
 		mPriority = pPriority;
 
@@ -112,7 +110,7 @@ uint pmTask::GetAssignedDeviceCount()
 	return mAssignedDeviceCount;
 }
 
-pmScheduler::schedulingModel pmTask::GetSchedulingModel()
+scheduler::schedulingModel pmTask::GetSchedulingModel()
 {
 	return mSchedulingModel;
 }
@@ -313,7 +311,7 @@ pmStatus pmTask::DestroySubtaskShadowMem(ulong pSubtaskId)
 /* class pmLocalTask */
 pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, 
 	pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
-	pmScheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
+	scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel)
 {
 	mSubtaskManager = NULL;
@@ -328,15 +326,15 @@ pmLocalTask::~pmLocalTask()
 		delete mSubtaskManager;
 }
 
-pmStatus pmLocalTask::InitializeSubtaskManager(pmScheduler::schedulingModel pSchedulingModel)
+pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel)
 {
 	switch(pSchedulingModel)
 	{
-		case pmScheduler::PUSH:
+		case scheduler::PUSH:
 			mSubtaskManager = new pmPushSchedulingManager(this);
 			break;
 
-		case pmScheduler::PULL:
+		case scheduler::PULL:
 			mSubtaskManager = new pmPullSchedulingManager(this);
 			break;
 
@@ -430,7 +428,7 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
 
 	mAssignedDeviceCount = mDevices.size();
 
-	if(GetSchedulingModel() == pmScheduler::PULL)
+	if(GetSchedulingModel() == scheduler::PULL)
 		RandomizeDevices(mDevices);
 
 	return pmSuccess;
@@ -445,7 +443,7 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 /* class pmRemoteTask */
 pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit,
 	uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pInternalTaskId, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
-	pmScheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
+	scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel)
 {
 	mInternalTaskId = pInternalTaskId;
@@ -486,7 +484,7 @@ pmStatus pmRemoteTask::AddAssignedDevice(pmProcessingElement* pDevice)
 	if(lSize > lCount)
 		PMTHROW(pmFatalErrorException());
 
-	if(lSize == lCount && GetSchedulingModel() == pmScheduler::PULL)
+	if(lSize == lCount && GetSchedulingModel() == scheduler::PULL)
 		RandomizeDevices(mDevices);
 
 	return pmSuccess;

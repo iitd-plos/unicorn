@@ -33,6 +33,7 @@ class pmPThreadResourceLock : public pmResourceLock
 
 		virtual pmStatus Lock();
 		virtual pmStatus Unlock();
+		virtual pthread_mutex_t* GetMutex() {return &mMutex;}
 
 	private:
 		pthread_mutex_t mMutex;

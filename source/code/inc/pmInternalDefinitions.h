@@ -62,13 +62,13 @@
 
 #define MPI_TRANSFER_MAX_LIMIT __MAX(int)
 
-#define MAX_CONTROL_PRIORITY 0
-#define MAX_PRIORITY_LEVEL MAX_CONTROL_PRIORITY+1	// 0 is used for control messages
-#define MIN_PRIORITY_LEVEL __MAX(ushort)
-#define CONTROL_EVENT_PRIORITY 0
-#define DEFAULT_PRIORITY_LEVEL 5
+const ushort RESERVED_PRIORITY = 0;
+const ushort MAX_CONTROL_PRIORITY = RESERVED_PRIORITY+1;
+const ushort MAX_PRIORITY_LEVEL = MAX_CONTROL_PRIORITY+1;	// 0 is used for control messages
+const ushort MIN_PRIORITY_LEVEL = __MAX(ushort);
+const ushort DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 
-#define DEFAULT_SCHEDULING_MODEL pmScheduler::PUSH
+#define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
 
 #define TRACK_MEMORY_ALLOCATIONS
 

@@ -9,6 +9,8 @@
 namespace pm
 {
 
+using namespace network;
+
 pmNetwork* pmMPI::mNetwork = NULL;
 pmCluster* PM_GLOBAL_CLUSTER = NULL;
 
@@ -104,7 +106,7 @@ pmStatus pmMPI::DestroyNetwork()
 	return pmNetworkTerminationError;
 }
 
-pmMPI::pmMPI() : pmNetwork()
+pmMPI::pmMPI() : pmNetwork(), mReceiveThread(this)
 {
 	int lMpiStatus;
 	int lArgc = 0;
@@ -132,11 +134,6 @@ pmMPI::pmMPI() : pmNetwork()
 	PM_GLOBAL_CLUSTER = new pmClusterMPI();
 
 	mDummyReceiveRequest = NULL;
-
-	std::tr1::shared_ptr<pmThreadCommand> lSharedPtr((pmThreadCommand*)NULL);
-	SwitchThread(lSharedPtr);	// Create an infinite loop in a new thread
-
-	mReceiveThread.Start(this);
 }
 
 pmMPI::~pmMPI()
@@ -928,7 +925,7 @@ pmStatus pmMPI::CancelDummyRequest()
 	return pmSuccess;
 }
 
-pmStatus pmMPI::ThreadSwitchCallback(pmThreadCommandPtr pCommand)
+pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 {
 	/* Do not use pCommand in this function as it is NULL (passed in the constructor above) */
 	
@@ -1044,21 +1041,16 @@ pmStatus pmMPI::ThreadSwitchCallback(pmThreadCommandPtr pCommand)
 }
 
 /* class pmMPI::pmUnknownLengthReceiveThread */
-pmMPI::pmUnknownLengthReceiveThread::pmUnknownLengthReceiveThread()
-{
-}
-
-pmStatus pmMPI::pmUnknownLengthReceiveThread::Start(pmMPI* pMPI)
+pmMPI::pmUnknownLengthReceiveThread::pmUnknownLengthReceiveThread(pmMPI* pMPI)
 {
 	mMPI = pMPI;
-	return SwitchThread(std::tr1::shared_ptr<pmThreadCommand>((pmThreadCommand*)NULL));	// Create an infinite loop in a new thread
 }
 
 pmMPI::pmUnknownLengthReceiveThread::~pmUnknownLengthReceiveThread()
 {
 }
 
-pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(pmThreadCommandPtr pCommand)
+pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent& pCommand)
 {
 	/* Do not use pCommand in this function as it is NULL (passed in the constructor above) */
 	

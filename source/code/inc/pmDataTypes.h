@@ -10,6 +10,16 @@ namespace pm
 	typedef unsigned int uint;
 	typedef unsigned long ulong;
 
+	class pmTask;
+
+        typedef struct pmSubtaskRange
+        {
+                pmTask* task;
+                ulong startSubtask;
+                ulong endSubtask;
+        } pmSubtaskRange;
+
+
 	template<typename T>
 	class finalize_ptr
 	{

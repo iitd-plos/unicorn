@@ -82,10 +82,10 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskA
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lRemoteTask, pmRemoteTask, new pmRemoteTask(lTaskConf, pRemoteTaskData->taskStruct.taskConfLength, 
 			pRemoteTaskData->taskStruct.taskId, lInputMem, lOutputMem, pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount,
 			pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.internalTaskId, PM_GLOBAL_CLUSTER,
-			pRemoteTaskData->taskStruct.priority, (pmScheduler::schedulingModel)pRemoteTaskData->taskStruct.schedModel));
+			pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)pRemoteTaskData->taskStruct.schedModel));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
-	if(pRemoteTaskData->taskStruct.schedModel == pmScheduler::PULL || lRemoteTask->GetCallbackUnit()->GetDataReductionCB())
+	if(pRemoteTaskData->taskStruct.schedModel == scheduler::PULL || lRemoteTask->GetCallbackUnit()->GetDataReductionCB())
 	{
 		for(uint i=0; i<pRemoteTaskData->taskStruct.assignedDeviceCount; ++i)
 			lRemoteTask->AddAssignedDevice(pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(((uint*)pRemoteTaskData->devices.ptr)[i]));

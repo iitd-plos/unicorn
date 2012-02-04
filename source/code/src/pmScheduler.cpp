@@ -17,6 +17,8 @@
 namespace pm
 {
 
+using namespace scheduler;
+
 pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand)
 {
 	pmScheduler* lScheduler = pmScheduler::GetScheduler();
@@ -40,8 +42,6 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 
 	SetupPersistentCommunicationCommands();
-
-	SwitchThread(std::tr1::shared_ptr<pmThreadCommand>((pmThreadCommand*)NULL));	// Create an infinite loop in a new thread
 }
 
 pmScheduler::~pmScheduler()
@@ -168,25 +168,17 @@ pmStatus pmScheduler::SubmitTaskEvent(pmLocalTask* pLocalTask)
 	lEvent.eventId = NEW_SUBMISSION;
 	lEvent.submissionDetails.localTask = pLocalTask;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pLocalTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pLocalTask->GetPriority());
 }
 
-pmStatus pmScheduler::PushEvent(pmProcessingElement* pDevice, pmScheduler::subtaskRange& pRange)
+pmStatus pmScheduler::PushEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = SUBTASK_EXECUTION;
 	lEvent.execDetails.device = pDevice;
 	lEvent.execDetails.range = pRange;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pRange.task->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
 
 pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate)
@@ -197,11 +189,7 @@ pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pm
 	lEvent.stealRequestDetails.task = pTask;
 	lEvent.stealRequestDetails.stealingDeviceExecutionRate = pExecutionRate;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
 pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate)
@@ -213,14 +201,10 @@ pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pm
 	lEvent.stealProcessDetails.task = pTask;
 	lEvent.stealProcessDetails.stealingDeviceExecutionRate = pExecutionRate;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::StealSuccessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, subtaskRange pRange)
+pmStatus pmScheduler::StealSuccessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange pRange)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = STEAL_SUCCESS_TARGET;
@@ -228,11 +212,7 @@ pmStatus pmScheduler::StealSuccessEvent(pmProcessingElement* pStealingDevice, pm
 	lEvent.stealSuccessTargetDetails.targetDevice = pTargetDevice;
 	lEvent.stealSuccessTargetDetails.range = pRange;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pRange.task->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
 
 pmStatus pmScheduler::StealFailedEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask)
@@ -243,14 +223,10 @@ pmStatus pmScheduler::StealFailedEvent(pmProcessingElement* pStealingDevice, pmP
 	lEvent.stealFailTargetDetails.targetDevice = pTargetDevice;
 	lEvent.stealFailTargetDetails.task = pTask;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::StealSuccessReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, subtaskRange pRange)
+pmStatus pmScheduler::StealSuccessReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange pRange)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = STEAL_SUCCESS_STEALER;
@@ -258,11 +234,7 @@ pmStatus pmScheduler::StealSuccessReturnEvent(pmProcessingElement* pStealingDevi
 	lEvent.stealSuccessTargetDetails.targetDevice = pTargetDevice;
 	lEvent.stealSuccessTargetDetails.range = pRange;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pRange.task->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
 
 pmStatus pmScheduler::StealFailedReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask)
@@ -273,14 +245,10 @@ pmStatus pmScheduler::StealFailedReturnEvent(pmProcessingElement* pStealingDevic
 	lEvent.stealFailTargetDetails.targetDevice = pTargetDevice;
 	lEvent.stealFailTargetDetails.task = pTask;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, subtaskRange pRange, pmStatus pExecStatus)
+pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = SEND_ACKNOWLEDGEMENT;
@@ -288,14 +256,10 @@ pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, sub
 	lEvent.ackSendDetails.range = pRange;
 	lEvent.ackSendDetails.execStatus = pExecStatus;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pRange.task->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
 
-pmStatus pmScheduler::AcknowledgementReceiveEvent(pmProcessingElement* pDevice, subtaskRange pRange, pmStatus pExecStatus)
+pmStatus pmScheduler::AcknowledgementReceiveEvent(pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = RECEIVE_ACKNOWLEDGEMENT;
@@ -303,11 +267,7 @@ pmStatus pmScheduler::AcknowledgementReceiveEvent(pmProcessingElement* pDevice, 
 	lEvent.ackReceiveDetails.range = pRange;
 	lEvent.ackReceiveDetails.execStatus = pExecStatus;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pRange.task->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
 
 pmStatus pmScheduler::TaskCancelEvent(pmTask* pTask)
@@ -316,11 +276,7 @@ pmStatus pmScheduler::TaskCancelEvent(pmTask* pTask)
 	lEvent.eventId = TASK_CANCEL;
 	lEvent.taskCancelDetails.task = pTask;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
 pmStatus pmScheduler::TaskFinishEvent(pmTask* pTask)
@@ -329,11 +285,7 @@ pmStatus pmScheduler::TaskFinishEvent(pmTask* pTask)
 	lEvent.eventId = TASK_FINISH;
 	lEvent.taskFinishDetails.task = pTask;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;
+	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
 pmStatus pmScheduler::ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId)
@@ -344,11 +296,7 @@ pmStatus pmScheduler::ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine,
 	lEvent.subtaskReduceDetails.machine = pDestMachine;
 	lEvent.subtaskReduceDetails.subtaskId = pSubtaskId;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pTask->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;	
+	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
 pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority)
@@ -362,11 +310,7 @@ pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffs
 	lEvent.memTransferDetails.destMemBaseAddr = pDestMemBaseAddr;
 	lEvent.memTransferDetails.priority = pPriority;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pPriority);
-
-	mSignalWait.Signal();
-
-	return lStatus;		
+	return SwitchThread(lEvent, pPriority);
 }
 
 pmStatus pmScheduler::CommandCompletionEvent(pmCommandPtr pCommand)
@@ -375,29 +319,12 @@ pmStatus pmScheduler::CommandCompletionEvent(pmCommandPtr pCommand)
 	lEvent.eventId = COMMAND_COMPLETION;
 	lEvent.commandCompletionDetails.command = pCommand;
 
-	pmStatus lStatus = mPriorityQueue.InsertItem(lEvent, pCommand->GetPriority());
-
-	mSignalWait.Signal();
-
-	return lStatus;	
+	return SwitchThread(lEvent, pCommand->GetPriority());
 }
 
-pmStatus pmScheduler::ThreadSwitchCallback(pmThreadCommandPtr pCommand)
+pmStatus pmScheduler::ThreadSwitchCallback(schedulerEvent& pEvent)
 {
-	while(1)
-	{
-		mSignalWait.Wait();
-
-		while(mPriorityQueue.GetSize() != 0)
-		{
-			schedulerEvent lEvent;
-			mPriorityQueue.GetTopItem(lEvent);
-
-			ProcessEvent(lEvent);
-		}
-	}
-
-	return pmSuccess;
+	return ProcessEvent(pEvent);
 }
 
 pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
@@ -583,7 +510,7 @@ pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLoc
 
 	if(lMachine == PM_LOCAL_MACHINE)
 	{
-		pmScheduler::subtaskRange lRange;
+		pmSubtaskRange lRange;
 		lRange.task = pLocalTask;
 		lRange.startSubtask = lStartingSubtask;
 		lRange.endSubtask = lStartingSubtask + lSubtaskCount - 1;
@@ -729,7 +656,7 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 	return pmSuccess;
 }
 
-pmStatus pmScheduler::PushToStub(pmProcessingElement* pDevice, subtaskRange pRange)
+pmStatus pmScheduler::PushToStub(pmProcessingElement* pDevice, pmSubtaskRange pRange)
 {
 	pmStubManager* lManager = pmStubManager::GetStubManager();
 	pmExecutionStub* lStub = lManager->GetStub(pDevice);
@@ -800,13 +727,13 @@ pmStatus pmScheduler::StealSubtasks(pmProcessingElement* pStealingDevice, pmTask
 
 pmStatus pmScheduler::ServeStealRequest(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate)
 {
-	subtaskRange lStolenRange;
+	pmSubtaskRange lStolenRange;
 	lStolenRange.task = pTask;
 
 	return pTargetDevice->GetLocalExecutionStub()->StealSubtasks(pTask, pStealingDevice, pExecutionRate);
 }
 
-pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, subtaskRange& pRange)
+pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
 {
 	pmMachine* lMachine = pStealingDevice->GetMachine();
 	if(lMachine == PM_LOCAL_MACHINE)
@@ -841,7 +768,7 @@ pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pm
 	return pmSuccess;
 }
 
-pmStatus pmScheduler::ReceiveStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, subtaskRange& pRange)
+pmStatus pmScheduler::ReceiveStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
 {
 	return PushEvent(pStealingDevice, pRange);
 }
@@ -895,7 +822,7 @@ pmStatus pmScheduler::ReceiveFailedStealResponse(pmProcessingElement* pStealingD
 
 
 // This method is executed at master host for the task
-pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, subtaskRange pRange, pmStatus pExecStatus)
+pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus)
 {
 	pmSubtaskManager* lSubtaskManager = pLocalTask->GetSubtaskManager();
 	lSubtaskManager->RegisterSubtaskCompletion(pDevice, pRange.endSubtask - pRange.startSubtask + 1, pRange.startSubtask, pExecStatus);
@@ -908,18 +835,18 @@ pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessi
 	}
 	else
 	{
-		if(pLocalTask->GetSchedulingModel() == pmScheduler::PUSH)
+		if(pLocalTask->GetSchedulingModel() == PUSH)
 			return AssignSubtasksToDevice(pDevice, pLocalTask);
 	}
 
 	return pmSuccess;
 }
 
-pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, subtaskRange pRange, pmStatus pExecStatus)
+pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus)
 {
 	AcknowledgementSendEvent(pDevice, pRange, pExecStatus);
 
-	if(pRange.task->GetSchedulingModel() == pmScheduler::PULL)
+	if(pRange.task->GetSchedulingModel() == PULL)
 	{
 		pmStubManager* lManager = pmStubManager::GetStubManager();
 		pmExecutionStub* lStub = lManager->GetStub(pDevice);
@@ -1022,7 +949,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
 					pmProcessingElement* lTargetDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->targetDeviceGlobalIndex);
 
-					pmScheduler::subtaskRange lRange;
+					pmSubtaskRange lRange;
 					lRange.task = pmTaskManager::GetTaskManager()->FindRemoteTask(lOriginatingHost, lData->internalTaskId);
 					lRange.startSubtask = lData->startSubtask;
 					lRange.endSubtask = lData->endSubtask;
@@ -1040,7 +967,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
 					pmProcessingElement* lSourceDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->sourceDeviceGlobalIndex);
 
-					pmScheduler::subtaskRange lRange;
+					pmSubtaskRange lRange;
 					lRange.task = pmTaskManager::GetTaskManager()->FindRemoteTask(lOriginatingHost, lData->internalTaskId);
 					lRange.startSubtask = lData->startSubtask;
 					lRange.endSubtask = lData->endSubtask;
@@ -1167,7 +1094,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					{
 						case pmCommunicatorCommand::STEAL_SUCCESS_RESPONSE:
 						{
-							pmScheduler::subtaskRange lRange;
+							pmSubtaskRange lRange;
 							lRange.task = lTask;
 							lRange.startSubtask = lData->startSubtask;
 							lRange.endSubtask = lData->endSubtask;

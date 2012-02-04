@@ -24,9 +24,6 @@ pmCommand::pmCommand(ushort pPriority, ushort pCommandType, void* pCommandData /
 
 pmCommand::~pmCommand()
 {
-	if(mSignalWait)
-		mSignalWait->WaitTillAllBlockedThreadsWakeup();
-
 	delete mSignalWait;
 }
 
@@ -346,7 +343,7 @@ pmCommunicatorCommand::remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTas
 	taskConf.length = pLocalTask->GetTaskConfigurationLength();
 
 	// Transfer device list if the task scehduling model is pull or if reduction callback is defined
-	if(taskStruct.assignedDeviceCount != 0 && (pLocalTask->GetSchedulingModel() == pmScheduler::PULL || pLocalTask->GetCallbackUnit()->GetDataReductionCB()))
+	if(taskStruct.assignedDeviceCount != 0 && (pLocalTask->GetSchedulingModel() == scheduler::PULL || pLocalTask->GetCallbackUnit()->GetDataReductionCB()))
 	{
 		uint* lDeviceArray = new uint[taskStruct.assignedDeviceCount];
 

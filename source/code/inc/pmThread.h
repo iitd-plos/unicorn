@@ -4,8 +4,8 @@
 
 #include "pmBase.h"
 #include "pmCommand.h"
-
-#include THREADING_IMPLEMENTATION_HEADER
+#include "pmSignalWait.h"
+#include "pmSafePriorityQueue.h"
 
 namespace pm
 {
@@ -27,45 +27,85 @@ void* ThreadLoop(void* pThreadData);
  * the first one returns.
 */
 
+// T must be default constructible
+
+template<typename T>
 class pmThread : public pmBase
 {
 	public:
-		virtual ~pmThread() {}
-		virtual pmStatus SwitchThread(pmThreadCommandPtr pCommand) = 0;
+		typedef bool (*internalMatchFuncPtr)(T& pItem, void* pMatchCriterion);
+
+		typedef struct internalMatchCriterion
+		{
+			internalMatchFuncPtr clientMatchFunc;
+			void* clientMatchCriterion;
+		} internalMatchCriterion;
+
+		virtual ~pmThread<T>() {}
+		virtual pmStatus SwitchThread(T& pCommand, ushort pPriority) = 0;
 
 		virtual pmStatus SetProcessorAffinity(int pProcesorId) = 0;
 		
 		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(pmThreadCommandPtr pCommand) = 0;
+		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
+
+		virtual pmStatus DeleteAndGetFirstMatchingCommand(ushort pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
+                virtual pmStatus DeleteMatchingCommands(ushort pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
+
+		enum internalMessage
+		{
+			TERMINATE,
+			DISPATCH_COMMAND
+		};
+
+		typedef struct internalType
+		{
+			internalMessage msg;
+			T cmd;
+			typedef pmThread<T> outerType;
+		} internalType;
+		
+		pmSafePQ<typename pmThread<T>::internalType>& GetPriorityQueue() {return this->mSafePQ;}
+
+	protected:
+		pmSafePQ<typename pmThread<T>::internalType> mSafePQ;
+
+	private:
+		virtual pmStatus TerminateThread() = 0;
 };
 
-class pmPThread : public pmThread
+template<typename T>
+class pmPThread : public pmThread<T>
 {
 	public:
-		pmPThread();
-		virtual ~pmPThread();
+		pmPThread<T>();
+		virtual ~pmPThread<T>();
 
-		virtual pmStatus SwitchThread(pmThreadCommandPtr pCommand);
+		virtual pmStatus SwitchThread(T& pCommand, ushort pPriority);
 
 		virtual pmStatus SetProcessorAffinity(int pProcesorId);
 
 		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(pmThreadCommandPtr pCommand) = 0;
-
+		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
+		
 		friend void* ThreadLoop(void* pThreadData);
 
 	private:
-		virtual pmStatus SubmitCommand(pmThreadCommandPtr pCommand);
+		virtual pmStatus SubmitCommand(typename pmThread<T>::internalType& pInternalCommand, ushort pPriority);
 		virtual pmStatus ThreadCommandLoop();
+		virtual pmStatus TerminateThread();
 
-		pthread_mutex_t mMutex;
-		pthread_cond_t mCondVariable;
-		bool mCondEnforcer;
+		SIGNAL_WAIT_IMPLEMENTATION_CLASS mSignalWait;
 
-		pmThreadCommandPtr mCommand;
 		pthread_t mThread;
 };
 
+template<typename T> 
+bool internalMatchFunc(T& pInternalCommand, void* pCriterion);
+
 } // end namespace pm
+
+#include "../src/pmThread.cpp"
+
 
 #endif

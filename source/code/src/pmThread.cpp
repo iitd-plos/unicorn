@@ -1,75 +1,105 @@
 
-#include "pmThread.h"
-#include "pmCommand.h"
-
-#include SYSTEM_CONFIGURATION_HEADER
-
 namespace pm
 {
 
 /* pmPThread Class */
-pmPThread::pmPThread()
+template<typename T>
+pmPThread<T>::pmPThread()
 {
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_init(&mMutex, NULL), pmThreadFailureException, pmThreadFailureException::MUTEX_INIT_FAILURE );
-	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_init(&mCondVariable, NULL), pmThreadFailureException, pmThreadFailureException::COND_VAR_INIT_FAILURE );
-	
-	mCondEnforcer = false;
-
 	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
 }
 
-pmPThread::~pmPThread()
+template<typename T>
+pmPThread<T>::~pmPThread()
 {
-	THROW_ON_NON_ZERO_RET_VAL( pthread_cancel(mThread), pmThreadFailureException, pmThreadFailureException::THREAD_CANCEL_ERROR );
-
-	// A locked mutex and in wait cond variable can not be deleted
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
-	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_signal(&mCondVariable), pmThreadFailureException, pmThreadFailureException::COND_VAR_SIGNAL_FAILURE );
-
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_destroy(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_DESTROY_FAILURE );
-	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_destroy(&mCondVariable), pmThreadFailureException, pmThreadFailureException::COND_VAR_DESTROY_FAILURE );
+	TerminateThread();
 }
 
-pmStatus pmPThread::SwitchThread(pmThreadCommandPtr pCommand)
+template<typename T>
+pmStatus pmPThread<T>::TerminateThread()
 {
-	return SubmitCommand(pCommand);
+	typename pmThread<T>::internalType lInternalCommand;
+	lInternalCommand.msg = pmThread<T>::TERMINATE;
+
+	SubmitCommand(lInternalCommand, RESERVED_PRIORITY);
+
+	THROW_ON_NON_ZERO_RET_VAL( pthread_join(mThread, NULL), pmThreadFailureException, pmThreadFailureException::THREAD_CANCEL_ERROR );
+	//THROW_ON_NON_ZERO_RET_VAL( pthread_cancel(mThread), pmThreadFailureException, pmThreadFailureException::THREAD_CANCEL_ERROR );
+
+	return pmSuccess;
 }
 
-pmStatus pmPThread::ThreadCommandLoop()
+template<typename T>
+pmStatus pmPThread<T>::SwitchThread(T& pCommand, ushort pPriority)
+{
+	typename pmThread<T>::internalType lInternalCommand;
+	lInternalCommand.msg = pmThread<T>::DISPATCH_COMMAND;
+	lInternalCommand.cmd = pCommand;
+
+	return SubmitCommand(lInternalCommand, pPriority);
+}
+
+template<typename T>
+pmStatus pmPThread<T>::ThreadCommandLoop()
 {
 	while(1)
 	{
-		THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_LOCK_FAILURE );
-	
-		while(!mCondEnforcer)
-			THROW_ON_NON_ZERO_RET_VAL( pthread_cond_wait(&mCondVariable, &mMutex), pmThreadFailureException, pmThreadFailureException::COND_VAR_WAIT_FAILURE );
+                mSignalWait.Wait();
 
-		mCondEnforcer = false;
+                while(this->mSafePQ.GetSize() != 0)
+                {
+			typename pmThread<T>::internalType lInternalCommand;
+                       	this->mSafePQ.GetTopItem(lInternalCommand);
 
-		pmStatus lStatus = ThreadSwitchCallback(mCommand);
-		if(mCommand)
-			mCommand->SetStatus(lStatus);
-
-		THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
+			switch(lInternalCommand.msg)
+			{
+				case pmThread<T>::TERMINATE:
+					return pmSuccess;
+				
+				case pmThread<T>::DISPATCH_COMMAND:
+                        		ThreadSwitchCallback(lInternalCommand.cmd);
+					break;
+			}
+                }
 	}
 
 	return pmSuccess;
 }
 
-pmStatus pmPThread::SubmitCommand(pmThreadCommandPtr pCommand)
+template<typename T>
+pmStatus pmPThread<T>::SubmitCommand(typename pmThread<T>::internalType& pInternalCommand, ushort pPriority)
 {
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_LOCK_FAILURE );
-	
-	mCondEnforcer = true;
-	mCommand = pCommand;
-
-	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_signal(&mCondVariable), pmThreadFailureException, pmThreadFailureException::COND_VAR_SIGNAL_FAILURE );
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
+	this->mSafePQ.InsertItem(pInternalCommand, pPriority);
 
 	return pmSuccess;
 }
 
-pmStatus pmPThread::SetProcessorAffinity(int pProcessorId)
+template<typename T>
+pmStatus pmThread<T>::DeleteAndGetFirstMatchingCommand(ushort pPriority, typename pmThread<T>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem)
+{
+	typename pmThread<T>::internalMatchCriterion lInternalMatchCriterion;
+	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
+	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
+
+	typename pmThread<T>::internalType lInternalItem;
+	pmStatus lStatus = this->mSafePQ.DeleteAndGetFirstMatchingItem(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion), lInternalItem);
+	pItem = lInternalItem.cmd;
+
+	return lStatus;
+}
+
+template<typename T>
+pmStatus pmThread<T>::DeleteMatchingCommands(ushort pPriority, typename pmThread<T>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
+{
+	typename pmThread<T>::internalMatchCriterion lInternalMatchCriterion;
+	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
+	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
+
+	return this->mSafePQ.DeleteMatchingItems(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion));
+}
+
+template<typename T>
+pmStatus pmPThread<T>::SetProcessorAffinity(int pProcessorId)
 {
 	pthread_t lThread = pthread_self();
 	cpu_set_t lSetCPU;
@@ -88,12 +118,22 @@ pmStatus pmPThread::SetProcessorAffinity(int pProcessorId)
 	return pmSuccess;
 }
 
+template<typename T>
 void* ThreadLoop(void* pThreadData)
 {
-	pmPThread* lObjectPtr = (pmPThread*)pThreadData;
+	pmPThread<T>* lObjectPtr = (pmPThread<T>*)pThreadData;
 	lObjectPtr->ThreadCommandLoop();
 
 	return NULL;
+}
+
+template<typename T>
+bool internalMatchFunc(T& pInternalCommand, void* pCriterion)
+{
+	typedef typename T::outerType::internalMatchCriterion matchCriterion;
+
+	matchCriterion* lInternalMatchCriterion = (matchCriterion*)(pCriterion);
+	return (lInternalMatchCriterion->clientMatchFunc)(pInternalCommand.cmd, lInternalMatchCriterion->clientMatchCriterion);
 }
 
 } // end namespace pm
