@@ -83,10 +83,14 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 				virtual ~pmUnknownLengthReceiveThread();
 
 				virtual pmStatus ThreadSwitchCallback(network::networkEvent& pCommand);
-				//pmStatus EnqueueReceiveCommand(pmCommunicatorCommandPtr pCommand);
 
 			private:
+				pmStatus StopThreadExecution();
+				pmStatus SendDummyProbeCancellationMessage();
+				pmStatus ReceiveDummyProbeCancellationMessage();
+
 				pmMPI* mMPI;
+				bool mThreadTerminationFlag;
 				std::vector<pmCommunicatorCommandPtr> mReceiveCommands;
 				RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 		} pmUnknownLengthReceiveThread;
@@ -120,6 +124,8 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		pmMPI();
 		virtual ~pmMPI();
 
+		pmStatus StopThreadExecution();
+
 		pmStatus SendNonBlockingInternal(pmCommunicatorCommandPtr pCommand, void* pData, int pLength);
 		pmStatus ReceiveNonBlockingInternal(pmCommunicatorCommandPtr pCommand, void* pData, int pLength);
 
@@ -147,7 +153,9 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		std::map<pmPersistentCommunicatorCommand*, MPI_Request> mPersistentSendRequest;
 		std::map<pmPersistentCommunicatorCommand*, MPI_Request> mPersistentRecvRequest;
 
-		pmUnknownLengthReceiveThread mReceiveThread;
+		bool mThreadTerminationFlag;
+
+		pmUnknownLengthReceiveThread* mReceiveThread;
 };
 
 } // end namespace pm

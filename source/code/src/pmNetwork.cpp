@@ -106,7 +106,7 @@ pmStatus pmMPI::DestroyNetwork()
 	return pmNetworkTerminationError;
 }
 
-pmMPI::pmMPI() : pmNetwork(), mReceiveThread(this)
+pmMPI::pmMPI() : pmNetwork()
 {
 	int lMpiStatus;
 	int lArgc = 0;
@@ -134,10 +134,20 @@ pmMPI::pmMPI() : pmNetwork(), mReceiveThread(this)
 	PM_GLOBAL_CLUSTER = new pmClusterMPI();
 
 	mDummyReceiveRequest = NULL;
+	
+	mThreadTerminationFlag = false;
+
+	networkEvent lNetworkEvent; 
+	SwitchThread(lNetworkEvent, MAX_PRIORITY_LEVEL);
+
+	mReceiveThread = new pmUnknownLengthReceiveThread(this);
 }
 
 pmMPI::~pmMPI()
 {
+	StopThreadExecution();
+
+	delete mReceiveThread;
 	delete dynamic_cast<pmClusterMPI*>(PM_GLOBAL_CLUSTER);
 }
 
@@ -925,6 +935,17 @@ pmStatus pmMPI::CancelDummyRequest()
 	return pmSuccess;
 }
 
+pmStatus pmMPI::StopThreadExecution()
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+	mThreadTerminationFlag = true;
+
+	CancelDummyRequest();
+
+	return pmSuccess;
+}
+
 pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 {
 	/* Do not use pCommand in this function as it is NULL (passed in the constructor above) */
@@ -939,6 +960,9 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 		// Auto lock/unlock scope
 		{
 			FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+			if(mThreadTerminationFlag)
+				return pmSuccess;
 
 			SetupDummyRequest();
 
@@ -973,6 +997,16 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 
 		if(lFinishingRequestIndex == 0)		// Dummy Request
 		{
+			// Auto lock/Unlock scope
+			{
+				FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+				if(mThreadTerminationFlag)
+				{
+					delete[] lCommandArray;
+					return pmSuccess;
+				}
+			}
+
 			int lFlag = 0;
 			if( MPI_CALL("MPI_Test_cancelled", (MPI_Test_cancelled(&lFinishingRequestStatus, &lFlag) != MPI_SUCCESS)) )
 			{
@@ -1044,10 +1078,49 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 pmMPI::pmUnknownLengthReceiveThread::pmUnknownLengthReceiveThread(pmMPI* pMPI)
 {
 	mMPI = pMPI;
+	mThreadTerminationFlag = false;
+	
+	networkEvent lNetworkEvent; 
+	SwitchThread(lNetworkEvent, MAX_PRIORITY_LEVEL);
 }
 
 pmMPI::pmUnknownLengthReceiveThread::~pmUnknownLengthReceiveThread()
 {
+	StopThreadExecution();
+}
+
+pmStatus pmMPI::pmUnknownLengthReceiveThread::StopThreadExecution()
+{
+	// Auto lock/unlock scope
+	{
+		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+		mThreadTerminationFlag = true;
+	}
+
+	SendDummyProbeCancellationMessage();
+
+	return pmSuccess;
+}
+
+pmStatus pmMPI::pmUnknownLengthReceiveThread::SendDummyProbeCancellationMessage()
+{
+	char lData[1];
+
+	if( MPI_CALL("MPI_Send", (MPI_Send(&lData, 1, MPI_CHAR, *PM_LOCAL_MACHINE, pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD) != MPI_SUCCESS)) )
+		PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
+
+	return pmSuccess;
+}
+
+pmStatus pmMPI::pmUnknownLengthReceiveThread::ReceiveDummyProbeCancellationMessage()
+{
+	MPI_Status lStatus;
+	char lData[1];
+
+	if( MPI_CALL("MPI_Recv", (MPI_Recv(&lData, 1, MPI_CHAR, *PM_LOCAL_MACHINE, pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lStatus) != MPI_SUCCESS)) )
+		PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
+
+	return pmSuccess;
 }
 
 pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent& pCommand)
@@ -1059,9 +1132,28 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 	{
 		MPI_Status lProbeStatus, lRecvStatus;
 
-		//if( MPI_Probe(MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &lStatus) != MPI_SUCCESS )
+		// Auto lock/unlock scope
+		{
+			FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+			if(mThreadTerminationFlag)
+			{
+				ReceiveDummyProbeCancellationMessage();
+				return pmSuccess;
+			}
+		}
+		
 		if( MPI_CALL("MPI_Probe", (MPI_Probe(MPI_ANY_SOURCE, pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lProbeStatus) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::PROBE_ERROR));
+		
+		// Auto lock/unlock scope
+		{
+			FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+			if(mThreadTerminationFlag)
+			{
+				ReceiveDummyProbeCancellationMessage();
+				return pmSuccess;
+			}
+		}
 
 		int lLength;
 		if( MPI_CALL("MPI_Get_count", (MPI_Get_count(&lProbeStatus, MPI_PACKED, &lLength) != MPI_SUCCESS)) )
@@ -1076,34 +1168,6 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 		uint lInternalTag;
 		if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lPackedData, lLength, &lPos, &lInternalTag, 1, MPI_UNSIGNED, MPI_COMM_WORLD) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
-
-		/*
-		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-
-		pmCommunicatorCommandPtr lCommand = NULL;
-		pmHardware* lHardware;
-		MPI_Comm lCommunicator;
-		int lDest;
-
-		int lSize = mReceiveCommands.size();
-		for(int i=0; i<lSize; ++i)
-		{
-			if(mReceiveCommands[i]->GetTag() == (pmCommunicatorCommand::communicatorCommandTags)lInternalTag)
-			{
-				lHardware = mReceiveCommands[i]->GetDestination();
-				SAFE_GET_MPI_COMMUNICATOR_AND_DESTINATION(lCommunicator, lDest, lHardware);
-
-				if(lDest == lProbeStatus.MPI_SOURCE && lCommunicator == MPI_COMM_WORLD)
-				{
-					lCommand = mReceiveCommands[i];
-					break;
-				}
-			}
-		}
-
-		if(!lCommand)
-			PMTHROW(pmFatalErrorException());
-		*/
 
 		pmCommunicatorCommand::communicatorDataTypes lDataType;
 		pmCommunicatorCommand::communicatorCommandTags lTag = (pmCommunicatorCommand::communicatorCommandTags)lInternalTag;
@@ -1136,15 +1200,6 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 
 	return pmSuccess;
 }
-
-/*
-pmStatus pmMPI::pmUnknownLengthReceiveThread::EnqueueReceiveCommand(pmCommunicatorCommandPtr pCommand)
-{
-	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-
-	mReceiveCommands.push_back(pCommand);
-}
-*/
 
 } // end namespace pm
 
