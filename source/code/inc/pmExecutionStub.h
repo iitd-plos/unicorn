@@ -31,7 +31,6 @@ typedef enum eventIdentifier
 
 typedef struct threadBind
 {
-        bool dummy;
 } threadBind;
 
 typedef struct subtaskExec

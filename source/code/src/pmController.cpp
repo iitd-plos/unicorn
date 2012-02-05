@@ -80,8 +80,6 @@ pmController* pmController::GetController()
 				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Scheduler Initialization Failed");
 				PMTHROW(pmFatalErrorException());
 			}
-
-			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Successful Initialization");
 		}
 		else
 		{

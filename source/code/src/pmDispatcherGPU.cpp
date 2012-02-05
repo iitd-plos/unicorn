@@ -77,12 +77,13 @@ size_t pmDispatcherGPU::ProbeProcessingElementsAndCreateStubs(std::vector<pmExec
 /* class pmDispatcherCUDA */
 pmDispatcherCUDA::pmDispatcherCUDA()
 {
-	mCutilHandle = OpenLibrary(CUDA_LIBRARY_CUTIL);
+	//mCutilHandle = OpenLibrary(CUDA_LIBRARY_CUTIL);
 	mRuntimeHandle = OpenLibrary(CUDA_LIBRARY_CUDART);
 
-	if(!mCutilHandle || !mRuntimeHandle)
+	//if(!mCutilHandle || !mRuntimeHandle)
+	if(!mRuntimeHandle)
 	{
-		CloseLibrary(mCutilHandle);
+		//CloseLibrary(mCutilHandle);
 		CloseLibrary(mRuntimeHandle);
 		
 		PMTHROW(pmExceptionGPU(pmExceptionGPU::NVIDIA_CUDA, pmExceptionGPU::LIBRARY_OPEN_FAILURE));
@@ -95,7 +96,7 @@ pmDispatcherCUDA::~pmDispatcherCUDA()
 {
 	try
 	{
-		CloseLibrary(mCutilHandle);
+		//CloseLibrary(mCutilHandle);
 		CloseLibrary(mRuntimeHandle);
 	}
 	catch(pmIgnorableException e)

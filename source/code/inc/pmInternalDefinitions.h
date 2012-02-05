@@ -84,4 +84,6 @@ const ushort DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 
 #define USE_LAZY_MEMORY
 
+//#define DUMP_THREADS
+
 #endif

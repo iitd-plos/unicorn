@@ -54,7 +54,10 @@ pmStatus pmPThread<T>::ThreadCommandLoop()
 			switch(lInternalCommand.msg)
 			{
 				case pmThread<T>::TERMINATE:
+					#ifdef DUMP_THREADS
 					pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Thread Exiting");
+					#endif
+
 					return pmSuccess;
 				
 				case pmThread<T>::DISPATCH_COMMAND:

@@ -149,6 +149,10 @@ pmMPI::~pmMPI()
 
 	delete mReceiveThread;
 	delete dynamic_cast<pmClusterMPI*>(PM_GLOBAL_CLUSTER);
+
+	#ifdef DUMP_THREADS
+	pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Shutting down network thread");
+	#endif
 }
 
 pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
@@ -1087,6 +1091,10 @@ pmMPI::pmUnknownLengthReceiveThread::pmUnknownLengthReceiveThread(pmMPI* pMPI)
 pmMPI::pmUnknownLengthReceiveThread::~pmUnknownLengthReceiveThread()
 {
 	StopThreadExecution();
+
+	#ifdef DUMP_THREADS
+	pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Shutting down unknown length network thread");
+	#endif
 }
 
 pmStatus pmMPI::pmUnknownLengthReceiveThread::StopThreadExecution()

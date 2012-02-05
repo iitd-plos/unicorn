@@ -57,6 +57,10 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
+
+	#ifdef DUMP_THREADS
+	pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Shutting down scheduler thread");
+	#endif
 }
 
 pmScheduler* pmScheduler::GetScheduler()

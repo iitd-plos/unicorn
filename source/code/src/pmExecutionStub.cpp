@@ -33,14 +33,17 @@ pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
 	mDeviceIndexOnMachine = pDeviceIndexOnMachine;
 
 	stubEvent lEvent;
+	lEvent.eventId = THREAD_BIND;
 	threadBind lBindDetails;
-	lBindDetails.dummy = true;
 	lEvent.bindDetails = lBindDetails;
 	SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
 }
 
 pmExecutionStub::~pmExecutionStub()
 {
+	#ifdef DUMP_THREADS
+	pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Shutting down stub thread");
+	#endif
 }
 
 pmProcessingElement* pmExecutionStub::GetProcessingElement()
