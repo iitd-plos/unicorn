@@ -28,9 +28,9 @@ pmCallbackUnit::pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributi
 
 pmCallbackUnit::~pmCallbackUnit()
 {
-	mResourceLock.Lock();
+	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
+
 	mKeyMap.erase(mKey);
-	mResourceLock.Unlock();
 }
 
 pmDataDistributionCB* pmCallbackUnit::GetDataDistributionCB()

@@ -71,8 +71,8 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskA
 	pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost);
 
 	pmRemoteTask* lRemoteTask;
-	pmMemSection* lInputMem = NULL;
-	pmMemSection* lOutputMem = NULL;
+	pmInputMemSection* lInputMem = NULL;
+	pmOutputMemSection* lOutputMem = NULL;
 	
 	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
 		FREE_PTR_ON_EXCEPTION(lDestructionBlock, lTaskConf, lTaskConf);

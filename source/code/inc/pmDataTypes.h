@@ -206,8 +206,8 @@ namespace pm
 
 	#define START_DESTROY_ON_EXCEPTION(blockName) pmDestroyOnException blockName; try {
 	#define FREE_PTR_ON_EXCEPTION(blockName, name, ptr) name = ptr; blockName.AddFreePtr(name);
-	#define DESTROY_PTR_ON_EXCEPTION(blockName, name, dataType, ptr) name = ptr; selective_finalize_ptr<dataType> name##_obj(ptr); blockName.AddDeletePtr(&(name##_obj));
-	#define DESTROY_PTR_ARRAY_ON_EXCEPTION(blockName, name, dataType, ptr) name = ptr; selective_finalize_ptr_array<dataType> name##_obj(ptr); blockName.AddDeletePtr(&(name##_obj));
+	#define DESTROY_PTR_ON_EXCEPTION(blockName, name, dataType, ptr) name = ptr; selective_finalize_ptr<dataType> name##_obj(name); blockName.AddDeletePtr(&(name##_obj));
+	#define DESTROY_PTR_ARRAY_ON_EXCEPTION(blockName, name, dataType, ptr) name = ptr; selective_finalize_ptr_array<dataType> name##_obj(name); blockName.AddDeletePtr(&(name##_obj));
 	#define END_DESTROY_ON_EXCEPTION(blockName) blockName.SetDestroy(false); } catch(...) {throw;}
 
 	#define SAFE_FREE(ptr) if(ptr) free(ptr);

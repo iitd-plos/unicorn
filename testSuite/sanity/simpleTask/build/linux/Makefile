@@ -23,12 +23,12 @@ endif
 OUTDIR= $(BUILD)
 
 ifeq ($(DEBUG), 1)
-	PROGRAM=$(OUTDIR)/basic_g.exe
+	PROGRAM=$(OUTDIR)/simpleTask_g.exe
 else
-	PROGRAM=$(OUTDIR)/basic.exe
+	PROGRAM=$(OUTDIR)/simpleTask.exe
 endif
 
-OBJECTS= $(OUTDIR)/basic.o
+OBJECTS= $(OUTDIR)/simpleTask.o
 
 CUDA_OBJECTS = 
 

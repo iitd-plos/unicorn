@@ -31,9 +31,8 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
 
 	if(mMem)
 	{
-		mResourceLock.Lock();
+		FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
 		mMemSectionMap[mMem] = this;
-		mResourceLock.Unlock();
 	}
 }
 		
