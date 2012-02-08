@@ -158,6 +158,7 @@ namespace pm
 			pmSubtaskCallback_CPU subtask_cpu;
 			pmSubtaskCallback_GPU_CUDA subtask_gpu_cuda;
 			pmDataReductionCallback dataReduction;
+			pmDataScatterCallback dataScatter;
 			pmDeviceSelectionCallback deviceSelection;
 			pmPreDataTransferCallback preDataTransfer;
 			pmPostDataTransferCallback postDataTransfer;
@@ -171,14 +172,14 @@ namespace pm
 	pmStatus pmRegisterCallbacks(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
 
 	/* The registered callbacks must be released by the application using the following API */
-	pmStatus pmReleaseCallbacks(pmCallbackHandle* pCallbackHandle);
+	pmStatus pmReleaseCallbacks(pmCallbackHandle pCallbackHandle);
 
 	
 	/** The memory creation API. The allocated memory is returned in the variable pMem. */
 	pmStatus pmCreateMemory(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMem);
 
 	/* The memory destruction API. The same interface is used for both input and output memory. */
-	pmStatus pmReleaseMemory(pmMemHandle* pMem);
+	pmStatus pmReleaseMemory(pmMemHandle pMem);
 
 	// The following two defines may be used in 3rd argument to pmSubscribeToMemory
 	#define INPUT_MEM 1
@@ -197,13 +198,13 @@ namespace pm
 	{
 		void* taskConf;
 		unsigned int taskConfLength;
-		pmMemHandle* inputMem;
-		pmMemHandle* outputMem;
-		pmCallbackHandle* callbackHandle;
+		pmMemHandle inputMem;
+		pmMemHandle outputMem;
+		pmCallbackHandle callbackHandle;
 		unsigned long subtaskCount;
 		unsigned long taskId;		/* Meant for application to assign and identify tasks */
 		unsigned short priority;	/* By default, this is set to max priority level (0) */
-		pmClusterHandle* cluster;	/* Unused */
+		pmClusterHandle cluster;	/* Unused */
 
 		pmTaskDetails();
 	} pmTaskDetails;
@@ -214,23 +215,23 @@ namespace pm
 	/** The submitted tasks must be released by the application using the following API.
 	 *	The API automatically blocks till task completion. Returns the task's exit status.
 	 */
-	pmStatus pmReleaseTask(pmTaskHandle* pTaskHandle);
+	pmStatus pmReleaseTask(pmTaskHandle pTaskHandle);
 
 	/** A task is by default non-blocking. The control comes back immediately.
 	 *	Use the following API to wait for the task to finish.
 	 *	The API returns the exit status of the task.
 	 */
-	pmStatus pmWaitForTaskCompletion(pmTaskHandle* pTaskHandle);
+	pmStatus pmWaitForTaskCompletion(pmTaskHandle pTaskHandle);
 
 	/** Returns the task execution time (in seconds) in the variable pTime.
 	 *	The API automatically blocks till task completion.
 	 */
-	pmStatus pmGetTaskExecutionTimeInSecs(pmTaskHandle* pTaskHandle, double* pTime);
+	pmStatus pmGetTaskExecutionTimeInSecs(pmTaskHandle pTaskHandle, double* pTime);
 
 	/** A unified API to release task and it's associated resources (callbacks, input and output memory).
 	 *	Returns the task's exit status (if no error). The API automatically blocks till task finishes.
 	 */
-	pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle);
+	pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTaskHandle);
 
 } // end namespace pm
 

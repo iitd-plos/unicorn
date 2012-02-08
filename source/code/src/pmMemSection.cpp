@@ -174,8 +174,8 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmM
 			pOwnerships[lIter->first] = lIter->second;
 	}
 
-	vmRangeOwner lLastOwner = lEndIter->second.second;
-	pOwnerships[lEndIter->first] = std::pair<size_t, vmRangeOwner>(lLastAddr - lEndIter->first + 1, lLastOwner);
+	//vmRangeOwner lLastOwner = lEndIter->second.second;
+	//pOwnerships[lEndIter->first] = std::pair<size_t, vmRangeOwner>(lLastAddr - lEndIter->first + 1, lLastOwner);
 
 	return pmSuccess;
 }

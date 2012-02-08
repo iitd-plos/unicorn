@@ -122,13 +122,14 @@ pmStatus pmController::CreateAndInitializeController()
 /* Public API */
 pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
 {
-	pmDataDistributionCB* lDataDistribution;
-	pmSubtaskCB* lSubtask;
-	pmDataReductionCB* lDataReduction;
-	pmDeviceSelectionCB* lDeviceSelection;
-	pmPreDataTransferCB* lPreDataTransfer;
-	pmPostDataTransferCB* lPostDataTransfer;
-	pmCallbackUnit* lCallbackUnit;
+	pmDataDistributionCB* lDataDistribution = NULL;
+	pmSubtaskCB* lSubtask = NULL;
+	pmDataReductionCB* lDataReduction = NULL;
+	pmDeviceSelectionCB* lDeviceSelection = NULL;
+	pmDataScatterCB* lDataScatter = NULL;
+	pmPreDataTransferCB* lPreDataTransfer = NULL;
+	pmPostDataTransferCB* lPostDataTransfer = NULL;
+	pmCallbackUnit* lCallbackUnit = NULL;
 
 	if(strlen(pKey) >= MAX_CB_KEY_LEN)
 		PMTHROW(pmMaxKeyLengthExceeded);
@@ -136,13 +137,21 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	*pCallbackHandle = NULL;
 
 	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataDistribution, pmDataDistributionCB, new pmDataDistributionCB(pCallbacks.dataDistribution));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, pmSubtaskCB, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, pmDataReductionCB, new pmDataReductionCB(pCallbacks.dataReduction));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDeviceSelection, pmDeviceSelectionCB, new pmDeviceSelectionCB(pCallbacks.deviceSelection));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPreDataTransfer, pmPreDataTransferCB, new pmPreDataTransferCB(pCallbacks.preDataTransfer));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPostDataTransfer, pmPostDataTransferCB, new pmPostDataTransferCB(pCallbacks.postDataTransfer));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lPreDataTransfer, lPostDataTransfer));
+		if(pCallbacks.dataDistribution)
+			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataDistribution, pmDataDistributionCB, new pmDataDistributionCB(pCallbacks.dataDistribution));
+		if(pCallbacks.subtask_cpu || pCallbacks.subtask_gpu_cuda)
+			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, pmSubtaskCB, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda));
+		if(pCallbacks.dataReduction)
+			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, pmDataReductionCB, new pmDataReductionCB(pCallbacks.dataReduction));
+		if(pCallbacks.dataScatter)
+			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataScatter, pmDataScatterCB, new pmDataScatterCB(pCallbacks.dataScatter));
+		if(pCallbacks.deviceSelection)
+			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDeviceSelection, pmDeviceSelectionCB, new pmDeviceSelectionCB(pCallbacks.deviceSelection));
+		if(pCallbacks.preDataTransfer)
+			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPreDataTransfer, pmPreDataTransferCB, new pmPreDataTransferCB(pCallbacks.preDataTransfer));
+		if(pCallbacks.postDataTransfer)
+			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPostDataTransfer, pmPostDataTransferCB, new pmPostDataTransferCB(pCallbacks.postDataTransfer));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lDataScatter, lPreDataTransfer, lPostDataTransfer));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
 	*pCallbackHandle = lCallbackUnit;
@@ -150,9 +159,9 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	return pmSuccess;
 }
 
-pmStatus pmController::ReleaseCallbacks_Public(pmCallbackHandle* pCallbackHandle)
+pmStatus pmController::ReleaseCallbacks_Public(pmCallbackHandle pCallbackHandle)
 {
-	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(*pCallbackHandle);
+	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(pCallbackHandle);
 
 	delete lCallbackUnit->GetDataDistributionCB();
 	delete lCallbackUnit->GetSubtaskCB();
@@ -183,9 +192,9 @@ pmStatus pmController::CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, p
 	return pmSuccess;
 }
 
-pmStatus pmController::ReleaseMemory_Public(pmMemHandle* pMem)
+pmStatus pmController::ReleaseMemory_Public(pmMemHandle pMem)
 {
-	pmMemSection* lMemSection = pmMemSection::FindMemSection(*pMem);
+	pmMemSection* lMemSection = pmMemSection::FindMemSection(pMem);
 
 	delete lMemSection;
 
@@ -202,7 +211,7 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 	if(!dynamic_cast<pmInputMemSection*>(lInputMem) || !dynamic_cast<pmOutputMemSection*>(lOutputMem))
 		PMTHROW(pmUnrecognizedMemoryException());
 
-	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(*(pTaskDetails.callbackHandle));
+	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(pTaskDetails.callbackHandle);
 
 	if(pTaskDetails.taskConfLength == 0)
 		pTaskDetails.taskConf = NULL;
@@ -214,23 +223,23 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 	return pmSuccess;
 }
 
-pmStatus pmController::WaitForTaskCompletion_Public(pmTaskHandle* pTaskHandle)
+pmStatus pmController::WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle)
 {
-	return (static_cast<pmLocalTask*>(*pTaskHandle))->WaitForCompletion();
+	return (static_cast<pmLocalTask*>(pTaskHandle))->WaitForCompletion();
 }
 
-pmStatus pmController::ReleaseTask_Public(pmTaskHandle* pTaskHandle)
+pmStatus pmController::ReleaseTask_Public(pmTaskHandle pTaskHandle)
 {
 	pmStatus lStatus = WaitForTaskCompletion_Public(pTaskHandle);
 
-	delete static_cast<pmLocalTask*>(*pTaskHandle);
+	delete static_cast<pmLocalTask*>(pTaskHandle);
 
 	return lStatus;
 }
 
-pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle* pTaskHandle, double* pTime)
+pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, double* pTime)
 {
-	*pTime = (static_cast<pmLocalTask*>(*pTaskHandle))->GetExecutionTimeInSecs();
+	*pTime = (static_cast<pmLocalTask*>(pTaskHandle))->GetExecutionTimeInSecs();
 
 	return pmSuccess;
 }

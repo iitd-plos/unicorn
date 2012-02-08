@@ -8,11 +8,12 @@ std::map<std::string, pmCallbackUnit*> pmCallbackUnit::mKeyMap;
 RESOURCE_LOCK_IMPLEMENTATION_CLASS pmCallbackUnit::mResourceLock;
 
 pmCallbackUnit::pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
-	pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB)
+	pmDataScatterCB* pDataScatterCB, pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB)
 {
 	mDataDistributionCB = pDataDistributionCB;
 	mSubtaskCB = pSubtaskCB;
 	mDataReductionCB = pDataReductionCB;
+	mDataScatterCB = pDataScatterCB;
 	mDeviceSelectionCB = pDeviceSelectionCB;
 	mPreDataTransferCB = pPreDataTransferCB;
 	mPostDataTransferCB = pPostDataTransferCB;

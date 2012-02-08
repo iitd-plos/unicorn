@@ -19,7 +19,7 @@ class pmCallbackUnit : public pmBase
 {
 	public:
 		pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
-			pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB);
+			pmDataScatterCB* pDataScatterCB, pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB);
 
 		virtual ~pmCallbackUnit();
 

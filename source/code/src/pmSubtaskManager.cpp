@@ -52,9 +52,9 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 	ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
 
 	ulong lFirstSubtask = 0;
-	ulong lLastSubtask;
+	ulong lLastSubtask = 0;
 	
-	pmSubtaskManager::pmUnfinishedPartition* lUnfinishedPartition;
+	pmSubtaskManager::pmUnfinishedPartition* lUnfinishedPartition = NULL;
 
 	std::vector<pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
 	std::vector<pmProcessingElement*>::iterator lIter = lDevices.begin();
@@ -62,31 +62,28 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 
 	try
 	{
-		START_DESTROY_ON_EXCEPTION(dBlock)
-
 		for(ulong i=0; i<lPartitionCount; ++i)
-		{				
+		{
 			if(i < lLeftoverSubtasks)
 				lLastSubtask = lFirstSubtask + lPartitionSize;
 			else
 				lLastSubtask = lFirstSubtask + lPartitionSize - 1;
 
-			lFirstSubtask = lLastSubtask + 1;
+			//DESTROY_PTR_ON_EXCEPTION(dBlock, lUnfinishedPartition, pmSubtaskManager::pmUnfinishedPartition, new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
 
-			DESTROY_PTR_ON_EXCEPTION(dBlock, lUnfinishedPartition, pmSubtaskManager::pmUnfinishedPartition, new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
-
+			lUnfinishedPartition = new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask);
+			
 			mSortedUnassignedPartitions[lUnfinishedPartition] = *lIter;
 			mUnassignedPartitions.insert(lUnfinishedPartition);
 			mAllottedUnassignedPartition[*lIter] = std::pair<pmUnfinishedPartition*, ulong>(lUnfinishedPartition, 0);
+
 			mExecTimeStats[*lIter] = std::pair<double, ulong>(0, 0);
 
-			if(lIter == lEndIter)
-				PMTHROW(pmFatalErrorException());
+			lFirstSubtask = lLastSubtask + 1;
 
+			assert(lIter != lEndIter);
 			++lIter;
 		}
-
-		END_DESTROY_ON_EXCEPTION(dBlock)
 	}
 	catch(pmException e)
 	{

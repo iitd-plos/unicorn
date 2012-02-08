@@ -82,7 +82,7 @@ const ushort DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 
 #define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (reinterpret_cast<size_t>(memAddr) % pageSize))
 
-#define USE_LAZY_MEMORY
+//#define USE_LAZY_MEMORY
 
 //#define DUMP_THREADS
 

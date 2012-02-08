@@ -289,71 +289,6 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
 	return pmSuccess;
 }
 
-#ifdef USE_LAZY_MEMORY
-pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(void* pLazyMemAddr)
-{
-	// Do not throw from this function as it is called by seg fault handler
-
-#ifdef TRACK_MEMORY_ALLOCATIONS
-	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
-	++mTotalLazySegFaults;
-#endif
-
-	size_t lLength = 0;
-	char* lStartAddr = static_cast<char*>(GetLazyMemoryStartAddr(pLazyMemAddr, lLength));
-
-	if(!lStartAddr)
-		return pmFatalError;
-
-	size_t lPageSize = static_cast<size_t>(GetVirtualMemoryPageSize());
-	char* lLastAddr = lStartAddr + lLength;
-
-	char* lMemAddr = static_cast<char*>(pLazyMemAddr);
-	char* lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
-
-	//size_t lOffset = lPageAddr - lStartAddr;
-	size_t lLeftoverLength = lLastAddr - lPageAddr;
-
-	if(lLeftoverLength > lPageSize)
-		lLeftoverLength = lPageSize;
-
-	pmController* lController = pmController::GetController();
-	if(!lController)
-		return pmFatalError;
-
-	//FetchMemoryRegion(lStartAddr, lOffset, lLeftoverLength);
-
-	return pmSuccess;
-}
-
-pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
-{    
-	struct sigaction lSigAction;
-
-	lSigAction.sa_flags = SA_SIGINFO;
-	sigemptyset(&lSigAction.sa_mask);
-	lSigAction.sa_sigaction = SegFaultHandler;
-
-	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
-		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_INSTALL_FAILED));
-
-	return pmSuccess;
-}
-
-pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
-{
-	struct sigaction lSigAction;
-
-	lSigAction.sa_flags = SA_SIGINFO;
-	sigemptyset(&lSigAction.sa_mask);
-	lSigAction.sa_handler = SIG_DFL;
-
-	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
-		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_UNINSTALL_FAILED));
-
-	return pmSuccess;
-}
-
 std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength)
 {
 	std::vector<pmCommunicatorCommandPtr> lCommandVector;
@@ -362,8 +297,8 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 	if(!lMemSection)
 		PMTHROW(pmFatalErrorException());
 
-	pOffset = GetLowerPageSizeMultiple(pOffset);
-	pLength = GetHigherPageSizeMultiple(pLength);
+	//pOffset = GetLowerPageSizeMultiple(pOffset);
+	//pLength = GetHigherPageSizeMultiple(pLength);
 
 	char* lFetchAddress = (char*)pMem + pOffset;
 	char* lLastFetchAddress = lFetchAddress + pLength - 1;
@@ -476,8 +411,6 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 		}
 	}
 
-	mInFlightLock.Unlock();
-
 	return lCommandVector;
 }
 
@@ -532,6 +465,71 @@ pmLinuxMemoryManager::regionFetchData::regionFetchData()
 	receiveCommand = std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)NULL);
 }
 
+#ifdef USE_LAZY_MEMORY
+pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(void* pLazyMemAddr)
+{
+	// Do not throw from this function as it is called by seg fault handler
+
+#ifdef TRACK_MEMORY_ALLOCATIONS
+	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+	++mTotalLazySegFaults;
+#endif
+
+	size_t lLength = 0;
+	char* lStartAddr = static_cast<char*>(GetLazyMemoryStartAddr(pLazyMemAddr, lLength));
+
+	if(!lStartAddr)
+		return pmFatalError;
+
+	size_t lPageSize = static_cast<size_t>(GetVirtualMemoryPageSize());
+	char* lLastAddr = lStartAddr + lLength;
+
+	char* lMemAddr = static_cast<char*>(pLazyMemAddr);
+	char* lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
+
+	//size_t lOffset = lPageAddr - lStartAddr;
+	size_t lLeftoverLength = lLastAddr - lPageAddr;
+
+	if(lLeftoverLength > lPageSize)
+		lLeftoverLength = lPageSize;
+
+	pmController* lController = pmController::GetController();
+	if(!lController)
+		return pmFatalError;
+
+	//FetchMemoryRegion(lStartAddr, lOffset, lLeftoverLength);
+
+	return pmSuccess;
+}
+
+pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
+{    
+	struct sigaction lSigAction;
+
+	lSigAction.sa_flags = SA_SIGINFO;
+	sigemptyset(&lSigAction.sa_mask);
+	lSigAction.sa_sigaction = SegFaultHandler;
+
+	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_INSTALL_FAILED));
+
+	return pmSuccess;
+}
+
+pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
+{
+	struct sigaction lSigAction;
+
+	lSigAction.sa_flags = SA_SIGINFO;
+	sigemptyset(&lSigAction.sa_mask);
+	lSigAction.sa_handler = SIG_DFL;
+
+	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
+		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_UNINSTALL_FAILED));
+
+	return pmSuccess;
+}
+
 void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
 {
 	pmLinuxMemoryManager* lMemoryManager = dynamic_cast<pmLinuxMemoryManager*>(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager());
@@ -548,3 +546,5 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
 #endif
 
 }
+
+

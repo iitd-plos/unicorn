@@ -328,7 +328,16 @@ pmStatus pmScheduler::CommandCompletionEvent(pmCommandPtr pCommand)
 
 pmStatus pmScheduler::ThreadSwitchCallback(schedulerEvent& pEvent)
 {
-	return ProcessEvent(pEvent);
+	try
+	{
+		return ProcessEvent(pEvent);
+	}
+	catch(pmException e)
+	{
+		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from scheduler thread");
+	}
+
+	return pmSuccess;
 }
 
 pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)

@@ -56,7 +56,10 @@ class pmMemoryManager : public pmBase
 		virtual ulong GetLowerPageSizeMultiple(ulong pNum) = 0;
 		virtual ulong GetHigherPageSizeMultiple(ulong pNum) = 0;
 
+#ifdef USE_LAZY_MEMORY
 		virtual pmStatus LoadLazyMemoryPage(void* pLazyMemAddr) = 0;
+#endif
+
 		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
 
 		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength) = 0;

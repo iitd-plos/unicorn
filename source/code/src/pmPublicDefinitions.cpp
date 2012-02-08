@@ -172,6 +172,7 @@ pmCallbacks::pmCallbacks()
 	subtask_cpu = NULL;
 	subtask_gpu_cuda = NULL;
 	dataReduction = NULL;
+	dataScatter = NULL;
 	deviceSelection = NULL;
 	preDataTransfer = NULL;
 	postDataTransfer = NULL;
@@ -182,7 +183,7 @@ pmStatus pmRegisterCallbacks(char* pKey, pmCallbacks pCallbacks, pmCallbackHandl
 	SAFE_EXECUTE_ON_CONTROLLER(RegisterCallbacks_Public, pKey, pCallbacks, pCallbackHandle);
 }
 
-pmStatus pmReleaseCallbacks(pmCallbackHandle* pCallbackHandle)
+pmStatus pmReleaseCallbacks(pmCallbackHandle pCallbackHandle)
 {
 	SAFE_EXECUTE_ON_CONTROLLER(ReleaseCallbacks_Public, pCallbackHandle);
 }
@@ -192,7 +193,7 @@ pmStatus pmCreateMemory(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMem)
 	SAFE_EXECUTE_ON_CONTROLLER(CreateMemory_Public, pMemInfo, pLength, pMem);
 }
 
-pmStatus pmReleaseMemory(pmMemHandle* pMem)
+pmStatus pmReleaseMemory(pmMemHandle pMem)
 {
 	SAFE_EXECUTE_ON_CONTROLLER(ReleaseMemory_Public, pMem);
 }
@@ -214,22 +215,22 @@ pmStatus pmSubmitTask(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)
 	SAFE_EXECUTE_ON_CONTROLLER(SubmitTask_Public, pTaskDetails, pTaskHandle);
 }
 
-pmStatus pmReleaseTask(pmTaskHandle* pTaskHandle)
+pmStatus pmReleaseTask(pmTaskHandle pTaskHandle)
 {
 	SAFE_EXECUTE_ON_CONTROLLER(ReleaseTask_Public, pTaskHandle);
 }
 
-pmStatus pmWaitForTaskCompletion(pmTaskHandle* pTaskHandle)
+pmStatus pmWaitForTaskCompletion(pmTaskHandle pTaskHandle)
 {
 	SAFE_EXECUTE_ON_CONTROLLER(WaitForTaskCompletion_Public, pTaskHandle);
 }
 
-pmStatus pmGetTaskExecutionTimeInSecs(pmTaskHandle* pTaskHandle, double* pTime)
+pmStatus pmGetTaskExecutionTimeInSecs(pmTaskHandle pTaskHandle, double* pTime)
 {
 	SAFE_EXECUTE_ON_CONTROLLER(GetTaskExecutionTimeInSecs_Public, pTaskHandle, pTime);
 }
 
-pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)
+pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTaskHandle)
 {
 	pmStatus lStatus1 = pmReleaseCallbacks(pTaskDetails.callbackHandle);
 	pmStatus lStatus2 = pmReleaseMemory(pTaskDetails.inputMem);

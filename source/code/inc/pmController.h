@@ -29,13 +29,13 @@ class pmController : public pmBase
 
 		/* User API Functions */
 		pmStatus RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
-		pmStatus ReleaseCallbacks_Public(pmCallbackHandle* pCallbackHandle);
+		pmStatus ReleaseCallbacks_Public(pmCallbackHandle pCallbackHandle);
 		pmStatus CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMem);
-		pmStatus ReleaseMemory_Public(pmMemHandle* pMem);
+		pmStatus ReleaseMemory_Public(pmMemHandle pMem);
 		pmStatus SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle);
-		pmStatus ReleaseTask_Public(pmTaskHandle* pTaskHandle);
-		pmStatus WaitForTaskCompletion_Public(pmTaskHandle* pTaskHandle);
-		pmStatus GetTaskExecutionTimeInSecs_Public(pmTaskHandle* pTaskHandle, double* pTime);
+		pmStatus ReleaseTask_Public(pmTaskHandle pTaskHandle);
+		pmStatus WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle);
+		pmStatus GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, double* pTime);
 		pmStatus SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pScatterGatherInfo);
 
 		uint GetHostId_Public();

@@ -107,7 +107,16 @@ pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
 
 pmStatus pmExecutionStub::ThreadSwitchCallback(stubEvent& pEvent)
 {
-	return ProcessEvent(pEvent);
+	try
+	{
+		return ProcessEvent(pEvent);
+	}
+        catch(pmException e)
+        {
+                pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from stub thread");
+        }
+
+	return pmSuccess;
 }
 
 pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
