@@ -844,7 +844,6 @@ pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessi
 	{
 		SendTaskFinishToMachines(pLocalTask);
 		return pLocalTask->MarkSubtaskExecutionFinished();
-		//return pLocalTask->MarkTaskEnd(lSubtaskManager->GetTaskExecutionStatus());
 	}
 	else
 	{

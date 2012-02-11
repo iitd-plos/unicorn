@@ -132,6 +132,8 @@ class pmLocalTask : public pmTask
 		pmStatus MarkTaskStart();
 		pmStatus MarkTaskEnd(pmStatus pStatus);
 
+		virtual pmStatus MarkSubtaskExecutionFinished();
+
 		pmStatus GetStatus();
 
 		std::vector<pmProcessingElement*>& GetAssignedDevices();

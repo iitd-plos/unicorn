@@ -199,9 +199,12 @@ pmReducer* pmTask::GetReducer()
 
 pmStatus pmTask::MarkSubtaskExecutionFinished()
 {
-	FINALIZE_RESOURCE_PTR(dExecLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mExecLock, Lock(), Unlock());
+	// Auto lock/unlock scope
+	{
+		FINALIZE_RESOURCE_PTR(dExecLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mExecLock, Lock(), Unlock());
 
-	mSubtaskExecutionFinished = true;
+		mSubtaskExecutionFinished = true;
+	}
 
 	if(mReducer)
 		mReducer->CheckReductionFinish();
@@ -240,10 +243,12 @@ pmStatus pmTask::SaveFinalReducedOutput(ulong pSubtaskId)
 		DestroySubtaskShadowMem(pSubtaskId);
 		PMTHROW(pmFatalErrorException());
 	}
-
+std::cout << "Pending Implementation" << std::endl;
 	subtaskShadowMem& lShadowMem = GetSubtaskShadowMem(pSubtaskId);
 	(static_cast<pmOutputMemSection*>(mMemRW))->Update(lSubscriptionInfo.offset, lSubscriptionInfo.length, lShadowMem.addr);
 	return DestroySubtaskShadowMem(pSubtaskId);
+
+	//return (pmLocalTask*)this->MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus());
 }
 
 bool pmTask::DoSubtasksNeedShadowMemory()
@@ -324,6 +329,22 @@ pmLocalTask::~pmLocalTask()
 
 	if(mSubtaskManager)
 		delete mSubtaskManager;
+}
+
+pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
+{
+        pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
+        if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataScatterCB())
+        {
+                pmTask::MarkSubtaskExecutionFinished();
+		return MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus()) ;
+        }
+        else
+        {
+                pmTask::MarkSubtaskExecutionFinished();
+        }
+
+        return pmSuccess;
 }
 
 pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel)

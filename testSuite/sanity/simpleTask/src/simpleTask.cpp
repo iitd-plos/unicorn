@@ -7,11 +7,6 @@ using namespace pm;
 
 pmStatus sampleCB(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 {
-	static int count = 0;
-	++count;
-
-	std::cout << "Callback for subtask " << pSubtaskInfo.subtaskId <<  " Total Executions " << count << "   " << std::endl;
-
 	return pmSuccess;
 }
 
