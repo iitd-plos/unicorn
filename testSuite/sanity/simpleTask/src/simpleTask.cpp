@@ -5,8 +5,30 @@ using namespace pm;
 
 #define ARRAY_LEN 1024
 
+void loadData(void* pMem)
+{
+	int* lMem = (int*)pMem;
+	for(int i=0; i<ARRAY_LEN; ++i)
+		lMem[i] = i;
+}
+
+bool checkMem(void* pMem)
+{
+	int* lMem = (int*)pMem;
+	for(int i=0; i<ARRAY_LEN; ++i)
+	{
+		if(lMem[i] != i)
+			return false;
+	}
+
+	return true;
+}
+
 pmStatus sampleCB(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 {
+	if(!checkMem(pSubtaskInfo.inputMem))
+		std::cout << "Data Error ... Subtask " << pSubtaskInfo.subtaskId << std::endl;
+
 	return pmSuccess;
 }
 
@@ -39,6 +61,8 @@ int main()
 			std::cout << "Input Mem Creation ...	Pass" << std::endl;
 		else
 			std::cout << "Input Mem Creation ...	Fail" << std::endl;
+
+		loadData(lInputMem);
 
 		if(pmCreateMemory(OUTPUT_MEM_WRITE_ONLY, ARRAY_LEN * sizeof(int), &lOutputMem) == pmSuccess)
 			std::cout << "Output Mem Creation ...	Pass" << std::endl;

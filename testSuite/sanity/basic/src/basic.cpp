@@ -5,6 +5,7 @@ using namespace pm;
 
 int main()
 {
+std::cout << "Initializing " << std::endl;
 	if(pmInitialize() == pmSuccess)
 	{
 		std::cout << "Initialization ... 		Pass" << std::endl;

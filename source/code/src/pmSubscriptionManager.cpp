@@ -160,7 +160,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 	{
 		mInputMemResourceLock.Lock();
 		std::vector<subscriptionData> lInputMemVector = mInputMemSubscriptions[pSubtaskId].second;
-		mInputMemSubscriptions.erase(pSubtaskId);
+		//mInputMemSubscriptions.erase(pSubtaskId);
 		mInputMemResourceLock.Unlock();
 
 		lSize = lInputMemVector.size();
@@ -185,7 +185,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 	{
 		mOutputMemResourceLock.Lock();
 		std::vector<subscriptionData> lOutputMemVector = mOutputMemSubscriptions[pSubtaskId].second;
-		mOutputMemSubscriptions.erase(pSubtaskId);
+		//mOutputMemSubscriptions.erase(pSubtaskId);
 		mOutputMemResourceLock.Unlock();
 
 		lSize = lOutputMemVector.size();
