@@ -308,6 +308,17 @@ class pmCommunicatorCommand : public pmCommand
 			memoryReceiveStruct receiveStruct;
 			dataPtr mem;
 		} memoryReceivePacked;
+    
+        typdef struct hostFinalizationStruct
+        {
+            ushort terminate;   // firstly all machines send to master with terminate false; then master sends to all machines with terminate true
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 1
+			} fieldCount;
+            
+        } hostFinalizationStruct;
 
 		typedef enum communicatorCommandTypes
 		{
@@ -331,6 +342,7 @@ class pmCommunicatorCommand : public pmCommand
 			MEMORY_SUBSCRIPTION_TAG,
 			MEMORY_RECEIVE_TAG,
 			SUBTASK_REDUCE_TAG,
+            HOST_FINALIZATION_TAG,
 			UNKNOWN_LENGTH_TAG,
 			MAX_COMMUNICATOR_COMMAND_TAGS
 		} communicatorCommandTags;
@@ -354,6 +366,7 @@ class pmCommunicatorCommand : public pmCommand
 			SUBTASK_REDUCE_PACKED,
 			MEMORY_RECEIVE_STRUCT,
 			MEMORY_RECEIVE_PACKED,
+            HOST_FINALIZATION_STRUCT,
 			MAX_COMMUNICATOR_DATA_TYPES
 		} communicatorDataTypes;
 

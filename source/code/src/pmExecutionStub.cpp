@@ -259,7 +259,7 @@ bool pmExecutionStub::IsHighPriorityEventWaiting(ushort pPriority)
 
 pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
-	pTask->GetSubscriptionManager().SetDefaultSubscriptions(pSubtaskId);
+	pTask->GetSubscriptionManager().InitializeSubtaskDefaults(pSubtaskId);
 	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, pTask, pSubtaskId);
 	pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(pSubtaskId);
 

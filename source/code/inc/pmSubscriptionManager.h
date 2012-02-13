@@ -14,37 +14,53 @@ namespace pm
 class pmTask;
 
 
-#define MAP_VALUE_DATA_TYPE std::pair<std::vector<pmSubscriptionInfo>, std::vector<subscriptionData> >
+#define SUBSCRIPTION_DATA_TYPE std::pair<std::vector<pmSubscriptionInfo>, std::vector<subscriptionData> >
+    
+namespace subscription
+{
 
+typedef struct subscriptionData
+{
+    std::vector<pmCommunicatorCommandPtr> receiveCommandVector;
+} subscriptionData;
+    
+struct pmSubtask
+{
+    pmCudaLaunchConf mCudaLaunchConf;
+
+    // Only one contiguous input mem and one output mem subscription for each subtask
+
+    SUBSCRIPTION_DATA_TYPE mInputMemSubscriptions;
+    SUBSCRIPTION_DATA_TYPE mOutputMemSubscriptions;
+    
+    pmSubtask();
+} pmSubtask;
+
+}
+    
 class pmSubscriptionManager : public pmBase
 {
 	public:
-		typedef struct subscriptionData
-		{
-			std::vector<pmCommunicatorCommandPtr> receiveCommandVector;
-		} subscriptionData;
-
 		pmSubscriptionManager(pmTask* pTask);
 		virtual ~pmSubscriptionManager();
 
-		pmStatus SetDefaultSubscriptions(ulong pSubtaskId);
+		pmStatus InitializeSubtaskDefaults(ulong pSubtaskId);
 		pmStatus RegisterSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo);
 		pmStatus FetchSubtaskSubscriptions(ulong pSubtaskId);
-		bool GetInputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
+        pmStatus SetCudaLaunchConfiguration(ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
+        pmCudaLaunchConf& GetCudaLaunchConf(ulong pSubtaskId);
+
+        bool GetInputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
 		bool GetOutputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
-		pmStatus WaitForSubscriptions(ulong pSubtaskId);
 		
 	private:
-		pmStatus FetchSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData);
+        pmStatus WaitForSubscriptions(ulong pSubtaskId);
+        pmStatus FetchSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
 
-		// Only one contiguous input mem and one output mem subscriptions for each subtask
-		std::map<ulong, MAP_VALUE_DATA_TYPE > mInputMemSubscriptions;	// subtaskId to input memory section subscriptions
-		std::map<ulong, MAP_VALUE_DATA_TYPE > mOutputMemSubscriptions;	// subtaskId to output memory section subscriptions
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+        std::map<ulong, subscription::pmSubtask> mSubtaskMap;     // subtaskId to pmSubtask map
 
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mInputMemResourceLock;
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mOutputMemResourceLock;
-
-		pmTask* mTask;
+        pmTask* mTask;
 };
 
 } // end namespace pm

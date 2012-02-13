@@ -94,7 +94,7 @@ std::string pmDispatcherCUDA::GetDeviceDescription(size_t pDeviceIndex)
 	return lStr;
 }
 
-pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmSubtaskCallback_GPU_CUDA pKernelPtr)
+pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr)
 {
 	void* lInputMemCudaPtr = NULL;
 	void* lOutputMemCudaPtr = NULL;
@@ -117,13 +117,14 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pS
 	SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&lStatusPtr, sizeof(pmStatus) );
 	SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lStatusPtr, &lStatus, sizeof(pmStatus), cudaMemcpyHostToDevice );
 
-	/*
 	pmSubtaskInfo lSubtaskInfo = pSubtaskInfo;
 	lSubtaskInfo.inputMem = lInputMemCudaPtr;
 	lSubtaskInfo.outputMem = lOutputMemCudaPtr;
 
-	pKernelPtr <<< >>> (pTaskInfo, lSubtaskInfo, lStatusPtr);
-	*/
+    dim3 gridConf(pCudaLaunchConf.blocksX, pCudaLaunchConf.blocksY, pCudaLaunchConf.blocksZ);
+    dim3 blockConf(pCudaLaunchConf.threadsX, pCudaLaunchConf.threadsY, pCudaLaunchConf.threadsZ);
+
+	pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem>>> (pTaskInfo, lSubtaskInfo, lStatusPtr);
 
 	if(cudaGetLastError() == cudaSuccess)
 	{

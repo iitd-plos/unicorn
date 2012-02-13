@@ -40,6 +40,7 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
 
 	SetupPersistentCommunicationCommands();
 }
@@ -55,6 +56,7 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnRegisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 
@@ -119,6 +121,19 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	SetupNewStealResponseReception();
 	SetupNewMemSubscriptionRequestReception();
 
+    // Only MPI master host receives finalization signal
+    if(pmMachinePool::GetMachine(0) == PM_LOCAL_MACHINE)
+    {
+        pmCommunicatorCommand::hostFinalizationStruct* lHostFinalizationData = NULL;
+        DESTROY_PTR_ON_EXCEPTION(dBlock, lHostFinalizationData, pmCommunicatorCommand::hostFinalizationStruct, new pmCommunicatorCommand::hostFinalizationStruct());
+        mHostFinalizationCommand = PERSISTENT_RECV_COMMAND(HOST_FINALIZATION_TAG, HOST_FINALIZATION_STRUCT, lHostFinalizationData, hostFinalizationStruct);
+        SetupNewHostFinalizationReception();
+    }
+    else
+    {
+        mHostFinalizationCommand = NULL;
+    }
+
 	END_DESTROY_ON_EXCEPTION(dBlock);
 
 	return pmSuccess;
@@ -132,6 +147,9 @@ pmStatus pmScheduler::DestroyPersistentCommunicationCommands()
 	delete (pmCommunicatorCommand::stealRequestStruct*)(mStealRequestRecvCommand->GetData());
 	delete (pmCommunicatorCommand::stealResponseStruct*)(mStealResponseRecvCommand->GetData());
 	delete (pmCommunicatorCommand::memorySubscriptionRequest*)(mMemSubscriptionRequestCommand->GetData());
+    
+    if(mHostFinalizationCommand)
+        delete (pmCommunicatorCommand::hostFinalizationStruct*)(mHostFinalizationCommand->GetData());
 
 	return pmSuccess;
 }
@@ -166,6 +184,11 @@ pmStatus pmScheduler::SetupNewMemSubscriptionRequestReception()
 	return pmCommunicator::GetCommunicator()->Receive(mMemSubscriptionRequestCommand, false);
 }
 
+pmStatus pmScheduler::SetupNewHostFinalizationReception()
+{
+    return pmCommunicator::GetCommunicator()->Receive(mHostFinalizationCommand, false);
+}
+    
 pmStatus pmScheduler::SubmitTaskEvent(pmLocalTask* pLocalTask)
 {
 	schedulerEvent lEvent;
@@ -324,6 +347,24 @@ pmStatus pmScheduler::CommandCompletionEvent(pmCommandPtr pCommand)
 	lEvent.commandCompletionDetails.command = pCommand;
 
 	return SwitchThread(lEvent, pCommand->GetPriority());
+}
+
+pmStatus pmScheduler::SendFinalizationSignal()
+{
+    schedulerEvent lEvent;
+    lEvent.eventId = HOST_FINALIZATION;
+    lEvent.hostFinalizationDetails.terminate = false;
+    
+    return SwitchThread(lEvent, MAX_CONTROL_PRIORITY);    
+}
+
+pmStatus pmScheduler::BroadcastTerminationSignal()
+{
+    schedulerEvent lEvent;
+    lEvent.eventId = HOST_FINALIZATION;
+    lEvent.hostFinalizationDetails.terminate = true;
+    
+    return SwitchThread(lEvent, MAX_CONTROL_PRIORITY);    
 }
 
 pmStatus pmScheduler::ThreadSwitchCallback(schedulerEvent& pEvent)
@@ -506,6 +547,46 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
 			break;
 		}
+            
+        case HOST_FINALIZATION:
+        {
+            hostFinalization& lEventDetails = pEvent.hostFinalizationDetails;
+            
+            pmMachine* lMasterHost = pmMachinePool::GetMachine(0);
+            
+            if(lEventDetails.terminate)
+            {
+                // Only master host can broadcast the global termination signal
+                if(lMasterHost != PM_LOCAL_MACHINE)
+                    PMTHROW(pmFatalErrorException());
+                
+                pmCommunicatorCommand::hostFinalizationStruct* lBroadcastData = new pmCommunicatorCommand::hostFinalizationStruct();
+                lBroadcastData->terminate = true;
+                
+                pmCommunicatorCommandPtr lBroadcastCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::BROADCAST,pmCommunicatorCommand::HOST_FINALIZATION_TAG, lMasterHost, pmCommunicatorCommand::HOST_FINALIZATION_STRUCT, lBroadcastData, sizeof(lBroadcastData), NULL, 0, gCommandCompletionCallback);
+                
+                pmCommunicator::GetCommunicator()->Broadcast(lBroadcastCommand);
+            }
+            else
+            {
+                if(lMasterHost == PM_LOCAL_MACHINE)
+                    return pmController::GetController()->ProcessFinalization();
+                
+                pmCommunicatorCommand::hostFinalizationStruct* lData = new pmCommunicatorCommand::hostFinalizationStruct();
+                lData->terminate = false;
+                
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::HOST_FINALIZATION_TAG, lMasterHost, pmCommunicatorCommand::HOST_FINALIZATION_STRUCT, lData, sizeof(lData), NULL, 0, gCommandCompletionCallback);
+                
+                pmCommunicator::GetCommunicator()->Send(lCommand, false);
+
+                pmCommunicatorCommand::hostFinalizationStruct* lBroadcastData = new pmCommunicatorCommand::hostFinalizationStruct();
+                pmCommunicatorCommandPtr lBroadcastCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::BROADCAST,pmCommunicatorCommand::HOST_FINALIZATION_TAG, lMasterHost, pmCommunicatorCommand::HOST_FINALIZATION_STRUCT, lBroadcastData, sizeof(lBroadcastData), NULL, 0, gCommandCompletionCallback);
+                
+                pmCommunicator::GetCommunicator()->Broadcast(lBroadcastCommand);
+            }
+            
+            break;
+        }
 	}
 
 	return pmSuccess;
@@ -881,6 +962,16 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 	switch(lCommunicatorCommand->GetType())
 	{
+        case pmCommunicatorCommand::BROADCAST:
+        {
+            if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::HOST_FINALIZATION_TAG)
+            {
+                delete (pmCommunicatorCommand::hostFinalizationStruct*)(lCommunicatorCommand->GetData());
+                
+                pmController::GetController()->ProcessTermination();
+            }
+        }
+            
 		case pmCommunicatorCommand::SEND:
 		{
 			if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::SUBTASK_REDUCE_TAG)
@@ -897,32 +988,35 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 			switch(lCommunicatorCommand->GetTag())
 			{
-                        	case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT:
+                case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT:
 					delete (pmCommunicatorCommand::remoteTaskAssignStruct*)(lCommunicatorCommand->GetData());
 					break;
-                        	case pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT:
+                case pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT:
 					delete (pmCommunicatorCommand::remoteSubtaskAssignStruct*)(lCommunicatorCommand->GetData());
 					break;
-                        	case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG:
+                case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG:
 					delete (pmCommunicatorCommand::sendAcknowledgementStruct*)(lCommunicatorCommand->GetData());
 					break;
-                        	case pmCommunicatorCommand::TASK_EVENT_TAG:
+                case pmCommunicatorCommand::TASK_EVENT_TAG:
 					delete (pmCommunicatorCommand::taskEventStruct*)(lCommunicatorCommand->GetData());
 					break;
-                        	case pmCommunicatorCommand::STEAL_REQUEST_TAG:
+                case pmCommunicatorCommand::STEAL_REQUEST_TAG:
 					delete (pmCommunicatorCommand::stealRequestStruct*)(lCommunicatorCommand->GetData());
 					break;
-                        	case pmCommunicatorCommand::STEAL_RESPONSE_TAG:
+                case pmCommunicatorCommand::STEAL_RESPONSE_TAG:
 					delete (pmCommunicatorCommand::stealResponseStruct*)(lCommunicatorCommand->GetData());
 					break;
-                        	case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG:
+                case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG:
 					delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lCommunicatorCommand->GetData());
 					break;
-                        	case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
+                case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
 					delete (pmCommunicatorCommand::memoryReceiveStruct*)(lCommunicatorCommand->GetData());
 					break;
-                        	case pmCommunicatorCommand::SUBTASK_REDUCE_TAG:
+                case pmCommunicatorCommand::SUBTASK_REDUCE_TAG:
 					delete (pmCommunicatorCommand::subtaskReduceStruct*)(lCommunicatorCommand->GetData());
+					break;
+                case pmCommunicatorCommand::HOST_FINALIZATION_TAG:
+					delete (pmCommunicatorCommand::hostFinalizationStruct*)(lCommunicatorCommand->GetData());
 					break;
 				default:
 					PMTHROW(pmFatalErrorException());
@@ -1149,6 +1243,27 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					PMTHROW(pmFatalErrorException());
 			}
 
+            case pmCommunicatorCommand::HOST_FINALIZATION_TAG:
+            {
+                pmCommunicatorCommand::hostFinalizationStruct* lData = (pmCommunicatorCommand::hostFinalizationStruct*)(lCommunicatorCommand->GetData());
+                
+                pmMachine* lMasterHost = pmMachinePool::GetMachine(0);
+
+                if(lData->terminate)
+                {
+                    PMTHROW(pmFatalErrorException());
+                }
+                else
+                {
+                    if(lMasterHost != PM_LOCAL_MACHINE)
+                        PMTHROW(pmFatalErrorException());
+                    
+                    pmController::GetController()->ProcessFinalization();
+                }
+                
+                SetupNewHostFinalizationReception();
+            }
+            
 			break;
 		}
 

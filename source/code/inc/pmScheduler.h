@@ -60,7 +60,8 @@ typedef enum eventIdentifier
 	TASK_FINISH,
 	SUBTASK_REDUCE,
 	MEMORY_TRANSFER,
-	COMMAND_COMPLETION
+	COMMAND_COMPLETION,
+    HOST_FINALIZATION
 } eventIdentifier;
 
 typedef struct taskSubmission
@@ -162,6 +163,11 @@ typedef struct commandCompletion
 {
 	pmCommandPtr command;
 } commandCompletion;
+    
+typedef struct hostFinalization
+{
+    bool terminate; // true for final termination; false for task submission freeze
+}
 
 typedef struct schedulerEvent
 {
@@ -182,6 +188,7 @@ typedef struct schedulerEvent
 		taskFinish taskFinishDetails;
 		subtaskReduce subtaskReduceDetails;
 		memTransfer memTransferDetails;
+        hostFinalization hostFinalizationDetails;
 	};
 
 	// Can't make this part of union as C++ standard does not allow anything with non-trivial constructor/copy-constructor/assignment to be part of an union
@@ -235,6 +242,9 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus CancelTask(pmLocalTask* pLocalTask);
 
 		pmCommandCompletionCallback GetUnknownLengthCommandCompletionCallback();
+    
+        pmStatus SendFinalizationSignal();
+        pmStatus BroadcastTerminationSignal();
 
 	private:
 		pmScheduler();
@@ -248,7 +258,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus SetupNewStealRequestReception();
 		pmStatus SetupNewStealResponseReception();
 		pmStatus SetupNewMemSubscriptionRequestReception();
-
+        pmStatus SetupNewHostFinalizationReception();
+    
 		pmStatus ProcessEvent(scheduler::schedulerEvent& pEvent);
 
 		pmStatus AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<pmMachine*>& pMachines);
@@ -277,7 +288,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmPersistentCommunicatorCommandPtr mTaskEventRecvCommand;
 		pmPersistentCommunicatorCommandPtr mStealRequestRecvCommand;
 		pmPersistentCommunicatorCommandPtr mStealResponseRecvCommand;
-		pmPersistentCommunicatorCommandPtr mMemSubscriptionRequestCommand;
+        pmPersistentCommunicatorCommandPtr mMemSubscriptionRequestCommand;
+        pmPersistentCommunicatorCommandPtr mHostFinalizationCommand;
 
 		static pmScheduler* mScheduler;
 };

@@ -13,6 +13,7 @@
 #include "pmCallback.h"
 #include "pmMemSection.h"
 #include "pmTask.h"
+#include "pmSignalWait.h"
 
 namespace pm
 {
@@ -21,10 +22,18 @@ namespace pm
 
 pmController* pmController::mController = NULL;
 
+pmController::~pmController()
+{
+    delete mSignalWait;
+}
+    
 pmController* pmController::GetController()
 {
 	if(!mController)
 	{
+        mFinalizedHosts = 0;
+        mSignalWait = NULL;
+        
 		if(CreateAndInitializeController() == pmSuccess)
 		{
 			if(!pmLogger::GetLogger())
@@ -93,6 +102,9 @@ pmController* pmController::GetController()
 
 pmStatus pmController::DestroyController()
 {
+    if(!mSignalWait)
+        PMTHROW(pmFatalErrorException());
+
 	SAFE_DESTROY(pmScheduler::GetScheduler(), DestroyScheduler);
 	SAFE_DESTROY(pmTaskManager::GetTaskManager(), DestroyTaskManager);
 	SAFE_DESTROY(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager(), DestroyMemoryManager);
@@ -102,11 +114,44 @@ pmStatus pmController::DestroyController()
 	SAFE_DESTROY(pmStubManager::GetStubManager(), DestroyStubManager);
 	SAFE_DESTROY(pmDispatcherGPU::GetDispatcherGPU(), DestroyDispatcherGPU);
 	SAFE_DESTROY(pmLogger::GetLogger(), DestroyLogger);
-	
-	delete mController;
-	mController = NULL;
+	    
+    mSignalWait->Signal();
 
+    delete mController;
+	mController = NULL;
+    
 	return pmSuccess;
+}
+    
+pmStatus pmController::FinalizeController()
+{
+    if(pmScheduler::GetScheduler()->SendFinalizationSignal() != pmSuccess)
+        PMTHROW(pmFatalErrorException());
+    
+    if(mSignalWait)
+        PMTHROW(pmFatalErrorException());
+
+    mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
+    mSignalWait->Wait();
+    
+    return pmSuccess;
+}
+
+/* Only to be called on master controller (with mpi host id 0) */
+pmStatus pmController::ProcessFinalization()
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    ++mFinalizedHosts;
+    if(mFinalizedHosts == NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount())
+        pmScheduler::GetScheduler()->BroadcastTerminationSignal();
+    
+    return pmSuccess;
+}
+    
+pmStatus pmController::ProcessTermination()
+{
+    return DestroyController();
 }
 
 pmStatus pmController::CreateAndInitializeController()
@@ -247,6 +292,11 @@ pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandl
 pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pScatterGatherInfo)
 {
 	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(pSubtaskId, pIsInputMemory, pScatterGatherInfo);
+}
+    
+pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
+{
+    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(pSubtaskId, pCudaLaunchConf);
 }
 
 uint pmController::GetHostId_Public()

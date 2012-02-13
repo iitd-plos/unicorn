@@ -8,6 +8,8 @@
 
 namespace pm
 {
+    
+using namespace subscription;
 
 pmSubscriptionManager::pmSubscriptionManager(pmTask* pTask)
 {
@@ -18,109 +20,99 @@ pmSubscriptionManager::~pmSubscriptionManager()
 {
 }
 
-pmStatus pmSubscriptionManager::SetDefaultSubscriptions(ulong pSubtaskId)
+pmStatus pmSubscriptionManager::InitializeSubtaskDefaults(ulong pSubtaskId)
 {
-	pmSubscriptionInfo lInputMemSubscription, lOutputMemSubscription;
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    if(mSubtaskMap.find(pSubtaskId) != mSubtaskMap.end())
+        PMTROW(pmFatalErrorException());
 
-	pmMemSection* lInputMemSection = mTask->GetMemSectionRO();
-	pmMemSection* lOutputMemSection = mTask->GetMemSectionRO();
-
-	if(lInputMemSection)
-	{
-		lInputMemSubscription.offset = 0;
-		lInputMemSubscription.length = lInputMemSection->GetLength();
-
-		RegisterSubscription(pSubtaskId, true, lInputMemSubscription);
-	}
-
-	if(lOutputMemSection)
-	{
-		lOutputMemSubscription.offset = 0;
-		lOutputMemSubscription.length = lOutputMemSection->GetLength();
-		RegisterSubscription(pSubtaskId, false, lOutputMemSubscription);
-	}
+    pmSubtask lSubtask;
+    mSubtaskMap[pSubtaskId] = lSubtask;
 
 	return pmSuccess;
 }
 
 pmStatus pmSubscriptionManager::RegisterSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo)
 {
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+        PMTROW(pmFatalErrorException());
+
 	// Only one subscription allowed per subtask (for now)
-	subscriptionData lSubscriptionData;
 	if(pIsInputMem)
 	{
 		if(!mTask->GetMemSectionRO())
-			return pmSuccess;
-
-		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mInputMemResourceLock, Lock(), Unlock());
-	/*	if(mInputMemSubscriptions.find(pSubtaskId) != mInputMemSubscriptions.end())
-		{
-			MAP_VALUE_DATA_TYPE lPair = mInputMemSubscriptions[pSubtaskId];
-			lPair.first.push_back(pSubscriptionInfo);
-			lPair.second.push_back(lSubscriptionData);
-		}
-		else
-		{
-	*/
-			std::vector<pmSubscriptionInfo> lVector1;
-			std::vector<subscriptionData> lVector2;
-			lVector1.push_back(pSubscriptionInfo);
-			lVector2.push_back(lSubscriptionData);
-			mInputMemSubscriptions[pSubtaskId] = MAP_VALUE_DATA_TYPE(lVector1, lVector2);
-	//	}
-
-		//return FetchSubscription(pSubtaskId, true, pSubscriptionInfo, mInputMemSubscriptions[pSubtaskId].second[mInputMemSubscriptions[pSubtaskId].second.size()-1]);
+            PMTROW(pmFatalErrorException());
+        
+        std::vector<pmSubscriptionInfo> lVector;
+        lVector.push_back(pSubscriptionInfo);
+        mSubtaskMap[pSubtaskId].mInputMemSubscriptions.first = lVector;
 	}
 	else
 	{
 		if(!mTask->GetMemSectionRW())
-			return pmSuccess;
+            PMTROW(pmFatalErrorException());
 
-		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOutputMemResourceLock, Lock(), Unlock());
-	/*	if(mOutputMemSubscriptions.find(pSubtaskId) != mOutputMemSubscriptions.end())
-		{
-			MAP_VALUE_DATA_TYPE lPair = mOutputMemSubscriptions[pSubtaskId];
-			lPair.first.push_back(pSubscriptionInfo);
-			lPair.second.push_back(lSubscriptionData);
-		}
-		else
-		{
-	*/
-			std::vector<pmSubscriptionInfo> lVector1;
-			std::vector<subscriptionData> lVector2;
-			lVector1.push_back(pSubscriptionInfo);
-			lVector2.push_back(lSubscriptionData);
-			mOutputMemSubscriptions[pSubtaskId] = MAP_VALUE_DATA_TYPE(lVector1, lVector2);
-	//	}
-
-		//return FetchSubscription(pSubtaskId, false, pSubscriptionInfo, mOutputMemSubscriptions[pSubtaskId].second[mInputMemSubscriptions[pSubtaskId].second.size()-1]);
+        std::vector<pmSubscriptionInfo> lVector;
+        lVector.push_back(pSubscriptionInfo);
+        mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.first = lVector;
 	}
 
 	return pmSuccess;
 }
 
+pmStatus pmSubscriptionManager::SetCudaLaunchConfiguration(ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+        PMTROW(pmFatalErrorException());
+
+    mSubtaskMap[pSubtaskId].mCudaLaunchConf = pCudaLaunchConf;
+    
+    return pmSuccess;
+}
+    
+pmCudaLaunchConf& pmSubscriptionManager::GetCudaLaunchConf(ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+        PMTROW(pmFatalErrorException());
+    
+    return mSubtaskMap[pSubtaskId].mCudaLaunchConf;
+}
+
 bool pmSubscriptionManager::GetInputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo)
 {
-	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mInputMemResourceLock, Lock(), Unlock());
-	if(mInputMemSubscriptions.find(pSubtaskId) != mInputMemSubscriptions.end())
-	{
-		pSubscriptionInfo = mInputMemSubscriptions[pSubtaskId].first[0];
-		return true;
-	}
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	return false;
+    if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+        PMTROW(pmFatalErrorException());
+
+    if(!mTask->GetMemSectionRO())
+        return false;
+
+    pSubscriptionInfo = mSubtaskMap[pSubtaskId].mInputMemSubscriptions.first[0];
+
+    return true;
 }
 
 bool pmSubscriptionManager::GetOutputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo)
 {
-	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOutputMemResourceLock, Lock(), Unlock());
-	if(mOutputMemSubscriptions.find(pSubtaskId) != mOutputMemSubscriptions.end())
-	{
-		pSubscriptionInfo = mOutputMemSubscriptions[pSubtaskId].first[0];
-		return true;
-	}
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+	
+    if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+        PMTROW(pmFatalErrorException());
 
-	return false;
+    if(!mTask->GetMemSectionRW())
+        return false;
+
+    pSubscriptionInfo = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.first[0];
+
+    return true;
 }
 
 pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId)
@@ -158,10 +150,13 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 
 	if(mTask->GetMemSectionRO())
 	{
-		mInputMemResourceLock.Lock();
-		std::vector<subscriptionData> lInputMemVector = mInputMemSubscriptions[pSubtaskId].second;
-		//mInputMemSubscriptions.erase(pSubtaskId);
-		mInputMemResourceLock.Unlock();
+        std::vector<subscriptionData> lInputMemVector;
+        
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+            lInputMemVector = mSubtaskMap[pSubtaskId].mInputMemSubscriptions.second[0];
+        }
 
 		lSize = lInputMemVector.size();
 		for(i=0; i<lSize; ++i)
@@ -183,10 +178,13 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 
 	if(mTask->GetMemSectionRW())
 	{
-		mOutputMemResourceLock.Lock();
-		std::vector<subscriptionData> lOutputMemVector = mOutputMemSubscriptions[pSubtaskId].second;
-		//mOutputMemSubscriptions.erase(pSubtaskId);
-		mOutputMemResourceLock.Unlock();
+        std::vector<subscriptionData> lOutputMemVector;
+        
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+            lOutputMemVector = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.second[0];
+        }
 
 		lSize = lOutputMemVector.size();
 		for(i=0; i<lSize; ++i)
@@ -207,6 +205,38 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 	}
 
 	return pmSuccess;
+}
+    
+pmSubtask::pmSubtask(pmTask* pTask)
+{
+	pmMemSection* lInputMemSection = pTask->GetMemSectionRO();
+	pmMemSection* lOutputMemSection = pTask->GetMemSectionRO();
+    
+	if(lInputMemSection)
+	{
+		lInputMemSubscription.offset = 0;
+		lInputMemSubscription.length = lInputMemSection->GetLength();
+        
+        subscriptionData lSubscriptionData;
+        std::vector<pmSubscriptionInfo> lVector1;
+        std::vector<subscriptionData> lVector2;
+        lVector1.push_back(lInputMemSubscription);
+        lVector2.push_back(lSubscriptionData);
+        mInputMemSubscriptions = SUBSCRIPTION_DATA_TYPE(lVector1, lVector2);
+	}
+    
+	if(lOutputMemSection)
+	{
+		lOutputMemSubscription.offset = 0;
+		lOutputMemSubscription.length = lOutputMemSection->GetLength();
+
+        subscriptionData lSubscriptionData;
+        std::vector<pmSubscriptionInfo> lVector1;
+        std::vector<subscriptionData> lVector2;
+        lVector1.push_back(lOutputMemSubscription);
+        lVector2.push_back(lSubscriptionData);
+        mOutputMemSubscriptions = SUBSCRIPTION_DATA_TYPE(lVector1, lVector2);
+	}
 }
 
 }

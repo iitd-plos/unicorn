@@ -7,6 +7,7 @@
 namespace pm
 {
 
+class pmSignalWait;
 class pmCluster;
 extern pmCluster* PM_GLOBAL_CLUSTER;
 
@@ -22,8 +23,11 @@ class pmController : public pmBase
 {
 	public:
 		static pmController* GetController();
-		pmStatus DestroyController();
-
+        pmStatus FinalizeController();
+    
+        pmStatus ProcessFinalization();
+        pmStatus ProcessTermination();
+    
 		pmStatus SetLastErrorCode(uint pErrorCode) {mLastErrorCode = pErrorCode; return pmSuccess;}
 		uint GetLastErrorCode() {return mLastErrorCode;}
 
@@ -37,17 +41,26 @@ class pmController : public pmBase
 		pmStatus WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle);
 		pmStatus GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, double* pTime);
 		pmStatus SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pScatterGatherInfo);
+        pmStatus SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
 
 		uint GetHostId_Public();
 		uint GetHostCount_Public();
 
 	private:
 		pmController() {mLastErrorCode = 0;}
+        virtual ~pmController();
+    
+        pmStatus DestroyController();
 	
 		static pmStatus CreateAndInitializeController();
 
 		static pmController* mController;
 		uint mLastErrorCode;
+    
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+        int mFinalizedHosts;
+    
+        pmSignalWait* mSignalWait;
 };
 
 } // end namespace pm

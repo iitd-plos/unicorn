@@ -99,7 +99,9 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 
 			pmSubtaskInfo lSubtaskInfo;
 			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo);
-			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask->GetTaskInfo(), lSubtaskInfo, mCallback_GPU_CUDA);
+            
+            pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pSubtaskId);
+			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, mCallback_GPU_CUDA);
 
 			break;
 		}

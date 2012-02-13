@@ -187,11 +187,31 @@ namespace pm
 
 	/** The memory subscription API. It establishes memory dependencies for a subtask.
 	 *	Any subtask is also allowed to subscribe on behalf any other subtask.
-	 *	This information must be provided as early as possible by the application to 
-	 *	allow effective prefetching of the subscribed memory regions.
-	 */
+     *  This function can only be called from DataDistribution callback. The effect
+     *  of calling this function otherwise is undefined.
+     */
 	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo);
 
+    /** The CUDA launch configuration structure */
+    typedef struct pmCudaLaunchConf
+    {
+        int blocksX;
+        int blocksY;
+        int blocksZ;
+        int threadsX;
+        int threadsY;
+        int threadsZ;
+        int sharedMem;
+        
+        pmCudaLaunchConf();
+    } pmCudaLaunchConf;
+
+    /** The CUDA launch configuration setting API. It sets kernel launch configuration for the subtask specified by
+     *  pSubtaskId. The launch configuration is specified in the structure pCudaLaunchConf.
+     *  This function can only be called from DataDistribution callback. The effect
+     *  of calling this function otherwise is undefined.
+     */
+    pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf);
 	
 	/** The task details structure used for task submission */
 	typedef struct pmTaskDetails

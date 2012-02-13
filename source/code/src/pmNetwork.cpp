@@ -832,6 +832,12 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 
 			break;
 		}
+            
+        case pmCommunicatorCommand::HOST_FINALIZATION_STRUCT:
+        {
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::hostFinalizationStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.terminate, lTerminateMPI, MPI_UNSIGNED_SHORT, 0, 1);
+        }
 
 		default:
 			PMTHROW(pmFatalErrorException());

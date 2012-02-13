@@ -118,7 +118,7 @@ pmStatus pmFinalize()
 		pmController* lController;
 		SAFE_GET_CONTROLLER(lController);
 
-		lStatus = lController->DestroyController();
+		lStatus = lController->FinalizeController();
 	}
 	catch(pmException& e)
 	{
@@ -242,6 +242,17 @@ pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTas
 	if(lStatus3 != pmSuccess) return lStatus3;
 	
 	return lStatus4;
+}
+    
+pmCudaLaunchConf::pmCudaLaunchConf()
+{
+    blocksX = blocksY = blocksZ = threadsX = threadsY = threadsZ = 1;
+    sharedMem = 0;
+}
+    
+pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf);
+{
+	SAFE_EXECUTE_ON_CONTROLLER(SetCudaLaunchConf_Public, pTaskHandle, pSubtaskId, pCudaLaunchConf);
 }
 
 pmSubscriptionInfo::pmSubscriptionInfo()
