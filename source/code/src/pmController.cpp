@@ -22,18 +22,22 @@ namespace pm
 
 pmController* pmController::mController = NULL;
 
+pmController::pmController()
+{
+	mLastErrorCode = 0;
+	mFinalizedHosts = 0;
+	mSignalWait = NULL;
+}
+
 pmController::~pmController()
 {
-    delete mSignalWait;
+	delete mSignalWait;
 }
-    
+
 pmController* pmController::GetController()
 {
 	if(!mController)
 	{
-        mFinalizedHosts = 0;
-        mSignalWait = NULL;
-        
 		if(CreateAndInitializeController() == pmSuccess)
 		{
 			if(!pmLogger::GetLogger())
@@ -47,7 +51,7 @@ pmController* pmController::GetController()
 				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Dispatcher Initialization Failed");
 				PMTHROW(pmFatalErrorException());
 			}
-				
+
 			if(!pmStubManager::GetStubManager())
 			{
 				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Stub Manager Initialization Failed");
@@ -102,8 +106,8 @@ pmController* pmController::GetController()
 
 pmStatus pmController::DestroyController()
 {
-    if(!mSignalWait)
-        PMTHROW(pmFatalErrorException());
+	if(!mSignalWait)
+		PMTHROW(pmFatalErrorException());
 
 	SAFE_DESTROY(pmScheduler::GetScheduler(), DestroyScheduler);
 	SAFE_DESTROY(pmTaskManager::GetTaskManager(), DestroyTaskManager);
@@ -114,44 +118,44 @@ pmStatus pmController::DestroyController()
 	SAFE_DESTROY(pmStubManager::GetStubManager(), DestroyStubManager);
 	SAFE_DESTROY(pmDispatcherGPU::GetDispatcherGPU(), DestroyDispatcherGPU);
 	SAFE_DESTROY(pmLogger::GetLogger(), DestroyLogger);
-	    
-    mSignalWait->Signal();
 
-    delete mController;
+	mSignalWait->Signal();
+
+	delete mController;
 	mController = NULL;
-    
+
 	return pmSuccess;
 }
-    
+
 pmStatus pmController::FinalizeController()
 {
-    if(pmScheduler::GetScheduler()->SendFinalizationSignal() != pmSuccess)
-        PMTHROW(pmFatalErrorException());
-    
-    if(mSignalWait)
-        PMTHROW(pmFatalErrorException());
+	if(pmScheduler::GetScheduler()->SendFinalizationSignal() != pmSuccess)
+		PMTHROW(pmFatalErrorException());
 
-    mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
-    mSignalWait->Wait();
-    
-    return pmSuccess;
+	if(mSignalWait)
+		PMTHROW(pmFatalErrorException());
+
+	mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
+	mSignalWait->Wait();
+
+	return pmSuccess;
 }
 
 /* Only to be called on master controller (with mpi host id 0) */
 pmStatus pmController::ProcessFinalization()
 {
-    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-    ++mFinalizedHosts;
-    if(mFinalizedHosts == NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount())
-        pmScheduler::GetScheduler()->BroadcastTerminationSignal();
-    
-    return pmSuccess;
+	++mFinalizedHosts;
+	if(mFinalizedHosts == NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount())
+		pmScheduler::GetScheduler()->BroadcastTerminationSignal();
+
+	return pmSuccess;
 }
-    
+
 pmStatus pmController::ProcessTermination()
 {
-    return DestroyController();
+	return DestroyController();
 }
 
 pmStatus pmController::CreateAndInitializeController()
@@ -184,22 +188,22 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
 		if(pCallbacks.dataDistribution)
 			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataDistribution, pmDataDistributionCB, new pmDataDistributionCB(pCallbacks.dataDistribution));
-		if(pCallbacks.subtask_cpu || pCallbacks.subtask_gpu_cuda)
-			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, pmSubtaskCB, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda));
-		if(pCallbacks.dataReduction)
-			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, pmDataReductionCB, new pmDataReductionCB(pCallbacks.dataReduction));
-		if(pCallbacks.dataScatter)
-			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataScatter, pmDataScatterCB, new pmDataScatterCB(pCallbacks.dataScatter));
-		if(pCallbacks.deviceSelection)
-			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDeviceSelection, pmDeviceSelectionCB, new pmDeviceSelectionCB(pCallbacks.deviceSelection));
-		if(pCallbacks.preDataTransfer)
-			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPreDataTransfer, pmPreDataTransferCB, new pmPreDataTransferCB(pCallbacks.preDataTransfer));
-		if(pCallbacks.postDataTransfer)
-			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPostDataTransfer, pmPostDataTransferCB, new pmPostDataTransferCB(pCallbacks.postDataTransfer));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lDataScatter, lPreDataTransfer, lPostDataTransfer));
+	if(pCallbacks.subtask_cpu || pCallbacks.subtask_gpu_cuda)
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, pmSubtaskCB, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda));
+	if(pCallbacks.dataReduction)
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, pmDataReductionCB, new pmDataReductionCB(pCallbacks.dataReduction));
+	if(pCallbacks.dataScatter)
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataScatter, pmDataScatterCB, new pmDataScatterCB(pCallbacks.dataScatter));
+	if(pCallbacks.deviceSelection)
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDeviceSelection, pmDeviceSelectionCB, new pmDeviceSelectionCB(pCallbacks.deviceSelection));
+	if(pCallbacks.preDataTransfer)
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPreDataTransfer, pmPreDataTransferCB, new pmPreDataTransferCB(pCallbacks.preDataTransfer));
+	if(pCallbacks.postDataTransfer)
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPostDataTransfer, pmPostDataTransferCB, new pmPostDataTransferCB(pCallbacks.postDataTransfer));
+	DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lDataScatter, lPreDataTransfer, lPostDataTransfer));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
-	*pCallbackHandle = lCallbackUnit;
+		*pCallbackHandle = lCallbackUnit;
 
 	return pmSuccess;
 }
@@ -233,7 +237,7 @@ pmStatus pmController::CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, p
 		pmMemSection* lOutputMem = new pmOutputMemSection(pLength, (pMemInfo == OUTPUT_MEM_WRITE_ONLY)?pmOutputMemSection::WRITE_ONLY:pmOutputMemSection::READ_WRITE);
 		*pMem = lOutputMem->GetMem();
 	}
-	
+
 	return pmSuccess;
 }
 
@@ -293,10 +297,10 @@ pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong 
 {
 	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(pSubtaskId, pIsInputMemory, pScatterGatherInfo);
 }
-    
+
 pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
 {
-    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(pSubtaskId, pCudaLaunchConf);
+	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(pSubtaskId, pCudaLaunchConf);
 }
 
 uint pmController::GetHostId_Public()

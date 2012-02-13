@@ -55,7 +55,7 @@ class pmCommand : public pmBase
 		virtual pmStatus SetData(void* pCommandData, ulong pDataLength);
 		virtual pmStatus SetStatus(pmStatus pStatus);
 		virtual pmStatus SetCommandCompletionCallback(pmCommandCompletionCallback pCallback);
-	
+
 		/**
 		 * The following functions must be called by clients for
 		 * command execution time measurement and status reporting
@@ -80,7 +80,7 @@ class pmCommand : public pmBase
 		pmStatus mStatus;
 		pmSignalWait* mSignalWait;
 		ushort mPriority;
-	
+
 		TIMER_IMPLEMENTATION_CLASS mTimer;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
@@ -170,7 +170,7 @@ class pmCommunicatorCommand : public pmCommand
 			{
 				FIELD_COUNT_VALUE = 5
 			} fieldCount;
-	
+
 		} remoteSubtaskAssignStruct;
 
 		typedef struct sendAcknowledgementStruct
@@ -186,7 +186,7 @@ class pmCommunicatorCommand : public pmCommand
 			{
 				FIELD_COUNT_VALUE = 6
 			} fieldCount;
-	
+
 		} sendAcknowledgementStruct;
 
 		typedef enum taskEvents
@@ -205,7 +205,7 @@ class pmCommunicatorCommand : public pmCommand
 			{
 				FIELD_COUNT_VALUE = 3
 			} fieldCount;
-	
+
 		} taskEventStruct;
 
 		typedef struct stealRequestStruct
@@ -220,7 +220,7 @@ class pmCommunicatorCommand : public pmCommand
 			{
 				FIELD_COUNT_VALUE = 5
 			} fieldCount;
-	
+
 		} stealRequestStruct;
 
 		typedef enum stealResponseType
@@ -243,7 +243,7 @@ class pmCommunicatorCommand : public pmCommand
 			{
 				FIELD_COUNT_VALUE = 7
 			} fieldCount;
-	
+
 		} stealResponseStruct;
 
 		typedef struct memorySubscriptionRequest
@@ -258,7 +258,7 @@ class pmCommunicatorCommand : public pmCommand
 			{
 				FIELD_COUNT_VALUE = 5
 			} fieldCount;
-	
+
 		} memorySubscriptionRequest;
 
 		typedef struct subtaskReduceStruct
@@ -268,12 +268,12 @@ class pmCommunicatorCommand : public pmCommand
 			ulong subtaskId;
 			ulong subtaskMemLength;
 			ulong subscriptionOffset;
-	
+
 			typedef enum fieldCount
 			{
 				FIELD_COUNT_VALUE = 5
 			} fieldCount;
-	
+
 		} subtaskReduceStruct;
 
 		typedef struct subtaskReducePacked
@@ -296,7 +296,7 @@ class pmCommunicatorCommand : public pmCommand
 			{
 				FIELD_COUNT_VALUE = 3
 			} fieldCount;
-	
+
 		} memoryReceiveStruct;
 
 		typedef struct memoryReceivePacked
@@ -308,17 +308,17 @@ class pmCommunicatorCommand : public pmCommand
 			memoryReceiveStruct receiveStruct;
 			dataPtr mem;
 		} memoryReceivePacked;
-    
-        typdef struct hostFinalizationStruct
-        {
-            ushort terminate;   // firstly all machines send to master with terminate false; then master sends to all machines with terminate true
+
+		typedef struct hostFinalizationStruct
+		{
+			ushort terminate;   // firstly all machines send to master with terminate false; then master sends to all machines with terminate true
 
 			typedef enum fieldCount
 			{
 				FIELD_COUNT_VALUE = 1
 			} fieldCount;
-            
-        } hostFinalizationStruct;
+		    
+		} hostFinalizationStruct;
 
 		typedef enum communicatorCommandTypes
 		{
@@ -342,7 +342,7 @@ class pmCommunicatorCommand : public pmCommand
 			MEMORY_SUBSCRIPTION_TAG,
 			MEMORY_RECEIVE_TAG,
 			SUBTASK_REDUCE_TAG,
-            HOST_FINALIZATION_TAG,
+			HOST_FINALIZATION_TAG,
 			UNKNOWN_LENGTH_TAG,
 			MAX_COMMUNICATOR_COMMAND_TAGS
 		} communicatorCommandTags;
@@ -366,7 +366,7 @@ class pmCommunicatorCommand : public pmCommand
 			SUBTASK_REDUCE_PACKED,
 			MEMORY_RECEIVE_STRUCT,
 			MEMORY_RECEIVE_PACKED,
-            HOST_FINALIZATION_STRUCT,
+			HOST_FINALIZATION_STRUCT,
 			MAX_COMMUNICATOR_DATA_TYPES
 		} communicatorDataTypes;
 
@@ -403,17 +403,17 @@ typedef std::tr1::shared_ptr<pmPersistentCommunicatorCommand> pmPersistentCommun
 
 class pmPersistentCommunicatorCommand : public pmCommunicatorCommand
 {
-public:
-	static pmPersistentCommunicatorCommandPtr CreateSharedPtr(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
-		void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
+	public:
+		static pmPersistentCommunicatorCommandPtr CreateSharedPtr(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
+			void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
 
-	virtual ~pmPersistentCommunicatorCommand();
+		virtual ~pmPersistentCommunicatorCommand();
 
-protected:
-	pmPersistentCommunicatorCommand(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
-		void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
+	protected:
+		pmPersistentCommunicatorCommand(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
+			void* pCommandData, ulong pDataUnits, void* pSecondaryData = NULL, ulong pSecondaryDataUnits = 0, pmCommandCompletionCallback pCallback = NULL);
 
-private:
+	private:
 };
 
 class pmThreadCommand;

@@ -167,7 +167,7 @@ typedef struct commandCompletion
 typedef struct hostFinalization
 {
     bool terminate; // true for final termination; false for task submission freeze
-}
+} hostFinalization;
 
 typedef struct schedulerEvent
 {
@@ -243,8 +243,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 
 		pmCommandCompletionCallback GetUnknownLengthCommandCompletionCallback();
     
-        pmStatus SendFinalizationSignal();
-        pmStatus BroadcastTerminationSignal();
+		pmStatus SendFinalizationSignal();
+		pmStatus BroadcastTerminationSignal();
 
 	private:
 		pmScheduler();
@@ -288,8 +288,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmPersistentCommunicatorCommandPtr mTaskEventRecvCommand;
 		pmPersistentCommunicatorCommandPtr mStealRequestRecvCommand;
 		pmPersistentCommunicatorCommandPtr mStealResponseRecvCommand;
-        pmPersistentCommunicatorCommandPtr mMemSubscriptionRequestCommand;
-        pmPersistentCommunicatorCommandPtr mHostFinalizationCommand;
+		pmPersistentCommunicatorCommandPtr mMemSubscriptionRequestCommand;
+		pmPersistentCommunicatorCommandPtr mHostFinalizationCommand;
 
 		static pmScheduler* mScheduler;
 };

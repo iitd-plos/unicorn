@@ -246,11 +246,11 @@ pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTas
     
 pmCudaLaunchConf::pmCudaLaunchConf()
 {
-    blocksX = blocksY = blocksZ = threadsX = threadsY = threadsZ = 1;
-    sharedMem = 0;
+	blocksX = blocksY = blocksZ = threadsX = threadsY = threadsZ = 1;
+	sharedMem = 0;
 }
     
-pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf);
+pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf)
 {
 	SAFE_EXECUTE_ON_CONTROLLER(SetCudaLaunchConf_Public, pTaskHandle, pSubtaskId, pCudaLaunchConf);
 }
