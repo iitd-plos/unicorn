@@ -17,16 +17,16 @@ pmCluster* PM_GLOBAL_CLUSTER = NULL;
 //#define DUMP_MPI_CALLS
 
 #ifdef DUMP_MPI_CALLS
-bool __dump_mpi_call(const char* name)
+bool __dump_mpi_call(const char* name, int line)
 {
         char lStr[512];
-        sprintf(lStr, "MPI Call: %s (%s:%d)", name, __FILE__, __LINE__);
+        sprintf(lStr, "MPI Call: %s (%s:%d)", name, __FILE__, line);
         pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, lStr);
 
 	return true;
 }
 
-#define MPI_CALL(name, call) (__dump_mpi_call(name) && call)
+#define MPI_CALL(name, call) (__dump_mpi_call(name, __LINE__) && call)
 #else
 #define MPI_CALL(name, call) call
 #endif
@@ -145,9 +145,10 @@ pmMPI::pmMPI() : pmNetwork()
 
 pmMPI::~pmMPI()
 {
+	delete mReceiveThread;
+
 	StopThreadExecution();
 
-	delete mReceiveThread;
 	delete dynamic_cast<pmClusterMPI*>(PM_GLOBAL_CLUSTER);
 
 	#ifdef DUMP_THREADS
@@ -675,6 +676,7 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 
 
 #define REGISTER_MPI_DATA_TYPE_HELPER_HEADER(cDataType, cName, headerMpiName) cDataType cName; \
+	lFieldCount = cDataType::FIELD_COUNT_VALUE; \
 	lBlockLength = new int[cDataType::FIELD_COUNT_VALUE]; \
 	lDisplacement = new MPI_Aint[cDataType::FIELD_COUNT_VALUE]; \
 	lDataType = new MPI_Datatype[cDataType::FIELD_COUNT_VALUE]; \
@@ -689,6 +691,7 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 
 pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorDataTypes pDataType)
 {
+	int lFieldCount;
 	int* lBlockLength;
 	MPI_Aint* lDisplacement;
 	MPI_Datatype* lDataType;
@@ -833,11 +836,13 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			break;
 		}
             
-        case pmCommunicatorCommand::HOST_FINALIZATION_STRUCT:
-        {
+		case pmCommunicatorCommand::HOST_FINALIZATION_STRUCT:
+		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::hostFinalizationStruct, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.terminate, lTerminateMPI, MPI_UNSIGNED_SHORT, 0, 1);
-        }
+
+			break;
+		}
 
 		default:
 			PMTHROW(pmFatalErrorException());
@@ -846,7 +851,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 	bool lError = false;
 	MPI_Datatype* lNewType = new MPI_Datatype();
 
-	if( (MPI_CALL("MPI_Type_create_struct", (MPI_Type_create_struct(pmCommunicatorCommand::machinePool::FIELD_COUNT_VALUE, lBlockLength, lDisplacement, lDataType, lNewType) != MPI_SUCCESS))) || (MPI_CALL("MPI_Type_commit", (MPI_Type_commit(lNewType) != MPI_SUCCESS))) )
+	if( (MPI_CALL("MPI_Type_create_struct", (MPI_Type_create_struct(lFieldCount, lBlockLength, lDisplacement, lDataType, lNewType) != MPI_SUCCESS))) || (MPI_CALL("MPI_Type_commit", (MPI_Type_commit(lNewType) != MPI_SUCCESS))) )
 	{
 		lError = true;
 		delete lNewType;
@@ -1098,6 +1103,7 @@ pmMPI::pmUnknownLengthReceiveThread::pmUnknownLengthReceiveThread(pmMPI* pMPI)
 	mThreadTerminationFlag = false;
 	
 	networkEvent lNetworkEvent; 
+	
 	SwitchThread(lNetworkEvent, MAX_PRIORITY_LEVEL);
 }
 
@@ -1125,20 +1131,29 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::StopThreadExecution()
 
 pmStatus pmMPI::pmUnknownLengthReceiveThread::SendDummyProbeCancellationMessage()
 {
+	MPI_Request lRequest;
+	MPI_Status lStatus;
 	char lData[1];
 
-	if( MPI_CALL("MPI_Send", (MPI_Send(&lData, 1, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD) != MPI_SUCCESS)) )
+	if( MPI_CALL("MPI_Isend", (MPI_Isend((void*)lData, 1, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
 
+	if(MPI_Wait(&lRequest, &lStatus) != MPI_SUCCESS)
+		PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
+	
 	return pmSuccess;
 }
 
 pmStatus pmMPI::pmUnknownLengthReceiveThread::ReceiveDummyProbeCancellationMessage()
 {
+	MPI_Request lRequest;
 	MPI_Status lStatus;
 	char lData[1];
 
-	if( MPI_CALL("MPI_Recv", (MPI_Recv(&lData, 1, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lStatus) != MPI_SUCCESS)) )
+	if( MPI_CALL("MPI_Irecv", (MPI_Irecv((void*)lData, 1, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
+		PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
+
+	if(MPI_Wait(&lRequest, &lStatus) != MPI_SUCCESS)
 		PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 
 	return pmSuccess;

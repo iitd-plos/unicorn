@@ -106,9 +106,6 @@ pmController* pmController::GetController()
 
 pmStatus pmController::DestroyController()
 {
-	if(!mSignalWait)
-		PMTHROW(pmFatalErrorException());
-
 	SAFE_DESTROY(pmScheduler::GetScheduler(), DestroyScheduler);
 	SAFE_DESTROY(pmTaskManager::GetTaskManager(), DestroyTaskManager);
 	SAFE_DESTROY(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager(), DestroyMemoryManager);
@@ -118,8 +115,6 @@ pmStatus pmController::DestroyController()
 	SAFE_DESTROY(pmStubManager::GetStubManager(), DestroyStubManager);
 	SAFE_DESTROY(pmDispatcherGPU::GetDispatcherGPU(), DestroyDispatcherGPU);
 	SAFE_DESTROY(pmLogger::GetLogger(), DestroyLogger);
-
-	mSignalWait->Signal();
 
 	delete mController;
 	mController = NULL;
@@ -138,7 +133,7 @@ pmStatus pmController::FinalizeController()
 	mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
 	mSignalWait->Wait();
 
-	return pmSuccess;
+	return DestroyController();
 }
 
 /* Only to be called on master controller (with mpi host id 0) */
@@ -155,7 +150,12 @@ pmStatus pmController::ProcessFinalization()
 
 pmStatus pmController::ProcessTermination()
 {
-	return DestroyController();
+	if(!mSignalWait)
+		PMTHROW(pmFatalErrorException());
+	
+	mSignalWait->Signal();
+
+	return pmSuccess;
 }
 
 pmStatus pmController::CreateAndInitializeController()
