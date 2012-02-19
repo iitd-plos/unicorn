@@ -93,6 +93,12 @@ pmController* pmController::GetController()
 				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Scheduler Initialization Failed");
 				PMTHROW(pmFatalErrorException());
 			}
+
+			if(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier() != pmSuccess)
+			{
+				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Global Initialization Barrier Failed");
+				PMTHROW(pmFatalErrorException());
+			}
 		}
 		else
 		{

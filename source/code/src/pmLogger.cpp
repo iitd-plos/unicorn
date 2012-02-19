@@ -47,9 +47,15 @@ pmStatus pmLogger::Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg)
 	if(pMsgLevel <= mLogLevel)
 	{
 		if(pMsgType == INFORMATION)
+		{
 			fprintf(stdout, "PMLIB [Host %d] %s\n", mHostId, pMsg);
+			fflush(stdout);
+		}
 		else
+		{
 			fprintf(stderr, "PMLIB [Host %d] %s\n", mHostId, pMsg);
+			fflush(stderr);
+		}
 	}
 
 	return pmSuccess;

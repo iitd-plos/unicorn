@@ -258,7 +258,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus SetupNewStealRequestReception();
 		pmStatus SetupNewStealResponseReception();
 		pmStatus SetupNewMemSubscriptionRequestReception();
-        pmStatus SetupNewHostFinalizationReception();
+		pmStatus SetupNewHostFinalizationReception();
     
 		pmStatus ProcessEvent(scheduler::schedulerEvent& pEvent);
 

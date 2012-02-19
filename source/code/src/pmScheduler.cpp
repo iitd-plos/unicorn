@@ -121,17 +121,16 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	SetupNewStealRequestReception();
 	SetupNewStealResponseReception();
 	SetupNewMemSubscriptionRequestReception();
+	
+	END_DESTROY_ON_EXCEPTION(dBlock);
 
 	// Only MPI master host receives finalization signal
 	if(pmMachinePool::GetMachinePool()->GetMachine(0) == PM_LOCAL_MACHINE)
 	{
-		pmCommunicatorCommand::hostFinalizationStruct* lHostFinalizationData = NULL;
-		DESTROY_PTR_ON_EXCEPTION(dBlock, lHostFinalizationData, pmCommunicatorCommand::hostFinalizationStruct, new pmCommunicatorCommand::hostFinalizationStruct());
+		pmCommunicatorCommand::hostFinalizationStruct* lHostFinalizationData = new pmCommunicatorCommand::hostFinalizationStruct();
 		mHostFinalizationCommand = PERSISTENT_RECV_COMMAND(HOST_FINALIZATION_TAG, HOST_FINALIZATION_STRUCT, lHostFinalizationData, hostFinalizationStruct);
 		SetupNewHostFinalizationReception();
 	}
-
-	END_DESTROY_ON_EXCEPTION(dBlock);
 
 	return pmSuccess;
 }

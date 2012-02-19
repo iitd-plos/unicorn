@@ -60,6 +60,8 @@ class pmNetwork : public pmBase
 		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommand* pCommand) = 0;
 		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommand* pCommand) = 0;
 
+		virtual pmStatus GlobalBarrier() = 0;
+
 		pmNetwork();
 		virtual ~pmNetwork();
 
@@ -73,7 +75,8 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 	public:
 		enum pmRequestTag
 		{
-			PM_MPI_DUMMY_TAG = pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS
+			PM_MPI_DUMMY_TAG = pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS,
+			PM_MPI_REVERSE_DUMMY_TAG = pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS
 		};
 
 		typedef class pmUnknownLengthReceiveThread : public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
@@ -86,8 +89,10 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 
 			private:
 				pmStatus StopThreadExecution();
-				pmStatus SendDummyProbeCancellationMessage();
+				pmStatus SendDummyProbeCancellationMessage(MPI_Request& pRequest);
 				pmStatus ReceiveDummyProbeCancellationMessage();
+				pmStatus SendReverseDummyProbeCancellationMessage();
+				pmStatus ReceiveReverseDummyProbeCancellationMessage();
 
 				pmMPI* mMPI;
 				bool mThreadTerminationFlag;
@@ -120,6 +125,8 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommand* pCommand);
 		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommand* pCommand);
 
+		virtual pmStatus GlobalBarrier();
+
 	private:
 		pmMPI();
 		virtual ~pmMPI();
@@ -139,21 +146,24 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		pmStatus CancelDummyRequest();
 
 		static pmNetwork* mNetwork;
+		static bool mTerminated;
+
 		uint mTotalHosts;
 		uint mHostId;
 
-		std::vector< std::pair<MPI_Request, pmCommunicatorCommandPtr> > mNonBlockingRequestVector;	// Vector of MPI_Request objects and corresponding pmCommunicatorCommand objects
+		std::map<MPI_Request, pmCommunicatorCommandPtr> mNonBlockingRequestMap;	// Vector of MPI_Request objects and corresponding pmCommunicatorCommand objects
 		std::map<pmCommunicatorCommandPtr, size_t> mRequestCountMap;	// Maps MpiCommunicatorCommand object to the number of MPI_Requests issued
 		MPI_Request* mDummyReceiveRequest;
 		std::map<pmCommunicatorCommand::communicatorDataTypes, MPI_Datatype*> mRegisteredDataTypes;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mDataTypesResourceLock;	   // Resource lock on mRegisteredDataTypes
 
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	   // Resource lock on mDummyReceiveRequest, mNonBlockingRequestVector and mResourceCountMap
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	   // Resource lock on mDummyReceiveRequest, mNonBlockingRequestMap and mResourceCountMap
 
 		std::map<pmPersistentCommunicatorCommand*, MPI_Request> mPersistentSendRequest;
 		std::map<pmPersistentCommunicatorCommand*, MPI_Request> mPersistentRecvRequest;
 
 		bool mThreadTerminationFlag;
+		long mProgressiveSleepTime;	// in ms
 
 		pmUnknownLengthReceiveThread* mReceiveThread;
 };
