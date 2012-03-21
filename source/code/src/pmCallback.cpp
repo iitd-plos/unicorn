@@ -92,6 +92,7 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 			break;
 		}
 
+#ifdef SUPPORT_CUDA
 		case GPU_CUDA:
 		{
 			if(!mCallback_GPU_CUDA)
@@ -100,13 +101,14 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 			pmSubtaskInfo lSubtaskInfo;
 			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo);
             
-            pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pSubtaskId);
+			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pSubtaskId);
 			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, mCallback_GPU_CUDA);
 
 			break;
 		}
+#endif
 		
-		case MAX_DEVICE_TYPES:
+		default:	
 			PMTHROW(pmFatalErrorException());
 	}
 

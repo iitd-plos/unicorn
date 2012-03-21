@@ -25,7 +25,10 @@ pmStatus pmSubscriptionManager::InitializeSubtaskDefaults(ulong pSubtaskId)
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	if(mSubtaskMap.find(pSubtaskId) != mSubtaskMap.end())
+    {
+    std::cout << "SUBTASK ID ALREADY PRESENT " << pSubtaskId << std::endl;
 		PMTHROW(pmFatalErrorException());
+    }
 
 	pmSubtask lSubtask;
 	lSubtask.Initialize(mTask);
@@ -120,12 +123,28 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId)
 {
 	pmSubscriptionInfo lInputMemSubscription, lOutputMemSubscription;
 	subscriptionData lInputMemSubscriptionData, lOutputMemSubscriptionData;
-
+    
 	if(GetInputMemSubscriptionForSubtask(pSubtaskId, lInputMemSubscription))
+    {
 		FetchSubscription(pSubtaskId, true, lInputMemSubscription, lInputMemSubscriptionData);
 
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+            mSubtaskMap[pSubtaskId].mInputMemSubscriptions.second.push_back(lInputMemSubscriptionData);
+        }
+    }
+
 	if(GetOutputMemSubscriptionForSubtask(pSubtaskId, lOutputMemSubscription))
+    {
 		FetchSubscription(pSubtaskId, false, lOutputMemSubscription, lOutputMemSubscriptionData);
+
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+            mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.second.push_back(lOutputMemSubscriptionData);
+        }
+    }
 
 	return WaitForSubscriptions(pSubtaskId);
 }
@@ -140,7 +159,8 @@ pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInpu
 		lMemSection = mTask->GetMemSectionRW();
 
 	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length);
-	lMemSection->SetRangeOwner(PM_LOCAL_MACHINE, (ulong)(lMemSection->GetMem()), pSubscriptionInfo.offset, pSubscriptionInfo.length);
+            
+	lMemSection->AcquireOwnershipImmediate(pSubscriptionInfo.offset, pSubscriptionInfo.length);
 
 	return pmSuccess;
 }
@@ -167,7 +187,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 			lInnerSize = lCommandVector.size();
 			for(j=0; j<lInnerSize; ++j)
 			{
-				pmCommunicatorCommandPtr lCommand = lCommandVector[i];
+				pmCommunicatorCommandPtr lCommand = lCommandVector[j];
 				if(lCommand)
 				{
 					if(lCommand->WaitForFinish() != pmSuccess)
@@ -195,7 +215,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 			lInnerSize = lCommandVector.size();
 			for(j=0; j<lInnerSize; ++j)
 			{
-				pmCommunicatorCommandPtr lCommand = lCommandVector[i];
+				pmCommunicatorCommandPtr lCommand = lCommandVector[j];
 				if(lCommand)
 				{
 					if(lCommand->WaitForFinish() != pmSuccess)

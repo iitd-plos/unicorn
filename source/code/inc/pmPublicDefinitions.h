@@ -137,6 +137,12 @@ namespace pm
 		pmDeviceTypes deviceTypeInfo;
 		unsigned int host;
 	} pmDeviceInfo;
+    
+    typedef enum pmSchedulingPolicy
+    {
+        SLOW_START,
+        RANDOM_STEAL
+    } pmSchedulingPolicy;
 
 
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
@@ -224,6 +230,7 @@ namespace pm
 		unsigned long subtaskCount;
 		unsigned long taskId;		/* Meant for application to assign and identify tasks */
 		unsigned short priority;	/* By default, this is set to max priority level (0) */
+        pmSchedulingPolicy policy;  /* By default, this is SLOW_START */
 		pmClusterHandle cluster;	/* Unused */
 
 		pmTaskDetails();

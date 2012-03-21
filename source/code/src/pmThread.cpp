@@ -44,37 +44,64 @@ pmStatus pmPThread<T>::ThreadCommandLoop()
 {
 	while(1)
 	{
-                mSignalWait.Wait();
+        mSignalWait.Wait();
 
-                while(this->mSafePQ.GetSize() != 0)
+        while(this->mSafePQ.GetSize() != 0)
+        {
+            if(this->mSafePQ.GetTopItem(mCurrentCommand) == pmSuccess)
+            {
+                switch(mCurrentCommand.msg)
                 {
-			typename pmThread<T>::internalType lInternalCommand;
-                       	this->mSafePQ.GetTopItem(lInternalCommand);
+                    case pmThread<T>::TERMINATE:
+                    {
+                        #ifdef DUMP_THREADS
+                        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Thread Exiting");
+                        #endif
 
-			switch(lInternalCommand.msg)
-			{
-				case pmThread<T>::TERMINATE:
-					#ifdef DUMP_THREADS
-					pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Thread Exiting");
-					#endif
-
-					return pmSuccess;
-				
-				case pmThread<T>::DISPATCH_COMMAND:
-                        		ThreadSwitchCallback(lInternalCommand.cmd);
-					break;
-			}
+                        return pmSuccess;
+                    }
+                    
+                    case pmThread<T>::DISPATCH_COMMAND:
+                    {
+                        ThreadSwitchCallback(mCurrentCommand.cmd);
+                        break;
+                    }
                 }
+                
+                this->mSafePQ.MarkProcessingFinished();
+            }
+        }
+        
+        mReverseSignalWait.Signal();
 	}
 
 	return pmSuccess;
+}
+
+template<typename T>    
+pmStatus pmPThread<T>::WaitIfCurrentCommandMatches(typename pmThread<T>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
+{
+	typename pmThread<T>::internalMatchCriterion lInternalMatchCriterion;
+	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
+	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
+
+    return this->mSafePQ.WaitIfMatchingItemBeingProcessed(mCurrentCommand, internalMatchFunc, (void*)(&lInternalMatchCriterion));
+}
+    
+template<typename T>
+pmStatus pmPThread<T>::WaitForQueuedCommands()
+{
+    while(!this->mSafePQ.IsEmpty())
+        mReverseSignalWait.Wait();
+    
+    return pmSuccess;
 }
 
 template<typename T>
 pmStatus pmPThread<T>::SubmitCommand(typename pmThread<T>::internalType& pInternalCommand, ushort pPriority)
 {
 	this->mSafePQ.InsertItem(pInternalCommand, pPriority);
-        mSignalWait.Signal();
+    mSignalWait.Signal();
 
 	return pmSuccess;
 }
@@ -106,6 +133,7 @@ pmStatus pmThread<T>::DeleteMatchingCommands(ushort pPriority, typename pmThread
 template<typename T>
 pmStatus pmPThread<T>::SetProcessorAffinity(int pProcessorId)
 {
+#ifdef LINUX
 	pthread_t lThread = pthread_self();
 	cpu_set_t lSetCPU;
 
@@ -118,6 +146,7 @@ pmStatus pmPThread<T>::SetProcessorAffinity(int pProcessorId)
 	THROW_ON_NON_ZERO_RET_VAL( pthread_getaffinity_np(lThread, sizeof(cpu_set_t), &lSetCPU), pmThreadFailureException, pmThreadFailureException::THREAD_AFFINITY_ERROR );
 	if(!CPU_ISSET(pProcessorId, &lSetCPU))
 		PMTHROW(pmFatalErrorException());
+#endif
 #endif
 
 	return pmSuccess;
@@ -136,6 +165,9 @@ template<typename T>
 bool internalMatchFunc(T& pInternalCommand, void* pCriterion)
 {
 	typedef typename T::outerType::internalMatchCriterion matchCriterion;
+    
+    if(pInternalCommand.msg != T::outerType::DISPATCH_COMMAND)
+        return false;
 
 	matchCriterion* lInternalMatchCriterion = (matchCriterion*)(pCriterion);
 	return (lInternalMatchCriterion->clientMatchFunc)(pInternalCommand.cmd, lInternalMatchCriterion->clientMatchCriterion);

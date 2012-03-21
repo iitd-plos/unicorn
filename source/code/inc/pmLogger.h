@@ -3,6 +3,7 @@
 #define __PM_LOGGER__
 
 #include "pmPublicDefinitions.h"
+#include "pmDataTypes.h"
 
 namespace pm
 {

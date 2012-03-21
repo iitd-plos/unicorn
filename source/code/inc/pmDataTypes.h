@@ -2,6 +2,7 @@
 #ifndef __PM_DATA_TYPES__
 #define __PM_DATA_TYPES__
 
+#include <stdlib.h>
 #include <vector>
 
 namespace pm
@@ -12,13 +13,12 @@ namespace pm
 
 	class pmTask;
 
-        typedef struct pmSubtaskRange
-        {
-                pmTask* task;
-                ulong startSubtask;
-                ulong endSubtask;
-        } pmSubtaskRange;
-
+    typedef struct pmSubtaskRange
+    {
+        pmTask* task;
+        ulong startSubtask;
+        ulong endSubtask;
+    } pmSubtaskRange;
 
 	template<typename T>
 	class finalize_ptr

@@ -104,6 +104,15 @@ pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
 
 	return SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
 }
+    
+pmStatus pmExecutionStub::ClearPendingStealCommands(pmTask* pTask)
+{
+    pTask->MarkForDeletion();
+    
+    DeleteMatchingCommands(pTask->GetPriority() - 1, stealEventClearMatchFunc, pTask); 	// Steal events are sent at one higher priority level than the task
+    
+    return WaitIfCurrentCommandMatches(stealEventClearMatchFunc, pTask);
+}
 
 pmStatus pmExecutionStub::ThreadSwitchCallback(stubEvent& pEvent)
 {
@@ -164,10 +173,10 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			}
 			else
 			{
+                pEvent.execDetails.rangeExecutedOnce = true;
 				lCompletedCount = lLastExecutedSubtaskId - lRange.startSubtask + 1;
 			}
 
-			pEvent.execDetails.rangeExecutedOnce = true;
 			pEvent.execDetails.lastExecutedSubtaskId = lLastExecutedSubtaskId;
 
 			lRange.task->GetTaskExecStats().RecordSubtaskExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
@@ -321,7 +330,7 @@ pmStubCPU::~pmStubCPU()
 
 pmStatus pmStubCPU::BindToProcessingElement()
 {
-	 return SetProcessorAffinity(mCoreId);
+	 return SetProcessorAffinity((int)mCoreId);
 }
 
 size_t pmStubCPU::GetCoreId()
@@ -349,15 +358,18 @@ pmDeviceTypes pmStubCPU::GetType()
 pmStatus pmStubCPU::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
 {
 	ulong index = pRange.startSubtask;
-	for(; index < pRange.endSubtask; ++index)
+	for(; index <= pRange.endSubtask; ++index)
 	{
 		Execute(pRange.task, index);
 
 		if(IsHighPriorityEventWaiting(pRange.task->GetPriority()))
-			break;
+        {
+            pLastExecutedSubtaskId = index;            
+            return pmSuccess;
+        }
 	}
 
-	pLastExecutedSubtaskId = index;
+	pLastExecutedSubtaskId = pRange.endSubtask;
 
 	return pmSuccess;
 }
@@ -395,22 +407,39 @@ pmStubCUDA::~pmStubCUDA()
 
 pmStatus pmStubCUDA::BindToProcessingElement()
 {
+#ifdef SUPPORT_CUDA
 	return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->BindToDevice(mDeviceIndex);
+#else
+	return pmSuccess;
+#endif
 }
 
 std::string pmStubCUDA::GetDeviceName()
 {
+#ifdef SUPPORT_CUDA
 	return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetDeviceName(mDeviceIndex);
+#else
+	return std::string();
+#endif
 }
 
 std::string pmStubCUDA::GetDeviceDescription()
 {
+#ifdef SUPPORT_CUDA
 	return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetDeviceDescription(mDeviceIndex);
+#else
+	return std::string();
+#endif
 }
 
 pmDeviceTypes pmStubCUDA::GetType()
 {
+#ifdef SUPPORT_CUDA
 	return GPU_CUDA;
+#else
+	PMTHROW(pmFatalErrorException());
+	return MAX_DEVICE_TYPES;
+#endif
 }
 
 pmStatus pmStubCUDA::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
@@ -431,9 +460,11 @@ pmStatus pmStubCUDA::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskI
 
 pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId)
 {
+#ifdef SUPPORT_CUDA
 	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId));
 	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, GPU_CUDA, pTask, pSubtaskId);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
+#endif
 
 	return pmSuccess;
 }
@@ -445,6 +476,14 @@ bool execEventMatchFunc(stubEvent& pEvent, void* pCriterion)
 		return true;
 
 	return false;
+}
+    
+bool stealEventClearMatchFunc(execStub::stubEvent& pEvent, void* pCriterion)
+{
+	if(pEvent.eventId == SUBTASK_STEAL && pEvent.execDetails.range.task == (pmTask*)pCriterion)
+		return true;
+    
+	return false;    
 }
 
 };

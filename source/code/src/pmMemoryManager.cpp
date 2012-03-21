@@ -9,6 +9,24 @@
 
 namespace pm
 {
+        
+#ifdef TRACK_MEMORY_REQUESTS
+void __dump_mem_req(const pmMemSection* memSection, const void* addr, size_t offset, size_t length, uint host)
+{
+    char lStr[512];
+   
+    if(dynamic_cast<const pmInputMemSection*>(memSection))
+        sprintf(lStr, "Requesting input memory %p (Mem Section %p) at offset %ld for length %ld from host %d", addr, memSection, offset, length, host);
+    else
+        sprintf(lStr, "Requesting output memory %p (Mem Section %p) at offset %ld for length %ld from host %d", addr, memSection, offset, length, host);
+    
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
+}
+
+#define MEM_REQ_DUMP(memSection, addr, offset, length, host) __dump_mem_req(memSection, addr, offset, length, host);
+#else
+#define MEM_REQ_DUMP(memSection, addr, offset, length, host)    
+#endif
 
 RESOURCE_LOCK_IMPLEMENTATION_CLASS pmLinuxMemoryManager::mInFlightLock;
 std::map<void*, size_t> pmLinuxMemoryManager::mLazyMemoryMap;
@@ -282,9 +300,10 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
 	if(mInFlightMemoryMap.find(lAddr) == mInFlightMemoryMap.end())
 		PMTHROW(pmFatalErrorException());
 
-	regionFetchData& lData = mInFlightMemoryMap[lAddr].second;
+	regionFetchData& lData = mInFlightMemoryMap[lAddr].second;    
 	delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
 	lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
+    mInFlightMemoryMap.erase(lAddr);
 
 	return pmSuccess;
 }
@@ -315,7 +334,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 	FIND_FLOOR_ELEM(mapType, mInFlightMemoryMap, lFetchAddress, lStartIterAddr);	// Find mem fetch range in flight just previous to the start of new range
 	FIND_FLOOR_ELEM(mapType, mInFlightMemoryMap, lLastFetchAddress, lEndIterAddr);	// Find mem fetch range in flight just previous to the end of new range
 
-	// Both start and end of new range fall prior to all ranges in flight
+	// Both start and end of new range fall prior to all ranges in flight or there is no range in flight
 	if(!lStartIterAddr && !lEndIterAddr)
 	{
 		lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, (ulong)lLastFetchAddress));
@@ -331,7 +350,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 			lStartIter = mInFlightMemoryMap.begin();
 		}
 	
-		// Both start and end of new range have atleast have in flight range prior to them
+		// Both start and end of new range have atleast one in flight range prior to them
 		
 		// Check if start and end of new range fall within their just prior ranges or outside
 		bool lStartInside = ((lFetchAddress >= (char*)(lStartIter->first)) && (lFetchAddress < ((char*)(lStartIter->first) + lStartIter->second.first)));
@@ -346,13 +365,17 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 				lCommandVector.push_back(lStartIter->second.second.receiveCommand);
 				return lCommandVector;
 			}
-			else
-			{
-				// If start of new range is within an in flight range and that range is just prior to the end of new range
-				if(lStartInside && !lEndInside)
-					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lStartIter->first) + lStartIter->second.first), (ulong)lLastFetchAddress));
-				else	// If both start and end of new range have the same in flight range just prior to them and they don't fall within that range
-					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, (ulong)lLastFetchAddress));
+			else if(lStartInside && !lEndInside)
+            {
+                // If start of new range is within an in flight range and that range is just prior to the end of new range
+				lCommandVector.push_back(lStartIter->second.second.receiveCommand);
+                
+                lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lStartIter->first) + lStartIter->second.first), (ulong)lLastFetchAddress));
+            }
+            else
+            {
+                // If both start and end of new range have the same in flight range just prior to them and they don't fall within that range
+                lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, (ulong)lLastFetchAddress));
 			}
 		}
 		else
@@ -368,13 +391,19 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 
 			// If end of new range does not fall within the in flight range
 			if(!lEndInside)
+            {
 				lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lEndIter->first) + lEndIter->second.first), (ulong)lLastFetchAddress));
+            }
 
-			// Fetch all non in flight data between in flight ranges
+            lCommandVector.push_back(lEndIter->second.second.receiveCommand);
+
+            // Fetch all non in flight data between in flight ranges
 			if(lStartIter != lEndIter)
 			{
 				for(mapType::iterator lTempIter = lStartIter; lTempIter != lEndIter; ++lTempIter)
 				{
+                    lCommandVector.push_back(lTempIter->second.second.receiveCommand);
+                    
 					mapType::iterator lNextIter = lTempIter;
 					++lNextIter;
 					lRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lTempIter->first) + lTempIter->second.first), ((ulong)(lNextIter->first))-1));
@@ -426,13 +455,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(pm
 }
 
 pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr)
-{
-	if(pOwnerMachine == PM_LOCAL_MACHINE)
-	{
-		std::tr1::shared_ptr<pmCommunicatorCommand> lSharedPtr((pmCommunicatorCommand*)NULL);
-		return lSharedPtr;	// memory already available
-	}
-	
+{	
 	regionFetchData lFetchData;
 	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG,
 		pOwnerMachine, pmCommunicatorCommand::BYTE,	NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
@@ -444,14 +467,15 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 	lData->length = pLength;
 	lData->destHost = *PM_LOCAL_MACHINE;
 
-	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine,
-		pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, sizeof(pmCommunicatorCommand::memorySubscriptionRequest), NULL, 0);
+	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine,	pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, 1, NULL, 0);
 
 	char* lAddr = (char*)pMem;
 	lAddr += lData->offset;
 
 	pmCommunicator::GetCommunicator()->Send(lFetchData.sendCommand);
 
+    MEM_REQ_DUMP(pMemSection, pMem, pOffset, pLength, (uint)(*pOwnerMachine));
+    
 	std::pair<size_t, regionFetchData> lPair(lData->length, lFetchData);
 	mInFlightMemoryMap[lAddr] = lPair;
 
@@ -461,8 +485,6 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 
 pmLinuxMemoryManager::regionFetchData::regionFetchData()
 {
-	sendCommand = std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)NULL);
-	receiveCommand = std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)NULL);
 }
 
 #ifdef USE_LAZY_MEMORY

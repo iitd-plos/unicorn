@@ -79,6 +79,9 @@ class pmTask : public pmBase
 		pmStatus CreateSubtaskShadowMem(ulong pSubtaskId, char* pMem, size_t pMemLength);
 		subtaskShadowMem& GetSubtaskShadowMem(ulong pSubtaskId);
 		pmStatus DestroySubtaskShadowMem(ulong pSubtaskId);
+    
+        pmStatus MarkForDeletion();
+        bool IsMarkedForDeletion();
 
 	protected:
 		pmStatus RandomizeDevices(std::vector<pmProcessingElement*>& pDevices);
@@ -101,6 +104,9 @@ class pmTask : public pmBase
 		pmTaskInfo mTaskInfo;
 		pmSubscriptionManager mSubscriptionManager;
 		pmTaskExecStats mTaskExecStats;
+
+        bool mMarkedForDeletion;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeleteLock;
 
 		/* Updating properties require locking */
 		ulong mSubtasksExecuted;

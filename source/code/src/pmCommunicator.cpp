@@ -50,8 +50,6 @@ pmStatus pmCommunicator::SendPacked(pmCommunicatorCommandPtr pCommand, bool pBlo
 
 	SAFE_GET_NETWORK(lNetwork);
 
-	pCommand->MarkExecutionStart();
-
 	if(lNetwork->PackData(pCommand) != pmSuccess)
 		PMTHROW(pmDataProcessingException(pmDataProcessingException::DATA_PACKING_FAILED));
 

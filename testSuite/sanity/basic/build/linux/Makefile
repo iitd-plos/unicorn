@@ -1,74 +1,19 @@
 
-# Linux Makefile for pmlib library
+# Linux Makefile for matrixMultiply test suite for pmlib
 
-DEBUG=0
+# Usage:
+# make - Builds the test suite in release mode
+# make DEBUG=1 - Builds the test suite in debug mode
+# make clean - Cleans test suite's release build files
+# make DEBUG=1 clean - Cleans test suite's debug build files
 
-COMPILER=g++
-NVCC_COMPILER=nvcc
-STRIP=strip
-FLAGS=-Wall -DUNIX -DLINUX
-CUDAFLAGS= -DUNIX --compiler-options
+SAMPLE_NAME=basic
+BUILD_CUDA=0	# 1 if CUDA code is included in the test suite; 0 otherwise
+BUILD_COMMON=0	# 1 if common code is included in the test suite; 0 otherwise
 
-ifeq ($(DEBUG), 1)
-	FLAGS += -DDEBUG -D_DEBUG -g
-	CUDAFLAGS += -DDEBUG -D_DEBUG -g
-	BUILD=debug
-	LIBRARIES=-L../../../../../build/linux/debug -lpmlib_g
-else
-	FLAGS += -O3 -DNDEBUG
-	BUILD=release
-	LIBRARIES=-L../../../../../build/linux/release -lpmlib
-endif
+OBJECTS= $(SAMPLE_NAME).o
 
-OUTDIR= $(BUILD)
+PATH_PREFIX= ../
 
-ifeq ($(DEBUG), 1)
-	PROGRAM=$(OUTDIR)/basic_g.exe
-else
-	PROGRAM=$(OUTDIR)/basic.exe
-endif
-
-OBJECTS= $(OUTDIR)/basic.o
-
-CUDA_OBJECTS = 
-
-INCLUDES += -I../../../../../source/code/inc
-
-all: prebuild compile link postbuild final
-
-prebuild:
-
-compile: precompile $(OBJECTS)
-
-precompile:
-	@echo "*** Compiling ***"
-
-link: 
-	@echo "\n*** Linking ***"
-	$(COMPILER) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
-
-ifeq ($(DEBUG), 1)
-postbuild:
-else
-postbuild: strip
-endif
-
-final:
-	@echo "\n*** Done ***"
-
-# Generic rule for compiling any cpp file. Any specific rules must
-# be added after this rule as the later one overrides
-$(OUTDIR)/%.o: ../../src/%.cpp
-	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $@
-
-$(OUTDIR)/%.o: ../../src/%.cu
-	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
-
-strip: $(PROGRAM)
-	@echo "\n*** Stripping ***"
-	$(STRIP) -s $(PROGRAM)
-
-clean: 
-	rm -f $(OUTDIR)/*.o core.* $(PROGRAM)
-
+include $(PATH_PREFIX)../../../common/build/linux/Makefile.common
 

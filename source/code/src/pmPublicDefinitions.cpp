@@ -208,6 +208,7 @@ pmTaskDetails::pmTaskDetails()
 	subtaskCount = 0;
 	taskId = 0;
 	priority = DEFAULT_PRIORITY_LEVEL;
+    policy = SLOW_START;
 }
 
 pmStatus pmSubmitTask(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)

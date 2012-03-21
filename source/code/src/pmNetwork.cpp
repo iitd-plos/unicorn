@@ -5,6 +5,7 @@
 #include "pmDevicePool.h"
 #include "pmCluster.h"
 #include "pmHardware.h"
+#include "pmCallbackUnit.h"
 
 namespace pm
 {
@@ -21,7 +22,7 @@ pmCluster* PM_GLOBAL_CLUSTER = NULL;
 #ifdef ENABLE_MPI_DEBUG_HOOK
 void __mpi_debug_hook()
 {
-	bool hook = true;
+	volatile bool hook = true;
 	char hostname[256];
 
 	gethostname(hostname, sizeof(hostname));
@@ -133,10 +134,11 @@ pmStatus pmMPI::DestroyNetwork()
 
 pmMPI::pmMPI() : pmNetwork()
 {
-	int lMpiStatus;
-	int lArgc = 0;
+	int lThreadSupport, lMpiStatus;
 
-	if(MPI_CALL("MPI_Init", ((lMpiStatus = MPI_Init(&lArgc, NULL)) != MPI_SUCCESS)))
+	//if(MPI_CALL("MPI_Init", ((lMpiStatus = MPI_Init(NULL, NULL)) != MPI_SUCCESS)))
+    if(MPI_CALL("MPI_Init_thread", ((lMpiStatus = MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &lThreadSupport)) != MPI_SUCCESS))
+       || lThreadSupport != MPI_THREAD_MULTIPLE)
 	{
 		MPI_CALL("MPI_Abort", MPI_Abort(MPI_COMM_WORLD, lMpiStatus));
 		mTotalHosts = 0;
@@ -159,9 +161,15 @@ pmMPI::pmMPI() : pmNetwork()
 	PM_GLOBAL_CLUSTER = new pmClusterMPI();
 
 	mDummyReceiveRequest = NULL;
+    mSignalWait = NULL;
 	mThreadTerminationFlag = false;
+    
+#ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
 	mProgressiveSleepTime = MIN_PROGRESSIVE_SLEEP_TIME_MILLI_SECS;
+#endif
 
+    MPI_DEBUG_HOOK
+    
 	networkEvent lNetworkEvent; 
 	SwitchThread(lNetworkEvent, MAX_PRIORITY_LEVEL);
 
@@ -171,11 +179,6 @@ pmMPI::pmMPI() : pmNetwork()
 pmMPI::~pmMPI()
 {
 	StopThreadExecution();
-	
-	// Auto lock/unlock scope
-	{
-		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-	}
 
 	delete mReceiveThread;
 
@@ -228,6 +231,8 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 				if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->devices.ptr, lData->devices.length/sizeof(uint), MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 					PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 			}
+            
+            lLength = lPos;
 
 			break;
 		}
@@ -252,8 +257,13 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->subtaskMem.ptr, lData->subtaskMem.length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            lLength = lPos;
 
 			break;
 		}
@@ -278,8 +288,13 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->mem.ptr, lData->mem.length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            lLength = lPos;
 
 			break;
 		}
@@ -288,7 +303,6 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 			PMTHROW(pmFatalErrorException());
 	}
 
-	pCommand->SetTag(pmCommunicatorCommand::UNKNOWN_LENGTH_TAG);
 	pCommand->SetSecondaryData(lPackedData, lLength);
 
 	return pmSuccess;
@@ -318,12 +332,26 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 
 			if(lPackedTask->taskStruct.assignedDeviceCount != 0)
 			{
-				lPackedTask->devices.ptr = new uint[lPackedTask->taskStruct.assignedDeviceCount];
-				lPackedTask->devices.length = lPackedTask->taskStruct.assignedDeviceCount * sizeof(uint);
+                bool lReductionCB = false;
+                
+                try {
+                    pmCallbackUnit* lCallbackUnit = pmCallbackUnit::FindCallbackUnit(lPackedTask->taskStruct.callbackKey);	// throws exception if key unregistered
+                    
+                    lReductionCB = (lCallbackUnit && lCallbackUnit->GetDataReductionCB());
+                } catch(pmException e) {}
+                
+                
+                if(lPackedTask->taskStruct.schedModel == scheduler::PULL || lReductionCB)
+                {
+                    lPackedTask->devices.ptr = new uint[lPackedTask->taskStruct.assignedDeviceCount];
+                    lPackedTask->devices.length = lPackedTask->taskStruct.assignedDeviceCount * sizeof(uint);
 
-				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->devices.ptr, lPackedTask->taskStruct.assignedDeviceCount, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
-					PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+                    if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->devices.ptr, lPackedTask->taskStruct.assignedDeviceCount, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+                        PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+                }
 			}
+            
+            pCommand->SetData(lPackedTask, pPos);
 
 			break;
 		}
@@ -340,6 +368,8 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->subtaskMem.ptr, lPackedTask->subtaskMem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
+            pCommand->SetData(lPackedTask, pPos);
+
 			break;
 		}
 
@@ -355,6 +385,8 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->mem.ptr, lPackedTask->mem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
+            pCommand->SetData(lPackedTask, pPos);
+
 			break;
 		}
 
@@ -364,13 +396,20 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 
 	return pmSuccess;
 }
+    
+bool pmMPI::IsUnknownLengthTag(pmCommunicatorCommand::communicatorCommandTags pTag)
+{
+    return (pTag == pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT || 
+            pTag == pmCommunicatorCommand::SUBTASK_REDUCE_TAG ||
+            pTag == pmCommunicatorCommand::MEMORY_RECEIVE_TAG);
+}
 
 pmStatus pmMPI::SendNonBlocking(pmCommunicatorCommandPtr pCommand)
 {
 	void* lData;
 	ulong lLength;
 
-	if(pCommand->GetTag() == pmCommunicatorCommand::UNKNOWN_LENGTH_TAG)
+	if(IsUnknownLengthTag(pCommand->GetTag()))
 	{
 		lData = pCommand->GetSecondaryData();
 		lLength = pCommand->GetSecondaryDataLength();
@@ -425,7 +464,7 @@ pmStatus pmMPI::BroadcastNonBlocking(pmCommunicatorCommandPtr pCommand)
 	SAFE_GET_MPI_COMMUNICATOR_AND_DESTINATION(lCommunicator, lRoot, pCommand->GetDestination());
 
 	MPI_Datatype lDataType = GetDataTypeMPI((pmCommunicatorCommand::communicatorDataTypes)(pCommand->GetDataType()));
-std::cout << mHostId << " Broadcast" << std::endl << std::flush;
+
 	if( MPI_CALL("MPI_Bcast", (MPI_Bcast(lData, lDataLength, lDataType, lRoot, lCommunicator) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::BROADCAST_ERROR));
 
@@ -454,12 +493,8 @@ pmStatus pmMPI::All2AllNonBlocking(pmCommunicatorCommandPtr pCommand)
 
 	MPI_Datatype lDataType = GetDataTypeMPI((pmCommunicatorCommand::communicatorDataTypes)(pCommand->GetDataType()));
 
-	MPI_DEBUG_HOOK	
-
-std::cout << mHostId << " Allgather" << std::endl << std::flush;
 	if( MPI_CALL("MPI_Allgather", (MPI_Allgather(lSendData, lSendLength, lDataType, lRecvData, lRecvLength, lDataType, lCommunicator) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::ALL2ALL_ERROR));
-std::cout << mHostId << " Allgather Done" << std::endl << std::flush;
 
 	pCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(pCommand));
 
@@ -502,7 +537,7 @@ pmStatus pmMPI::SendNonBlockingInternal(pmCommunicatorCommandPtr pCommand, void*
 {
 	pCommand->MarkExecutionStart();
 
-	MPI_Request lRequest;
+	MPI_Request* lRequest = NULL;
 	MPI_Comm lCommunicator;
 	int lDest;
 
@@ -510,7 +545,7 @@ pmStatus pmMPI::SendNonBlockingInternal(pmCommunicatorCommandPtr pCommand, void*
 	if((lPersistentCommand = std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(pCommand)))
 	{
 		lRequest = GetPersistentSendRequest(lPersistentCommand.get());
-		if( MPI_CALL("MPI_Start", (MPI_Start(&lRequest) != MPI_SUCCESS)) )
+		if( MPI_CALL("MPI_Start", (MPI_Start(lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
 	}
 	else
@@ -518,7 +553,12 @@ pmStatus pmMPI::SendNonBlockingInternal(pmCommunicatorCommandPtr pCommand, void*
 		SAFE_GET_MPI_COMMUNICATOR_AND_DESTINATION(lCommunicator, lDest, pCommand->GetDestination());
 		MPI_Datatype lDataType = GetDataTypeMPI((pmCommunicatorCommand::communicatorDataTypes)(pCommand->GetDataType()));
 		
-		if( MPI_CALL("MPI_Isend", (MPI_Isend(pData, pLength, lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, &lRequest) != MPI_SUCCESS)) )
+        lRequest = new MPI_Request();
+        pmCommunicatorCommand::communicatorCommandTags lTag = pCommand->GetTag();
+        if(IsUnknownLengthTag(lTag))
+            lTag = pmCommunicatorCommand::UNKNOWN_LENGTH_TAG;
+        
+		if( MPI_CALL("MPI_Isend", (MPI_Isend(pData, pLength, lDataType, lDest, (int)lTag, lCommunicator, lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
 	}
 
@@ -526,7 +566,7 @@ pmStatus pmMPI::SendNonBlockingInternal(pmCommunicatorCommandPtr pCommand, void*
 	mNonBlockingRequestMap[lRequest] = pCommand;
 	
 	if(mRequestCountMap.find(pCommand) == mRequestCountMap.end())
-		mRequestCountMap[pCommand] = 0;
+		mRequestCountMap[pCommand] = 1;
 	else
 		mRequestCountMap[pCommand] = mRequestCountMap[pCommand] + 1;
 
@@ -539,7 +579,7 @@ pmStatus pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr pCommand, vo
 {
 	pCommand->MarkExecutionStart();
 
-	MPI_Request lRequest = NULL;
+	MPI_Request* lRequest = NULL;
 	MPI_Comm lCommunicator;
 	int lDest;
 
@@ -547,7 +587,7 @@ pmStatus pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr pCommand, vo
 	if((lPersistentCommand = std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(pCommand)))
 	{
 		lRequest = GetPersistentRecvRequest(lPersistentCommand.get());
-		if( MPI_CALL("MPI_Start", (MPI_Start(&lRequest) != MPI_SUCCESS)) )
+		if( MPI_CALL("MPI_Start", (MPI_Start(lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 	}
 	else
@@ -555,7 +595,8 @@ pmStatus pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr pCommand, vo
 		SAFE_GET_MPI_COMMUNICATOR_AND_DESTINATION(lCommunicator, lDest, pCommand->GetDestination());
 		MPI_Datatype lDataType = GetDataTypeMPI((pmCommunicatorCommand::communicatorDataTypes)(pCommand->GetDataType()));
 
-		if( MPI_CALL("MPI_Irecv", (MPI_Irecv(pData, pLength, lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, &lRequest) != MPI_SUCCESS)) )
+        lRequest = new MPI_Request();
+		if( MPI_CALL("MPI_Irecv", (MPI_Irecv(pData, pLength, lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 	}
 
@@ -563,7 +604,7 @@ pmStatus pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr pCommand, vo
 	mNonBlockingRequestMap[lRequest] = pCommand;
 	
 	if(mRequestCountMap.find(pCommand) == mRequestCountMap.end())
-		mRequestCountMap[pCommand] = 0;
+		mRequestCountMap[pCommand] = 1;
 	else
 		mRequestCountMap[pCommand] = mRequestCountMap[pCommand] + 1;
 
@@ -574,10 +615,8 @@ pmStatus pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr pCommand, vo
 
 pmStatus pmMPI::GlobalBarrier()
 {
-std::cout << mHostId << " Barrier" << std::endl << std::flush;
 	if( MPI_CALL("MPI_Barrier", (MPI_Barrier(MPI_COMM_WORLD) != MPI_SUCCESS)) )
-                PMTHROW(pmNetworkException(pmNetworkException::GLOBAL_BARRIER_ERROR));
-std::cout << mHostId << " Barrier Done" << std::endl << std::flush;
+        PMTHROW(pmNetworkException(pmNetworkException::GLOBAL_BARRIER_ERROR));
 
 	return pmSuccess;
 }
@@ -605,7 +644,9 @@ pmStatus pmMPI::ReceiveAllocateUnpackNonBlocking(pmCommunicatorCommandPtr pComma
 
 pmStatus pmMPI::InitializePersistentCommand(pmPersistentCommunicatorCommand* pCommand)
 {
-	MPI_Request lRequest;
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+	MPI_Request* lRequest = new MPI_Request();
 	MPI_Comm lCommunicator;
 	int lDest;
 
@@ -619,7 +660,7 @@ pmStatus pmMPI::InitializePersistentCommand(pmPersistentCommunicatorCommand* pCo
 		if(mPersistentSendRequest.find(pCommand) != mPersistentSendRequest.end())
 			PMTHROW(pmFatalErrorException());
 
-		if( MPI_CALL("MPI_Send_init", (MPI_Send_init(pCommand->GetData(), pCommand->GetDataLength(), lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, &lRequest) != MPI_SUCCESS)) )
+		if( MPI_CALL("MPI_Send_init", (MPI_Send_init(pCommand->GetData(), pCommand->GetDataLength(), lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
 
 		mPersistentSendRequest[pCommand] = lRequest;
@@ -631,58 +672,69 @@ pmStatus pmMPI::InitializePersistentCommand(pmPersistentCommunicatorCommand* pCo
 			if(mPersistentRecvRequest.find(pCommand) != mPersistentRecvRequest.end())
 				PMTHROW(pmFatalErrorException());
 
-			if( MPI_CALL("MPI_Recv_init", (MPI_Recv_init(pCommand->GetData(), pCommand->GetDataLength(), lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, &lRequest) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Recv_init", (MPI_Recv_init(pCommand->GetData(), pCommand->GetDataLength(), lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, lRequest) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 
 			mPersistentRecvRequest[pCommand] = lRequest;
 		}
 	}
-
+    
 	return pmSuccess;
 }
 
 pmStatus pmMPI::TerminatePersistentCommand(pmPersistentCommunicatorCommand* pCommand)
 {
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    CancelDummyRequest();
+
 	pmCommunicatorCommand::communicatorCommandTypes lType = (pmCommunicatorCommand::communicatorCommandTypes)(pCommand->GetType());
-	MPI_Request lRequest;
+	MPI_Request* lRequest = NULL;
 
 	if(lType == pmCommunicatorCommand::SEND && mPersistentSendRequest.find(pCommand) != mPersistentSendRequest.end())
+    {
 		lRequest = mPersistentSendRequest[pCommand];
+        mPersistentSendRequest.erase(pCommand);
+    }
 	else if(lType == pmCommunicatorCommand::RECEIVE && mPersistentRecvRequest.find(pCommand) != mPersistentRecvRequest.end())
+    {
 		lRequest = mPersistentRecvRequest[pCommand];
-	else
-		PMTHROW(pmFatalErrorException());
+        mPersistentRecvRequest.erase(pCommand);
+    }
 
-	// Auto lock/unlock scope
-	{
-		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-
-		pmCommunicatorCommandPtr lCommand = mNonBlockingRequestMap[lRequest];
-
-		if(mRequestCountMap.find(lCommand) == mRequestCountMap.end())
-			PMTHROW(pmFatalErrorException())
-		else
-			mRequestCountMap[lCommand] -= 1;
-
-		mNonBlockingRequestMap.erase(lRequest);
-	}
-
-	if( MPI_CALL("MPI_Request_free", (MPI_Request_free(&lRequest) != MPI_SUCCESS)) )
+    pmCommunicatorCommandPtr lCommand = mNonBlockingRequestMap[lRequest];
+    
+    if(mRequestCountMap.find(lCommand) != mRequestCountMap.end())
+    {
+        mRequestCountMap[lCommand] -= 1;
+        if(mRequestCountMap[lCommand] == 0)
+            mRequestCountMap.erase(lCommand);
+    }
+        
+    mNonBlockingRequestMap.erase(lRequest);
+    
+	if( MPI_CALL("MPI_Request_free", (MPI_Request_free(lRequest) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::REQUEST_FREE_ERROR));
 
+    delete lRequest;
+    
 	return pmSuccess;
 }
 
-MPI_Request pmMPI::GetPersistentSendRequest(pmPersistentCommunicatorCommand* pCommand)
+MPI_Request* pmMPI::GetPersistentSendRequest(pmPersistentCommunicatorCommand* pCommand)
 {
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
 	if(mPersistentSendRequest.find(pCommand) == mPersistentSendRequest.end())
 		PMTHROW(pmFatalErrorException());
 
 	return mPersistentSendRequest[pCommand];
 }
 
-MPI_Request pmMPI::GetPersistentRecvRequest(pmPersistentCommunicatorCommand* pCommand)
+MPI_Request* pmMPI::GetPersistentRecvRequest(pmPersistentCommunicatorCommand* pCommand)
 {
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
 	if(mPersistentRecvRequest.find(pCommand) == mPersistentRecvRequest.end())
 		PMTHROW(pmFatalErrorException());
 
@@ -729,10 +781,6 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 
 
 #define REGISTER_MPI_DATA_TYPE_HELPER_HEADER(cDataType, cName, headerMpiName) cDataType cName; \
-	lFieldCount = cDataType::FIELD_COUNT_VALUE; \
-	lBlockLength = new int[cDataType::FIELD_COUNT_VALUE]; \
-	lDisplacement = new MPI_Aint[cDataType::FIELD_COUNT_VALUE]; \
-	lDataType = new MPI_Datatype[cDataType::FIELD_COUNT_VALUE]; \
 	MPI_Aint headerMpiName; \
 	SAFE_GET_MPI_ADDRESS(&cName, &headerMpiName);
 
@@ -744,31 +792,113 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 
 pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorDataTypes pDataType)
 {
-	int lFieldCount;
-	int* lBlockLength;
-	MPI_Aint* lDisplacement;
-	MPI_Datatype* lDataType;
-
 	std::map<pmCommunicatorCommand::communicatorDataTypes, MPI_Datatype*>::iterator lIter = mRegisteredDataTypes.find(pDataType);
 	if(lIter != mRegisteredDataTypes.end())
 		PMTHROW(pmFatalErrorException());
+
+	int lFieldCount = 0;
+    
+    switch(pDataType)
+	{
+		case pmCommunicatorCommand::MACHINE_POOL_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::machinePool::FIELD_COUNT_VALUE;            
+			break;
+		}
+            
+		case pmCommunicatorCommand::DEVICE_POOL_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::devicePool::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::remoteTaskAssignStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::remoteSubtaskAssignStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::sendAcknowledgementStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::TASK_EVENT_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::taskEventStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::STEAL_REQUEST_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::stealRequestStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::STEAL_RESPONSE_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::stealResponseStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::memorySubscriptionRequest::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::subtaskReduceStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::memoryReceiveStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		case pmCommunicatorCommand::HOST_FINALIZATION_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::hostFinalizationStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+            
+		default:
+			PMTHROW(pmFatalErrorException());
+	}
+    
+    std::vector<int> lBlockLengthVector(lFieldCount);
+	int* lBlockLength = &lBlockLengthVector[0];
+    std::vector<MPI_Aint> lDisplacementVector(lFieldCount);
+	MPI_Aint* lDisplacement = &lDisplacementVector[0];
+    std::vector<MPI_Datatype> lDataTypeVector(lFieldCount);
+	MPI_Datatype* lDataType = &lDataTypeVector[0];
 
 	switch(pDataType)
 	{
 		case pmCommunicatorCommand::MACHINE_POOL_STRUCT:
 		{
-			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::machinePool, lPool, lPoolMPI);
-			REGISTER_MPI_DATA_TYPE_HELPER(lPoolMPI, lPool.cpuCores, lPoolCoresMPI, MPI_UNSIGNED, 0, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lPoolMPI, lPool.gpuCards, lPoolCardsMPI, MPI_UNSIGNED, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::machinePool, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.cpuCores, lDataCoresMPI, MPI_UNSIGNED, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.gpuCards, lDataCardsMPI, MPI_UNSIGNED, 1, 1);
 
 			break;
 		}
 
 		case pmCommunicatorCommand::DEVICE_POOL_STRUCT:
 		{
-			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::devicePool, lPool, lPoolMPI);
-			REGISTER_MPI_DATA_TYPE_HELPER(lPoolMPI, lPool.name, lPoolNameMPI, MPI_CHAR, 0, MAX_NAME_STR_LEN);
-			REGISTER_MPI_DATA_TYPE_HELPER(lPoolMPI, lPool.description, lPoolDescMPI, MPI_CHAR, 1, MAX_DESC_STR_LEN);
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::devicePool, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.name, lDataNameMPI, MPI_CHAR, 0, MAX_NAME_STR_LEN);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.description, lDataDescMPI, MPI_CHAR, 1, MAX_DESC_STR_LEN);
 
 			break;
 		}
@@ -780,7 +910,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.taskId, lTaskIdMPI, MPI_UNSIGNED_LONG, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemLength, lInputMemLengthMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemLength, lOutputMemLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isOutputMemReadWrite, lIsOutputMemReadWriteMPI, MPI_UNSIGNED_LONG, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isOutputMemReadWrite, lIsOutputMemReadWriteMPI, MPI_UNSIGNED_SHORT, 4, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskCount, lSubtaskCountMPI, MPI_UNSIGNED_LONG, 5, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.callbackKey, lCallbackKeyMPI, MPI_CHAR, 6, MAX_CB_KEY_LEN);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.assignedDeviceCount, lAssignedDeviceCountMPI, MPI_UNSIGNED, 7, 1);
@@ -910,10 +1040,6 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 		delete lNewType;
 	}
 
-	delete[] lBlockLength;
-	delete[] lDisplacement;
-	delete[] lDataType;
-
 	if(lError)
 		PMTHROW(pmNetworkException(pmNetworkException::DATA_TYPE_REGISTRATION));
 
@@ -941,6 +1067,8 @@ pmStatus pmMPI::UnregisterTransferDataType(pmCommunicatorCommand::communicatorDa
 
 pmStatus pmMPI::SendComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus)
 {
+    //std::cout << "SEND COMPLETE TAG " << pCommand->GetTag() << " TYPE " << pCommand->GetType() << std::endl;
+    
 	pCommand->MarkExecutionEnd(pStatus, std::tr1::static_pointer_cast<pmCommand>(pCommand));
 
 	pmHardware* lHardware = pCommand->GetDestination();
@@ -983,6 +1111,7 @@ pmStatus pmMPI::SetupDummyRequest()
 		mDummyReceiveRequest = new MPI_Request();
 
 		char lDummyBuffer[1];
+        lDummyBuffer[0] = '\0';
 		if( MPI_CALL("MPI_Irecv", (MPI_Irecv(lDummyBuffer, 1, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, mDummyReceiveRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::DUMMY_REQUEST_CREATION_ERROR));
 	}
@@ -995,8 +1124,14 @@ pmStatus pmMPI::CancelDummyRequest()
 {
 	if(mDummyReceiveRequest)
 	{
-		if( MPI_CALL("MPI_Cancel", (MPI_Cancel(mDummyReceiveRequest) != MPI_SUCCESS)) )
+        MPI_Request lRequest;
+		char lDummyBuffer[1];
+        
+		if( MPI_CALL("MPI_Isend", (MPI_Isend(lDummyBuffer, 1, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::DUMMY_REQUEST_CANCEL_ERROR));
+
+//		if( MPI_CALL("MPI_Cancel", (MPI_Cancel(mDummyReceiveRequest) != MPI_SUCCESS)) )
+//			PMTHROW(pmNetworkException(pmNetworkException::DUMMY_REQUEST_CANCEL_ERROR));
 	}
 
 	delete mDummyReceiveRequest;
@@ -1008,24 +1143,40 @@ pmStatus pmMPI::CancelDummyRequest()
 
 pmStatus pmMPI::StopThreadExecution()
 {
+    if(mSignalWait)
+        PMTHROW(pmFatalErrorException());
+
+    mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
+
+	// Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+        mThreadTerminationFlag = true;
+        CancelDummyRequest();
+    }
+
+	mSignalWait->Wait();
+    
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-
-	mThreadTerminationFlag = true;
-
-	CancelDummyRequest();
+    
+    delete mSignalWait;
 
 	return pmSuccess;
 }
 
+#ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
 pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 {
-        /* Do not use pCommand in this function as it is NULL (passed in the constructor above) */
+    /* Do not use pCommand in this function as it is NULL (passed in the constructor above) */
 
-        // This loop terminates with the pmThread's destruction
-        while(1)
-        {
+    // This loop terminates with the pmThread's destruction
+    while(1)
+    {
 		if(mThreadTerminationFlag)
-			return pmSuccess;
+        {
+            mSignalWait->Signal();
+            return pmSuccess;
+        }
 
 		struct timespec lReqTime, lRemTime;
 		lReqTime.tv_sec = mProgressiveSleepTime/1000;
@@ -1033,10 +1184,13 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 		nanosleep(&lReqTime, &lRemTime);
 
 		if(mThreadTerminationFlag)
-			return pmSuccess;
+        {
+            mSignalWait->Signal();
+            return pmSuccess;
+        }
 
-                try
-                {               
+        try
+        {               
 			FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 			size_t lRequestCount = mNonBlockingRequestMap.size();
@@ -1044,17 +1198,19 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 				continue;
 
 			std::vector<MPI_Request> lRequestVector(lRequestCount);
+			std::vector<MPI_Request*> lRequestPtrVector(lRequestCount);
 			std::vector<pmCommunicatorCommandPtr> lCommandVector(lRequestCount);
 
 			MPI_Request* lRequestArray = &lRequestVector[0];
 			pmCommunicatorCommandPtr* lCommandArray = &lCommandVector[0];
 	
 			size_t lIndex = 0;	
-			std::map<MPI_Request, pmCommunicatorCommandPtr>::iterator lIter = mNonBlockingRequestMap.begin();
-			std::map<MPI_Request, pmCommunicatorCommandPtr>::iterator lEndIter = mNonBlockingRequestMap.end();
+			std::map<MPI_Request*, pmCommunicatorCommandPtr>::iterator lIter = mNonBlockingRequestMap.begin();
+			std::map<MPI_Request*, pmCommunicatorCommandPtr>::iterator lEndIter = mNonBlockingRequestMap.end();
 			for(; lIter != lEndIter; ++lIter, ++lIndex)
 			{
-				lRequestArray[lIndex] = lIter->first;
+                lRequestPtrVector[lIndex] = lIter->first;
+				lRequestArray[lIndex] = *(lIter->first);
 				lCommandArray[lIndex] = lIter->second;
 			}
 			
@@ -1066,39 +1222,48 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 
 			if(lFlag && lFinishingRequestIndex != MPI_UNDEFINED)
 			{
-				mNonBlockingRequestMap.erase(lRequestArray[lFinishingRequestIndex]);
-
 				pmCommunicatorCommandPtr lCommand = lCommandArray[lFinishingRequestIndex];
-				if(mRequestCountMap.find(lCommand) == mRequestCountMap.end())
-					PMTHROW(pmFatalErrorException());
+
+				mNonBlockingRequestMap.erase(lRequestPtrVector[lFinishingRequestIndex]);
+                if(!std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(lCommand))
+                    delete lRequestPtrVector[lFinishingRequestIndex];
+                
+                if(mRequestCountMap.find(lCommand) == mRequestCountMap.end())
+                    PMTHROW(pmFatalErrorException());
+                
+                if(mRequestCountMap[lCommand] == 0)
+                    PMTHROW(pmFatalErrorException());
 
 				mRequestCountMap[lCommand] = (mRequestCountMap[lCommand] - 1);
 				size_t lRemainingCount = mRequestCountMap[lCommand];
 
-                                if(lRemainingCount == 0)
-                                {
+                if(lRemainingCount == 0)
+                {
 					mRequestCountMap.erase(lCommand);
-                                        ushort lCommandType = lCommand->GetType();
+                    ushort lCommandType = lCommand->GetType();
 
-                                        switch(lCommandType)
-                                        {
-                                                case pmCommunicatorCommand::SEND:
-                                                case pmCommunicatorCommand::BROADCAST:
-                                                {
-                                                        SendComplete(lCommand, pmSuccess);
-                                                        break;
-                                                }
+                    switch(lCommandType)
+                    {
+                        case pmCommunicatorCommand::SEND:
+                        case pmCommunicatorCommand::BROADCAST:
+                        {
+                            SendComplete(lCommand, pmSuccess);
+                            break;
+                        }
 
-                                                case pmCommunicatorCommand::RECEIVE:
-                                                {
-                                                        ReceiveComplete(lCommand, pmSuccess);
-                                                        break;
-                                                }
+                        case pmCommunicatorCommand::RECEIVE:
+                        {
+                            ReceiveComplete(lCommand, pmSuccess);
+                            break;
+                        }
 
-                                                default:
-                                                        PMTHROW(pmFatalErrorException());
-                                        }
-                                }
+                        default:
+                            PMTHROW(pmFatalErrorException());
+                    }
+                    
+                    if(!std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(lCommand))
+                        mCommandCompletionSignalWait.Signal();
+                }
 
 				mProgressiveSleepTime = MIN_PROGRESSIVE_SLEEP_TIME_MILLI_SECS;
 			}
@@ -1108,17 +1273,16 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 				if(mProgressiveSleepTime > MAX_PROGRESSIVE_SLEEP_TIME_MILLI_SECS)
 					mProgressiveSleepTime = MAX_PROGRESSIVE_SLEEP_TIME_MILLI_SECS;
 			}
-                }
-                catch(pmException e)
-                {
-                        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from primary network thread");
-                }
         }
+        catch(pmException e)
+        {
+            pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from primary network thread");
+        }
+    }
 
-        return pmSuccess;
+    return pmSuccess;
 }
-
-#if 0
+#else
 pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 {
 	/* Do not use pCommand in this function as it is NULL (passed in the constructor above) */
@@ -1128,95 +1292,85 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 	{
 		try
 		{
-			size_t lRequestCount = 0;
-			MPI_Request* lRequestArray = NULL;
-			pmCommunicatorCommandPtr* lCommandArray = NULL;
+            size_t lRequestCount = 0;
+            
+            std::vector<MPI_Request> lRequestVector;
+            std::vector<MPI_Request*> lRequestPtrVector;
+            std::vector<pmCommunicatorCommandPtr> lCommandVector;
 
+            MPI_Request* lRequestArray = NULL;
+            pmCommunicatorCommandPtr* lCommandArray = NULL;
+            
 			// Auto lock/unlock scope
 			{
 				FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 				if(mThreadTerminationFlag)
+                {
+                    mSignalWait->Signal();
 					return pmSuccess;
+                }
 
 				SetupDummyRequest();
 
-				lRequestCount = mNonBlockingRequestVector.size();
+                lRequestCount = mNonBlockingRequestMap.size();
 				++lRequestCount; // Adding one for dummy request
-
-				lRequestArray = new MPI_Request[lRequestCount];
-				lCommandArray = new pmCommunicatorCommandPtr[lRequestCount];
-
+                
+                lRequestVector.resize(lRequestCount);
+                lRequestPtrVector.resize(lRequestCount);
+                lCommandVector.resize(lRequestCount);
+                
+                lRequestArray = &lRequestVector[0];
+                lCommandArray = &lCommandVector[0];
+                
 				lRequestArray[0] = *mDummyReceiveRequest;
-				lCommandArray[0] = std::tr1::shared_ptr<pmCommunicatorCommand>((pmCommunicatorCommand*)NULL);
-
-				for(size_t i=0; i<lRequestCount-1; ++i)
-				{
-					lRequestArray[i+1] = mNonBlockingRequestVector[i].first;
-					lCommandArray[i+1] = mNonBlockingRequestVector[i].second;
-				}
+                
+                size_t lIndex = 1;
+                std::map<MPI_Request*, pmCommunicatorCommandPtr>::iterator lIter = mNonBlockingRequestMap.begin();
+                std::map<MPI_Request*, pmCommunicatorCommandPtr>::iterator lEndIter = mNonBlockingRequestMap.end();
+                for(; lIter != lEndIter; ++lIter, ++lIndex)
+                {
+                    lRequestPtrVector[lIndex] = lIter->first;
+                    lRequestArray[lIndex] = *(lIter->first);
+                    lCommandArray[lIndex] = lIter->second;
+                }
 			}
 
 			int lFinishingRequestIndex;
 			MPI_Status lFinishingRequestStatus;
 
-			if( MPI_CALL("MPI_Waitany", (MPI_Waitany(lRequestCount, lRequestArray, &lFinishingRequestIndex, &lFinishingRequestStatus) != MPI_SUCCESS)) )
-			{
-				delete[] lCommandArray;
-				delete[] lRequestArray;
-
+			if( MPI_CALL("MPI_Waitany", (MPI_Waitany((int)lRequestCount, lRequestArray, &lFinishingRequestIndex, &lFinishingRequestStatus) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::WAIT_ERROR));
-			}
 
-			delete[] lRequestArray;
-
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+            
 			if(lFinishingRequestIndex == 0)		// Dummy Request
 			{
-				// Auto lock/Unlock scope
-				{
-					FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-					if(mThreadTerminationFlag)
-					{
-						delete[] lCommandArray;
-						return pmSuccess;
-					}
-				}
-
-				int lFlag = 0;
-				if( MPI_CALL("MPI_Test_cancelled", (MPI_Test_cancelled(&lFinishingRequestStatus, &lFlag) != MPI_SUCCESS)) )
-				{
-					delete[] lCommandArray;
-					PMTHROW(pmNetworkException(pmNetworkException::CANCELLATION_TEST_ERROR));
-				}
-
-				if(!lFlag)
-				{
-					delete[] lCommandArray;
-					PMTHROW(pmNetworkException(pmNetworkException::INVALID_DUMMY_REQUEST_STATUS_ERROR));
-				}
+                if(mThreadTerminationFlag)
+                {
+                    mSignalWait->Signal();
+                    return pmSuccess;
+                }
 			}
 			else
 			{
-				size_t lRemainingCount = 0;
-				pmCommunicatorCommandPtr lCommand;
+				pmCommunicatorCommandPtr lCommand = lCommandArray[lFinishingRequestIndex];
 
-				// Auto lock/unlock scope
-				{
-					FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+                mNonBlockingRequestMap.erase(lRequestPtrVector[lFinishingRequestIndex]);
+                if(!std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(lCommand))
+                    delete lRequestPtrVector[lFinishingRequestIndex];
 
-					lCommand = lCommandArray[lFinishingRequestIndex];
-					if(mRequestCountMap.find(lCommand) == mRequestCountMap.end())
-					{
-						delete[] lCommandArray;
-						PMTHROW(pmFatalErrorException());
-					}
+                if(mRequestCountMap.find(lCommand) == mRequestCountMap.end())
+                    PMTHROW(pmFatalErrorException());
 
-					mRequestCountMap[lCommand] = (mRequestCountMap[lCommand] - 1);
-					lRemainingCount = mRequestCountMap[lCommand];
-				}
+                size_t lRemainingCount = mRequestCountMap[lCommand];
+                --lRemainingCount;
+                
+                mRequestCountMap[lCommand] = lRemainingCount;
 
 				if(lRemainingCount == 0)
 				{
+					mRequestCountMap.erase(lCommand);
 					ushort lCommandType = lCommand->GetType();
 
 					switch(lCommandType)
@@ -1235,15 +1389,13 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 						}
 
 						default:
-						{
-							delete[] lCommandArray;
 							PMTHROW(pmFatalErrorException());
-						}
 					}
+                    
+                    if(!std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(lCommand))
+                        mCommandCompletionSignalWait.Signal();
 				}
 			}
-
-			delete[] lCommandArray;
 		}
 		catch(pmException e)
 		{
@@ -1254,12 +1406,44 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 	return pmSuccess;
 }
 #endif
+    
+pmStatus pmMPI::WaitForAllNonBlockingNonPersistentCommands()
+{
+    while(1)
+    {
+        bool lFound = false;
+
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+            std::map<MPI_Request*, pmCommunicatorCommandPtr>::iterator lIter = mNonBlockingRequestMap.begin();
+            std::map<MPI_Request*, pmCommunicatorCommandPtr>::iterator lEndIter = mNonBlockingRequestMap.end();
+            for(; lIter != lEndIter; ++lIter)
+            {
+                if(!std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(lIter->second))
+                {
+                    lFound = true;
+                    break;
+                }
+            }
+            
+            if(!lFound)
+                break;
+        }
+        
+        mCommandCompletionSignalWait.Wait();
+    }
+
+    return pmSuccess;
+}
 
 /* class pmMPI::pmUnknownLengthReceiveThread */
 pmMPI::pmUnknownLengthReceiveThread::pmUnknownLengthReceiveThread(pmMPI* pMPI)
 {
 	mMPI = pMPI;
 	mThreadTerminationFlag = false;
+    mSignalWait = NULL;
 	
 	networkEvent lNetworkEvent; 
 	
@@ -1278,6 +1462,11 @@ pmMPI::pmUnknownLengthReceiveThread::~pmUnknownLengthReceiveThread()
 pmStatus pmMPI::pmUnknownLengthReceiveThread::StopThreadExecution()
 {
 	MPI_Request lRequest;
+    
+    if(mSignalWait)
+        PMTHROW(pmFatalErrorException());
+    
+    mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
 
 	// Auto lock/unlock scope
 	{
@@ -1285,24 +1474,22 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::StopThreadExecution()
 		mThreadTerminationFlag = true;
 		SendDummyProbeCancellationMessage(lRequest);
 	}
-	
-	MPI_Status lStatus;
-	if(MPI_Wait(&lRequest, &lStatus) != MPI_SUCCESS)
-		PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
 
-	ReceiveReverseDummyProbeCancellationMessage();
+	mSignalWait->Wait();
+    
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
+    //delete[] lData;
+    delete mSignalWait;
+    
 	return pmSuccess;
 }
 
 pmStatus pmMPI::pmUnknownLengthReceiveThread::SendDummyProbeCancellationMessage(MPI_Request& pRequest)
 {
-	char lData;
-
-	if( MPI_CALL("MPI_Isend", (MPI_Isend(&lData, 1, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &pRequest) != MPI_SUCCESS)) )
+	if( MPI_CALL("MPI_Isend", (MPI_Isend(NULL, 0, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &pRequest) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
-
+    
 	return pmSuccess;
 }
 
@@ -1310,45 +1497,14 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ReceiveDummyProbeCancellationMessa
 {
 	MPI_Request lRequest;
 	MPI_Status lStatus;
-	char lData;
 
-	if( MPI_CALL("MPI_Irecv", (MPI_Irecv(&lData, 1, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
+	if( MPI_CALL("MPI_Irecv", (MPI_Irecv(NULL, 0, MPI_CHAR, mMPI->GetHostId(), pmCommunicatorCommand::UNKNOWN_LENGTH_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 
-	if(MPI_Wait(&lRequest, &lStatus) != MPI_SUCCESS)
+	if( MPI_CALL("MPI_Wait", (MPI_Wait(&lRequest, &lStatus) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 
 	return pmSuccess;
-}
-
-pmStatus pmMPI::pmUnknownLengthReceiveThread::SendReverseDummyProbeCancellationMessage()
-{
-        MPI_Request lRequest;
-        //MPI_Status lStatus;
-        int lData;
-
-        if( MPI_CALL("MPI_Isend", (MPI_Isend(&lData, 1, MPI_INT, mMPI->GetHostId(), pmMPI::PM_MPI_REVERSE_DUMMY_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
-                PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
-
-        //if(MPI_Wait(&lRequest, &lStatus) != MPI_SUCCESS)
-        //        PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
-
-        return pmSuccess;
-}
-
-pmStatus pmMPI::pmUnknownLengthReceiveThread::ReceiveReverseDummyProbeCancellationMessage()
-{
-        MPI_Request lRequest;
-        MPI_Status lStatus;
-        int lData;
-
-        if( MPI_CALL("MPI_Irecv", (MPI_Irecv(&lData, 1, MPI_INT, mMPI->GetHostId(), pmMPI::PM_MPI_REVERSE_DUMMY_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
-                PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
-
-        if(MPI_Wait(&lRequest, &lStatus) != MPI_SUCCESS)
-                PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
-
-        return pmSuccess;
 }
 
 pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent& pCommand)
@@ -1368,7 +1524,8 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 				if(mThreadTerminationFlag)
 				{
 					ReceiveDummyProbeCancellationMessage();
-					SendReverseDummyProbeCancellationMessage();
+                    mSignalWait->Signal();
+					//SendReverseDummyProbeCancellationMessage();
 					return pmSuccess;
 				}
 			}
@@ -1382,7 +1539,8 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 				if(mThreadTerminationFlag)
 				{
 					ReceiveDummyProbeCancellationMessage();
-					SendReverseDummyProbeCancellationMessage();
+                    mSignalWait->Signal();
+					//SendReverseDummyProbeCancellationMessage();
 					return pmSuccess;
 				}
 			}
@@ -1422,8 +1580,7 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 					continue;
 			}
 
-			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, lTag,	NULL, lDataType, 
-				lPackedData, lLength, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
+			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, lTag,	NULL, lDataType, lPackedData, lLength, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
 
 			lCommand->MarkExecutionStart();
 			mMPI->UnpackData(lCommand, lPackedData, lLength, lPos);	

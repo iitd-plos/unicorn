@@ -68,7 +68,7 @@ pmStatus pmTaskExecStats::RecordStealAttempt(pmExecutionStub* pStub)
 		mStats[pStub] = lStats;
 	}
 
-	++mStats[pStub].stealAttempts;
+	++(mStats[pStub].stealAttempts);
 
 	return pmSuccess;
 }

@@ -34,7 +34,10 @@ pmLinuxTimer::pmLinuxTimer()
 
 pmStatus pmLinuxTimer::Start()
 {
-	if(GetState() != pmTimer::NOT_STARTED)
+	if(GetState() == pmTimer::STOPPED)
+        return Reset();
+        
+    if(GetState() != pmTimer::NOT_STARTED)
 		PMTHROW(pmTimerException(pmTimerException::ALREADY_RUNNING));
 
 	mStartTime = GetCurrentTimeInSecs();

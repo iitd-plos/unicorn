@@ -112,6 +112,10 @@ pmController* pmController::GetController()
 
 pmStatus pmController::DestroyController()
 {
+    pmTaskManager::GetTaskManager()->WaitForAllTasksToFinish();
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->WaitForAllNonBlockingNonPersistentCommands();
+    pmScheduler::GetScheduler()->WaitForAllCommandsToFinish();
+    
 	SAFE_DESTROY(pmScheduler::GetScheduler(), DestroyScheduler);
 	SAFE_DESTROY(pmTaskManager::GetTaskManager(), DestroyTaskManager);
 	SAFE_DESTROY(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager(), DestroyMemoryManager);
@@ -130,14 +134,30 @@ pmStatus pmController::DestroyController()
 
 pmStatus pmController::FinalizeController()
 {
-	if(pmScheduler::GetScheduler()->SendFinalizationSignal() != pmSuccess)
-		PMTHROW(pmFatalErrorException());
+    pmMachine* lMasterHost = pmMachinePool::GetMachinePool()->GetMachine(0);
+    
+    if(lMasterHost != PM_LOCAL_MACHINE)
+    {
+        if(pmScheduler::GetScheduler()->SendFinalizationSignal() != pmSuccess)
+            PMTHROW(pmFatalErrorException());
 
-	if(mSignalWait)
-		PMTHROW(pmFatalErrorException());
+        pmCommunicatorCommand::hostFinalizationStruct lBroadcastData;
+        pmCommunicatorCommandPtr lBroadcastCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::BROADCAST,pmCommunicatorCommand::HOST_FINALIZATION_TAG, lMasterHost, pmCommunicatorCommand::HOST_FINALIZATION_STRUCT, &lBroadcastData, 1, NULL, 0);
+    
+        pmCommunicator::GetCommunicator()->Broadcast(lBroadcastCommand);
+    }
+    else
+    {
+        if(mSignalWait)
+            PMTHROW(pmFatalErrorException());
 
-	mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
-	mSignalWait->Wait();
+        mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
+
+        if(pmScheduler::GetScheduler()->SendFinalizationSignal() != pmSuccess)
+            PMTHROW(pmFatalErrorException());
+        
+        mSignalWait->Wait();
+    }
 
 	return DestroyController();
 }
@@ -154,6 +174,7 @@ pmStatus pmController::ProcessFinalization()
 	return pmSuccess;
 }
 
+/* Only to be called on master controller (with mpi host id 0) */
 pmStatus pmController::ProcessTermination()
 {
 	if(!mSignalWait)
@@ -209,7 +230,13 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lDataScatter, lPreDataTransfer, lPostDataTransfer));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
-		*pCallbackHandle = lCallbackUnit;
+    *pCallbackHandle = lCallbackUnit;
+    
+    if(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier() != pmSuccess)
+    {
+        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Callback Registration Barrier Failed");
+        PMTHROW(pmFatalErrorException());
+    }
 
 	return pmSuccess;
 }
@@ -271,7 +298,7 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 	if(pTaskDetails.taskConfLength == 0)
 		pTaskDetails.taskConf = NULL;
 
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority);
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, ((pTaskDetails.policy == SLOW_START)?scheduler::PUSH:scheduler::PULL));
 
 	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 

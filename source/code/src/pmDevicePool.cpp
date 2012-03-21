@@ -59,7 +59,7 @@ pmMachinePool::pmMachinePool(uint pMachineCount)
 		mMachinesVector.push_back(lMachine);
 		mMachineDataVector.push_back(lData);
 	}
-return;
+
 	pmDevicePool* lDevicePool = pmDevicePool::GetDevicePool();
 
 	FINALIZE_RESOURCE(fDevicePoolResource, (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::DEVICE_POOL_STRUCT)), (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::DEVICE_POOL_STRUCT)));
@@ -97,8 +97,7 @@ pmStatus pmMachinePool::All2AllMachineData(pmCommunicatorCommand::machinePool* p
 	lSendBuffer.cpuCores = (uint)(lManager->GetProcessingElementsCPU());
 	lSendBuffer.gpuCards = (uint)(lManager->GetProcessingElementsGPU());
 
-	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::ALL2ALL, pmCommunicatorCommand::MACHINE_POOL_TRANSFER, NULL,
-			pmCommunicatorCommand::MACHINE_POOL_STRUCT, &lSendBuffer, 1, pAll2AllBuffer, 1);
+	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::ALL2ALL, pmCommunicatorCommand::MACHINE_POOL_TRANSFER, NULL, pmCommunicatorCommand::MACHINE_POOL_STRUCT, &lSendBuffer, 1, pAll2AllBuffer, 1);
 
 	pmCommunicator::GetCommunicator()->All2All(lCommand);
 
@@ -176,7 +175,7 @@ pmStatus pmMachinePool::RegisterSendCompletion(pmMachine* pMachine, ulong pDataS
 	size_t lIndex = (size_t)(*pMachine);
 
 	if(lIndex >= (uint)mMachinesVector.size())
-		PMTHROW(pmUnknownMachineException(lIndex));
+		PMTHROW(pmUnknownMachineException((uint)lIndex));
 
 	mResourceLock.Lock();
 
@@ -194,7 +193,7 @@ pmStatus pmMachinePool::RegisterReceiveCompletion(pmMachine* pMachine, ulong pDa
 	size_t lIndex = (size_t)(*pMachine);
 
 	if(lIndex >= (uint)mMachinesVector.size())
-		PMTHROW(pmUnknownMachineException(lIndex));
+		PMTHROW(pmUnknownMachineException((uint)lIndex));
 
 	mResourceLock.Lock();
 

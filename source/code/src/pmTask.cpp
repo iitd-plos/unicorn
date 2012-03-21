@@ -40,7 +40,10 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 
 	mTaskInfo.taskHandle = NULL;
 	mSubtaskExecutionFinished = false;
+    mReducer = NULL;
 	mSubtasksExecuted = 0;
+    
+    mMarkedForDeletion = false;
 }
 
 pmTask::~pmTask()
@@ -311,6 +314,22 @@ pmStatus pmTask::DestroySubtaskShadowMem(ulong pSubtaskId)
 
 	return pmSuccess;
 }
+    
+pmStatus pmTask::MarkForDeletion()
+{
+	FINALIZE_RESOURCE_PTR(dDeleteLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDeleteLock, Lock(), Unlock());
+    
+    mMarkedForDeletion = true;
+    
+    return pmSuccess;
+}
+    
+bool pmTask::IsMarkedForDeletion()
+{
+	FINALIZE_RESOURCE_PTR(dDeleteLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDeleteLock, Lock(), Unlock());
+    
+    return mMarkedForDeletion;
+}
 
 
 /* class pmLocalTask */
@@ -333,18 +352,18 @@ pmLocalTask::~pmLocalTask()
 
 pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
 {
-        pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
-        if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataScatterCB())
-        {
-                pmTask::MarkSubtaskExecutionFinished();
-		return MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus()) ;
-        }
-        else
-        {
-                pmTask::MarkSubtaskExecutionFinished();
-        }
+    pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
+    if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataScatterCB())
+    {
+        pmTask::MarkSubtaskExecutionFinished();
+        return MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus()) ;
+    }
+    else
+    {
+        pmTask::MarkSubtaskExecutionFinished();
+    }
 
-        return pmSuccess;
+    return pmSuccess;
 }
 
 pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel)

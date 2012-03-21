@@ -2,9 +2,9 @@
 #ifndef __PM_BASE__
 #define __PM_BASE__
 
+#include "pmDataTypes.h"
 #include "pmPublicDefinitions.h"
 #include "pmErrorDefinitions.h"
-#include "pmDataTypes.h"
 #include "pmInternalDefinitions.h"
 #include <assert.h>
 

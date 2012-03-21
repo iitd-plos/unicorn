@@ -13,9 +13,6 @@ SUPPORT_CUDA=1
 DEBUG=0
 
 STD_TR1_INCLUDE= -I/usr/include/c++/4.4.3
-MPI_INCLUDE= -I$(MPI_INSTALL_PATH)/include
-MPI_LIBS= -L$(MPI_INSTALL_PATH)/lib -lmpi -lmpi_cxx
-
 PTHREAD_LIBS= -lpthread
 
 COMPILER=g++
@@ -25,8 +22,12 @@ FLAGS=-Wall -fPIC -DUNIX -DLINUX
 CUDAFLAGS= -DUNIX --compiler-options -fPIC
 
 ifeq ($(DEBUG), 1)
+MPI_INCLUDE= -I$(MPI_DEBUG_INSTALL_PATH)/include
+MPI_LIBS= -L$(MPI_DEBUG_INSTALL_PATH)/lib -lmpi -lmpi_cxx
 SO_FLAGS=-Wall -DUNIX -DLINUX -shared -Wl,-soname,libpmlib_g.so
 else
+MPI_INCLUDE= -I$(MPI_RELEASE_INSTALL_PATH)/include
+MPI_LIBS= -L$(MPI_RELEASE_INSTALL_PATH)/lib -lmpi -lmpi_cxx
 SO_FLAGS=-Wall -DUNIX -DLINUX -shared -Wl,-soname,libpmlib.so
 endif
 
@@ -83,9 +84,9 @@ CUDA_OBJECTS = $(OUTDIR)/pmDispatcherCUDA.o
 ifeq ($(SUPPORT_CUDA), 1)
 FLAGS += -DSUPPORT_CUDA
 CUDAFLAGS += -DSUPPORT_CUDA
-INCLUDES += -I/usr/local/cuda/include
+INCLUDES += -I$(CUDA_INCLUDE_PATH)
 OBJECTS += $(CUDA_OBJECTS)
-LIBRARIES += -L/usr/local/cuda/lib64 -lcudart
+LIBRARIES += -L$(CUDA_LIB_PATH) -lcudart
 endif
 
 INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(STD_TR1_INCLUDE)

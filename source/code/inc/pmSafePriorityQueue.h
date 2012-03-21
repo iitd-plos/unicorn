@@ -34,7 +34,10 @@ class pmSafePQ : public pmBase
 
 		pmStatus InsertItem(T& pItem, ushort pPriority);
 		pmStatus GetTopItem(T& pItem);
+    
+        pmStatus MarkProcessingFinished();
 
+        pmStatus WaitIfMatchingItemBeingProcessed(T& pItem, matchFuncPtr pMatchFunc, void* pMatchCriterion);
 		pmStatus DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
 		pmStatus DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
 
@@ -44,13 +47,12 @@ class pmSafePQ : public pmBase
 		uint GetSize();
 
 	private:
-		pmStatus LockQueue();
-		pmStatus UnlockQueue();
-
 		typedef map<ushort, typename std::vector<T> > priorityQueueType;
 		priorityQueueType mQueue;
+        bool mIsProcessing;
 
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+        SIGNAL_WAIT_IMPLEMENTATION_CLASS mCommandSignalWait;
 };
 
 } // end namespace pm

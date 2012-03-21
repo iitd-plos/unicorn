@@ -12,7 +12,7 @@ namespace pm
 
 pmBase::pmBase()
 {
-	srand(time(NULL));
+	srand((int)time(NULL));
 }
 
 pmBase::~pmBase()

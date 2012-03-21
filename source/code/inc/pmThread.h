@@ -49,9 +49,13 @@ class pmThread : public pmBase
 		
 		/* To be implemented by client */
 		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
+    
+        virtual pmStatus WaitForQueuedCommands() = 0;
+    
+        virtual pmStatus WaitIfCurrentCommandMatches(internalMatchFuncPtr pMatchFunc, void* pMatchCriterion) = 0;
 
 		virtual pmStatus DeleteAndGetFirstMatchingCommand(ushort pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
-                virtual pmStatus DeleteMatchingCommands(ushort pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
+        virtual pmStatus DeleteMatchingCommands(ushort pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
 
 		enum internalMessage
 		{
@@ -89,16 +93,23 @@ class pmPThread : public pmThread<T>
 		/* To be implemented by client */
 		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
 		
-		friend void* ThreadLoop <T> (void* pThreadData);
+        virtual pmStatus WaitForQueuedCommands();
+
+        virtual pmStatus WaitIfCurrentCommandMatches(typename pmThread<T>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
+
+        friend void* ThreadLoop <T> (void* pThreadData);
 
 	private:
 		virtual pmStatus SubmitCommand(typename pmThread<T>::internalType& pInternalCommand, ushort pPriority);
 		virtual pmStatus ThreadCommandLoop();
 		virtual pmStatus TerminateThread();
 
-		SIGNAL_WAIT_IMPLEMENTATION_CLASS mSignalWait;
+        SIGNAL_WAIT_IMPLEMENTATION_CLASS mSignalWait;
+        SIGNAL_WAIT_IMPLEMENTATION_CLASS mReverseSignalWait;
 
 		pthread_t mThread;
+
+        typename pmThread<T>::internalType mCurrentCommand;
 };
 
 template<typename T> 

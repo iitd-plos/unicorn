@@ -233,12 +233,10 @@ pmPersistentCommunicatorCommand::pmPersistentCommunicatorCommand(ushort pPriorit
 	void* pCommandData, ulong pDataUnits, void* pSecondaryData /* = NULL */, ulong pSecondaryDataUnits /* = 0 */, pmCommandCompletionCallback pCallback /* = NULL */)
 	: pmCommunicatorCommand(pPriority, pCommandType, pCommandTag, pDestination, pDataType, pCommandData, pDataUnits, pSecondaryData, pSecondaryDataUnits, pCallback)
 {
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->InitializePersistentCommand(this);
 }
 
 pmPersistentCommunicatorCommand::~pmPersistentCommunicatorCommand()
 {
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->TerminatePersistentCommand(this);
 }
 
 pmPersistentCommunicatorCommandPtr pmPersistentCommunicatorCommand::CreateSharedPtr(ushort pPriority, communicatorCommandTypes pCommandType, communicatorCommandTags pCommandTag, pmHardware* pDestination, communicatorDataTypes pDataType, 
@@ -386,7 +384,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmTask* pTask, u
 
 	this->reduceStruct.originatingHost = *(lOriginatingHost);
 	this->reduceStruct.subtaskId = pSubtaskId;
-	this->subtaskMem.length = lShadowMem.length;
+	this->subtaskMem.length = (uint)lShadowMem.length;
 	this->subtaskMem.ptr = lShadowMem.addr;
 
 	if(pTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pSubtaskId, lSubscriptionInfo))
@@ -409,7 +407,7 @@ pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked(ulong pReceiving
 	this->receiveStruct.offset = pOffset;
 	this->receiveStruct.length = pLength;
 	this->mem.ptr = pMemPtr;
-	this->mem.length = pLength;
+	this->mem.length = (uint)pLength;
 }
 
 pmCommunicatorCommand::memoryReceivePacked::~memoryReceivePacked()

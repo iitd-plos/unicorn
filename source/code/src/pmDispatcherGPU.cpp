@@ -67,7 +67,7 @@ size_t pmDispatcherGPU::ProbeProcessingElementsAndCreateStubs(std::vector<pmExec
 	{
 		lCountCUDA = mDispatcherCUDA->GetCountCUDA();
 		for(size_t i=0; i<lCountCUDA; ++i)
-			pStubVector.push_back(new pmStubCUDA(i, pStubVector.size()));
+			pStubVector.push_back(new pmStubCUDA(i, (uint)pStubVector.size()));
 	}
 
 	mCountGPU = lCountCUDA;
@@ -77,6 +77,7 @@ size_t pmDispatcherGPU::ProbeProcessingElementsAndCreateStubs(std::vector<pmExec
 /* class pmDispatcherCUDA */
 pmDispatcherCUDA::pmDispatcherCUDA()
 {
+#ifdef SUPPORT_CUDA
 	//mCutilHandle = OpenLibrary(CUDA_LIBRARY_CUTIL);
 	mRuntimeHandle = OpenLibrary(CUDA_LIBRARY_CUDART);
 
@@ -90,6 +91,7 @@ pmDispatcherCUDA::pmDispatcherCUDA()
 	}
 
 	CountAndProbeProcessingElements();
+#endif
 }
 
 pmDispatcherCUDA::~pmDispatcherCUDA()

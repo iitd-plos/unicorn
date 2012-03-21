@@ -243,7 +243,9 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 
 		pmCommandCompletionCallback GetUnknownLengthCommandCompletionCallback();
     
-		pmStatus SendFinalizationSignal();
+        pmStatus WaitForAllCommandsToFinish();
+
+        pmStatus SendFinalizationSignal();
 		pmStatus BroadcastTerminationSignal();
 
 	private:
@@ -278,6 +280,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus ReceiveFailedStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask);
 		pmStatus ReceiveStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
 
+        pmStatus ClearPendingStealCommands(pmTask* pTask);
 		pmStatus SendTaskFinishToMachines(pmLocalTask* pLocalTask);
 
 		pmCommunicatorCommandPtr mRemoteTaskCommand;
@@ -290,9 +293,17 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmPersistentCommunicatorCommandPtr mStealResponseRecvCommand;
 		pmPersistentCommunicatorCommandPtr mMemSubscriptionRequestCommand;
 		pmPersistentCommunicatorCommandPtr mHostFinalizationCommand;
-
-		static pmScheduler* mScheduler;
+    
+#ifdef TRACK_SUBTASK_EXECUTION
+        ulong mSubtasksAssigned;
+        ulong mAcknowledgementsSent;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mTrackLock;
+#endif
+    
+    static pmScheduler* mScheduler;
 };
+
+bool stealClearMatchFunc(scheduler::schedulerEvent& pEvent, void* pCriterion);
 
 } // end namespace pm
 

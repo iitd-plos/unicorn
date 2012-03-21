@@ -5,20 +5,25 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 
+#include <vector>
 #include <map>
 
 #define FIND_FLOOR_ELEM(mapType, mapVar, searchKey, iterAddr) \
 { \
-	mapType::iterator dUpper = mapVar.lower_bound(searchKey); \
-	if(dUpper == mapVar.begin() && (ulong)(dUpper->first) > (ulong)searchKey) \
-		iterAddr = NULL; \
-	else \
-	{ \
-		if((ulong)(dUpper->first) > (ulong)searchKey) \
-			*iterAddr = (--dUpper); \
-		else \
-			*iterAddr = dUpper; \
-	}\
+    if(mapVar.empty()) \
+    { \
+        iterAddr = NULL; \
+    } \
+    else \
+    { \
+        mapType::iterator dUpper = mapVar.lower_bound(searchKey); \
+        if(dUpper == mapVar.begin() && (ulong)(dUpper->first) > (ulong)searchKey) \
+            iterAddr = NULL; \
+        else if(dUpper == mapVar.end() || (ulong)(dUpper->first) > (ulong)searchKey) \
+            *iterAddr = (--dUpper); \
+        else \
+            *iterAddr = dUpper; \
+    } \
 }
 
 namespace pm
@@ -38,6 +43,13 @@ class pmMemSection : public pmBase
 			pmMachine* host;		// Host where memory page lives
 			ulong hostBaseAddr;		// Actual base addr on host
 		} vmRangeOwner;
+    
+        typedef struct pmMemTransferData
+        {
+            vmRangeOwner rangeOwner;
+            ulong offset;
+            ulong length;
+        } pmMemTransferData;
 
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
@@ -47,7 +59,9 @@ class pmMemSection : public pmBase
 
 		static pmMemSection* FindMemSection(void* pMem);
 	
-		pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength);
+        pmStatus AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
+        pmStatus TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength);
+    
 		pmStatus FlushOwnerships();
 		pmStatus GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
 
@@ -55,14 +69,18 @@ class pmMemSection : public pmBase
 		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr);
 
 	private:
+        pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength);
+    
 		void* mMem;
 		size_t mRequestedLength;
 		size_t mAllocatedLength;
 		size_t mVMPageCount;
 
 		pmMemOwnership mOwnershipMap;		// offset versus pair (of length of region and vmRangeOwner)
-		pmMemOwnership mShadowOwnershipMap;	// Map of subscriptions; updated to mOwnershipMap after task finishes
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
+
+        std::vector<pmMemTransferData> mOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipTransferLock;
 
 		static std::map<void*, pmMemSection*> mMemSectionMap;	// Maps actual allocated memory regions to pmMemSection objects
 		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;

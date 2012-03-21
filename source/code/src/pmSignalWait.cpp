@@ -1,9 +1,32 @@
 
 #include "pmSignalWait.h"
 
+#ifdef TRACK_THREADS
+#include <pthread.h>
+#endif
+
 namespace pm
 {
 
+#ifdef DUMP_THREADS
+void __dump_thread_state(bool pWait)
+{
+    char lStr[512];
+    if(pWait)
+        sprintf(lStr, "Thread %p entering wait", pthread_self());
+    else
+        sprintf(lStr, "Thread %p resuming", pthread_self());
+        
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, lStr);
+}
+#define THREAD_WAIT_ENTER __dump_thread_state(true);
+#define THREAD_WAIT_EXIT __dump_thread_state(false);
+#else
+#define THREAD_WAIT_ENTER
+#define THREAD_WAIT_EXIT
+#endif
+
+    
 /* class pmPThreadSignalWait */
 pmPThreadSignalWait::pmPThreadSignalWait()
 {
@@ -33,9 +56,13 @@ pmStatus pmPThreadSignalWait::Wait()
 		return pmSuccess;
 
 	++mWaitingThreadCount;
+    
+    THREAD_WAIT_ENTER
 
 	while(!mCondEnforcer)
 		THROW_ON_NON_ZERO_RET_VAL( pthread_cond_wait(&mCondVariable, mResourceLock.GetMutex()), pmThreadFailureException, pmThreadFailureException::COND_VAR_WAIT_FAILURE );
+
+    THREAD_WAIT_EXIT
 
 	--mWaitingThreadCount;
 
@@ -57,6 +84,8 @@ pmStatus pmPThreadSignalWait::Signal()
 
 pmStatus pmPThreadSignalWait::WaitTillAllBlockedThreadsWakeup()
 {
+    THREAD_WAIT_ENTER
+
 	while(1)
 	{
 		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
@@ -64,6 +93,9 @@ pmStatus pmPThreadSignalWait::WaitTillAllBlockedThreadsWakeup()
 		if(mWaitingThreadCount == 0)
 		{
 			mExiting = true;
+
+            THREAD_WAIT_EXIT
+            
 			return pmSuccess;
 		}
 	}
