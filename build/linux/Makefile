@@ -13,8 +13,8 @@ SUPPORT_CUDA=1
 DEBUG=0
 
 STD_TR1_INCLUDE= -I/usr/include/c++/4.4.3
-MPI_INCLUDE= -I/usr/lib/openmpi/include
-MPI_LIBS= -L/usr/lib/openmpi/lib -lmpi -lmpi_cxx
+MPI_INCLUDE= -I$(MPI_INSTALL_PATH)/include
+MPI_LIBS= -L$(MPI_INSTALL_PATH)/lib -lmpi -lmpi_cxx
 
 PTHREAD_LIBS= -lpthread
 
