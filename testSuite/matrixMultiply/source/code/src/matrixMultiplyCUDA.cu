@@ -2,7 +2,7 @@
 #include "pmPublicDefinitions.h"
 #include "matrixMultiply.h"
 
-pmStatus matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
+void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus)
 {
-	return pmSuccess;
+	*pStatus = pmSuccess;
 }

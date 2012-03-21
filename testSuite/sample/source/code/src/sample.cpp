@@ -110,12 +110,14 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 
 /** Non-common args
  */
-void main(int argc, char** argv)
+int main(int argc, char** argv)
 {
 	// All the five functions pointers passed here are executed only on the host submitting the task
 	commonStart(argc, argv, DoInit, DoSerialProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy);
 
 	commonFinish();
+
+	return 0;
 }
 
 

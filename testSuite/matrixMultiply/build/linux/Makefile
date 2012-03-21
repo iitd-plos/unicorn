@@ -8,8 +8,13 @@
 # make DEBUG=1 clean - Cleans test suite's debug build files
 
 SAMPLE_NAME=matrixMultiply
-BUILD_CUDA=1	# 1 if CUDA code is included in the test suite; 0 otherwise
-BUILD_COMMON=1	# 1 if common code is included in the test suite; 0 otherwise
+
+# 1 if CUDA code is included in the test suite; 0 otherwise
+BUILD_CUDA=1
+
+# 1 if common code is included in the test suite; 0 otherwise
+BUILD_COMMON=1
+
 DEBUG=0
 
 OBJECTS= $(SAMPLE_NAME).o

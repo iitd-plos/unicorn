@@ -1,5 +1,6 @@
 
 #include <time.h>
+#include <string.h>
 
 #include "commonAPI.h"
 #include "matrixMultiply.h"
@@ -23,20 +24,25 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSub
 	pmSubscriptionInfo lSubscriptionInfo;
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
 
+	// Subscribe to entire first and second input matrix
+	lSubscriptionInfo.offset = 0;
+	lSubscriptionInfo.length = lTaskConf->matrixDim * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
+
 	// Subscribe to one row of the first input matrix
-	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	lSubscriptionInfo.blockLength = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, INPUT_MEM, lSubscriptionInfo);
+	//lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	//lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
 
 	// Subscribe to entire second input matrix
-	lSubscriptionInfo.offset = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	lSubscriptionInfo.blockLength = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, INPUT_MEM, lSubscriptionInfo);
+	//lSubscriptionInfo.offset = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	//lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
 
 	// Subscribe to one row of the output matrix
-	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim;
-	lSubscriptionInfo.blockLength = lTaskConf->matrixDim;
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, OUTPUT_MEM, lSubscriptionInfo);
+	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, false, lSubscriptionInfo);
 
 	return pmSuccess;
 }
@@ -165,12 +171,14 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 /**	Non-common args
  *	1. Matrix Dimension
  */
-void main(int argc, char** argv)
+int main(int argc, char** argv)
 {
 	// All the five functions pointers passed here are executed only on the host submitting the task
 	commonStart(argc, argv, DoInit, DoSerialProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy);
 
 	commonFinish();
+
+	return 0;
 }
 
 

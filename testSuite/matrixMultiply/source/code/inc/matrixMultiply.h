@@ -2,7 +2,9 @@
 #define DEFAULT_MATRIX_DIM 1000
 #define MATRIX_DATA_TYPE int
 
-pmStatus matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
+using namespace pm;
+
+void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
 
 typedef struct matrixMultiplyTaskConf
 {

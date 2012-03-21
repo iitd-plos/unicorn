@@ -46,7 +46,7 @@ void commonFinish();
 		SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY, inputMemSize, lInputMem) ); \
 	if(outputMemSize) \
 		SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_WRITE_ONLY, outputMemSize, lOutputMem) ); \
-	SAFE_PM_EXEC( pmRegisterCallbacks(key, callbacks, lCallbackHandle) ); \
+	SAFE_PM_EXEC( pmRegisterCallbacks((char*)key, callbacks, lCallbackHandle) ); \
 	lTaskDetails.inputMem = lInputMem; \
 	lTaskDetails.outputMem = lOutputMem; \
 	lTaskDetails.callbackHandle = lCallbackHandle; \

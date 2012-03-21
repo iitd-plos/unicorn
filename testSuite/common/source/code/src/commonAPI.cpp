@@ -4,6 +4,14 @@
 
 #include "commonAPI.h"
 
+/** Common Arguments:
+ *	1. Run Mode - [0: Don't compare to serial execution; 1: Compare to serial execution (default); 2: Only run serial]
+ *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default)]
+ */
+#define COMMON_ARGS 2
+#define DEFAULT_RUN_MODE 1
+#define DEFAULT_PARALLEL_MODE 6
+
 double ExecuteParallelTask(int argc, char** argv, int pParallelMode, parallelProcessFunc pParallelFunc, callbacksFunc pCallbacksFunc)
 {
 	pmCallbacks lCallbacks = pCallbacksFunc();
@@ -26,13 +34,6 @@ double ExecuteParallelTask(int argc, char** argv, int pParallelMode, parallelPro
 	return pParallelFunc(argc, argv, COMMON_ARGS, lCallbacks);
 }
 
-/** Common Arguments:
- *	1. Run Mode - [0: Don't compare to serial execution; 1: Compare to serial execution (default); 2: Only run serial]
- *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default)]
- */
-#define COMMON_ARGS 2
-#define DEFAULT_RUN_MODE 1
-#define DEFAULT_PARALLEL_MODE 6
 void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc pParallelFunc, 
 	callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc)
 {
@@ -75,7 +76,7 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 				if(lParallelMode == 0 || lParallelMode == i)
 				{
 					lParallelExecTime = ExecuteParallelTask(argc, argv, lParallelMode, pParallelFunc, pCallbacksFunc);
-					std::cout << "Parallel Task " << lParallelMode << " Execution Time = " << lParallelExecTime << std::endl;
+					std::cout << "Parallel Task " << i << " Execution Time = " << lParallelExecTime << std::endl;
 
 					if(lRunMode == 1)
 					{
