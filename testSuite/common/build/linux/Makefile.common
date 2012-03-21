@@ -1,0 +1,79 @@
+
+# Common Makefile for entire testSuite for pmlib library
+# This makefile is included from makefiles in various testSuite's
+
+COMPILER=g++
+NVCC_COMPILER=nvcc
+STRIP=strip
+FLAGS=-Wall -DUNIX -DLINUX
+CUDAFLAGS= -DUNIX --compiler-options
+
+ifeq ($(DEBUG), 1)
+	FLAGS += -DDEBUG -D_DEBUG -g
+	CUDAFLAGS += -DDEBUG -D_DEBUG -g
+	BUILD=debug
+	LIBRARIES +=-L$(PMLIB_DEBUG_LIB_PATH) -lpmlib_g
+else
+	FLAGS += -O3 -DNDEBUG
+	BUILD=release
+	LIBRARIES +=-L$(PMLIB_RELEASE_LIB_PATH) -lpmlib
+endif
+
+OUTDIR= $(BUILD)
+
+ifeq ($(DEBUG), 1)
+	PROGRAM=$(OUTDIR)/$(SAMPLE_NAME)_g.exe
+else
+	PROGRAM=$(OUTDIR)/$(SAMPLE_NAME).exe
+endif
+
+ifeq ($(BUILD_CUDA), 1)
+INCLUDES += -I$(CUDA_INCLUDE_PATH)
+OBJECTS += $(CUDA_OBJECTS)
+LIBRARIES += -L$(CUDA_LIB_PATH) -lcudart
+endif
+
+ifeq ($(BUILD_COMMON), 1)
+OBJECTS += $(PATH_PREFIX)../../../common/source/code/src/commonAPI.cpp
+endif
+
+INCLUDES += -I$(PMLIB_INCLUDE_PATH) -I../../source/code/inc -I$(PATH_PREFIX)../../../common/source/code/inc
+
+all: prebuild compile link postbuild final
+
+prebuild:
+
+compile: precompile $(OBJECTS)
+
+precompile:
+	@echo "*** Compiling ***"
+
+link: 
+	@echo "\n*** Linking ***"
+	$(COMPILER) -o $(PROGRAM) $(OBJECTS:%.o=$(OUTDIR)/%.o) $(LIBRARIES)
+
+ifeq ($(DEBUG), 1)
+postbuild:
+else
+postbuild: strip
+endif
+
+final:
+	@echo "\n*** Done ***"
+
+# Generic rule for compiling any cpp file. Any specific rules must
+# be added after this rule as the later one overrides
+%.o: ../../source/code/src/%.cpp
+	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+
+%.o: ../../source/code/src/%.cu
+	$(NVCC_COMPILER) $(CUDA_FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+
+strip: $(PROGRAM)
+	@echo "\n*** Stripping ***"
+	$(STRIP) -s $(PROGRAM)
+
+clean: 
+	rm -f $(OUTDIR)/*.o core.* $(PROGRAM)
+
+
