@@ -37,16 +37,16 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 void commonFinish();
 
 #define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, key, callbacks) \
-	pmTaskHandle* lTaskHandle = NULL; \
-	pmMemHandle* lInputMem = NULL; \
-	pmMemHandle* lOutputMem = NULL; \
-	pmCallbackHandle* lCallbackHandle = NULL; \
+	pmTaskHandle lTaskHandle; \
+	pmMemHandle lInputMem; \
+	pmMemHandle lOutputMem; \
+	pmCallbackHandle lCallbackHandle; \
 	pmTaskDetails lTaskDetails; \
 	if(inputMemSize) \
-		SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY, inputMemSize, lInputMem) ); \
+		SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY, inputMemSize, &lInputMem) ); \
 	if(outputMemSize) \
-		SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_WRITE_ONLY, outputMemSize, lOutputMem) ); \
-	SAFE_PM_EXEC( pmRegisterCallbacks((char*)key, callbacks, lCallbackHandle) ); \
+		SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_WRITE_ONLY, outputMemSize, &lOutputMem) ); \
+	SAFE_PM_EXEC( pmRegisterCallbacks((char*)key, callbacks, &lCallbackHandle) ); \
 	lTaskDetails.inputMem = lInputMem; \
 	lTaskDetails.outputMem = lOutputMem; \
 	lTaskDetails.callbackHandle = lCallbackHandle; \

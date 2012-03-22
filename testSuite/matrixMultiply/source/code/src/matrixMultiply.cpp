@@ -25,9 +25,9 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSub
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
 
 	// Subscribe to entire first and second input matrix
-	lSubscriptionInfo.offset = 0;
-	lSubscriptionInfo.length = lTaskConf->matrixDim * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
+	//lSubscriptionInfo.offset = 0;
+	//lSubscriptionInfo.length = lTaskConf->matrixDim * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
 
 	// Subscribe to one row of the first input matrix
 	//lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
@@ -40,9 +40,9 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSub
 	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
 
 	// Subscribe to one row of the output matrix
-	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, false, lSubscriptionInfo);
+	//lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	//lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, false, lSubscriptionInfo);
 
 	return pmSuccess;
 }
@@ -100,7 +100,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbacks pCa
 	lTaskDetails.taskConf = (void*)(&lTaskConf);
 	lTaskDetails.taskConfLength = sizeof(lTaskConf);
 
-	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, lTaskHandle) );
+	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
 	SAFE_PM_EXEC( pmGetTaskExecutionTimeInSecs(lTaskHandle, &lExecTime) );
 
 	memcpy(gParallelOutput, lTaskDetails.outputMem, lOutputMemSize);
