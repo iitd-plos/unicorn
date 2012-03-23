@@ -9,7 +9,7 @@
 # make regressions - Builds the entire regression suite in release mode [Not Implemented Yet]
 # make regressions clean - Cleans the entire regression suite's release build files [Not Implemented Yet]
 
-SUPPORT_CUDA=1
+SUPPORT_CUDA=$(BUILD_FOR_CUDA)
 DEBUG=0
 
 STD_TR1_INCLUDE= -I/usr/include/c++/4.4.3
@@ -18,17 +18,25 @@ PTHREAD_LIBS= -lpthread
 COMPILER=g++
 NVCC_COMPILER=nvcc
 STRIP=strip
-FLAGS=-Wall -fPIC -DUNIX -DLINUX
+FLAGS=-Wall -fPIC -DUNIX -D$(PLATFORM)
 CUDAFLAGS= -DUNIX --compiler-options -fPIC
 
 ifeq ($(DEBUG), 1)
 MPI_INCLUDE= -I$(MPI_DEBUG_INSTALL_PATH)/include
 MPI_LIBS= -L$(MPI_DEBUG_INSTALL_PATH)/lib -lmpi -lmpi_cxx
-SO_FLAGS=-Wall -DUNIX -DLINUX -shared -Wl,-soname,libpmlib_g.so
+ifeq ($(PLATFORM), LINUX)
+SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared -Wl,-soname,libpmlib_g.so
+else
+SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared 
+endif
 else
 MPI_INCLUDE= -I$(MPI_RELEASE_INSTALL_PATH)/include
 MPI_LIBS= -L$(MPI_RELEASE_INSTALL_PATH)/lib -lmpi -lmpi_cxx
-SO_FLAGS=-Wall -DUNIX -DLINUX -shared -Wl,-soname,libpmlib.so
+ifeq ($(PLATFORM), LINUX)
+SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared -Wl,-soname,libpmlib.so
+else
+SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared
+endif
 endif
 
 LIBRARIES= -lstdc++ -lm $(PTHREAD_LIBS) $(MPI_LIBS)
@@ -122,8 +130,10 @@ $(OUTDIR)/%.o: ../../source/code/src/%.cu
 	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
 
 strip: $(PROGRAM)
+ifeq ($(PLATFORM), LINUX)
 	@echo "\n*** Stripping ***"
 	$(STRIP) -s $(PROGRAM)
+endif
 
 clean: 
 	rm -f $(OUTDIR)/*.o core.* $(PROGRAM)
