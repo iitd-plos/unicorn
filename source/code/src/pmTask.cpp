@@ -45,8 +45,6 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 	mSubtaskExecutionFinished = false;
     mReducer = NULL;
 	mSubtasksExecuted = 0;
-    
-    mMarkedForDeletion = false;
 }
 
 pmTask::~pmTask()
@@ -330,22 +328,6 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
     return pmSuccess;
 }
     
-pmStatus pmTask::MarkForDeletion()
-{
-	FINALIZE_RESOURCE_PTR(dDeleteLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDeleteLock, Lock(), Unlock());
-    
-    mMarkedForDeletion = true;
-    
-    return pmSuccess;
-}
-    
-bool pmTask::IsMarkedForDeletion()
-{
-	FINALIZE_RESOURCE_PTR(dDeleteLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDeleteLock, Lock(), Unlock());
-    
-    return mMarkedForDeletion;
-}
-
 
 /* class pmLocalTask */
 pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, 
@@ -363,7 +345,7 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, p
 
 pmLocalTask::~pmLocalTask()
 {
-	pmTaskManager::GetTaskManager()->DeleteTask(this);
+    pmTaskManager::GetTaskManager()->DeleteTask(this);  // could have already been erased from task manager in MarkSubtaskExecutionFinished
 
 	if(mSubtaskManager)
 		delete mSubtaskManager;
@@ -375,7 +357,8 @@ pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
     if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataScatterCB())
     {
         pmTask::MarkSubtaskExecutionFinished();
-        return MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus()) ;
+        MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus());
+        pmTaskManager::GetTaskManager()->DeleteTask(this);  // Local task is only erased from task manager. It is actually deleted from memory by user
     }
     else
     {

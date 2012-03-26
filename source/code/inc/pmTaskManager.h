@@ -47,6 +47,9 @@ class pmTaskManager : public pmBase
         bool GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmProcessingElement* pTargetDevice, pmMachine* pOriginatingHost, ulong pSequenceNumber);
 		pmTask* FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumber);
 
+        bool IsTaskOpenToSteal(pmTask* pTask);
+        bool IsTaskOpenToSteal(pmMachine* pOriginatingHost, ulong pSequenceNumber);
+
 	private:
 		pmTaskManager();
 

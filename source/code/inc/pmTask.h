@@ -83,9 +83,6 @@ class pmTask : public pmBase
         ulong GetSequenceNumber();
         pmStatus SetSequenceNumber(ulong pSequenceNumber);
     
-        pmStatus MarkForDeletion();
-        bool IsMarkedForDeletion();
-
 	protected:
 		pmStatus RandomizeDevices(std::vector<pmProcessingElement*>& pDevices);
 
@@ -108,9 +105,6 @@ class pmTask : public pmBase
 		pmSubscriptionManager mSubscriptionManager;
 		pmTaskExecStats mTaskExecStats;
         ulong mSequenceNumber;  // Sequence Id of task on originating host (This along with originating machine is the global unique identifier for a task)
-
-        bool mMarkedForDeletion;
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeleteLock;
 
 		/* Updating properties require locking */
 		ulong mSubtasksExecuted;

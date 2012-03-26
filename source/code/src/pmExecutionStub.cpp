@@ -107,8 +107,6 @@ pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
     
 pmStatus pmExecutionStub::ClearPendingStealCommands(pmTask* pTask)
 {
-    pTask->MarkForDeletion();
-    
     DeleteMatchingCommands(pTask->GetPriority() - 1, stealEventClearMatchFunc, pTask); 	// Steal events are sent at one higher priority level than the task
     
     return WaitIfCurrentCommandMatches(stealEventClearMatchFunc, pTask);

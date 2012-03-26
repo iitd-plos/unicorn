@@ -79,7 +79,7 @@ int main()
 		lTaskDetails.outputMem = lOutputMem;
 		lTaskDetails.callbackHandle = lCallbackHandle;
 		lTaskDetails.subtaskCount = ARRAY_LEN;
-		//lTaskDetails.policy = RANDOM_STEAL;
+		lTaskDetails.policy = RANDOM_STEAL;
 
 		if(pmSubmitTask(lTaskDetails, &lTaskHandle) == pmSuccess)
 			std::cout << "Task Submission ...	Pass" << std::endl;

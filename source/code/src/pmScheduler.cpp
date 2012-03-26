@@ -256,7 +256,7 @@ pmStatus pmScheduler::PushEvent(pmProcessingElement* pDevice, pmSubtaskRange& pR
 
 pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate)
 {
-    if(pTask->IsMarkedForDeletion())
+    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pTask))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -270,7 +270,7 @@ pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pm
 
 pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate)
 {
-    if(pTask->IsMarkedForDeletion())
+    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pTask))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -285,7 +285,7 @@ pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pm
 
 pmStatus pmScheduler::StealSuccessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange pRange)
 {
-    if(pRange.task->IsMarkedForDeletion())
+    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pRange.task))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -299,7 +299,7 @@ pmStatus pmScheduler::StealSuccessEvent(pmProcessingElement* pStealingDevice, pm
 
 pmStatus pmScheduler::StealFailedEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
-    if(pTask->IsMarkedForDeletion())
+    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pTask))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -313,7 +313,7 @@ pmStatus pmScheduler::StealFailedEvent(pmProcessingElement* pStealingDevice, pmP
 
 pmStatus pmScheduler::StealSuccessReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange pRange)
 {
-    if(pRange.task->IsMarkedForDeletion())
+    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pRange.task))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -327,7 +327,7 @@ pmStatus pmScheduler::StealSuccessReturnEvent(pmProcessingElement* pStealingDevi
 
 pmStatus pmScheduler::StealFailedReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
-    if(pTask->IsMarkedForDeletion())
+    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pTask))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -468,37 +468,49 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 		case STEAL_REQUEST_STEALER:	/* Comes from stub thread */
 			{
 				stealRequest& lRequest = pEvent.stealRequestDetails;
-				return StealSubtasks(lRequest.stealingDevice, lRequest.task, lRequest.stealingDeviceExecutionRate);
+
+                if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lRequest.task))
+                    return StealSubtasks(lRequest.stealingDevice, lRequest.task, lRequest.stealingDeviceExecutionRate);
 			}
 
 		case STEAL_PROCESS_TARGET:	/* Comes from netwrok thread */
 			{
 				stealProcess& lEventDetails = pEvent.stealProcessDetails;
-				return ServeStealRequest(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task, lEventDetails.stealingDeviceExecutionRate);
+                
+                if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.task))
+                    return ServeStealRequest(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task, lEventDetails.stealingDeviceExecutionRate);
 			}
 
 		case STEAL_SUCCESS_TARGET:	/* Comes from stub thread */
 			{
 				stealSuccessTarget& lEventDetails = pEvent.stealSuccessTargetDetails;
-				return SendStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
+                
+                if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.range.task))
+                    return SendStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
 			}
 
 		case STEAL_FAIL_TARGET: /* Comes from stub thread */
 			{
 				stealFailTarget& lEventDetails = pEvent.stealFailTargetDetails;
-				return SendFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
+
+                if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.task))
+                    return SendFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
 			}
 
 		case STEAL_SUCCESS_STEALER: /* Comes from network thread */
 			{
 				stealSuccessStealer& lEventDetails = pEvent.stealSuccessStealerDetails;
-				return ReceiveStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
+
+                if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.range.task))
+                    return ReceiveStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
 			}
 
 		case STEAL_FAIL_STEALER: /* Comes from network thread */
 			{
 				stealFailStealer& lEventDetails = pEvent.stealFailStealerDetails;
-				return ReceiveFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
+
+                if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.task))
+                    return ReceiveFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
 			}
 
 		case SEND_ACKNOWLEDGEMENT:	/* Comes from stub thread */
@@ -569,13 +581,10 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 				taskFinish& lEventDetails = pEvent.taskFinishDetails;
 				pmTask* lTask = lEventDetails.task;
 
-				if(lTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
-					PMTHROW(pmFatalErrorException());	// On local machine, task is cleared when user explicitly deletes that
-
                 if(lTask->GetSchedulingModel() == scheduler::PULL)
                     ClearPendingStealCommands(lTask);
                 
-				((pmRemoteTask*)lTask)->MarkSubtaskExecutionFinished();
+				lTask->MarkSubtaskExecutionFinished();
 
 				break;
 			}
@@ -741,11 +750,12 @@ pmStatus pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 	{
 		pmMachine* lMachine = *lIter;
 
-		if(lMachine != PM_LOCAL_MACHINE)
+		if(lMachine == PM_LOCAL_MACHINE)
+        {
+            TaskFinishEvent(pLocalTask);
+        }
+        else
 		{
-			// Send task finish message to machine lMachine
-			// No action is required on local machine
-
 			pmCommunicatorCommand::taskEventStruct* lTaskEventData = new pmCommunicatorCommand::taskEventStruct();
 			lTaskEventData->taskEvent = (uint)(pmCommunicatorCommand::TASK_FINISH_EVENT);
 			lTaskEventData->originatingHost = *(pLocalTask->GetOriginatingHost());
@@ -979,11 +989,6 @@ pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessi
 	if(lSubtaskManager->HasTaskFinished())
 	{
 		SendTaskFinishToMachines(pLocalTask);
-		
-        if(pLocalTask->GetSchedulingModel() == PULL)
-            ClearPendingStealCommands(pLocalTask);
-        
-		return pLocalTask->MarkSubtaskExecutionFinished();
 	}
 	else
 	{
@@ -1017,10 +1022,8 @@ pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskR
     
 pmStatus pmScheduler::ClearPendingStealCommands(pmTask* pTask)
 {
-    pTask->MarkForDeletion();
-    
     DeleteMatchingCommands(pTask->GetPriority(), stealClearMatchFunc, pTask);
-    WaitIfCurrentCommandMatches(stealClearMatchFunc, pTask);
+    //WaitIfCurrentCommandMatches(stealClearMatchFunc, pTask);  // Current command is task finish itself
 
     std::vector<pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(pTask) != NULL) ? (((pmLocalTask*)pTask)->GetAssignedDevices()) : (((pmRemoteTask*)pTask)->GetAssignedDevices());
 
@@ -1256,18 +1259,11 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
                     
-                    pmTask* lTask = NULL;
-                    
-                    try
+                    if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lOriginatingHost, lData->sequenceNumber))
                     {
-                        lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
-                    }
-                    catch(pmException e)
-                    {
-                    }
-
-                    if(lTask)
+                        pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
                         StealProcessEvent(lStealingDevice, lTargetDevice, lTask, lData->stealingDeviceExecutionRate);
+                    }
                     
 					SetupNewStealRequestReception();
 
@@ -1282,18 +1278,11 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					pmProcessingElement* lTargetDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->targetDeviceGlobalIndex);
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
-                    pmTask* lTask = NULL;
-                    
-                    try
-                    {
-                        lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
-                    }
-                    catch(pmException e)
-                    {
-                    }
 
-                    if(lTask)
+                    if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lOriginatingHost, lData->sequenceNumber))
                     {
+                        pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+
                         pmCommunicatorCommand::stealResponseType lResponseType = (pmCommunicatorCommand::stealResponseType)(lData->success);
 
                         switch(lResponseType)
