@@ -519,7 +519,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 					pmCommunicatorCommand::sendAcknowledgementStruct* lAckData = new pmCommunicatorCommand::sendAcknowledgementStruct();
 					lAckData->sourceDeviceGlobalIndex = lEventDetails.device->GetGlobalDeviceIndex();
 					lAckData->originatingHost = *(lOriginatingHost);
-					lAckData->internalTaskId = ((pmRemoteTask*)lTask)->GetInternalTaskId();
+					lAckData->sequenceNumber = lTask->GetSequenceNumber();
 					lAckData->startSubtask = lEventDetails.range.startSubtask;
 					lAckData->endSubtask = lEventDetails.range.endSubtask;
 					lAckData->execStatus = (uint)(lEventDetails.execStatus);
@@ -685,7 +685,7 @@ pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLoc
 	else
 	{
 		pmCommunicatorCommand::remoteSubtaskAssignStruct* lSubtaskData = new pmCommunicatorCommand::remoteSubtaskAssignStruct();
-		lSubtaskData->internalTaskId = (ulong)pLocalTask;
+		lSubtaskData->sequenceNumber = pLocalTask->GetSequenceNumber();
 		lSubtaskData->startSubtask = lStartingSubtask;
 		lSubtaskData->endSubtask = lStartingSubtask + lSubtaskCount - 1;
 		lSubtaskData->originatingHost = *(pLocalTask->GetOriginatingHost());
@@ -749,7 +749,7 @@ pmStatus pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 			pmCommunicatorCommand::taskEventStruct* lTaskEventData = new pmCommunicatorCommand::taskEventStruct();
 			lTaskEventData->taskEvent = (uint)(pmCommunicatorCommand::TASK_FINISH_EVENT);
 			lTaskEventData->originatingHost = *(pLocalTask->GetOriginatingHost());
-			lTaskEventData->internalTaskId = (ulong)pLocalTask;
+			lTaskEventData->sequenceNumber = pLocalTask->GetSequenceNumber();
 
 			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lMachine, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, gCommandCompletionCallback);
 
@@ -782,7 +782,7 @@ pmStatus pmScheduler::CancelTask(pmLocalTask* pLocalTask)
 			pmCommunicatorCommand::taskEventStruct* lTaskEventData = new pmCommunicatorCommand::taskEventStruct();
 			lTaskEventData->taskEvent = (uint)(pmCommunicatorCommand::TASK_CANCEL_EVENT);
 			lTaskEventData->originatingHost = *(pLocalTask->GetOriginatingHost());
-			lTaskEventData->internalTaskId = (ulong)pLocalTask;
+			lTaskEventData->sequenceNumber = pLocalTask->GetSequenceNumber();
 
 			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lMachine, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, gCommandCompletionCallback);
 
@@ -872,12 +872,7 @@ pmStatus pmScheduler::StealSubtasks(pmProcessingElement* pStealingDevice, pmTask
 			lStealRequestData->stealingDeviceGlobalIndex = pStealingDevice->GetGlobalDeviceIndex();
 			lStealRequestData->targetDeviceGlobalIndex = lTargetDevice->GetGlobalDeviceIndex();
 			lStealRequestData->originatingHost = *lOriginatingHost;
-
-			if(lOriginatingHost == PM_LOCAL_MACHINE)
-				lStealRequestData->internalTaskId = (ulong)pTask;
-			else
-				lStealRequestData->internalTaskId = ((pmRemoteTask*)pTask)->GetInternalTaskId();
-
+			lStealRequestData->sequenceNumber = pTask->GetSequenceNumber();
 			lStealRequestData->stealingDeviceExecutionRate = pExecutionRate;
 
 			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_REQUEST_TAG, lTargetMachine, pmCommunicatorCommand::STEAL_REQUEST_STRUCT, lStealRequestData, 1, NULL, 0, gCommandCompletionCallback);
@@ -913,12 +908,7 @@ pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pm
 		lStealResponseData->stealingDeviceGlobalIndex = pStealingDevice->GetGlobalDeviceIndex();
 		lStealResponseData->targetDeviceGlobalIndex = pTargetDevice->GetGlobalDeviceIndex();
 		lStealResponseData->originatingHost = *lOriginatingHost;
-
-		if(lOriginatingHost == PM_LOCAL_MACHINE)
-			lStealResponseData->internalTaskId = (ulong)lTask;
-		else
-			lStealResponseData->internalTaskId = ((pmRemoteTask*)lTask)->GetInternalTaskId();
-
+        lStealResponseData->sequenceNumber = lTask->GetSequenceNumber();
 		lStealResponseData->success = (ushort)(pmCommunicatorCommand::STEAL_SUCCESS_RESPONSE);
 		lStealResponseData->startSubtask = pRange.startSubtask;
 		lStealResponseData->endSubtask = pRange.endSubtask;
@@ -953,12 +943,7 @@ pmStatus pmScheduler::SendFailedStealResponse(pmProcessingElement* pStealingDevi
 		lStealResponseData->stealingDeviceGlobalIndex = pStealingDevice->GetGlobalDeviceIndex();
 		lStealResponseData->targetDeviceGlobalIndex = pTargetDevice->GetGlobalDeviceIndex();
 		lStealResponseData->originatingHost = *lOriginatingHost;
-
-		if(lOriginatingHost == PM_LOCAL_MACHINE)
-			lStealResponseData->internalTaskId = (ulong)pTask;
-		else
-			lStealResponseData->internalTaskId = ((pmRemoteTask*)pTask)->GetInternalTaskId();
-
+        lStealResponseData->sequenceNumber = pTask->GetSequenceNumber();
 		lStealResponseData->success = (ushort)(pmCommunicatorCommand::STEAL_FAILURE_RESPONSE);
 		lStealResponseData->startSubtask = 0;	// dummy value
 		lStealResponseData->endSubtask = 0;		// dummy value
@@ -1084,7 +1069,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				pmCommunicatorCommand::subtaskReducePacked* lData = (pmCommunicatorCommand::subtaskReducePacked*)(lCommunicatorCommand->GetData());
 
 				pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->reduceStruct.originatingHost);
-				pmTask* lTask = pmTaskManager::GetTaskManager()->FindRemoteTask(lOriginatingHost, lData->reduceStruct.internalTaskId);
+				pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->reduceStruct.sequenceNumber);
 
 				lTask->DestroySubtaskShadowMem(lData->reduceStruct.subtaskId);
 
@@ -1105,10 +1090,10 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				case pmCommunicatorCommand::TASK_EVENT_TAG:
 					delete (pmCommunicatorCommand::taskEventStruct*)(lCommunicatorCommand->GetData());
 					break;
-				case pmCommunicatorCommand::STEAL_REQUEST_TAG:
+				case pmCommunicatorCommand::STEAL_REQUEST_TAG:  // Steal Request Callback may be called after task deletion; do not de-reference task here
 					delete (pmCommunicatorCommand::stealRequestStruct*)(lCommunicatorCommand->GetData());
 					break;
-				case pmCommunicatorCommand::STEAL_RESPONSE_TAG:
+				case pmCommunicatorCommand::STEAL_RESPONSE_TAG:  // Steal Request Callback may be called after task deletion; do not de-reference task here
 					delete (pmCommunicatorCommand::stealResponseStruct*)(lCommunicatorCommand->GetData());
 					break;
 				case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG:
@@ -1168,7 +1153,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					lRange.endSubtask = lData->endSubtask;
 
                     // Handling for out of order message receive (task received after subtask reception)
-                    if(pmTaskManager::GetTaskManager()->GetRemoteTaskOrEnqueueSubtasks(lRange, lTargetDevice, lOriginatingHost, lData->internalTaskId))
+                    if(pmTaskManager::GetTaskManager()->GetRemoteTaskOrEnqueueSubtasks(lRange, lTargetDevice, lOriginatingHost, lData->sequenceNumber))
                         PushEvent(lTargetDevice, lRange);
                     
 					SetupNewRemoteSubtaskReception();
@@ -1181,9 +1166,10 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					pmCommunicatorCommand::sendAcknowledgementStruct* lData = (pmCommunicatorCommand::sendAcknowledgementStruct*)(lCommunicatorCommand->GetData());
 
 					pmProcessingElement* lSourceDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->sourceDeviceGlobalIndex);
+                    pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
 
 					pmSubtaskRange lRange;
-					lRange.task = (pmLocalTask*)(lData->internalTaskId);
+					lRange.task = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost ,lData->sequenceNumber);
 					lRange.startSubtask = lData->startSubtask;
 					lRange.endSubtask = lData->endSubtask;
 
@@ -1198,19 +1184,19 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					pmCommunicatorCommand::taskEventStruct* lData = (pmCommunicatorCommand::taskEventStruct*)(lCommunicatorCommand->GetData());
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
-					pmRemoteTask* lRemoteTask = pmTaskManager::GetTaskManager()->FindRemoteTask(lOriginatingHost, lData->internalTaskId);
+					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
 
 					switch((pmCommunicatorCommand::taskEvents)(lData->taskEvent))
 					{
 						case pmCommunicatorCommand::TASK_FINISH_EVENT:
 						{
-							TaskFinishEvent(lRemoteTask);
+							TaskFinishEvent(lTask);
 							break;
 						}
 
 						case pmCommunicatorCommand::TASK_CANCEL_EVENT:
 						{
-							TaskCancelEvent(lRemoteTask);
+							TaskCancelEvent(lTask);
 							break;
 						}
 
@@ -1227,14 +1213,8 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				{
 					pmCommunicatorCommand::subtaskReducePacked* lData = (pmCommunicatorCommand::subtaskReducePacked*)(lCommunicatorCommand->GetData());
 
-					pmTask* lTask;
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->reduceStruct.originatingHost);
-
-					if(lOriginatingHost == PM_LOCAL_MACHINE)
-						lTask = (pmLocalTask*)(lData->reduceStruct.internalTaskId);
-					else
-						lTask = pmTaskManager::GetTaskManager()->FindRemoteTask(lOriginatingHost, lData->reduceStruct.internalTaskId);
-
+					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->reduceStruct.sequenceNumber);
 					pmSubscriptionInfo lSubscriptionInfo;
 					lSubscriptionInfo.offset = lData->reduceStruct.subscriptionOffset;
 					lSubscriptionInfo.length = lData->reduceStruct.subtaskMemLength;
@@ -1269,20 +1249,26 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 				case pmCommunicatorCommand::STEAL_REQUEST_TAG:
 				{
-					pmTask* lTask;
 					pmCommunicatorCommand::stealRequestStruct* lData = (pmCommunicatorCommand::stealRequestStruct*)(lCommunicatorCommand->GetData());
 
 					pmProcessingElement* lStealingDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->stealingDeviceGlobalIndex);
 					pmProcessingElement* lTargetDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->targetDeviceGlobalIndex);
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+                    
+                    pmTask* lTask = NULL;
+                    
+                    try
+                    {
+                        lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+                    }
+                    catch(pmException e)
+                    {
+                    }
 
-					if(lOriginatingHost == PM_LOCAL_MACHINE)
-						lTask = (pmLocalTask*)(lData->internalTaskId);
-					else
-						lTask = pmTaskManager::GetTaskManager()->FindRemoteTask(lOriginatingHost, lData->internalTaskId);
-
-					StealProcessEvent(lStealingDevice, lTargetDevice, lTask, lData->stealingDeviceExecutionRate);
+                    if(lTask)
+                        StealProcessEvent(lStealingDevice, lTargetDevice, lTask, lData->stealingDeviceExecutionRate);
+                    
 					SetupNewStealRequestReception();
 
 					break;
@@ -1290,43 +1276,49 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 				case pmCommunicatorCommand::STEAL_RESPONSE_TAG:
 				{
-					pmTask* lTask;
 					pmCommunicatorCommand::stealResponseStruct* lData = (pmCommunicatorCommand::stealResponseStruct*)(lCommunicatorCommand->GetData());
 
 					pmProcessingElement* lStealingDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->stealingDeviceGlobalIndex);
 					pmProcessingElement* lTargetDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->targetDeviceGlobalIndex);
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+                    pmTask* lTask = NULL;
+                    
+                    try
+                    {
+                        lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+                    }
+                    catch(pmException e)
+                    {
+                    }
 
-					if(lOriginatingHost == PM_LOCAL_MACHINE)
-						lTask = (pmLocalTask*)(lData->internalTaskId);
-					else
-						lTask = pmTaskManager::GetTaskManager()->FindRemoteTask(lOriginatingHost, lData->internalTaskId);
+                    if(lTask)
+                    {
+                        pmCommunicatorCommand::stealResponseType lResponseType = (pmCommunicatorCommand::stealResponseType)(lData->success);
 
-					pmCommunicatorCommand::stealResponseType lResponseType = (pmCommunicatorCommand::stealResponseType)(lData->success);
+                        switch(lResponseType)
+                        {
+                            case pmCommunicatorCommand::STEAL_SUCCESS_RESPONSE:
+                            {
+                                pmSubtaskRange lRange;
+                                lRange.task = lTask;
+                                lRange.startSubtask = lData->startSubtask;
+                                lRange.endSubtask = lData->endSubtask;
 
-					switch(lResponseType)
-					{
-						case pmCommunicatorCommand::STEAL_SUCCESS_RESPONSE:
-						{
-							pmSubtaskRange lRange;
-							lRange.task = lTask;
-							lRange.startSubtask = lData->startSubtask;
-							lRange.endSubtask = lData->endSubtask;
+                                StealSuccessReturnEvent(lStealingDevice, lTargetDevice, lRange);
+                                break;
+                            }
 
-							StealSuccessReturnEvent(lStealingDevice, lTargetDevice, lRange);
-							break;
-						}
+                            case pmCommunicatorCommand::STEAL_FAILURE_RESPONSE:
+                            {
+                                StealFailedReturnEvent(lStealingDevice, lTargetDevice, lTask);
+                                break;
+                            }
 
-						case pmCommunicatorCommand::STEAL_FAILURE_RESPONSE:
-						{
-							StealFailedReturnEvent(lStealingDevice, lTargetDevice, lTask);
-							break;
-						}
-
-						default:
-							PMTHROW(pmFatalErrorException());
-					}
+                            default:
+                                PMTHROW(pmFatalErrorException());
+                        }
+                    }
 
 					SetupNewStealResponseReception();
 

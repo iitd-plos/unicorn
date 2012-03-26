@@ -21,7 +21,7 @@ class pmCommunicator : public pmBase
 {
 	public:
 		static pmCommunicator* GetCommunicator();
-		pmStatus DestroyCommunicator();
+		static pmStatus DestroyCommunicator();
 
 		pmStatus Send(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
 		pmStatus Receive(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);	// If no source is provided, any machine is assumed (MPI_ANY) 

@@ -30,7 +30,7 @@ class pmLogger
 		} logType;
 
 		static pmLogger* GetLogger();
-		pmStatus DestroyLogger();
+		static pmStatus DestroyLogger();
 
 		pmStatus SetHostId(uint pHostId);
 

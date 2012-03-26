@@ -19,7 +19,7 @@ class pmStubManager : public pmBase
 {
 	public:
 		static pmStubManager* GetStubManager();
-		pmStatus DestroyStubManager();
+		static pmStatus DestroyStubManager();
 
 		size_t GetProcessingElementsCPU();
 		size_t GetProcessingElementsGPU();

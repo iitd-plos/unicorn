@@ -80,6 +80,9 @@ class pmTask : public pmBase
 		subtaskShadowMem& GetSubtaskShadowMem(ulong pSubtaskId);
 		pmStatus DestroySubtaskShadowMem(ulong pSubtaskId);
     
+        ulong GetSequenceNumber();
+        pmStatus SetSequenceNumber(ulong pSequenceNumber);
+    
         pmStatus MarkForDeletion();
         bool IsMarkedForDeletion();
 
@@ -104,6 +107,7 @@ class pmTask : public pmBase
 		pmTaskInfo mTaskInfo;
 		pmSubscriptionManager mSubscriptionManager;
 		pmTaskExecStats mTaskExecStats;
+        ulong mSequenceNumber;  // Sequence Id of task on originating host (This along with originating machine is the global unique identifier for a task)
 
         bool mMarkedForDeletion;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeleteLock;
@@ -151,19 +155,20 @@ class pmLocalTask : public pmTask
 		pmTaskCommandPtr mTaskCommand;
 		pmSubtaskManager* mSubtaskManager;
 		std::vector<pmProcessingElement*> mDevices;
+
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mSequenceLock;
+        static ulong mSequenceId;   // Task number at the originating host
 };
 
 class pmRemoteTask : public pmTask
 {
 	public:
 		pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, 
-			pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pInternalTaskId,
+			pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber,
 			pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL,
 			scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
 
 		virtual ~pmRemoteTask();
-
-		ulong GetInternalTaskId();
 
 		pmStatus AddAssignedDevice(pmProcessingElement* pDevice);
 		std::vector<pmProcessingElement*>& GetAssignedDevices();
@@ -171,7 +176,6 @@ class pmRemoteTask : public pmTask
 		virtual pmStatus MarkSubtaskExecutionFinished();
 
 	private:
-		ulong mInternalTaskId;	// This along with originating machine is the global unique identifier for a task
 		std::vector<pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined
 };
 

@@ -27,7 +27,7 @@ class pmTaskManager : public pmBase
 {
 	public:
 		static pmTaskManager* GetTaskManager();
-		pmStatus DestroyTaskManager();
+		static pmStatus DestroyTaskManager();
 
 		pmStatus SubmitTask(pmLocalTask* pLocalTask);
 		pmRemoteTask* CreateRemoteTask(pmCommunicatorCommand::remoteTaskAssignPacked* pRemoteTaskData);
@@ -44,15 +44,18 @@ class pmTaskManager : public pmBase
 
 		uint FindPendingLocalTaskCount();
 
-        bool GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmProcessingElement* pTargetDevice, pmMachine* pOriginatingHost, ulong pInternalTaskId);
-		pmRemoteTask* FindRemoteTask(pmMachine* pOriginatingHost, ulong pInternalTaskId);
+        bool GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmProcessingElement* pTargetDevice, pmMachine* pOriginatingHost, ulong pSequenceNumber);
+		pmTask* FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumber);
 
 	private:
 		pmTaskManager();
 
         pmStatus ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask* pRemoteTask);
-        pmRemoteTask* FindRemoteTask_Internal(pmMachine* pOriginatingHost, ulong pInternalTaskId);
-		pmStatus SubmitTask(pmRemoteTask* pLocalTask);
+        
+        pmLocalTask* FindLocalTask_Internal(ulong pSequenceNumber);
+        pmRemoteTask* FindRemoteTask_Internal(pmMachine* pOriginatingHost, ulong pSequenceNumber);
+		
+        pmStatus SubmitTask(pmRemoteTask* pLocalTask);
 
 		static std::set<pmLocalTask*> mLocalTasks;		/* Tasks that originated on this machine */
 		static std::set<pmRemoteTask*> mRemoteTasks;	/* Tasks that originated on remote machines */

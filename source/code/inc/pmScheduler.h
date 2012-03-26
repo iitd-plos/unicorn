@@ -211,7 +211,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		virtual ~pmScheduler();
 
 		static pmScheduler* GetScheduler();
-		pmStatus DestroyScheduler();
+		static pmStatus DestroyScheduler();
 
 		pmStatus SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus);
 		pmStatus ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus);

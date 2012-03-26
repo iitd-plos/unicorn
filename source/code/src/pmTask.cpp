@@ -17,6 +17,9 @@
 namespace pm
 {
 
+RESOURCE_LOCK_IMPLEMENTATION_CLASS pmLocalTask::mSequenceLock;
+ulong pmLocalTask::mSequenceId = 0;
+    
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
@@ -314,6 +317,18 @@ pmStatus pmTask::DestroySubtaskShadowMem(ulong pSubtaskId)
 
 	return pmSuccess;
 }
+
+ulong pmTask::GetSequenceNumber()
+{
+    return mSequenceNumber;
+}
+    
+pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
+{
+    mSequenceNumber = pSequenceNumber;
+    
+    return pmSuccess;
+}
     
 pmStatus pmTask::MarkForDeletion()
 {
@@ -340,6 +355,10 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, p
 {
 	mSubtaskManager = NULL;
 	mTaskCommand = pmTaskCommand::CreateSharedPtr(pPriority, pmTaskCommand::BASIC_TASK);
+    
+	FINALIZE_RESOURCE(dSequenceLock, mSequenceLock.Lock(), mSequenceLock.Unlock());    
+    SetSequenceNumber(mSequenceId);
+    ++mSequenceId;
 }
 
 pmLocalTask::~pmLocalTask()
@@ -482,11 +501,11 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 /* class pmRemoteTask */
 pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit,
-	uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pInternalTaskId, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
+	uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
 	scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel)
 {
-	mInternalTaskId = pInternalTaskId;
+    SetSequenceNumber(pSequenceNumber);
 }
 
 pmRemoteTask::~pmRemoteTask()
@@ -508,11 +527,6 @@ pmStatus pmRemoteTask::MarkSubtaskExecutionFinished()
 	}
 
 	return pmSuccess;
-}
-
-ulong pmRemoteTask::GetInternalTaskId()
-{
-	return mInternalTaskId;
 }
 
 pmStatus pmRemoteTask::AddAssignedDevice(pmProcessingElement* pDevice)

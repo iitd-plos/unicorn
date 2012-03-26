@@ -50,7 +50,7 @@ class pmMachinePool : public pmBase
 		virtual ~pmMachinePool();
 
 		static pmMachinePool* GetMachinePool();
-		pmStatus DestroyMachinePool();
+		static pmStatus DestroyMachinePool();
 
 		pmMachine* GetMachine(uint pIndex);
 		pmMachineData& GetMachineData(uint pIndex);

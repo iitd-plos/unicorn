@@ -40,8 +40,6 @@ class pmMemoryManager : public pmBase
 	public:
 		virtual ~pmMemoryManager() {}
 
-		virtual pmStatus DestroyMemoryManager() = 0;
-
 		virtual void* AllocateMemory(size_t& pLength, size_t& pPageCount) = 0;
 
 #ifdef USE_LAZY_MEMORY
@@ -83,7 +81,7 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		} regionFetchData;
 
 		static pmMemoryManager* GetMemoryManager();
-		virtual pmStatus DestroyMemoryManager();
+		static pmStatus DestroyMemoryManager();
 
 		virtual void* AllocateMemory(size_t& pLength, size_t& pPageCount);
 

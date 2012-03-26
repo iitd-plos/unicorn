@@ -312,7 +312,7 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
 	subtaskCount = pLocalTask->GetSubtaskCount();
 	assignedDeviceCount = pLocalTask->GetAssignedDeviceCount();
 	originatingHost = *(pLocalTask->GetOriginatingHost());
-	internalTaskId = (ulong)pLocalTask;
+    sequenceNumber = pLocalTask->GetSequenceNumber();
 	priority = pLocalTask->GetPriority();
 	schedModel = (ushort)(pLocalTask->GetSchedulingModel());
 	inputMemAddr = lInputSection?((ulong)(lInputSection->GetMem())):0x0;
@@ -373,10 +373,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked()
 pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmTask* pTask, ulong pSubtaskId)
 {
 	pmMachine* lOriginatingHost = pTask->GetOriginatingHost();
-	if(lOriginatingHost == PM_LOCAL_MACHINE)
-		this->reduceStruct.internalTaskId = (ulong)pTask;
-	else
-		this->reduceStruct.internalTaskId = ((pmRemoteTask*)pTask)->GetInternalTaskId();
+	this->reduceStruct.sequenceNumber = pTask->GetSequenceNumber();
 
 	pmTask::subtaskShadowMem& lShadowMem = pTask->GetSubtaskShadowMem(pSubtaskId);
 

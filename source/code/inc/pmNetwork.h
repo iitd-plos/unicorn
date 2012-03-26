@@ -46,9 +46,7 @@ class pmNetwork : public pmBase
 		virtual pmStatus ReceiveNonBlocking(pmCommunicatorCommandPtr pCommand) = 0;
 		virtual pmStatus All2AllNonBlocking(pmCommunicatorCommandPtr pCommand) = 0;
 		virtual pmStatus ReceiveAllocateUnpackNonBlocking(pmCommunicatorCommandPtr pCommand) = 0;		// Receive Packed Data of unknown size
-        virtual pmStatus WaitForAllNonBlockingNonPersistentCommands() = 0;
-
-		virtual pmStatus DestroyNetwork() = 0;
+        virtual pmStatus FreezeReceptionAndFinishCommands() = 0;
 
 		virtual uint GetTotalHostCount() = 0;
 		virtual uint GetHostId() = 0;
@@ -100,13 +98,13 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		} pmUnknownLengthReceiveThread;
 
 		static pmNetwork* GetNetwork();
-		virtual pmStatus DestroyNetwork();
+		static pmStatus DestroyNetwork();
 
 		virtual pmStatus SendNonBlocking(pmCommunicatorCommandPtr pCommand);
 		virtual pmStatus BroadcastNonBlocking(pmCommunicatorCommandPtr pCommand);
 		virtual pmStatus ReceiveNonBlocking(pmCommunicatorCommandPtr pCommand);
 		virtual pmStatus All2AllNonBlocking(pmCommunicatorCommandPtr pCommand);
-        virtual pmStatus WaitForAllNonBlockingNonPersistentCommands();
+        virtual pmStatus FreezeReceptionAndFinishCommands();
 
 		virtual pmStatus PackData(pmCommunicatorCommandPtr pCommand);
 		virtual pmStatus UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData, int pDataLength, int pPos);
@@ -166,6 +164,7 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
         pmSignalWait* mSignalWait;
     
 		bool mThreadTerminationFlag;
+        bool mPersistentReceptionFreezed;
     
 #ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
 		long mProgressiveSleepTime;	// in ms

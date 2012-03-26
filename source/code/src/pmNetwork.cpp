@@ -163,6 +163,7 @@ pmMPI::pmMPI() : pmNetwork()
 	mDummyReceiveRequest = NULL;
     mSignalWait = NULL;
 	mThreadTerminationFlag = false;
+    mPersistentReceptionFreezed = false;
     
 #ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
 	mProgressiveSleepTime = MIN_PROGRESSIVE_SLEEP_TIME_MILLI_SECS;
@@ -915,7 +916,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.callbackKey, lCallbackKeyMPI, MPI_CHAR, 6, MAX_CB_KEY_LEN);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.assignedDeviceCount, lAssignedDeviceCountMPI, MPI_UNSIGNED, 7, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 8, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.internalTaskId, lInternalTaskIdMPI, MPI_UNSIGNED_LONG, 9, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 9, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.priority, lPriorityMPI, MPI_UNSIGNED_SHORT, 10, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.schedModel, lSchedModelMPI, MPI_UNSIGNED_SHORT, 11, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemAddr, lInputMemAddrMPI, MPI_UNSIGNED_LONG, 12, 1);
@@ -927,7 +928,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 		case pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::remoteSubtaskAssignStruct, lData, lDataMPI);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.internalTaskId, lInternalTaskIdMPI, MPI_UNSIGNED_LONG, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.startSubtask, lStartSubtaskMPI, MPI_UNSIGNED_LONG, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.endSubtask, lEndSubtaskMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 3, 1);
@@ -941,7 +942,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::sendAcknowledgementStruct, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sourceDeviceGlobalIndex, lSourceDeviceGlobalIndexMPI, MPI_UNSIGNED, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.internalTaskId, lInternalTaskIdMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.startSubtask, lStartSubtaskMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.endSubtask, lEndSubtaskMPI, MPI_UNSIGNED_LONG, 4, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.execStatus, lExecStatusMPI, MPI_UNSIGNED, 5, 1);
@@ -954,7 +955,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::taskEventStruct, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.taskEvent, lTaskEventMPI, MPI_UNSIGNED, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.internalTaskId, lInternalTaskIdMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 2, 1);
 
 			break;
 		}
@@ -965,7 +966,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.stealingDeviceGlobalIndex, lStealingDeviceGlobalIndexMPI, MPI_UNSIGNED, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.targetDeviceGlobalIndex, lTargetDeviceGlobalIndexMPI, MPI_UNSIGNED, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.internalTaskId, lInternalTaskIdMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.stealingDeviceExecutionRate, lStealingDeviceExecutionRateMPI, MPI_DOUBLE, 4, 1);
 
 			break;
@@ -977,7 +978,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.stealingDeviceGlobalIndex, lStealingDeviceGlobalIndexMPI, MPI_UNSIGNED, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.targetDeviceGlobalIndex, lTargetDeviceGlobalIndexMPI, MPI_UNSIGNED, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.internalTaskId, lInternalTaskIdMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.success, lSuccessMPI, MPI_UNSIGNED_SHORT, 4, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.startSubtask, lStartSubtaskMPI, MPI_UNSIGNED_LONG, 5, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.endSubtask, lEndSubtaskMPI, MPI_UNSIGNED_LONG, 6, 1);
@@ -1001,7 +1002,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::subtaskReduceStruct, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 0, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.internalTaskId, lInternalTaskIdMPI, MPI_UNSIGNED_LONG, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskId, lSubtaskIdMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskMemLength, lSubtaskMemLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subscriptionOffset, lSubscriptionOffsetMPI, MPI_UNSIGNED_LONG, 4, 1);
@@ -1240,6 +1241,9 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
                 if(lRemainingCount == 0)
                 {
 					mRequestCountMap.erase(lCommand);
+                    if(std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(lCommand) && mPersistentReceptionFreezed)
+                        continue;
+                    
                     ushort lCommandType = lCommand->GetType();
 
                     switch(lCommandType)
@@ -1371,6 +1375,9 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 				if(lRemainingCount == 0)
 				{
 					mRequestCountMap.erase(lCommand);
+                    if(std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(lCommand) && mPersistentReceptionFreezed)
+                        continue;
+
 					ushort lCommandType = lCommand->GetType();
 
 					switch(lCommandType)
@@ -1407,8 +1414,17 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 }
 #endif
     
-pmStatus pmMPI::WaitForAllNonBlockingNonPersistentCommands()
+pmStatus pmMPI::FreezeReceptionAndFinishCommands()
 {
+    /* Set no more persistent command reception; steal commands may be active even after tasks are destroyed */
+
+	// Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+        mPersistentReceptionFreezed = true;
+    }
+
+    // Wait for all non-persistent commands to finish
     while(1)
     {
         bool lFound = false;

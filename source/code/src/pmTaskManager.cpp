@@ -82,7 +82,7 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskA
 			pRemoteTaskData->taskStruct.isOutputMemReadWrite?pmOutputMemSection::READ_WRITE:pmOutputMemSection::WRITE_ONLY, lOriginatingHost, pRemoteTaskData->taskStruct.outputMemAddr)));
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lRemoteTask, pmRemoteTask, new pmRemoteTask(lTaskConf, pRemoteTaskData->taskStruct.taskConfLength, 
 			pRemoteTaskData->taskStruct.taskId, lInputMem, lOutputMem, pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount,
-			pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.internalTaskId, PM_GLOBAL_CLUSTER,
+			pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER,
 			pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)pRemoteTaskData->taskStruct.schedModel));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
@@ -172,11 +172,11 @@ pmStatus pmTaskManager::WaitForAllTasksToFinish()
 /** If remote task already exists returns true; otherwise if remote task does not exist (due to out of order message receives),
  *  enqueues remote subtask range for later execution 
  */
-bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmProcessingElement* pTargetDevice, pmMachine* pOriginatingHost, ulong pInternalTaskId)
+bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmProcessingElement* pTargetDevice, pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
 	FINALIZE_RESOURCE(dResourceLock, mRemoteTaskResourceLock.Lock(), mRemoteTaskResourceLock.Unlock());
 
-    pmRemoteTask* lRemoteTask = FindRemoteTask_Internal(pOriginatingHost, pInternalTaskId);
+    pmRemoteTask* lRemoteTask = FindRemoteTask_Internal(pOriginatingHost, pSequenceNumber);
     
     if(lRemoteTask)
     {
@@ -184,7 +184,7 @@ bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmPro
         return true;
     }
     
-    std::pair<pmMachine*, ulong> lPair(pOriginatingHost, pInternalTaskId);
+    std::pair<pmMachine*, ulong> lPair(pOriginatingHost, pSequenceNumber);
     
 #ifdef _DEBUG
     if(mEnqueuedRemoteSubtasksMap.find(lPair) != mEnqueuedRemoteSubtasksMap.end())
@@ -208,7 +208,7 @@ bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmPro
 // Must be called with mRemoteTaskResourceLock acquired
 pmStatus pmTaskManager::ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask* pRemoteTask)
 {
-    std::pair<pmMachine*, ulong> lPair(pRemoteTask->GetOriginatingHost(), pRemoteTask->GetInternalTaskId());
+    std::pair<pmMachine*, ulong> lPair(pRemoteTask->GetOriginatingHost(), pRemoteTask->GetSequenceNumber());
     if(mEnqueuedRemoteSubtasksMap.find(lPair) != mEnqueuedRemoteSubtasksMap.end())
     {
         std::vector<std::pair<pmSubtaskRange, pmProcessingElement*> >::iterator lBegin = mEnqueuedRemoteSubtasksMap[lPair].begin();
@@ -227,26 +227,51 @@ pmStatus pmTaskManager::ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask*
     return pmSuccess;
 }
 
-pmRemoteTask* pmTaskManager::FindRemoteTask(pmMachine* pOriginatingHost, ulong pInternalTaskId)
+pmTask* pmTaskManager::FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
-	FINALIZE_RESOURCE(dResourceLock, mRemoteTaskResourceLock.Lock(), mRemoteTaskResourceLock.Unlock());
+    pmTask* lTask = NULL;
+    
+    if(pOriginatingHost == PM_LOCAL_MACHINE)
+    {
+        FINALIZE_RESOURCE(dResourceLock, mLocalTaskResourceLock.Lock(), mLocalTaskResourceLock.Unlock());        
+        lTask = FindLocalTask_Internal(pSequenceNumber);
+    }
+    else
+    {
+        FINALIZE_RESOURCE(dResourceLock, mRemoteTaskResourceLock.Lock(), mRemoteTaskResourceLock.Unlock());
+        lTask = FindRemoteTask_Internal(pOriginatingHost, pSequenceNumber);
+    }
 
-    pmRemoteTask* lRemoteTask = NULL;
-    if((lRemoteTask = FindRemoteTask_Internal(pOriginatingHost, pInternalTaskId)) == NULL)
+    if(!lTask)
         PMTHROW(pmFatalErrorException());
+    
+    return lTask;
+}
 
-	return lRemoteTask;
+// Must be called with mLocalTaskResourceLock acquired
+pmLocalTask* pmTaskManager::FindLocalTask_Internal(ulong pSequenceNumber)
+{
+    std::set<pmLocalTask*>::iterator lIter = mLocalTasks.begin();
+    std::set<pmLocalTask*>::iterator lEndIter = mLocalTasks.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        pmLocalTask* lLocalTask = *lIter;
+        if(lLocalTask->GetSequenceNumber() == pSequenceNumber)
+            return lLocalTask;
+    }
+    
+    return NULL;
 }
     
 // Must be called with mRemoteTaskResourceLock acquired
-pmRemoteTask* pmTaskManager::FindRemoteTask_Internal(pmMachine* pOriginatingHost, ulong pInternalTaskId)
+pmRemoteTask* pmTaskManager::FindRemoteTask_Internal(pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
 	std::set<pmRemoteTask*>::iterator lIter = mRemoteTasks.begin();
 	std::set<pmRemoteTask*>::iterator lEndIter = mRemoteTasks.end();
 	for(; lIter != lEndIter; ++lIter)
 	{
 		pmRemoteTask* lRemoteTask = *lIter;
-		if(lRemoteTask->GetInternalTaskId() == pInternalTaskId && lRemoteTask->GetOriginatingHost() == pOriginatingHost)
+		if(lRemoteTask->GetOriginatingHost() == pOriginatingHost && lRemoteTask->GetSequenceNumber() == pSequenceNumber)
 			return lRemoteTask;
 	}
 

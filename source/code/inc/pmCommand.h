@@ -126,7 +126,7 @@ class pmCommunicatorCommand : public pmCommand
 			char callbackKey[MAX_CB_KEY_LEN];
 			uint assignedDeviceCount;
 			uint originatingHost;
-			ulong internalTaskId;	// memory address of local task object (on originating host)
+            ulong sequenceNumber;   // Sequence number of task on originating host
 			ushort priority;
 			ushort schedModel;
 			ulong inputMemAddr;		// Actual base addr of input memory
@@ -160,7 +160,7 @@ class pmCommunicatorCommand : public pmCommand
 
 		typedef struct remoteSubtaskAssignStruct
 		{
-			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
 			ulong startSubtask;
 			ulong endSubtask;
 			uint originatingHost;
@@ -177,7 +177,7 @@ class pmCommunicatorCommand : public pmCommand
 		{
 			uint sourceDeviceGlobalIndex;
 			uint originatingHost;
-			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
 			ulong startSubtask;
 			ulong endSubtask;
 			uint execStatus;
@@ -199,7 +199,7 @@ class pmCommunicatorCommand : public pmCommand
 		{
 			uint taskEvent;			// Map to enum taskEvents
 			uint originatingHost;
-			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
 
 			typedef enum fieldCount
 			{
@@ -213,7 +213,7 @@ class pmCommunicatorCommand : public pmCommand
 			uint stealingDeviceGlobalIndex;
 			uint targetDeviceGlobalIndex;
 			uint originatingHost;
-			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
 			double stealingDeviceExecutionRate;
 
 			typedef enum fieldCount
@@ -234,7 +234,7 @@ class pmCommunicatorCommand : public pmCommand
 			uint stealingDeviceGlobalIndex;
 			uint targetDeviceGlobalIndex;
 			uint originatingHost;
-			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
 			ushort success;			// enum stealResponseType
 			ulong startSubtask;
 			ulong endSubtask;			
@@ -264,7 +264,7 @@ class pmCommunicatorCommand : public pmCommand
 		typedef struct subtaskReduceStruct
 		{
 			uint originatingHost;
-			ulong internalTaskId;	// memory address of local task object (on originating host)
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
 			ulong subtaskId;
 			ulong subtaskMemLength;
 			ulong subscriptionOffset;
