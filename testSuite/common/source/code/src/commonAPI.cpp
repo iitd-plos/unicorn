@@ -82,7 +82,7 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 	if(lRunMode < 0 || lRunMode > 2)
 		lRunMode = DEFAULT_RUN_MODE;
 
-	if(lParallelMode < 1 || lParallelMode > 6)
+	if(lParallelMode < 0 || lParallelMode > 6)
 		lParallelMode = DEFAULT_PARALLEL_MODE;
 
 	SAFE_PM_EXEC( pmInitialize() );
