@@ -281,6 +281,13 @@ pmStatus pmController::ReleaseMemory_Public(pmMemHandle pMem)
 	return pmSuccess;
 }
 
+pmStatus pmController::FetchMemory_Public(pmMemHandle pMem)
+{
+    pmMemSection* lMemSection = pmMemSection::FindMemSection(pMem);
+    
+    return lMemSection->Fetch(MAX_PRIORITY_LEVEL);
+}
+    
 pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)
 {
 	*pTaskHandle = NULL;

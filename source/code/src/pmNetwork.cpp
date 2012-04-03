@@ -994,6 +994,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.writeOnly, lWriteOnlyMPI, MPI_UNSIGNED_SHORT, 5, 1);
 
 			break;
 		}
@@ -1068,8 +1069,6 @@ pmStatus pmMPI::UnregisterTransferDataType(pmCommunicatorCommand::communicatorDa
 
 pmStatus pmMPI::SendComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus)
 {
-    //std::cout << "SEND COMPLETE TAG " << pCommand->GetTag() << " TYPE " << pCommand->GetType() << std::endl;
-    
 	pCommand->MarkExecutionEnd(pStatus, std::tr1::static_pointer_cast<pmCommand>(pCommand));
 
 	pmHardware* lHardware = pCommand->GetDestination();

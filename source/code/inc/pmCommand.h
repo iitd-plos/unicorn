@@ -253,10 +253,11 @@ class pmCommunicatorCommand : public pmCommand
 			ulong offset;
 			ulong length;
 			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
+            ushort writeOnly;       // Signifies only subscription information transfer; no data is sent back
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 5
+				FIELD_COUNT_VALUE = 6
 			} fieldCount;
 
 		} memorySubscriptionRequest;

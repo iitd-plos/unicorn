@@ -1,6 +1,7 @@
 
 #include "pmMemSection.h"
 #include "pmMemoryManager.h"
+#include "pmHardware.h"
 
 #include <string.h>
 
@@ -28,7 +29,6 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
 	lRangeOwner.hostBaseAddr = pOwner?pOwnerBaseMemAddr:(ulong)mMem;
 
 	mOwnershipMap[0] = std::pair<size_t, vmRangeOwner>(pLength, lRangeOwner);
-
 	if(mMem)
 	{
 		FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
@@ -73,9 +73,6 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 
     pmMemOwnership& lMap = mOwnershipMap;
     
-//	if(mShadowOwnershipMap.empty())
-//		mShadowOwnershipMap = mOwnershipMap;
-
 	// Remove present ownership
 	size_t lLastAddr = pOffset + pLength - 1;
 
@@ -88,7 +85,7 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 
 	if(!lStartIterAddr || !lEndIterAddr)
 		PMTHROW(pmFatalErrorException());
-
+    
 	assert(lStartIter->first <= pOffset);
 	assert(lEndIter->first <= lLastAddr);
 	assert(lStartIter->first + lStartIter->second.first > pOffset);
@@ -103,6 +100,7 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 	vmRangeOwner lEndOwner = lEndIter->second.second;
 
 	lMap.erase(lStartIter, lEndIter);
+    lMap.erase(lEndIter);
 
 	if(lStartOffset < pOffset)
 	{
@@ -145,7 +143,7 @@ pmStatus pmMemSection::TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ul
     lTransferData.rangeOwner = lRangeOwner;
     lTransferData.offset = pOffset;
     lTransferData.length = pLength;
-    
+
     mOwnershipTransferVector.push_back(lTransferData);
 
     return pmSuccess;
@@ -161,6 +159,7 @@ pmStatus pmMemSection::FlushOwnerships()
     for(; lIter != lEnd; ++lIter)
     {
         pmMemTransferData& lTransferData = *lIter;
+
         SetRangeOwner(lTransferData.rangeOwner.host, lTransferData.rangeOwner.hostBaseAddr, lTransferData.offset, lTransferData.length);
     }
     
@@ -169,18 +168,23 @@ pmStatus pmMemSection::FlushOwnerships()
 	return pmSuccess;
 }
 
+pmStatus pmMemSection::Fetch(ushort pPriority)
+{
+    const std::vector<pmCommunicatorCommandPtr>& lVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(this, pPriority, 0, GetLength());
+    
+    std::vector<pmCommunicatorCommandPtr>::const_iterator lIter = lVector.begin();
+    std::vector<pmCommunicatorCommandPtr>::const_iterator lEndIter = lVector.end();
+
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter)->WaitForFinish();
+
+    return pmSuccess;
+}
+
 pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships)
 {
 	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
 
-//	pmMemOwnership* lTargetMap = NULL;
-//	if(mShadowOwnershipMap.empty())
-//		lTargetMap = &mOwnershipMap;
-//	else
-//		lTargetMap = &mShadowOwnershipMap;
-//
-//	pmMemOwnership lMap = *lTargetMap;
-    
     pmMemOwnership& lMap = mOwnershipMap;
 
 	ulong lLastAddr = pOffset + pLength - 1;
@@ -195,7 +199,14 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmM
 	if(!lStartIterAddr || !lEndIterAddr)
 		PMTHROW(pmFatalErrorException());
 
-	pOwnerships[pOffset] = lStartIter->second;
+    size_t lSpan = lStartIter->first + lStartIter->second.first - 1;
+    if(lLastAddr < lSpan)
+    {
+        lSpan = lLastAddr;
+        assert(lStartIter == lEndIter);
+    }
+    
+	pOwnerships[pOffset] = std::make_pair(lSpan - pOffset + 1, lStartIter->second.second);
 	
 	pmMemOwnership::iterator lIter = lStartIter;
 	++lIter;
@@ -203,7 +214,22 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmM
 	if(lStartIter != lEndIter)
 	{
 		for(; lIter != lEndIter; ++lIter)
-			pOwnerships[lIter->first] = lIter->second;
+        {
+            lSpan = lIter->first + lIter->second.first - 1;
+            if(lLastAddr < lSpan)
+            {
+                lSpan = lLastAddr;
+                assert(lIter == lEndIter);
+            }
+            
+			pOwnerships[lIter->first] = std::make_pair(lSpan - lIter->first + 1, lIter->second.second);
+        }
+        
+        lSpan = lEndIter->first + lEndIter->second.first - 1;
+        if(lLastAddr < lSpan)
+            lSpan = lLastAddr;
+        
+        pOwnerships[lEndIter->first] = std::make_pair(lSpan - lEndIter->first + 1, lEndIter->second.second);        
 	}
 
 	return pmSuccess;

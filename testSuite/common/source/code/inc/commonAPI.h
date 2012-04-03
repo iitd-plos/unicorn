@@ -22,37 +22,38 @@ double getCurrentTimeInSecs();
 	} \
 }
 
-#define FETCH_INT_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex < totalArgs) argName = atoi(argArray[argIndex]); }
+#define FETCH_INT_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = atoi(argArray[argIndex+1]); }
 
 typedef double (*serialProcessFunc)(int argc, char** argv, int pCommonArgs);
-typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbacks pCallbacks);
+typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle);
 typedef pmCallbacks (*callbacksFunc)();
 typedef int (*initFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*destroyFunc)();
 typedef int (*compareFunc)(int argc, char** argv, int pCommonArgs);
 
 void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc pParallelFunc, 
-	callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc);
+	callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey);
 
 void commonFinish();
 
-#define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, key, callbacks) \
+#define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle) \
 	pmTaskHandle lTaskHandle; \
 	pmMemHandle lInputMem; \
 	pmMemHandle lOutputMem; \
-	pmCallbackHandle lCallbackHandle; \
 	pmTaskDetails lTaskDetails; \
 	if(inputMemSize) \
 		SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY, inputMemSize, &lInputMem) ); \
 	if(outputMemSize) \
 		SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_WRITE_ONLY, outputMemSize, &lOutputMem) ); \
-	SAFE_PM_EXEC( pmRegisterCallbacks((char*)key, callbacks, &lCallbackHandle) ); \
 	lTaskDetails.inputMem = lInputMem; \
 	lTaskDetails.outputMem = lOutputMem; \
-	lTaskDetails.callbackHandle = lCallbackHandle; \
+	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks;
 
-#define FREE_TASK_AND_RESOURCES SAFE_PM_EXEC( pmReleaseTaskAndResources(lTaskDetails, lTaskHandle) );
+#define FREE_TASK_AND_RESOURCES \
+	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \
+	SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.inputMem) ); \
+	SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.outputMem) );
 
 
 

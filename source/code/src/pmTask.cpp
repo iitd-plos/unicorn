@@ -51,12 +51,17 @@ pmTask::~pmTask()
 {
 	if(mReducer)
 		delete mReducer;
+}
+    
+pmStatus pmTask::TaskInternallyFinished()
+{
+    if(mMemRO)
+        mMemRO->FlushOwnerships();
+    
+    if(mMemRW)
+        mMemRW->FlushOwnerships();
 
-	if(mMemRO)
-		mMemRO->FlushOwnerships();
-
-	if(mMemRW)
-		mMemRW->FlushOwnerships();
+    return pmSuccess;
 }
 
 void* pmTask::GetTaskConfiguration()
@@ -152,7 +157,7 @@ pmTaskInfo& pmTask::GetTaskInfo()
 	return mTaskInfo;
 }
 
-pmStatus pmTask::GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo)
+pmStatus pmTask::GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly)
 {
 	pmSubscriptionInfo lInputMemSubscriptionInfo, lOutputMemSubscriptionInfo;
 	void* lInputMem;
@@ -169,8 +174,8 @@ pmStatus pmTask::GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo)
 		pSubtaskInfo.inputMem = NULL;
 		pSubtaskInfo.inputMemLength = 0;
 	}
-
-	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetInputMemSubscriptionForSubtask(pSubtaskId, lInputMemSubscriptionInfo))
+    
+	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pSubtaskId, lOutputMemSubscriptionInfo))
 	{
 		if(DoSubtasksNeedShadowMemory())
 			pSubtaskInfo.outputMem = GetSubtaskShadowMem(pSubtaskId).addr;
@@ -178,11 +183,13 @@ pmStatus pmTask::GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo)
 			pSubtaskInfo.outputMem = ((char*)lOutputMem + lOutputMemSubscriptionInfo.offset);
 
 		pSubtaskInfo.outputMemLength = lOutputMemSubscriptionInfo.length;
+        pOutputMemWriteOnly = (((pmOutputMemSection*)mMemRW)->GetAccessType() == pmOutputMemSection::WRITE_ONLY);
 	}
 	else
 	{
 		pSubtaskInfo.outputMem = NULL;
 		pSubtaskInfo.outputMemLength = 0;
+        pOutputMemWriteOnly = false;
 	}
 
 	return pmSuccess;
@@ -357,8 +364,8 @@ pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
     if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataScatterCB())
     {
         pmTask::MarkSubtaskExecutionFinished();
-        MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus());
         pmTaskManager::GetTaskManager()->DeleteTask(this);  // Local task is only erased from task manager. It is actually deleted from memory by user
+        MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus());
     }
     else
     {
@@ -468,7 +475,9 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
 		++lIter;
 	}
 
-	mAssignedDeviceCount = mDevices.size();
+	mAssignedDeviceCount = (uint)(mDevices.size());
+    
+    pDevices.erase(lIter, pDevices.end());
 
 	if(GetSchedulingModel() == scheduler::PULL)
 		RandomizeDevices(mDevices);

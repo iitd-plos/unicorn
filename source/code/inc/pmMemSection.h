@@ -64,6 +64,8 @@ class pmMemSection : public pmBase
     
 		pmStatus FlushOwnerships();
 		pmStatus GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
+    
+        pmStatus Fetch(ushort pPriority);
 
 	protected:
 		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr);

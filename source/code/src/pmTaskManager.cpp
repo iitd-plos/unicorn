@@ -109,23 +109,27 @@ pmStatus pmTaskManager::SubmitTask(pmRemoteTask* pRemoteTask)
 
 pmStatus pmTaskManager::DeleteTask(pmLocalTask* pLocalTask)
 {
-	FINALIZE_RESOURCE(dResourceLock, mLocalTaskResourceLock.Lock(), mLocalTaskResourceLock.Unlock());
-	mLocalTasks.erase(pLocalTask);
+    FINALIZE_RESOURCE(dResourceLock, mLocalTaskResourceLock.Lock(), mLocalTaskResourceLock.Unlock());
+    mLocalTasks.erase(pLocalTask);
     
+    pLocalTask->TaskInternallyFinished();
+
     mTaskFinishSignalWait.Signal();
 
-	return pmSuccess;
+    return pmSuccess;
 }
 
 pmStatus pmTaskManager::DeleteTask(pmRemoteTask* pRemoteTask)
 {
-	FINALIZE_RESOURCE(dResourceLock, mRemoteTaskResourceLock.Lock(), mRemoteTaskResourceLock.Unlock());
-	SAFE_FREE(pRemoteTask->GetTaskConfiguration());
-	mRemoteTasks.erase(pRemoteTask);
+    FINALIZE_RESOURCE(dResourceLock, mRemoteTaskResourceLock.Lock(), mRemoteTaskResourceLock.Unlock());
+    SAFE_FREE(pRemoteTask->GetTaskConfiguration());
+    mRemoteTasks.erase(pRemoteTask);
+    
+    pRemoteTask->TaskInternallyFinished();
 
     mTaskFinishSignalWait.Signal();
-
-	return pmSuccess;
+    
+    return pmSuccess;
 }
 
 pmStatus pmTaskManager::CancelTask(pmLocalTask* pLocalTask)

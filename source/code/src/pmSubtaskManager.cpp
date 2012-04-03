@@ -39,10 +39,7 @@ pmSubtaskManager::pmUnfinishedPartition::pmUnfinishedPartition(ulong pFirstSubta
 	lastSubtaskIndex = pLastSubtaskIndex;
     
 	if(lastSubtaskIndex < firstSubtaskIndex)
-    {
-        std::cout << "firstSubtaskIndex " << firstSubtaskIndex << " lastSubtaskIndex " << lastSubtaskIndex << std::endl;
 		PMTHROW(pmFatalErrorException());
-    }
 }
 
 
@@ -50,8 +47,6 @@ pmSubtaskManager::pmUnfinishedPartition::pmUnfinishedPartition(ulong pFirstSubta
 pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 	: pmSubtaskManager(pLocalTask)
 {
-    std::cout << "PUSH POLICY" << std::endl;
-    
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lPartitionCount = mLocalTask->GetAssignedDeviceCount();
 
@@ -376,8 +371,6 @@ bool pmPushSchedulingManager::partitionSorter::operator() (const pmSubtaskManage
 pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 	: pmSubtaskManager(pLocalTask)
 {
-    std::cout << "PULL POLICY" << std::endl;
-
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lPartitionCount = mLocalTask->GetAssignedDeviceCount();
 
@@ -415,6 +408,15 @@ pmPullSchedulingManager::~pmPullSchedulingManager()
     mUnacknowledgedPartitions.clear();
 }
 
+void pmPullSchedulingManager::PrintUnacknowledgedPartitions()
+{
+    std::set<pmUnfinishedPartitionPtr>::iterator lBegin = mUnacknowledgedPartitions.begin();
+    std::set<pmUnfinishedPartitionPtr>::iterator lEnd = mUnacknowledgedPartitions.end();
+    
+    for(; lBegin != lEnd; ++lBegin)
+        std::cout << (*lBegin)->firstSubtaskIndex << " " << (*lBegin)->lastSubtaskIndex << std::endl;
+}
+    
 bool pmPullSchedulingManager::HasTaskFinished()
 {
 	if(mUnacknowledgedPartitions.empty())

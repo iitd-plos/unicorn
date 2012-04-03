@@ -35,7 +35,7 @@ class pmDispatcherCUDA : public pmGraphicsBase
 
 		std::string GetDeviceName(size_t pDeviceIndex);
 		std::string GetDeviceDescription(size_t pDeviceIndex);
-		pmStatus InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr);
+		pmStatus InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr);
 	
 	private:
 		pmStatus CountAndProbeProcessingElements();

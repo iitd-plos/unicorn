@@ -78,6 +78,8 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
 
 pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId)
 {
+    bool lOutputMemWriteOnly = false;
+
 	switch(pDeviceType)
 	{
 		case CPU:
@@ -86,7 +88,7 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 				return pmSuccess;
 
 			pmSubtaskInfo lSubtaskInfo;
-			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo);
+			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
 			return mCallback_CPU(pTask->GetTaskInfo(), lSubtaskInfo);
 
 			break;
@@ -97,12 +99,12 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 		{
 			if(!mCallback_GPU_CUDA)
 				return pmSuccess;
-
+            
 			pmSubtaskInfo lSubtaskInfo;
-			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo);
+			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
             
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pSubtaskId);
-			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, mCallback_GPU_CUDA);
+			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA);
 
 			break;
 		}
@@ -130,10 +132,12 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, ulong pSubtaskId1, ulong pSubt
 {
 	if(!mCallback)
 		return pmSuccess;
+    
+    bool lOutputMemWriteOnly = false;
 
 	pmSubtaskInfo lSubtaskInfo1, lSubtaskInfo2;
-	pTask->GetSubtaskInfo(pSubtaskId1, lSubtaskInfo1);
-	pTask->GetSubtaskInfo(pSubtaskId2, lSubtaskInfo2);
+	pTask->GetSubtaskInfo(pSubtaskId1, lSubtaskInfo1, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pSubtaskId2, lSubtaskInfo2, lOutputMemWriteOnly);
 
 	return mCallback(pTask->GetTaskInfo(), lSubtaskInfo1, lSubtaskInfo2);
 }

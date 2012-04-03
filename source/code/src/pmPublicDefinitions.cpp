@@ -198,6 +198,11 @@ pmStatus pmReleaseMemory(pmMemHandle pMem)
 	SAFE_EXECUTE_ON_CONTROLLER(ReleaseMemory_Public, pMem);
 }
 
+pmStatus pmFetchMemory(pmMemHandle pMem)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(FetchMemory_Public, pMem);
+}
+    
 pmTaskDetails::pmTaskDetails()
 {
 	taskConf = NULL;
@@ -233,16 +238,16 @@ pmStatus pmGetTaskExecutionTimeInSecs(pmTaskHandle pTaskHandle, double* pTime)
 
 pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTaskHandle)
 {
-	pmStatus lStatus1 = pmReleaseCallbacks(pTaskDetails.callbackHandle);
-	pmStatus lStatus2 = pmReleaseMemory(pTaskDetails.inputMem);
-	pmStatus lStatus3 = pmReleaseMemory(pTaskDetails.outputMem);
-	pmStatus lStatus4 = pmReleaseTask(pTaskHandle);
+	pmStatus lStatus1 = pmReleaseTask(pTaskHandle);
+	pmStatus lStatus2 = pmReleaseCallbacks(pTaskDetails.callbackHandle);
+	pmStatus lStatus3 = pmReleaseMemory(pTaskDetails.inputMem);
+	pmStatus lStatus4 = pmReleaseMemory(pTaskDetails.outputMem);
 
-	if(lStatus1 != pmSuccess) return lStatus1;
-	if(lStatus2 != pmSuccess) return lStatus2;
-	if(lStatus3 != pmSuccess) return lStatus3;
+	if(lStatus2 != pmSuccess) return lStatus1;
+	if(lStatus3 != pmSuccess) return lStatus2;
+	if(lStatus4 != pmSuccess) return lStatus3;
 	
-	return lStatus4;
+	return lStatus1;
 }
     
 pmCudaLaunchConf::pmCudaLaunchConf()

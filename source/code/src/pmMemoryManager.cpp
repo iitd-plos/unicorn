@@ -33,50 +33,6 @@ std::map<void*, size_t> pmLinuxMemoryManager::mLazyMemoryMap;
 RESOURCE_LOCK_IMPLEMENTATION_CLASS pmLinuxMemoryManager::mResourceLock;
 std::map<void*, std::pair<size_t, pmLinuxMemoryManager::regionFetchData> > pmLinuxMemoryManager::mInFlightMemoryMap;
 
-/*
-pmStatus MemoryManagerCommandCompletionCallback(pmCommandPtr pCommand)
-{
-	pmCommunicatorCommandPtr lCommunicatorCommand = std::tr1::dynamic_pointer_cast<pmCommunicatorCommand>(pCommand);
-	if(!lCommunicatorCommand)
-		PMTHROW(pmFatalErrorException());
-
-	switch(lCommunicatorCommand->GetType())
-	{
-		case pmCommunicatorCommand::SEND:
-		{
-			if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG)
-				delete lCommunicatorCommand->GetData();
-
-			break;
-		}
-
-		case pmCommunicatorCommand::RECEIVE:
-		{
-			pmCommunicatorCommand::memorySubscriptionRequest* lData = (pmCommunicatorCommand::memorySubscriptionRequest*)(pCommand->GetData());
-			ulong lAddr = lData->addr;
-			ulong lOffset = lData->offset;
-			ulong lLength = lData->length;
-			ulong lTransferId = lData->transferId;
-			pmMachine* lDestHost = pmMachinePool::GetMachinePool()->GetMachine(lData->destHost);
-
-			pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand::CreateSharedPtr(pCommand->GetPriority(), pmCommunicatorCommand::SEND, (pmCommunicatorCommand::communicatorCommandTags)(lData->transferId), lDestHost, pmCommunicatorCommand::BYTE, 
-				((char*)lAddr + lOffset),  lLength, NULL, 0, gCommandCompletionCallback);
-
-			pmCommunicator::GetCommunicator()->Send(lSendCommand);
-
-			pmSubscriptionManager* lManager = (pmSubscriptionManager*)(lCommunicatorCommand->GetSecondaryData());
-			lManager->SetupNewMemRequestReceiveReception();
-		}
-
-		default:
-			PMTHROW(pmFatalErrorException());
-	}
-
-	return pmSuccess;
-}
-
-static pmCommandCompletionCallback gCommandCompletionCallback = MemoryManagerCommandCompletionCallback;
-*/
 
 /* class pmLinuxMemoryManager */
 pmMemoryManager* pmLinuxMemoryManager::mMemoryManager = NULL;
@@ -308,7 +264,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
 	return pmSuccess;
 }
 
-std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength)
+std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength, bool pTreatWriteOnly)
 {
 	std::vector<pmCommunicatorCommandPtr> lCommandVector;
 
@@ -417,7 +373,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 	{
 		ulong lOffset = lRegionsToBeFetched[i].first-(ulong)pMem;
 		ulong lLength = lRegionsToBeFetched[i].second - lRegionsToBeFetched[i].first+ 1;
-
+    
 		pmMemSection::pmMemOwnership lOwnerships;
 		lMemSection->GetOwners(lOffset, lLength, lOwnerships);
 
@@ -433,8 +389,9 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 
 			if(lRangeOwner.host != PM_LOCAL_MACHINE)
 			{
-				pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr);
-				if(lCommand)
+				pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr, pTreatWriteOnly);
+
+				if(lCommand.get())
 					lCommandVector.push_back(lCommand);
 			}
 		}
@@ -443,7 +400,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 	return lCommandVector;
 }
 
-std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength)
+std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, bool pTreatWriteOnly /* = false */)
 {
 	void* lMem = NULL;
 	if(dynamic_cast<pmInputMemSection*>(pMemSection))
@@ -451,14 +408,12 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(pm
 	else
 		lMem = ((pmOutputMemSection*)pMemSection)->GetMem();
 
-	return FetchMemoryRegion(lMem, pPriority, pOffset, pLength);
+	return FetchMemoryRegion(lMem, pPriority, pOffset, pLength, pTreatWriteOnly);
 }
 
-pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr)
+pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, bool pTreatWriteOnly)
 {	
 	regionFetchData lFetchData;
-	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG,
-		pOwnerMachine, pmCommunicatorCommand::BYTE,	NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
 
 	pmCommunicatorCommand::memorySubscriptionRequest* lData = new pmCommunicatorCommand::memorySubscriptionRequest();
 	lData->ownerBaseAddr = pOwnerBaseMemAddr;	// page aligned
@@ -466,6 +421,7 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 	lData->offset = pOffset;
 	lData->length = pLength;
 	lData->destHost = *PM_LOCAL_MACHINE;
+    lData->writeOnly = pTreatWriteOnly?1:0;
 
 	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine,	pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, 1, NULL, 0);
 
@@ -475,14 +431,19 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 	pmCommunicator::GetCommunicator()->Send(lFetchData.sendCommand);
 
     MEM_REQ_DUMP(pMemSection, pMem, pOffset, pLength, (uint)(*pOwnerMachine));
+        
+    if(pTreatWriteOnly)
+        return lFetchData.receiveCommand;   // By default, it is initialized with NULL naked pointer
     
+	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine, pmCommunicatorCommand::BYTE, NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
+
 	std::pair<size_t, regionFetchData> lPair(lData->length, lFetchData);
 	mInFlightMemoryMap[lAddr] = lPair;
 
 	lFetchData.receiveCommand->MarkExecutionStart();
 	return lFetchData.receiveCommand;
 }
-
+    
 pmLinuxMemoryManager::regionFetchData::regionFetchData()
 {
 }

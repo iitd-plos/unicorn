@@ -54,12 +54,15 @@ pmStatus pmLinuxTimer::Stop()
 	if(lState == pmTimer::NOT_STARTED)
 		PMTHROW(pmTimerException(pmTimerException::NOT_STARTED));
 
-	SetState(pmTimer::STOPPED);
-
 	if(lState == pmTimer::PAUSED)
+    {
+        SetState(pmTimer::STOPPED);
 		return pmSuccess;
+    }
 
 	mUnpausedTime += GetElapsedTimeInSecs();
+
+	SetState(pmTimer::STOPPED);
 
 	return pmSuccess;
 }

@@ -65,7 +65,7 @@ class pmTask : public pmBase
 		scheduler::schedulingModel GetSchedulingModel();
 		pmTaskExecStats& GetTaskExecStats();
 		pmTaskInfo& GetTaskInfo();
-		pmStatus GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo);
+		pmStatus GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly);
 		pmSubscriptionManager& GetSubscriptionManager();
 		pmReducer* GetReducer();
 		virtual pmStatus MarkSubtaskExecutionFinished();
@@ -82,6 +82,8 @@ class pmTask : public pmBase
     
         ulong GetSequenceNumber();
         pmStatus SetSequenceNumber(ulong pSequenceNumber);
+    
+        pmStatus TaskInternallyFinished();
     
 	protected:
 		pmStatus RandomizeDevices(std::vector<pmProcessingElement*>& pDevices);

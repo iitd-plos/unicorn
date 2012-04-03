@@ -40,9 +40,9 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSub
 	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
 
 	// Subscribe to one row of the output matrix
-	//lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	//lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, false, lSubscriptionInfo);
+	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, false, lSubscriptionInfo);
 
 	return pmSuccess;
 }
@@ -51,8 +51,9 @@ pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
 
-	serialMatrixMultiply((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem), (MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem) + (lTaskConf->matrixDim * lTaskConf->matrixDim), 
-		(MATRIX_DATA_TYPE*)(pSubtaskInfo.outputMem), 1, lTaskConf->matrixDim, lTaskConf->matrixDim);
+	memset(pSubtaskInfo.outputMem, 0, lTaskConf->matrixDim*sizeof(MATRIX_DATA_TYPE));
+
+	serialMatrixMultiply((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem) + (pSubtaskInfo.subtaskId * lTaskConf->matrixDim), (MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem) + (lTaskConf->matrixDim * lTaskConf->matrixDim), (MATRIX_DATA_TYPE*)(pSubtaskInfo.outputMem), 1, lTaskConf->matrixDim, lTaskConf->matrixDim);
 
 	return pmSuccess;
 }
@@ -78,11 +79,11 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbacks pCallbacks)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle)
 {
-	double lExecTime = (double)0;
-
 	READ_NON_COMMON_ARGS
+
+	double lStartTime = getCurrentTimeInSecs();
 
 	// Input Mem contains both input matrices one after the other
 	// Output Mem contains the result matrix
@@ -90,10 +91,9 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbacks pCa
 	size_t lInputMemSize = 2 * lMatrixSize;
 	size_t lOutputMemSize = lMatrixSize;
 
-	CREATE_TASK(lInputMemSize, lOutputMemSize, lMatrixDim, "MATRIXMUL", pCallbacks)
+	CREATE_TASK(lInputMemSize, lOutputMemSize, lMatrixDim, pCallbackHandle)
 
 	memcpy(lTaskDetails.inputMem, gSampleInput, lInputMemSize);
-	memset(lTaskDetails.outputMem, 0, lOutputMemSize);
 
 	matrixMultiplyTaskConf lTaskConf;
 	lTaskConf.matrixDim = lMatrixDim;
@@ -101,13 +101,16 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbacks pCa
 	lTaskDetails.taskConfLength = sizeof(lTaskConf);
 
 	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
-	SAFE_PM_EXEC( pmGetTaskExecutionTimeInSecs(lTaskHandle, &lExecTime) );
+	SAFE_PM_EXEC( pmWaitForTaskCompletion(lTaskHandle) );
+	SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMem) );
 
 	memcpy(gParallelOutput, lTaskDetails.outputMem, lOutputMemSize);
 
 	FREE_TASK_AND_RESOURCES
 
-	return lExecTime;
+	double lEndTime = getCurrentTimeInSecs();
+
+	return (lEndTime - lStartTime);
 }
 
 pmCallbacks DoSetDefaultCallbacks()
@@ -117,7 +120,7 @@ pmCallbacks DoSetDefaultCallbacks()
 	lCallbacks.dataDistribution = matrixMultiplyDataDistribution;
 	lCallbacks.deviceSelection = NULL;
 	lCallbacks.subtask_cpu = matrixMultiply_cpu;
-	lCallbacks.subtask_gpu_cuda = matrixMultiply_cuda;
+	//lCallbacks.subtask_gpu_cuda = matrixMultiply_cuda;
 
 	return lCallbacks;
 }
@@ -136,7 +139,9 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 	gParallelOutput = new MATRIX_DATA_TYPE[lMatrixElems];
 
 	for(size_t i=0; i<lInputSize; ++i)
-		gSampleInput[i] = (MATRIX_DATA_TYPE)rand();
+		gSampleInput[i] = i;    //(MATRIX_DATA_TYPE)rand();
+
+	memset(gSerialOutput, 0, lMatrixElems*sizeof(MATRIX_DATA_TYPE));
 
 	return 0;
 }
@@ -165,6 +170,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 		}
 	}
 
+	std::cout << "Perfect match against serial execution" << std::endl;
 	return 0;
 }
 
@@ -174,7 +180,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 int main(int argc, char** argv)
 {
 	// All the five functions pointers passed here are executed only on the host submitting the task
-	commonStart(argc, argv, DoInit, DoSerialProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy);
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "MATRIXMUL");
 
 	commonFinish();
 

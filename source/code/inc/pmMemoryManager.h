@@ -60,9 +60,8 @@ class pmMemoryManager : public pmBase
 
 		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
 
-		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength) = 0;
-		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength) = 0;
-
+		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength, bool pTreatWriteOnly) = 0;
+		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, bool pTreatWriteOnly = false) = 0;
 	private:
 
 	protected:
@@ -103,14 +102,14 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
 		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
 
-		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength);
-		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength);
+		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength, bool pTreatWriteOnly);
+		virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, bool pTreatWriteOnly = false);
 
 	private:
 		pmLinuxMemoryManager();
 		virtual ~pmLinuxMemoryManager();
 
-		virtual pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr);
+		virtual pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, bool pTreatWriteOnly);
 
 		size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
 

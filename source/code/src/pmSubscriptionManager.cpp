@@ -25,10 +25,7 @@ pmStatus pmSubscriptionManager::InitializeSubtaskDefaults(ulong pSubtaskId)
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	if(mSubtaskMap.find(pSubtaskId) != mSubtaskMap.end())
-    {
-    std::cout << "SUBTASK ID ALREADY PRESENT " << pSubtaskId << std::endl;
 		PMTHROW(pmFatalErrorException());
-    }
 
 	pmSubtask lSubtask;
 	lSubtask.Initialize(mTask);
@@ -152,14 +149,20 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId)
 pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
 {
 	pmMemSection* lMemSection = NULL;
+    bool lTreatWriteOnly = false;
 
 	if(pIsInputMem)
+    {
 		lMemSection = mTask->GetMemSectionRO();
+    }
 	else
+    {
 		lMemSection = mTask->GetMemSectionRW();
+        lTreatWriteOnly = (((pmOutputMemSection*)lMemSection)->GetAccessType() == pmOutputMemSection::WRITE_ONLY);
+    }
 
-	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length);
-            
+	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length, lTreatWriteOnly);
+
 	lMemSection->AcquireOwnershipImmediate(pSubscriptionInfo.offset, pSubscriptionInfo.length);
 
 	return pmSuccess;
@@ -231,7 +234,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 pmStatus pmSubtask::Initialize(pmTask* pTask)
 {
 	pmMemSection* lInputMemSection = pTask->GetMemSectionRO();
-	pmMemSection* lOutputMemSection = pTask->GetMemSectionRO();
+	pmMemSection* lOutputMemSection = pTask->GetMemSectionRW();
 
 	if(lInputMemSection)
 	{

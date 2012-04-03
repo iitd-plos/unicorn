@@ -10,7 +10,7 @@
 SAMPLE_NAME=matrixMultiply
 
 # 1 if CUDA code is included in the test suite; 0 otherwise
-BUILD_CUDA=1
+BUILD_CUDA=$(BUILD_FOR_CUDA)
 
 # 1 if common code is included in the test suite; 0 otherwise
 BUILD_COMMON=1

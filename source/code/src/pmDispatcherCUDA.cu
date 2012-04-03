@@ -94,7 +94,7 @@ std::string pmDispatcherCUDA::GetDeviceDescription(size_t pDeviceIndex)
 	return lStr;
 }
 
-pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr)
+pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr)
 {
 	void* lInputMemCudaPtr = NULL;
 	void* lOutputMemCudaPtr = NULL;
@@ -108,7 +108,9 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pS
 	if(pSubtaskInfo.outputMem && pSubtaskInfo.outputMemLength != 0)
 	{
 		SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&lOutputMemCudaPtr, pSubtaskInfo.outputMemLength );
-		SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lOutputMemCudaPtr, pSubtaskInfo.outputMem, pSubtaskInfo.outputMemLength, cudaMemcpyHostToDevice );
+
+        if(!pOutputMemWriteOnly)
+            SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lOutputMemCudaPtr, pSubtaskInfo.outputMem, pSubtaskInfo.outputMemLength, cudaMemcpyHostToDevice );
 	}
 
 	pmStatus lStatus = pmStatusUnavailable;

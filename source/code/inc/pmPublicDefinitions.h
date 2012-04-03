@@ -186,6 +186,11 @@ namespace pm
 
 	/* The memory destruction API. The same interface is used for both input and output memory. */
 	pmStatus pmReleaseMemory(pmMemHandle pMem);
+    
+    /** This routine reads the entire distributed memory pointed to by pMem from the entire cluster into the local buffer.
+     *  This is a blocking call. 
+     */
+    pmStatus pmFetchMemory(pmMemHandle pMem);
 
 	// The following two defines may be used in 3rd argument to pmSubscribeToMemory
 	#define INPUT_MEM 1

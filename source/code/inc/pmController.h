@@ -36,7 +36,8 @@ class pmController : public pmBase
 		pmStatus RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
 		pmStatus ReleaseCallbacks_Public(pmCallbackHandle pCallbackHandle);
 		pmStatus CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMem);
-		pmStatus ReleaseMemory_Public(pmMemHandle pMem);
+        pmStatus ReleaseMemory_Public(pmMemHandle pMem);
+        pmStatus FetchMemory_Public(pmMemHandle pMem);
 		pmStatus SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle);
 		pmStatus ReleaseTask_Public(pmTaskHandle pTaskHandle);
 		pmStatus WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle);

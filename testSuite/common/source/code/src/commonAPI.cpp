@@ -1,6 +1,7 @@
 
 #include <iostream>
 #include <sys/time.h>
+#include <string>
 
 #include "commonAPI.h"
 
@@ -12,30 +13,62 @@
 #define DEFAULT_RUN_MODE 1
 #define DEFAULT_PARALLEL_MODE 6
 
-double ExecuteParallelTask(int argc, char** argv, int pParallelMode, parallelProcessFunc pParallelFunc, callbacksFunc pCallbacksFunc)
-{
-	pmCallbacks lCallbacks = pCallbacksFunc();
+pmCallbackHandle gCallbackHandleArray[6];
 
+double ExecuteParallelTask(int argc, char** argv, int pParallelMode, parallelProcessFunc pParallelFunc)
+{
+	return pParallelFunc(argc, argv, COMMON_ARGS, gCallbackHandleArray[pParallelMode-1]);
+}
+
+void RegisterLibraryCallback(int pParallelMode, std::string pCallbackKey, pmCallbacks pCallbacks)
+{
 	switch(pParallelMode)
 	{
 		case 1:
 		case 4:
-			lCallbacks.subtask_gpu_cuda = NULL;
+			pCallbacks.subtask_gpu_cuda = NULL;
 			break;
 		case 2:
 		case 5:
-			lCallbacks.subtask_cpu = NULL;
+			pCallbacks.subtask_cpu = NULL;
 			break;
 	}
-
+    
 	if(pParallelMode <= 3)
-		lCallbacks.deviceSelection = LOCAL_DEVICE_SELECTION_CALLBACK;
+		pCallbacks.deviceSelection = LOCAL_DEVICE_SELECTION_CALLBACK;    
 
-	return pParallelFunc(argc, argv, COMMON_ARGS, lCallbacks);
+    static char* lArray[6] = {"1", "2", "3", "4", "5", "6"};
+
+    std::string lTempKey;
+    lTempKey = pCallbackKey + lArray[pParallelMode-1];
+
+    SAFE_PM_EXEC( pmRegisterCallbacks((char*)lTempKey.c_str(), pCallbacks, &gCallbackHandleArray[pParallelMode-1]) );
+}
+
+void RegisterLibraryCallbacks(std::string pCallbackKey, callbacksFunc pCallbacksFunc)
+{
+	pmCallbacks lCallbacks = pCallbacksFunc();
+
+    RegisterLibraryCallback(1, pCallbackKey, lCallbacks);
+    RegisterLibraryCallback(2, pCallbackKey, lCallbacks);
+    RegisterLibraryCallback(3, pCallbackKey, lCallbacks);
+    RegisterLibraryCallback(4, pCallbackKey, lCallbacks);
+    RegisterLibraryCallback(5, pCallbackKey, lCallbacks);
+    RegisterLibraryCallback(6, pCallbackKey, lCallbacks);
+}
+
+void ReleaseLibraryCallbacks()
+{
+    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray[0]) );
+    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray[1]) );
+    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray[2]) );
+    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray[3]) );
+    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray[4]) );
+    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray[5]) );
 }
 
 void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc pParallelFunc, 
-	callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc)
+                 callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey)
 {
 	double lSerialExecTime = (double)0;
 	double lParallelExecTime = (double)0;
@@ -53,6 +86,9 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 		lParallelMode = DEFAULT_PARALLEL_MODE;
 
 	SAFE_PM_EXEC( pmInitialize() );
+    
+    if(lRunMode != 2)
+        RegisterLibraryCallbacks(pCallbackKey, pCallbacksFunc);
 
 	if(pmGetHostId() == SUBMITTING_HOST_ID)
 	{
@@ -75,7 +111,7 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 			{
 				if(lParallelMode == 0 || lParallelMode == i)
 				{
-					lParallelExecTime = ExecuteParallelTask(argc, argv, lParallelMode, pParallelFunc, pCallbacksFunc);
+					lParallelExecTime = ExecuteParallelTask(argc, argv, lParallelMode, pParallelFunc);
 					std::cout << "Parallel Task " << i << " Execution Time = " << lParallelExecTime << std::endl;
 
 					if(lRunMode == 1)
@@ -87,6 +123,8 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 					}
 				}
 			}
+
+            ReleaseLibraryCallbacks();
 		}
 
 		if(pDestroyFunc() != 0)
