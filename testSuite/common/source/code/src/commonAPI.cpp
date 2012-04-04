@@ -8,16 +8,18 @@
 /** Common Arguments:
  *	1. Run Mode - [0: Don't compare to serial execution; 1: Compare to serial execution (default); 2: Only run serial]
  *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default)]
+ *  3. Scheduling Policy - [0: Push; 1: Pull]
  */
-#define COMMON_ARGS 2
+#define COMMON_ARGS 3
 #define DEFAULT_RUN_MODE 1
 #define DEFAULT_PARALLEL_MODE 6
+#define DEFAULT_SCHEDULING_POLICY 0
 
 pmCallbackHandle gCallbackHandleArray[6];
 
-double ExecuteParallelTask(int argc, char** argv, int pParallelMode, parallelProcessFunc pParallelFunc)
+double ExecuteParallelTask(int argc, char** argv, int pParallelMode, parallelProcessFunc pParallelFunc, pmSchedulingPolicy pSchedulingPolicy)
 {
-	return pParallelFunc(argc, argv, COMMON_ARGS, gCallbackHandleArray[pParallelMode-1]);
+	return pParallelFunc(argc, argv, COMMON_ARGS, gCallbackHandleArray[pParallelMode-1], pSchedulingPolicy);
 }
 
 void RegisterLibraryCallback(int pParallelMode, std::string pCallbackKey, pmCallbacks pCallbacks)
@@ -75,15 +77,20 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 
 	int lRunMode = DEFAULT_RUN_MODE;
 	int lParallelMode = DEFAULT_PARALLEL_MODE;
+	int lSchedulingPolicy = DEFAULT_SCHEDULING_POLICY;
 
 	FETCH_INT_ARG(lRunMode, 0, argc, argv);
 	FETCH_INT_ARG(lParallelMode, 1, argc, argv);
+	FETCH_INT_ARG(lSchedulingPolicy, 2, argc, argv);
 
 	if(lRunMode < 0 || lRunMode > 2)
 		lRunMode = DEFAULT_RUN_MODE;
 
 	if(lParallelMode < 0 || lParallelMode > 6)
 		lParallelMode = DEFAULT_PARALLEL_MODE;
+
+	if(lSchedulingPolicy < 0 || lSchedulingPolicy > 1)
+		lSchedulingPolicy = DEFAULT_SCHEDULING_POLICY;
 
 	SAFE_PM_EXEC( pmInitialize() );
     
@@ -111,16 +118,24 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 			{
 				if(lParallelMode == 0 || lParallelMode == i)
 				{
-					lParallelExecTime = ExecuteParallelTask(argc, argv, lParallelMode, pParallelFunc);
-					std::cout << "Parallel Task " << i << " Execution Time = " << lParallelExecTime << std::endl;
+					lParallelExecTime = ExecuteParallelTask(argc, argv, i, pParallelFunc, (lSchedulingPolicy == 0)?SLOW_START:RANDOM_STEAL);
+                    
+                    if(lParallelExecTime < 0.0)
+                    {
+                        std::cout << "Parallel Task " << i << " Failed" << std::endl;                        
+                    }
+                    else
+                    {
+                        std::cout << "Parallel Task " << i << " Execution Time = " << lParallelExecTime << std::endl;
 
-					if(lRunMode == 1)
-					{
-						if(pCompareFunc(argc, argv, COMMON_ARGS))
-							std::cout << "Parallel Task " << i << " Test Failed" << std::endl;
-						else
-							std::cout << "Parallel Task " << i << " Test Passed" << std::endl;
-					}
+                        if(lRunMode == 1)
+                        {
+                            if(pCompareFunc(argc, argv, COMMON_ARGS))
+                                std::cout << "Parallel Task " << i << " Test Failed" << std::endl;
+                            else
+                                std::cout << "Parallel Task " << i << " Test Passed" << std::endl;
+                        }
+                    }
 				}
 			}
 

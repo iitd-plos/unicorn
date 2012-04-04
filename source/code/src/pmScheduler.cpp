@@ -838,6 +838,12 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 
 	std::set<pmProcessingElement*> lDevices;
 	pLocalTask->FindCandidateProcessingElements(lDevices);
+    
+    if(lDevices.empty())
+    {
+        SendTaskFinishToMachines(pLocalTask);
+        return pmNoCompatibleDevice;
+    }
 
 	pLocalTask->InitializeSubtaskManager(pLocalTask->GetSchedulingModel());
 

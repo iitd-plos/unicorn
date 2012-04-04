@@ -365,7 +365,9 @@ pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
     {
         pmTask::MarkSubtaskExecutionFinished();
         pmTaskManager::GetTaskManager()->DeleteTask(this);  // Local task is only erased from task manager. It is actually deleted from memory by user
-        MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus());
+        
+        pmSubtaskManager* lManager = GetSubtaskManager();
+        MarkTaskEnd(lManager?lManager->GetTaskExecutionStatus():pmNoCompatibleDevice);
     }
     else
     {

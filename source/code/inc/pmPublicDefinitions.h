@@ -42,6 +42,7 @@ namespace pm
 		pmInvalidKey,
 		pmMaxKeyLengthExceeded,
 		pmDataProcessingFailure,
+        pmNoCompatibleDevice,
 		pmMaxStatusValues
 	} pmStatus;
 

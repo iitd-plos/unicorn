@@ -79,7 +79,7 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
 	READ_NON_COMMON_ARGS
 
@@ -91,7 +91,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	size_t lInputMemSize = 2 * lMatrixSize;
 	size_t lOutputMemSize = lMatrixSize;
 
-	CREATE_TASK(lInputMemSize, lOutputMemSize, lMatrixDim, pCallbackHandle)
+	CREATE_TASK(lInputMemSize, lOutputMemSize, lMatrixDim, pCallbackHandle, pSchedulingPolicy)
 
 	memcpy(lTaskDetails.inputMem, gSampleInput, lInputMemSize);
 
@@ -101,7 +101,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	lTaskDetails.taskConfLength = sizeof(lTaskConf);
 
 	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
-	SAFE_PM_EXEC( pmWaitForTaskCompletion(lTaskHandle) );
+	
+    if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
+        return (double)-1.0;
+    
 	SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMem) );
 
 	memcpy(gParallelOutput, lTaskDetails.outputMem, lOutputMemSize);

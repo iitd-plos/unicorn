@@ -61,7 +61,8 @@ static const char* pmErrorMessages[] =
 	"Memory not allocated through PMLIB or wrong memory access type",
 	"Invalid callback key or multiple invalid uses of same key",
 	"Key length exceeds the maximum limit",
-	"Internal failure in data packing/unpacking"
+	"Internal failure in data packing/unpacking",
+    "No compatible processing element found in the cluster"
 };
 
 const char* pmGetLibVersion()

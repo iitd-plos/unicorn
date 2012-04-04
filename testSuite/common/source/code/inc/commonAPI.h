@@ -25,7 +25,7 @@ double getCurrentTimeInSecs();
 #define FETCH_INT_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = atoi(argArray[argIndex+1]); }
 
 typedef double (*serialProcessFunc)(int argc, char** argv, int pCommonArgs);
-typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle);
+typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy);
 typedef pmCallbacks (*callbacksFunc)();
 typedef int (*initFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*destroyFunc)();
@@ -36,7 +36,7 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 
 void commonFinish();
 
-#define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle) \
+#define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
 	pmTaskHandle lTaskHandle; \
 	pmMemHandle lInputMem; \
 	pmMemHandle lOutputMem; \
@@ -48,7 +48,8 @@ void commonFinish();
 	lTaskDetails.inputMem = lInputMem; \
 	lTaskDetails.outputMem = lOutputMem; \
 	lTaskDetails.callbackHandle = cbHandle; \
-	lTaskDetails.subtaskCount = totalSubtasks;
+	lTaskDetails.subtaskCount = totalSubtasks; \
+    lTaskDetails.policy = schedPolicy;
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \
