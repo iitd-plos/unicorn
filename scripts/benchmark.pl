@@ -112,11 +112,11 @@ sub execute
         $varying_str .= ":$iter2";
     }
     
-    my($cmd) = "mpirun ";
+    my($cmd) = "mpirun --mca btl_tcp_if_include lo,eth0 ";
     
     if($hostsFile !~ /^$/)
     {
-        $cmd .= "--hostfile $hostsFile";
+        $cmd .= "--hostfile $hostsFile ";
     }
 
     $cmd .= "-n $procs $exec_path $runLevel $parallelTaskMode $schedModel $varying_str";
