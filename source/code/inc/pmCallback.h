@@ -31,7 +31,7 @@ class pmDataDistributionCB : public pmCallback
 		pmDataDistributionCB(pmDataDistributionCallback pCallback);
 		virtual ~pmDataDistributionCB();
 
-		virtual pmStatus Invoke(pmTask* pTask, ulong pSubtaskId);
+		virtual pmStatus Invoke(pmTask* pTask, ulong pSubtaskId, pmDeviceTypes pDeviceType);
 
 	private:
 		pmDataDistributionCallback mCallback;

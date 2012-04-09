@@ -6,7 +6,13 @@ COMPILER=g++
 NVCC_COMPILER=nvcc
 STRIP=strip
 FLAGS=-Wall -DUNIX -DLINUX
-CUDAFLAGS= -DUNIX --compiler-options
+CUDAFLAGS= -DUNIX
+
+ifeq ($(CUDA_DEBUG), 1)
+	CUDAFLAGS += -G
+endif
+
+CUDAFLAGS += --compiler-options
 
 ifeq ($(DEBUG), 1)
 	FLAGS += -DDEBUG -D_DEBUG -g
@@ -28,6 +34,7 @@ else
 endif
 
 ifeq ($(BUILD_CUDA), 1)
+FLAGS += -DBUILD_CUDA -DSUPPORT_CUDA
 INCLUDES += -I$(CUDA_INCLUDE_PATH)
 OBJECTS += $(CUDA_OBJECTS)
 LIBRARIES += -L$(CUDA_LIB_PATH) -lcudart
@@ -70,7 +77,7 @@ final:
 	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
 
 %.o: ../../source/code/src/%.cu
-	$(NVCC_COMPILER) $(CUDA_FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
 
 strip: $(PROGRAM)
 	@echo "\n*** Stripping ***"

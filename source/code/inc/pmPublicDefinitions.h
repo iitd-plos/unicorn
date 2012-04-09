@@ -147,7 +147,7 @@ namespace pm
 
 
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
-	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, unsigned long pSubtaskId);
+	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, unsigned long pSubtaskId, pmDeviceTypes pDeviceType);
 	typedef pmStatus (*pmSubtaskCallback_CPU)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
 	typedef pmStatus (*pmDataReductionCallback)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtask1Info, pmSubtaskInfo pSubtask2Info);

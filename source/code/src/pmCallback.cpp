@@ -27,12 +27,12 @@ pmDataDistributionCB::~pmDataDistributionCB()
 {
 }
 
-pmStatus pmDataDistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId)
+pmStatus pmDataDistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId, pmDeviceTypes pDeviceType)
 {
 	if(!mCallback)
 		return pmSuccess;
 
-	return mCallback(pTask->GetTaskInfo() ,pSubtaskId);
+	return mCallback(pTask->GetTaskInfo(), pSubtaskId, pDeviceType);
 }
 
 

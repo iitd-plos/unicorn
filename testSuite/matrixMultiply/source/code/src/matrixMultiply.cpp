@@ -19,7 +19,27 @@ void serialMatrixMultiply(MATRIX_DATA_TYPE* pMatrixA, MATRIX_DATA_TYPE* pMatrixB
 				pMatrixC[i*pDim3 + j] += pMatrixA[i*pDim2 + k] * pMatrixB[k*pDim3 + j];
 }
 
-pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSubtaskId)
+#ifdef BUILD_CUDA
+pmCudaLaunchConf GetCudaLaunchConf(int pMatrixDim)
+{
+	pmCudaLaunchConf lCudaLaunchConf;
+
+	int lMaxThreadsPerBlock = 512;	// Max. 512 threads allowed per block
+
+	lCudaLaunchConf.threadsX = pMatrixDim;
+	if(lCudaLaunchConf.threadsX > lMaxThreadsPerBlock)
+	{
+		lCudaLaunchConf.threadsX = lMaxThreadsPerBlock;
+		lCudaLaunchConf.blocksX = pMatrixDim/lCudaLaunchConf.threadsX;
+                if(lCudaLaunchConf.blocksX * lCudaLaunchConf.threadsX < pMatrixDim)
+                        ++lCudaLaunchConf.blocksX;
+	}
+
+	return lCudaLaunchConf;
+}
+#endif
+
+pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSubtaskId, pmDeviceTypes pDeviceType)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
@@ -29,20 +49,16 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSub
 	//lSubscriptionInfo.length = lTaskConf->matrixDim * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
 	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
 
-	// Subscribe to one row of the first input matrix
-	//lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	//lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
-
-	// Subscribe to entire second input matrix
-	//lSubscriptionInfo.offset = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	//lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
-
 	// Subscribe to one row of the output matrix
 	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
 	lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
 	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, false, lSubscriptionInfo);
+
+#ifdef BUILD_CUDA
+	// Set CUDA Launch Configuration
+	if(pDeviceType == pm::GPU_CUDA)
+		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pSubtaskId, lTaskConf->cudaLaunchConf);
+#endif
 
 	return pmSuccess;
 }
@@ -97,6 +113,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	matrixMultiplyTaskConf lTaskConf;
 	lTaskConf.matrixDim = lMatrixDim;
+	#ifdef BUILD_CUDA
+		lTaskConf.cudaLaunchConf = GetCudaLaunchConf(lMatrixDim);
+	#endif
+
 	lTaskDetails.taskConf = (void*)(&lTaskConf);
 	lTaskDetails.taskConfLength = sizeof(lTaskConf);
 
@@ -123,7 +143,10 @@ pmCallbacks DoSetDefaultCallbacks()
 	lCallbacks.dataDistribution = matrixMultiplyDataDistribution;
 	lCallbacks.deviceSelection = NULL;
 	lCallbacks.subtask_cpu = matrixMultiply_cpu;
-	//lCallbacks.subtask_gpu_cuda = matrixMultiply_cuda;
+
+	#ifdef BUILD_CUDA
+	lCallbacks.subtask_gpu_cuda = matrixMultiply_cuda;
+	#endif
 
 	return lCallbacks;
 }

@@ -9,4 +9,7 @@ void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmSta
 typedef struct matrixMultiplyTaskConf
 {
 	int matrixDim;
+#ifdef BUILD_CUDA
+	pmCudaLaunchConf cudaLaunchConf;
+#endif
 } matrixMultiplyTaskConf;

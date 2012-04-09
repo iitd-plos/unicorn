@@ -96,6 +96,13 @@ std::string pmDispatcherCUDA::GetDeviceDescription(size_t pDeviceIndex)
 
 pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr)
 {
+	void* lTaskConfCudaPtr = NULL;
+        if(pTaskInfo.taskConf && pTaskInfo.taskConfLength != 0)
+        {
+                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&lTaskConfCudaPtr, pTaskInfo.taskConfLength );
+                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTaskConfCudaPtr, pTaskInfo.taskConf, pTaskInfo.taskConfLength, cudaMemcpyHostToDevice );
+        }
+
 	void* lInputMemCudaPtr = NULL;
 	void* lOutputMemCudaPtr = NULL;
 
@@ -119,14 +126,18 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pS
 	SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&lStatusPtr, sizeof(pmStatus) );
 	SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lStatusPtr, &lStatus, sizeof(pmStatus), cudaMemcpyHostToDevice );
 
+	pmTaskInfo lTaskInfo = pTaskInfo;
+	lTaskInfo.taskConf = lTaskConfCudaPtr;
+
 	pmSubtaskInfo lSubtaskInfo = pSubtaskInfo;
 	lSubtaskInfo.inputMem = lInputMemCudaPtr;
 	lSubtaskInfo.outputMem = lOutputMemCudaPtr;
 
-    dim3 gridConf(pCudaLaunchConf.blocksX, pCudaLaunchConf.blocksY, pCudaLaunchConf.blocksZ);
-    dim3 blockConf(pCudaLaunchConf.threadsX, pCudaLaunchConf.threadsY, pCudaLaunchConf.threadsZ);
+	dim3 gridConf(pCudaLaunchConf.blocksX, pCudaLaunchConf.blocksY, pCudaLaunchConf.blocksZ);
+	dim3 blockConf(pCudaLaunchConf.threadsX, pCudaLaunchConf.threadsY, pCudaLaunchConf.threadsZ);
 
-	pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem>>> (pTaskInfo, lSubtaskInfo, lStatusPtr);
+	//pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem>>> (pTaskInfo, lSubtaskInfo, lStatusPtr);
+	pKernelPtr <<<gridConf, blockConf>>> (lTaskInfo, lSubtaskInfo, lStatusPtr);
 
 	if(cudaGetLastError() == cudaSuccess)
 	{
@@ -139,6 +150,9 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pS
 
 	if(lOutputMemCudaPtr)
 		SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, lOutputMemCudaPtr );
+
+	if(lTaskConfCudaPtr)
+		SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, lTaskConfCudaPtr );
 	
 	SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, lStatusPtr );
 

@@ -44,6 +44,9 @@ pmStatus pmLogger::SetHostId(uint pHostId)
 
 pmStatus pmLogger::Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg)
 {
+#ifdef _DEBUG
+	std::cout << "Log Message Level " << pMsgLevel << " Message Type " << pMsgType << " " << pMsg << std::endl;
+#endif
 	if(pMsgLevel <= mLogLevel)
 	{
 		if(pMsgType == INFORMATION)

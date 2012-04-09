@@ -267,7 +267,7 @@ bool pmExecutionStub::IsHighPriorityEventWaiting(ushort pPriority)
 pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
 	pTask->GetSubscriptionManager().InitializeSubtaskDefaults(pSubtaskId);
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, pTask, pSubtaskId);
+	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, pTask, pSubtaskId, GetType());
 	pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(pSubtaskId);
 
 	if(pTask->GetMemSectionRW() && pTask->DoSubtasksNeedShadowMemory())
@@ -361,10 +361,10 @@ pmStatus pmStubCPU::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId
 		Execute(pRange.task, index);
 
 		if(IsHighPriorityEventWaiting(pRange.task->GetPriority()))
-        {
-            pLastExecutedSubtaskId = index;            
-            return pmSuccess;
-        }
+		{
+			pLastExecutedSubtaskId = index;            
+			return pmSuccess;
+		}
 	}
 
 	pLastExecutedSubtaskId = pRange.endSubtask;
@@ -443,15 +443,18 @@ pmDeviceTypes pmStubCUDA::GetType()
 pmStatus pmStubCUDA::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
 {
 	ulong index = pRange.startSubtask;
-	for(; index < pRange.endSubtask; ++index)
+	for(; index <= pRange.endSubtask; ++index)
 	{
 		Execute(pRange.task, index);
 
 		if(IsHighPriorityEventWaiting(pRange.task->GetPriority()))
+		{
+			pLastExecutedSubtaskId = index;
 			break;
+		}
 	}
 
-	pLastExecutedSubtaskId = index;
+	pLastExecutedSubtaskId = pRange.endSubtask;
 
 	return pmSuccess;
 }
