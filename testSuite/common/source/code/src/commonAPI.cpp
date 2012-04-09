@@ -8,7 +8,7 @@
 /** Common Arguments:
  *	1. Run Mode - [0: Don't compare to serial execution; 1: Compare to serial execution (default); 2: Only run serial]
  *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default)]
- *  3. Scheduling Policy - [0: Push; 1: Pull]
+ *	3. Scheduling Policy - [0: Push (default); 1: Pull; 2: Equal_Static]
  */
 #define COMMON_ARGS 3
 #define DEFAULT_RUN_MODE 1
@@ -89,7 +89,7 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 	if(lParallelMode < 0 || lParallelMode > 6)
 		lParallelMode = DEFAULT_PARALLEL_MODE;
 
-	if(lSchedulingPolicy < 0 || lSchedulingPolicy > 1)
+	if(lSchedulingPolicy < 0 || lSchedulingPolicy > 2)
 		lSchedulingPolicy = DEFAULT_SCHEDULING_POLICY;
 
 	SAFE_PM_EXEC( pmInitialize() );
@@ -118,7 +118,13 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 			{
 				if(lParallelMode == 0 || lParallelMode == i)
 				{
-					lParallelExecTime = ExecuteParallelTask(argc, argv, i, pParallelFunc, (lSchedulingPolicy == 0)?SLOW_START:RANDOM_STEAL);
+					pmSchedulingPolicy lPolicy = SLOW_START;
+					if(lSchedulingPolicy == 1)
+						lPolicy = RANDOM_STEAL;
+					else if(lSchedulingPolicy == 2)
+						lPolicy = EQUAL_STATIC;
+
+					lParallelExecTime = ExecuteParallelTask(argc, argv, i, pParallelFunc, lPolicy);
                     
                     if(lParallelExecTime < 0.0)
                     {

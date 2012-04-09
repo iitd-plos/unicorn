@@ -12,9 +12,9 @@ pmSubtaskManager::pmSubtaskManager(pmLocalTask* pLocalTask)
 {
 	mLocalTask= pLocalTask;
 	mTaskStatus = pmStatusUnavailable;
-    
-#ifdef _DEBUG
-    mAcknowledgementsReceived = 0;
+
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+    mExecutionProfilePrinted = false;
 #endif
 }
 
@@ -41,6 +41,60 @@ pmSubtaskManager::pmUnfinishedPartition::pmUnfinishedPartition(ulong pFirstSubta
 	if(lastSubtaskIndex < firstSubtaskIndex)
 		PMTHROW(pmFatalErrorException());
 }
+
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+// This method must only be called from RegisterSubtaskCompletion method of the subclasses as that acquires the lock and ensures synchronization
+pmStatus pmSubtaskManager::UpdateExecutionProfile(pmProcessingElement* pDevice, ulong pSubtaskCount)
+{
+    uint lDeviceIndex = pDevice->GetGlobalDeviceIndex();
+    uint lMachineIndex = (uint)(*(pDevice->GetMachine()));
+
+    if(mDeviceExecutionProfile.find(lDeviceIndex) == mDeviceExecutionProfile.end())
+        mDeviceExecutionProfile[lDeviceIndex] = 0;
+    
+    if(mMachineExecutionProfile.find(lMachineIndex) == mMachineExecutionProfile.end())
+        mMachineExecutionProfile[lMachineIndex] = 0;
+
+    mDeviceExecutionProfile[lDeviceIndex] += pSubtaskCount;
+    mMachineExecutionProfile[lMachineIndex] += pSubtaskCount;
+    
+    return pmSuccess;
+}
+    
+pmStatus pmSubtaskManager::PrintExecutionProfile()
+{
+    if(mExecutionProfilePrinted)
+        return pmSuccess;
+    
+    mExecutionProfilePrinted = true;
+    
+    std::map<uint, ulong>::iterator lStart, lEnd;
+    lStart = mDeviceExecutionProfile.begin();
+    lEnd = mDeviceExecutionProfile.end();
+    
+    std::cout << "Device Subtask Execution Profile ... " << std::endl;
+    for(; lStart != lEnd; ++lStart)
+        std::cout << "Device " << lStart->first << " Subtasks " << lStart->second << std::endl;
+
+    std::cout << std::endl;
+    
+    std::cout << "Machine Subtask Execution Profile ... " << std::endl;
+    ulong lTotal = 0;
+    lStart = mMachineExecutionProfile.begin();
+    lEnd = mMachineExecutionProfile.end();
+    for(; lStart != lEnd; ++lStart)
+    {
+        std::cout << "Machine " << lStart->first << " Subtasks " << lStart->second << std::endl;
+        lTotal += lStart->second;
+    }
+    
+    std::cout << std::endl;
+    
+    std::cout << "Total Acknowledgements Received " << lTotal << std::endl; 
+    
+    return pmSuccess;
+}
+#endif
 
 
 /* class pmPushSchedulingManager */
@@ -99,8 +153,8 @@ bool pmPushSchedulingManager::HasTaskFinished()
 
 	if(mUnassignedPartitions.empty() && mAssignedPartitions.empty())
     {
-#ifdef _DEBUG
-        std::cout << "Acknowledgements Received " << mAcknowledgementsReceived << std::endl;
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+        PrintExecutionProfile();
 #endif
 
         return true;
@@ -337,8 +391,8 @@ pmStatus pmPushSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement*
 	if(lPartitionPtr->firstSubtaskIndex != pStartingSubtask && (lPartitionPtr->lastSubtaskIndex - lPartitionPtr->firstSubtaskIndex + 1) != pSubtaskCount)
 		PMTHROW(pmFatalErrorException());
     
-#ifdef _DEBUG
-    mAcknowledgementsReceived += pSubtaskCount;
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+    UpdateExecutionProfile(pDevice, pSubtaskCount);
 #endif
 
 	pmSubtaskRangeCommandPtr lCommand = mAssignedPartitions[pDevice].second;
@@ -421,8 +475,8 @@ bool pmPullSchedulingManager::HasTaskFinished()
 {
 	if(mUnacknowledgedPartitions.empty())
     {
-#ifdef _DEBUG
-        std::cout << "Acknowledgements Received " << mAcknowledgementsReceived << std::endl;
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+        PrintExecutionProfile();
 #endif
         
         return true;
@@ -478,8 +532,8 @@ pmStatus pmPullSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement*
     if(lTargetPartitionPtr->lastSubtaskIndex > pStartingSubtask + pSubtaskCount - 1)
         mUnacknowledgedPartitions.insert(pmUnfinishedPartitionPtr(new pmUnfinishedPartition(pStartingSubtask + pSubtaskCount, lTargetPartitionPtr->lastSubtaskIndex)));
 
-#ifdef _DEBUG
-    mAcknowledgementsReceived += pSubtaskCount;
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+    UpdateExecutionProfile(pDevice, pSubtaskCount);
 #endif
 
 	return pmSuccess;

@@ -343,9 +343,8 @@ pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, pmS
 {
 #ifdef TRACK_SUBTASK_EXECUTION
 	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
-    std::cout << "Before Value " << mAcknowledgementsSent << std::endl;
     mAcknowledgementsSent += (pRange.endSubtask - pRange.startSubtask + 1);
-    std::cout << "Ack Sent " << (pRange.endSubtask - pRange.startSubtask + 1) << " " << mAcknowledgementsSent << std::endl;
+    std::cout << "Device " << pDevice->GetGlobalDeviceIndex() << " Sent Acknowledgements " << (pRange.endSubtask - pRange.startSubtask + 1) << std::endl;
 #endif
     
 	schedulerEvent lEvent;
@@ -628,16 +627,23 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 				if(dynamic_cast<pmOutputMemSection*>(lEventDetails.memSection))
 					lEventDetails.memSection->TransferOwnershipPostTaskCompletion(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length);
                 
-                if(!lEventDetails.writeOnly)
+                pmCommunicatorCommand::memoryReceivePacked* lPackedData = NULL;
+                
+                if(lEventDetails.writeOnly)
                 {
-                    pmCommunicatorCommand::memoryReceivePacked* lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
-
-                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
-                    
-                    MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
-
-                    pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+                    // Send a 0 length buffer as an acknowledgement that the subscription information sent has been registered
+                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.offset, 0, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
                 }
+                else
+                {
+                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+                }
+                
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+                
+                MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
+
+                pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
 
 				break;
 			}

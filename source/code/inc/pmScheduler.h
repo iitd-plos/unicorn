@@ -22,7 +22,8 @@ namespace scheduler
 typedef enum schedulingModel
 {
 	PUSH,	/* subtasks are pushed from originating task manager to all schedulers to all stubs */
-	PULL	/* subtasks are pulled by stubs from their scheduler which pull from originating task manager */
+	PULL,	/* subtasks are pulled by stubs from their scheduler which pull from originating task manager */
+    STATIC_EQUAL  /* subtasks are equally and statically divided among all stubs */
 } schedulingModel;
 
 typedef enum pushStrategy

@@ -386,6 +386,7 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
 			break;
 
 		case scheduler::PULL:
+		case scheduler::STATIC_EQUAL:
 			mSubtaskManager = new pmPullSchedulingManager(this);
 			break;
 

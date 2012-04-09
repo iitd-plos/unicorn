@@ -142,7 +142,8 @@ namespace pm
     typedef enum pmSchedulingPolicy
     {
         SLOW_START,
-        RANDOM_STEAL
+        RANDOM_STEAL,
+        EQUAL_STATIC
     } pmSchedulingPolicy;
 
 

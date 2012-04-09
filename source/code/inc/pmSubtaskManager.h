@@ -41,12 +41,22 @@ class pmSubtaskManager : public pmBase
 
 	protected:
 		pmSubtaskManager(pmLocalTask* pLocalTask);
+
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+        pmStatus UpdateExecutionProfile(pmProcessingElement* pDevice, ulong pSubtaskCount);
+        pmStatus PrintExecutionProfile();
+#endif
+    
 		pmLocalTask* mLocalTask;
 		pmStatus mTaskStatus;
+
+    private:
     
-#ifdef _DEBUG
-    ulong mAcknowledgementsReceived;
-#endif
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+        std::map<uint, ulong> mDeviceExecutionProfile;    // Global Device Index versus Subtasks Executed
+        std::map<uint, ulong> mMachineExecutionProfile;    // Machine Index versus Subtasks Executed
+        bool mExecutionProfilePrinted;
+#endif    
 };
 
 class pmPushSchedulingManager : public pmSubtaskManager

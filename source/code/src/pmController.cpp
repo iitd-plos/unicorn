@@ -303,7 +303,13 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 	if(pTaskDetails.taskConfLength == 0)
 		pTaskDetails.taskConf = NULL;
 
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, ((pTaskDetails.policy == SLOW_START)?scheduler::PUSH:scheduler::PULL));
+    scheduler::schedulingModel lModel = scheduler::PUSH;
+    if(pTaskDetails.policy == RANDOM_STEAL)
+        lModel = scheduler::PULL;
+    else if(pTaskDetails.policy == EQUAL_STATIC)
+        lModel = scheduler::STATIC_EQUAL;
+    
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel);
 
 	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 

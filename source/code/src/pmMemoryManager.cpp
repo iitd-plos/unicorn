@@ -432,9 +432,7 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 
     MEM_REQ_DUMP(pMemSection, pMem, pOffset, pLength, (uint)(*pOwnerMachine));
         
-    if(pTreatWriteOnly)
-        return lFetchData.receiveCommand;   // By default, it is initialized with NULL naked pointer
-    
+    // For write only memory, a zero length buffer will be received back as an acknowledgement of subscription registration
 	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine, pmCommunicatorCommand::BYTE, NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
 
 	std::pair<size_t, regionFetchData> lPair(lData->length, lFetchData);

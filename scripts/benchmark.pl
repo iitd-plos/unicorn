@@ -63,11 +63,11 @@ sub computeResults
     {
         my($schedModel);
         
-        for($schedModel = 0; $schedModel <= 1; ++$schedModel)
+        for($schedModel = 0; $schedModel <= 2; ++$schedModel)
         {
-            if($schedulingModel == 2 || $schedModel == $schedulingModel)
+            if($schedulingModel == 3 || $schedModel == $schedulingModel)
             {
-                $schedulingModelName = ($schedModel == 0)?"PUSH (Slow Start)":"PULL (Random Steal)";
+		$schedulingModelName = getSchedulingModelName($schedModel);
 
                 $~ = SUBHEADER;
                 write;
@@ -146,7 +146,7 @@ sub getInputs
 {
     $runLevel = getIntegralInput(1, "\nSelect Run Level ... \n0. Don't compare to serial execution\n1. Compare to serial execution\n2. Only run serial\n", "Invalid Run Level", 0, 2);
     $parallelTaskMode = getIntegralInput(2, "\nSelect Parallel Task Mode ... \n0. All\n1. Local CPU\n2. Local GPU\n3. Local CPU + GPU\n4. Global CPU\n5. Global GPU\n6. Global CPU + GPU\n", "Invalid Parallel Task Mode", 0, 6);
-    $schedulingModel = getIntegralInput(3, "\nSelect Scheduling Model ... \n0. Push (Slow Start)\n1. Pull (Random Steal)\n2. Both\n", "Invalid Scheduling Model", 0, 2);
+    $schedulingModel = getIntegralInput(3, "\nSelect Scheduling Model ... \n0. Push (Slow Start)\n1. Pull (Random Steal)\n2. Equal Static\n3. All\n", "Invalid Scheduling Model", 0, 3);
     $samples = getIntegralInput(4, "\nSamples ... ", "Invalid Samples", 1, 5);
     $minProcs = getIntegralInput(5, "Min Procs ... ", "Invalid Min Procs", 1, 10000);
     $maxProcs = getIntegralInput(6, "Max Procs ... ", "Invalid Max Procs", 1, 10000);
@@ -248,6 +248,23 @@ sub getTestSuite
     }
     
     return $testSuite;
+}
+
+sub getSchedulingModelName
+{
+	my($modelNum) = @_;
+
+	if($modelNum == 1)
+	{
+		return "PULL (Random Steal)";
+	}
+	
+	if($modelNum == 2)
+	{
+		return "Equal Static";
+	}
+
+	return "PUSH (Slow Start)";
 }
 
 sub readStringInput
