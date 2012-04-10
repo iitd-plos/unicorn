@@ -250,7 +250,8 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
 	char* lAddr = (char*)pDestMem;
 	lAddr += pOffset;
 
-	memcpy((void*)lAddr, pSrcMem, pLength);
+	if(pLength)
+		memcpy((void*)lAddr, pSrcMem, pLength);
 
 	std::map<void*, std::pair<size_t, regionFetchData> >::iterator lIter;
 	if(mInFlightMemoryMap.find(lAddr) == mInFlightMemoryMap.end())
@@ -259,7 +260,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
 	regionFetchData& lData = mInFlightMemoryMap[lAddr].second;    
 	delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
 	lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
-    mInFlightMemoryMap.erase(lAddr);
+	mInFlightMemoryMap.erase(lAddr);
 
 	return pmSuccess;
 }

@@ -292,8 +292,11 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 
-			if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->mem.ptr, lData->mem.length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
-				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+			if(lData->mem.length != 0)
+			{
+				if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->mem.ptr, lData->mem.length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+					PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+			}
 
             lLength = lPos;
 
@@ -380,11 +383,19 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedTask->receiveStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-			lPackedTask->mem.ptr = new char[lPackedTask->receiveStruct.length];
-			lPackedTask->mem.length = lPackedTask->receiveStruct.length;
+			if(lPackedTask->receiveStruct.length == 0)
+			{
+				lPackedTask->mem.ptr = NULL;
+				lPackedTask->mem.length = 0;
+			}
+			else
+			{
+				lPackedTask->mem.ptr = new char[lPackedTask->receiveStruct.length];
+				lPackedTask->mem.length = lPackedTask->receiveStruct.length;
 				
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->mem.ptr, lPackedTask->mem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
-				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->mem.ptr, lPackedTask->mem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+					PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+			}
 
             pCommand->SetData(lPackedTask, pPos);
 
