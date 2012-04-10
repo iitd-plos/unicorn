@@ -5,15 +5,18 @@
 #include "pmBase.h"
 
 #ifdef SUPPORT_CUDA
+#include "pmResourceLock.h"
 #include "cuda.h"
 #include "cuda_runtime_api.h"
 #include <vector>
+#include <map>
 #endif
 
 namespace pm
 {
 
 class pmExecutionStub;
+class pmMemSection;
 
 /**
  * \brief The class responsible for all GPU related operations on various graphics cards
@@ -52,7 +55,9 @@ class pmDispatcherCUDA : public pmGraphicsBase
 		pmStatus InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr);
 
 #ifdef SUPPORT_CUDA
-        pmStatus FreeLastExecutionResources(size_t pBoundDeviceIndex);
+		pmStatus InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, pmMemSection* pInputMemSection);
+
+		pmStatus FreeLastExecutionResources(size_t pBoundDeviceIndex);
 #endif
     
 	private:
@@ -65,8 +70,8 @@ class pmDispatcherCUDA : public pmGraphicsBase
 #ifdef SUPPORT_CUDA
 		std::vector<std::pair<int, cudaDeviceProp> > mDeviceVector;
         
-        std::map<size_t, pmLastExecutionRecord> mLastExecutionMap;  // CUDA Device Index vs. last execution details
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mLastExecutionLock;
+		std::map<size_t, dispatcherCUDA::lastExecutionRecord> mLastExecutionMap;  // CUDA Device Index vs. last execution details
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mLastExecutionLock;
 #endif
 };
 

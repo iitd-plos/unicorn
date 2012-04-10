@@ -25,6 +25,8 @@ class pmStubManager : public pmBase
 		size_t GetProcessingElementsGPU();
 		size_t GetStubCount();
 
+		pmStatus FreeGpuResources();
+
 		pmExecutionStub* GetStub(pmProcessingElement* pDevice);
 		pmExecutionStub* GetStub(uint pIndex);
 

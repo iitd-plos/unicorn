@@ -1,7 +1,10 @@
 
 #include "pmDispatcherGPU.h"
 #include "pmExecutionStub.h"
+#include "pmHardware.h"
+#include "pmMemSection.h"
 #include "pmLogger.h"
+#include "pmTask.h"
 
 #define CUDA_LIBRARY_CUTIL (char*)"libcutil.so"
 #define CUDA_LIBRARY_CUDART (char*)"libcudart.so"
@@ -110,6 +113,21 @@ pmDispatcherCUDA::~pmDispatcherCUDA()
 size_t pmDispatcherCUDA::GetCountCUDA()
 {
 	return mCountCUDA;
+}
+
+pmStatus pmDispatcherCUDA::InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr)
+{
+#ifdef SUPPORT_CUDA
+	pmTask* lTask = (pmTask*)(pTaskInfo.taskHandle);
+	uint lOriginatingMachineIndex = (uint)(*(lTask->GetOriginatingHost()));
+	ulong lSequenceNumber = lTask->GetSequenceNumber();
+
+	pmMemSection* lInputMemSection = lTask->GetMemSectionRO();
+
+	return InvokeKernel(pBoundDeviceIndex, pTaskInfo, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, lOriginatingMachineIndex, lSequenceNumber, lInputMemSection);
+#else	
+        return pmSuccess;
+#endif
 }
 
 }

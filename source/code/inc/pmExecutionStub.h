@@ -26,7 +26,8 @@ typedef enum eventIdentifier
         SUBTASK_EXEC,
         SUBTASK_REDUCE,
         SUBTASK_CANCEL,
-        SUBTASK_STEAL
+        SUBTASK_STEAL,
+	FREE_GPU_RESOURCES
 } eventIdentifier;
 
 typedef struct threadBind
@@ -97,12 +98,14 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		pmStatus StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pExecutionRate);
 		pmStatus CancelSubtasks(pmTask* pTask);
 
-        pmStatus ClearPendingStealCommands(pmTask* pTask);
+	        pmStatus ClearPendingStealCommands(pmTask* pTask);
 
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
 		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId);
 		pmStatus CommonPostExecuteOnCPU(pmTask* pTask, ulong pSubtaskId);
+
+		pmStatus FreeGpuResources();
 
 		virtual pmStatus DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, ulong pSubtaskId2);
 
@@ -126,6 +129,9 @@ class pmStubGPU : public pmExecutionStub
 		virtual std::string GetDeviceDescription() = 0;
 
 		virtual pmDeviceTypes GetType() = 0;
+
+		virtual pmStatus FreeResources() = 0;
+		virtual pmStatus FreeLastExecutionResources() = 0;
 
 		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId) = 0;
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
@@ -166,6 +172,9 @@ class pmStubCUDA : public pmStubGPU
 		virtual std::string GetDeviceDescription();
 
 		virtual pmDeviceTypes GetType();
+
+		virtual pmStatus FreeResources();
+		virtual pmStatus FreeLastExecutionResources();
 
 		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId);
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId);

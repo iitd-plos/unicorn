@@ -104,6 +104,18 @@ pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
 
 	return SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
 }
+
+pmStatus pmExecutionStub::FreeGpuResources()
+{
+#ifdef SUPPORT_CUDA
+        stubEvent lEvent;
+        lEvent.eventId = FREE_GPU_RESOURCES;
+
+        SwitchThread(lEvent, RESERVED_PRIORITY);
+#endif
+
+	return pmSuccess;
+}
     
 pmStatus pmExecutionStub::ClearPendingStealCommands(pmTask* pTask)
 {
@@ -157,6 +169,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
 			lCommand->MarkExecutionStart();
 			pmStatus lExecStatus = Execute(lCurrentRange, lLastExecutedSubtaskId);
+
 			lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
 
 			if(lLastExecutedSubtaskId < lRange.startSubtask || lLastExecutedSubtaskId > lRange.endSubtask)
@@ -260,6 +273,14 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			if(!lStealSuccess)
 				pmScheduler::GetScheduler()->StealFailedEvent(pEvent.stealDetails.requestingDevice, GetProcessingElement(), lTask);
 
+			break;
+		}
+
+		case FREE_GPU_RESOURCES:
+		{
+	#ifdef SUPPORT_CUDA
+			((pmStubGPU*)this)->FreeLastExecutionResources();
+	#endif
 			break;
 		}
 	}
@@ -409,9 +430,22 @@ pmStubCUDA::pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine)
 
 pmStubCUDA::~pmStubCUDA()
 {
+}
+
+pmStatus pmStubCUDA::FreeResources()
+{
+#ifdef SUPPORT_CUDA
+    FreeGpuResources();
+#endif
+    return pmSuccess;
+}
+
+pmStatus pmStubCUDA::FreeLastExecutionResources()
+{
 #ifdef SUPPORT_CUDA
     pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeLastExecutionResources(mDeviceIndex);
 #endif
+    return pmSuccess;
 }
 
 pmStatus pmStubCUDA::BindToProcessingElement()
@@ -461,7 +495,7 @@ pmStatus pmStubCUDA::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskI
 		if(IsHighPriorityEventWaiting(pRange.task->GetPriority()))
 		{
 			pLastExecutedSubtaskId = index;
-			break;
+			return pmSuccess;
 		}
 	}
 

@@ -85,8 +85,21 @@ pmStatus pmStubManager::CreateExecutionStubs()
 	return pmSuccess;
 }
 
+pmStatus pmStubManager::FreeGpuResources()
+{
+        for(size_t i=0; i<mStubCount; ++i)
+        {
+                if(dynamic_cast<pmStubGPU*>(mStubVector[i]))
+                        (static_cast<pmStubGPU*>(mStubVector[i]))->FreeResources();
+	}
+
+	return pmSuccess;
+}
+
 pmStatus pmStubManager::DestroyExecutionStubs()
 {
+	FreeGpuResources();
+
 	for(size_t i=0; i<mStubCount; ++i)
 		delete mStubVector[i];
 
