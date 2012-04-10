@@ -76,7 +76,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
 	return false;
 }
 
-pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId)
+pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex)
 {
     bool lOutputMemWriteOnly = false;
 
@@ -104,7 +104,7 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
             
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pSubtaskId);
-			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA);
+			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pBoundHardwareDeviceIndex, pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA);
 
 			break;
 		}

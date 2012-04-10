@@ -899,7 +899,6 @@ pmStatus pmScheduler::StealSubtasks(pmProcessingElement* pStealingDevice, pmTask
 	pmProcessingElement* lTargetDevice = RandomlySelectStealTarget(pStealingDevice, pTask);
 	if(lTargetDevice)
 	{
-    std::cout << "Steal Attempt " << pStealingDevice->GetGlobalDeviceIndex() << " Target " << lTargetDevice->GetGlobalDeviceIndex() << std::endl;
 		pmMachine* lTargetMachine = lTargetDevice->GetMachine();
 
 		if(lTargetMachine == PM_LOCAL_MACHINE)
@@ -968,13 +967,11 @@ pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pm
 
 pmStatus pmScheduler::ReceiveStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
 {
-    std::cout << "Successful Steal " << pStealingDevice->GetGlobalDeviceIndex() << " Target " << pTargetDevice->GetGlobalDeviceIndex() << " (" << pRange.startSubtask << ", " << pRange.endSubtask << ")" << std::endl;
 	return PushEvent(pStealingDevice, pRange);
 }
 
 pmStatus pmScheduler::SendFailedStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
-    std::cout << "Steal Failed " << pStealingDevice->GetGlobalDeviceIndex() << " Target " << pTargetDevice->GetGlobalDeviceIndex() << std::endl;
 	pmMachine* lMachine = pStealingDevice->GetMachine();
 	if(lMachine == PM_LOCAL_MACHINE)
 	{

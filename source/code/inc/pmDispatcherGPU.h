@@ -23,6 +23,20 @@ class pmGraphicsBase : public pmBase
 {
 };
 
+#ifdef SUPPORT_CUDA
+    namespace dispatcherCUDA
+    {
+        typedef struct lastExecutionRecord
+        {
+            uint taskOriginatingMachineIndex;
+            ulong taskSequenceNumber;
+            bool fullInputMemSubscription;
+            void* inputMemCudaPtr;
+            void* taskConfCudaPtr;
+        } lastExecutionRecord;
+    }
+#endif
+    
 class pmDispatcherCUDA : public pmGraphicsBase
 {
 	public:
@@ -35,8 +49,12 @@ class pmDispatcherCUDA : public pmGraphicsBase
 
 		std::string GetDeviceName(size_t pDeviceIndex);
 		std::string GetDeviceDescription(size_t pDeviceIndex);
-		pmStatus InvokeKernel(pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr);
-	
+		pmStatus InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr);
+
+#ifdef SUPPORT_CUDA
+        pmStatus FreeLastExecutionResources(size_t pBoundDeviceIndex);
+#endif
+    
 	private:
 		pmStatus CountAndProbeProcessingElements();
 
@@ -46,6 +64,9 @@ class pmDispatcherCUDA : public pmGraphicsBase
 
 #ifdef SUPPORT_CUDA
 		std::vector<std::pair<int, cudaDeviceProp> > mDeviceVector;
+        
+        std::map<size_t, pmLastExecutionRecord> mLastExecutionMap;  // CUDA Device Index vs. last execution details
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mLastExecutionLock;
 #endif
 };
 

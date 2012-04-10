@@ -43,7 +43,7 @@ class pmSubtaskCB : public pmCallback
 		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA);
 		virtual ~pmSubtaskCB();
 
-		virtual pmStatus Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId);
+		virtual pmStatus Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex);
 
 		virtual bool IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType);
 
