@@ -39,7 +39,7 @@ SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared
 endif
 endif
 
-LIBRARIES= -lstdc++ -lm $(PTHREAD_LIBS) $(MPI_LIBS)
+LIBRARIES= $(PTHREAD_LIBS) $(MPI_LIBS) -lstdc++ -lm
 
 ifeq ($(DEBUG), 1)
 	FLAGS += -DDEBUG -D_DEBUG -g
