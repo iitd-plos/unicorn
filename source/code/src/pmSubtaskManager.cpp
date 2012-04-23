@@ -607,11 +607,12 @@ pmStatus pmProportionalSchedulingManager::ReadConfigurationFile(std::vector<pmPr
     FILE* fp = fopen(PROPORTIONAL_SCHEDULING_CONF_FILE, "r");
     if(!fp)
         PMTHROW(pmConfFileNotFoundException());
-    
-    fscanf(fp, "%d %d", &mLocalCpuPower, &mRemoteCpuPower);
+   
+    // fscanf is compiled with attribute unwarn_unused_result. To avoid compiler warning receiving it's return value
+    int lVal = fscanf(fp, "%d %d", &mLocalCpuPower, &mRemoteCpuPower);
     
 #ifdef SUPPORT_CUDA
-    fscanf(fp, " %d %d", &mLocalGpuPower, &mRemoteGpuPower);
+    lVal = fscanf(fp, " %d %d", &mLocalGpuPower, &mRemoteGpuPower);
 #endif
 
     mTotalClusterPower = 0;

@@ -145,7 +145,7 @@ private:
 
     uint mLocalCpuPower, mRemoteCpuPower;
 #ifdef SUPPORT_CUDA
-    uint mRemoteCpuPower, mRemoteGpuPower;
+    uint mLocalGpuPower, mRemoteGpuPower;
 #endif
     
     uint mTotalClusterPower;
