@@ -64,16 +64,16 @@ class pmDataReductionCB : public pmCallback
 		pmDataReductionCallback mCallback;
 };
 
-class pmDataScatterCB : public pmCallback
+class pmDataRedistributionCB : public pmCallback
 {
 	public:
-		pmDataScatterCB(pmDataScatterCallback pCallback);
-		virtual ~pmDataScatterCB();
+		pmDataRedistributionCB(pmDataRedistributionCallback pCallback);
+		virtual ~pmDataRedistributionCB();
 
-		virtual pmStatus Invoke(pmTask* pTask);
+		virtual pmStatus Invoke(pmTask* pTask, ulong pSubtaskId);
 
 	private:
-		pmDataScatterCallback mCallback;
+		pmDataRedistributionCallback mCallback;
 };
 
 class pmDeviceSelectionCB : public pmCallback

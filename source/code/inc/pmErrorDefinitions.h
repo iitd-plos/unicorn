@@ -268,7 +268,8 @@ namespace pm
 			typedef enum failureTypes
 			{
 				MPI_MAX_MACHINES,
-				MPI_MAX_TRANSFER_LENGTH
+				MPI_MAX_TRANSFER_LENGTH,
+                ARITHMETIC_OVERFLOW
 			} failureTypes;
 
 			pmBeyondComputationalLimitsException(failureTypes pFailureId) {mFailureId = pFailureId;}
@@ -310,6 +311,13 @@ namespace pm
 			failureTypes mFailureId;
 	};
 
+	class pmConfFileNotFoundException : public pmException
+	{
+    public:
+        pmStatus GetStatusCode() {return pmConfFileNotFound;}
+        
+    private:
+	};
 
 } // end namespace pm
 

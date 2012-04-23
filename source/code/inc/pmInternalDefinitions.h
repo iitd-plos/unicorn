@@ -97,6 +97,8 @@ const unsigned short DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
     #define MAX_PROGRESSIVE_SLEEP_TIME_MILLI_SECS 5000
 #endif
 
+#define PROPORTIONAL_SCHEDULING_CONF_FILE "propSchedConf.txt"
+
 #endif
 
 

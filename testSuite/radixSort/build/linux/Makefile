@@ -8,8 +8,13 @@
 # make DEBUG=1 clean - Cleans test suite's debug build files
 
 SAMPLE_NAME=radixSort
-BUILD_CUDA=1	# 1 if CUDA code is included in the test suite; 0 otherwise
-BUILD_COMMON=1	# 1 if common code is included in the test suite; 0 otherwise
+
+# 1 if CUDA code is included in the test suite; 0 otherwise
+BUILD_CUDA=$(BUILD_FOR_CUDA)
+
+# 1 if common code is included in the test suite; 0 otherwise
+BUILD_COMMON=1
+
 DEBUG=0
 
 OBJECTS= $(SAMPLE_NAME).o
@@ -17,6 +22,5 @@ OBJECTS= $(SAMPLE_NAME).o
 CUDA_OBJECTS = $(SAMPLE_NAME)CUDA.o
 
 include ../../../common/build/linux/Makefile.common
-
 
 

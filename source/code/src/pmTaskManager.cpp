@@ -252,9 +252,9 @@ pmTask* pmTaskManager::FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumb
     return lTask;
 }
 
-/** There could be unnecessary steal requests in flight when a task finishes. Depending upon, the presence of reduce or scatter in the task, it may
- *  get deleted at different stages which are all independent of in flight steal commands. So it is required to atomically check the existence of
- *  task and it's steal completion while processing steal commands in the scheduler thread 
+/** There could be unnecessary steal requests in flight when a task finishes. Depending upon, the presence of reduce or redistribution in the 
+ *  task, it may get deleted at different stages which are all independent of in flight steal commands. So it is required to atomically check
+ *  the existence of task and it's steal completion while processing steal commands in the scheduler thread.
 */
 bool pmTaskManager::IsTaskOpenToSteal(pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {

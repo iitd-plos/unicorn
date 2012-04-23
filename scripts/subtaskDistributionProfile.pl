@@ -6,6 +6,9 @@ my($script_path) = abs_path($0);
 $script_path =~ /(.*)\/.*\/.*$/;
 my($pm_base_path) = $1;
 
+my($linux) = `uname -a | grep Linux`;
+chomp($linux);
+
 #my($runLevel, $parallelTaskMode, $schedulingModel, $samples, $minProcs, $maxProcs, $hostsFile, $exec_varyings, $varying1_min, $varying1_max, $varying1_step, $varying2_min, $varying2_max, $varying2_step);
 my($minProcs, $maxProcs, $hostsFile, $exec_varyings, $varying1_min, $varying1_max, $varying1_step, $varying2_min, $varying2_max, $varying2_step);
 
@@ -104,7 +107,7 @@ sub executeBenchmark
 
     for($i=0; $i<$procs; ++$i)
     {
-        for($j=0; $j<=2; ++$j)
+        for($j=0; $j<=3; ++$j)
         {
             $mach_4[$j][$i] = "XXX";
             $mach_5[$j][$i] = "XXX";
@@ -115,12 +118,15 @@ sub executeBenchmark
     execute($exec_path, 4, 0, $procs, $varying_str);
     execute($exec_path, 4, 1, $procs, $varying_str);
     execute($exec_path, 4, 2, $procs, $varying_str);
+    execute($exec_path, 4, 3, $procs, $varying_str);
     execute($exec_path, 5, 0, $procs, $varying_str);
     execute($exec_path, 5, 1, $procs, $varying_str);
     execute($exec_path, 5, 2, $procs, $varying_str);
+    execute($exec_path, 5, 3, $procs, $varying_str);
     execute($exec_path, 6, 0, $procs, $varying_str);
     execute($exec_path, 6, 1, $procs, $varying_str);
     execute($exec_path, 6, 2, $procs, $varying_str);
+    execute($exec_path, 6, 3, $procs, $varying_str);
 
     $~ = DATA;
 
@@ -130,12 +136,15 @@ sub executeBenchmark
         $gc_0_subtasks = $mach_4[0][$i];
         $gc_1_subtasks = $mach_4[1][$i];
         $gc_2_subtasks = $mach_4[2][$i];
+        $gc_3_subtasks = $mach_4[3][$i];
         $gg_0_subtasks = $mach_5[0][$i];
         $gg_1_subtasks = $mach_5[1][$i];
         $gg_2_subtasks = $mach_5[2][$i];
+        $gg_3_subtasks = $mach_5[3][$i];
         $gcg_0_subtasks = $mach_6[0][$i];
         $gcg_1_subtasks = $mach_6[1][$i];
         $gcg_2_subtasks = $mach_6[2][$i];
+        $gcg_3_subtasks = $mach_6[3][$i];
 
         write;
     }
@@ -148,7 +157,12 @@ sub execute
 {
     my($exec_path, $parallelMode, $schedModel, $procs, $varying_str) = @_;
 
-    my($cmd) = "mpirun --mca btl_tcp_if_include lo,eth0 ";
+    my($cmd) = "mpirun ";
+    
+    if($linux !~ /^\s*$/)
+    {
+        $cmd .= "--mca btl_tcp_if_include lo,eth0 ";
+    }
     
     if($hostsFile !~ /^$/)
     {
@@ -341,32 +355,32 @@ sub verifyIntegerRange
 
 
 format HEADER = 
-===============================================================================================
+=======================================================================================================================
 MPI Cluster Hosts: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 $clusterHosts
 Benchmark: @<<<<<<<<<<<<<<<<<<<<<<
 $benchmarkName
-===============================================================================================
+=======================================================================================================================
 .
  
 format SUBHEADER =
-===============================================================================================
+=======================================================================================================================
                                     Varying: @<<<<<<<<<<<<<<<<<<       Hosts: @<<<<<<       
 $varying_str $hosts
-===============================================================================================
-             |                               Subtasks Executed                                |
-             |         Global CPU       |         Global GPU       |     Global CPU+GPU       |
-    Hosts    |  Push  |  Pull  | Static |  Push  |  Pull  | Static |  Push  |  Pull  | Static |
-===============================================================================================
+=======================================================================================================================
+             |                                            Subtasks Executed                                           |
+             |             Global CPU           |            Global GPU            |           Global CPU+GPU         |
+    Hosts    |  Push  |  Pull  | Equal |  Prop  |  Push  |  Pull  | Equal |  Prop  |  Push  |  Pull  | Equal |  Prop  |
+=======================================================================================================================
 .
 
 format DATA =
-@<<<<<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<
-$machine_num $gc_0_subtasks $gc_1_subtasks $gc_2_subtasks $gg_0_subtasks $gg_1_subtasks $gg_2_subtasks $gcg_0_subtasks $gcg_1_subtasks $gcg_2_subtasks
+@<<<<<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<<
+$machine_num $gc_0_subtasks $gc_1_subtasks $gc_2_subtasks $gc_3_subtasks $gg_0_subtasks $gg_1_subtasks $gg_2_subtasks $gg_3_subtasks $gcg_0_subtasks $gcg_1_subtasks $gcg_2_subtasks $gcg_3_subtasks
 .
  
 format FOOTER =
-===============================================================================================
+=======================================================================================================================
 .
 
  

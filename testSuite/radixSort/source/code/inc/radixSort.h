@@ -1,15 +1,17 @@
 
-#define DEFAULT_ARRAY_LENGTH 10000
-#define ELEMS_PER_SUBTASK 100
+const int DEFAULT_ARRAY_LENGTH = 10000;
+const int ELEMS_PER_SUBTASK = 100;
 
-#define BITS_PER_ROUND 4
-#define TOTAL_BITS (sizeof(int)*8)
-#define TOTAL_ROUNDS (TOTAL_BITS/4)
+const int BITS_PER_ROUND = 4;
+const int TOTAL_BITS = (sizeof(int)*8);
+const int TOTAL_ROUNDS = (TOTAL_BITS/BITS_PER_ROUND);
 
-pmStatus radixSort_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
+#ifdef BUILD_CUDA
+void radixSort_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
+#endif
 
 typedef struct radixSortTaskConf
 {
 	int arrayLen;
-	bool fisrtRoundSortFromMsb;
+	bool firstRoundSortFromMsb;
 } radixSortTaskConf;

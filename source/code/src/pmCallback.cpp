@@ -143,22 +143,27 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, ulong pSubtaskId1, ulong pSubt
 }
 
 
-/* class pmDataScatterCB */
-pmDataScatterCB::pmDataScatterCB(pmDataScatterCallback pCallback)
+/* class pmDataRedistributionCB */
+pmDataRedistributionCB::pmDataRedistributionCB(pmDataRedistributionCallback pCallback)
 {
 	mCallback = pCallback;
 }
 
-pmDataScatterCB::~pmDataScatterCB()
+pmDataRedistributionCB::~pmDataRedistributionCB()
 {
 }
 
-pmStatus pmDataScatterCB::Invoke(pmTask* pTask)
+pmStatus pmDataRedistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId)
 {
 	if(!mCallback)
 		return pmSuccess;
 
-	return mCallback(pTask->GetTaskInfo());
+    bool lOutputMemWriteOnly = false;
+
+	pmSubtaskInfo lSubtaskInfo;
+	pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
+
+	return mCallback(pTask->GetTaskInfo(), lSubtaskInfo);
 }
 
 

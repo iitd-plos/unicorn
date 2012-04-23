@@ -42,7 +42,8 @@ class pmController : public pmBase
 		pmStatus ReleaseTask_Public(pmTaskHandle pTaskHandle);
 		pmStatus WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle);
 		pmStatus GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, double* pTime);
-		pmStatus SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pScatterGatherInfo);
+		pmStatus SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo);
+        pmStatus RedistributeData_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned long pOrder);
 		pmStatus SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
 
 		uint GetHostId_Public();

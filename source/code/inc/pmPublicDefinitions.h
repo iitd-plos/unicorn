@@ -43,6 +43,7 @@ namespace pm
 		pmMaxKeyLengthExceeded,
 		pmDataProcessingFailure,
         pmNoCompatibleDevice,
+        pmConfFileNotFound,
 		pmMaxStatusValues
 	} pmStatus;
 
@@ -72,7 +73,7 @@ namespace pm
 	typedef void* pmCallbackHandle;
 	typedef void* pmClusterHandle;
 
-	/** Scatter Gather structure for memory subscription */
+	/** Structure for memory subscription */
 	typedef struct pmSubscriptionInfo
 	{
 		size_t offset;				/* Offset from the start of the memory region */
@@ -143,7 +144,8 @@ namespace pm
     {
         SLOW_START,
         RANDOM_STEAL,
-        EQUAL_STATIC
+        EQUAL_STATIC,
+        PROPORTIONAL_STATIC
     } pmSchedulingPolicy;
 
 
@@ -152,7 +154,7 @@ namespace pm
 	typedef pmStatus (*pmSubtaskCallback_CPU)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
 	typedef pmStatus (*pmDataReductionCallback)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtask1Info, pmSubtaskInfo pSubtask2Info);
-	typedef pmStatus (*pmDataScatterCallback)(pmTaskInfo pTaskInfo);
+	typedef pmStatus (*pmDataRedistributionCallback)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef bool     (*pmDeviceSelectionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
 	typedef pmStatus (*pmPreDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
 	typedef pmStatus (*pmPostDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
@@ -166,7 +168,7 @@ namespace pm
 			pmSubtaskCallback_CPU subtask_cpu;
 			pmSubtaskCallback_GPU_CUDA subtask_gpu_cuda;
 			pmDataReductionCallback dataReduction;
-			pmDataScatterCallback dataScatter;
+			pmDataRedistributionCallback dataRedistribution;
 			pmDeviceSelectionCallback deviceSelection;
 			pmPreDataTransferCallback preDataTransfer;
 			pmPostDataTransferCallback postDataTransfer;
@@ -204,6 +206,15 @@ namespace pm
      *  of calling this function otherwise is undefined.
      */
 	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo);
+    
+	/** The memory redistribution API. It establishes memory ordering for the
+	 *	output section computed by a subtask in the final task memory. Order 0 is assumed
+     *  to be the first order. Data for order 1 is placed after all data for order 0.
+     *  There is no guaranteed ordering inside an order number if multiple subtasks
+     *  produce data for that order. This function can only be called from DataRedistribution
+     *  callback. The effect of calling this function otherwise is undefined.
+     */
+    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned long pOrder);
 
     /** The CUDA launch configuration structure */
     typedef struct pmCudaLaunchConf

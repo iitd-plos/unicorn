@@ -96,25 +96,63 @@ class pmPushSchedulingManager : public pmSubtaskManager
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
-class pmPullSchedulingManager : public pmSubtaskManager
+class pmSingleAssignmentSchedulingManager : public pmSubtaskManager
+{
+public:
+    pmSingleAssignmentSchedulingManager(pmLocalTask* pLocalTask);
+    virtual ~pmSingleAssignmentSchedulingManager();	
+    
+    virtual bool HasTaskFinished();
+    
+    virtual pmStatus AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask) = 0;
+    virtual pmStatus RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
+    
+private:
+    bool HasTaskFinished_Internal();
+
+    std::set<pmUnfinishedPartitionPtr> mUnacknowledgedPartitions;		// Collection of all unacknowledged partitions
+    
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;    
+};
+    
+class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager
 {
 	public:
 		pmPullSchedulingManager(pmLocalTask* pLocalTask);
 		virtual ~pmPullSchedulingManager();	
 
-		virtual bool HasTaskFinished();
-
 		virtual pmStatus AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask);
-		virtual pmStatus RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
-        
-        void PrintUnacknowledgedPartitions();
 
 	private:
 		std::set<pmUnfinishedPartitionPtr> mSubtaskPartitions;		// Collection of partitions to be assigned to devices
-		std::set<pmUnfinishedPartitionPtr> mUnacknowledgedPartitions;		// Collection of all unacknowledged partitions
 		std::set<pmUnfinishedPartitionPtr>::iterator mIter;
 
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mAssignmentResourceLock;
+};
+
+class pmProportionalSchedulingManager : public pmSingleAssignmentSchedulingManager
+{
+public:
+    pmProportionalSchedulingManager(pmLocalTask* pLocalTask);
+    virtual ~pmProportionalSchedulingManager();	
+    
+    virtual pmStatus AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask);
+    
+private:
+    pmStatus ReadConfigurationFile(std::vector<pmProcessingElement*>& pDevices);
+    uint GetDevicePower(pmProcessingElement* pDevice);
+    ulong FindDeviceAssignment(pmProcessingElement* pDevice, ulong pSubtaskCount);
+
+    uint mLocalCpuPower, mRemoteCpuPower;
+#ifdef SUPPORT_CUDA
+    uint mRemoteCpuPower, mRemoteGpuPower;
+#endif
+    
+    uint mTotalClusterPower;
+    
+    std::map<pmProcessingElement*, pmUnfinishedPartitionPtr> mDevicePartitionMap;
+
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mAssignmentResourceLock;
 };
 
 } // end namespace pm

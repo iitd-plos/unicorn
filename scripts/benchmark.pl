@@ -6,6 +6,10 @@ my($script_path) = abs_path($0);
 $script_path =~ /(.*)\/.*\/.*$/;
 my($pm_base_path) = $1;
 
+my($linux) = `uname -a | grep Linux`;
+chomp($linux);
+
+
 my($runLevel, $parallelTaskMode, $schedulingModel, $samples, $minProcs, $maxProcs, $hostsFile, $exec_varyings, $varying1_min, $varying1_max, $varying1_step, $varying2_min, $varying2_max, $varying2_step);
 
 main();
@@ -63,11 +67,11 @@ sub computeResults
     {
         my($schedModel);
         
-        for($schedModel = 0; $schedModel <= 2; ++$schedModel)
+        for($schedModel = 0; $schedModel <= 3; ++$schedModel)
         {
-            if($schedulingModel == 3 || $schedModel == $schedulingModel)
+            if($schedulingModel == 4 || $schedModel == $schedulingModel)
             {
-		$schedulingModelName = getSchedulingModelName($schedModel);
+                $schedulingModelName = getSchedulingModelName($schedModel);
 
                 $~ = SUBHEADER;
                 write;
@@ -112,8 +116,13 @@ sub execute
         $varying_str .= ":$iter2";
     }
     
-    my($cmd) = "mpirun --mca btl_tcp_if_include lo,eth0 ";
+    my($cmd) = "mpirun ";
     
+    if($linux !~ /^\s*$/)
+    {
+        $cmd .= "--mca btl_tcp_if_include lo,eth0 ";
+    }
+        
     if($hostsFile !~ /^$/)
     {
         $cmd .= "--hostfile $hostsFile ";
@@ -146,7 +155,7 @@ sub getInputs
 {
     $runLevel = getIntegralInput(1, "\nSelect Run Level ... \n0. Don't compare to serial execution\n1. Compare to serial execution\n2. Only run serial\n", "Invalid Run Level", 0, 2);
     $parallelTaskMode = getIntegralInput(2, "\nSelect Parallel Task Mode ... \n0. All\n1. Local CPU\n2. Local GPU\n3. Local CPU + GPU\n4. Global CPU\n5. Global GPU\n6. Global CPU + GPU\n", "Invalid Parallel Task Mode", 0, 6);
-    $schedulingModel = getIntegralInput(3, "\nSelect Scheduling Model ... \n0. Push (Slow Start)\n1. Pull (Random Steal)\n2. Equal Static\n3. All\n", "Invalid Scheduling Model", 0, 3);
+    $schedulingModel = getIntegralInput(3, "\nSelect Scheduling Model ... \n0. Push (Slow Start)\n1. Pull (Random Steal)\n2. Equal Static\n3. Proportional Static\n4. All\n", "Invalid Scheduling Model", 0, 4);
     $samples = getIntegralInput(4, "\nSamples ... ", "Invalid Samples", 1, 5);
     $minProcs = getIntegralInput(5, "Min Procs ... ", "Invalid Min Procs", 1, 10000);
     $maxProcs = getIntegralInput(6, "Max Procs ... ", "Invalid Max Procs", 1, 10000);
@@ -262,6 +271,11 @@ sub getSchedulingModelName
 	if($modelNum == 2)
 	{
 		return "Equal Static";
+	}
+
+	if($modelNum == 3)
+	{
+		return "Proportional Static";
 	}
 
 	return "PUSH (Slow Start)";

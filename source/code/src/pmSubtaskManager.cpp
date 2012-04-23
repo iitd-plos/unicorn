@@ -421,9 +421,87 @@ bool pmPushSchedulingManager::partitionSorter::operator() (const pmSubtaskManage
 }
 
 
+/* class pmSingleAssignmentSchedulingManager */
+pmSingleAssignmentSchedulingManager::pmSingleAssignmentSchedulingManager(pmLocalTask* pLocalTask)
+    : pmSubtaskManager(pLocalTask)
+{
+	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
+    if(lSubtaskCount == 0)
+        PMTHROW(pmFatalErrorException());
+    
+	pmUnfinishedPartitionPtr lUnacknowledgedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(0, lSubtaskCount-1));
+	mUnacknowledgedPartitions.insert(lUnacknowledgedPartitionPtr);
+}
+
+pmSingleAssignmentSchedulingManager::~pmSingleAssignmentSchedulingManager()
+{
+    mUnacknowledgedPartitions.clear();
+}
+
+bool pmSingleAssignmentSchedulingManager::HasTaskFinished()
+{
+    FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    if(HasTaskFinished_Internal())
+    {
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+        PrintExecutionProfile();
+#endif
+        
+        return true;
+    }
+    
+    return false;
+}
+
+/* This method must be called with mResourceLock acquired */
+bool pmSingleAssignmentSchedulingManager::HasTaskFinished_Internal()
+{
+    return mUnacknowledgedPartitions.empty();
+}
+
+pmStatus pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus)
+{
+    FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    if(HasTaskFinished_Internal())
+        PMTHROW(pmFatalErrorException());
+    
+    std::set<pmUnfinishedPartitionPtr>::iterator lIter = mUnacknowledgedPartitions.begin();
+    std::set<pmUnfinishedPartitionPtr>::iterator lEndIter = mUnacknowledgedPartitions.end();
+    
+    pmUnfinishedPartitionPtr lTargetPartitionPtr;
+    for(; lIter != lEndIter; ++lIter)
+    {
+        pmUnfinishedPartitionPtr lPartitionPtr = *lIter;
+        if(lPartitionPtr->firstSubtaskIndex <= pStartingSubtask && lPartitionPtr->lastSubtaskIndex >= pStartingSubtask + pSubtaskCount - 1)
+        {
+            mUnacknowledgedPartitions.erase(lIter);
+            lTargetPartitionPtr = lPartitionPtr;
+            break;
+        }
+    }
+    
+    if(!lTargetPartitionPtr.get())
+        PMTHROW(pmFatalErrorException());
+    
+    if(lTargetPartitionPtr->firstSubtaskIndex < pStartingSubtask)
+        mUnacknowledgedPartitions.insert(pmUnfinishedPartitionPtr(new pmUnfinishedPartition(lTargetPartitionPtr->firstSubtaskIndex, pStartingSubtask - 1)));
+    
+    if(lTargetPartitionPtr->lastSubtaskIndex > pStartingSubtask + pSubtaskCount - 1)
+        mUnacknowledgedPartitions.insert(pmUnfinishedPartitionPtr(new pmUnfinishedPartition(pStartingSubtask + pSubtaskCount, lTargetPartitionPtr->lastSubtaskIndex)));
+    
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+    UpdateExecutionProfile(pDevice, pSubtaskCount);
+#endif
+    
+    return pmSuccess;
+}
+
+
 /* class pmPullSchedulingManager */
 pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
-	: pmSubtaskManager(pLocalTask)
+	: pmSingleAssignmentSchedulingManager(pLocalTask)
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lPartitionCount = mLocalTask->GetAssignedDeviceCount();
@@ -437,9 +515,6 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 	ulong lFirstSubtask = 0;
 	ulong lLastSubtask;
 	
-	pmUnfinishedPartitionPtr lUnacknowledgedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(0, lSubtaskCount-1));
-	mUnacknowledgedPartitions.insert(lUnacknowledgedPartitionPtr);
-
     for(ulong i=0; i<lPartitionCount; ++i)
     {				
         if(i < lLeftoverSubtasks)
@@ -459,35 +534,11 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 pmPullSchedulingManager::~pmPullSchedulingManager()
 {
     mSubtaskPartitions.clear();
-    mUnacknowledgedPartitions.clear();
-}
-
-void pmPullSchedulingManager::PrintUnacknowledgedPartitions()
-{
-    std::set<pmUnfinishedPartitionPtr>::iterator lBegin = mUnacknowledgedPartitions.begin();
-    std::set<pmUnfinishedPartitionPtr>::iterator lEnd = mUnacknowledgedPartitions.end();
-    
-    for(; lBegin != lEnd; ++lBegin)
-        std::cout << (*lBegin)->firstSubtaskIndex << " " << (*lBegin)->lastSubtaskIndex << std::endl;
-}
-    
-bool pmPullSchedulingManager::HasTaskFinished()
-{
-	if(mUnacknowledgedPartitions.empty())
-    {
-#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
-        PrintExecutionProfile();
-#endif
-        
-        return true;
-    }
-    
-    return false;
 }
 
 pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask)
 {
-	FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+	FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
 
     assert(mIter != mSubtaskPartitions.end());
     
@@ -501,42 +552,121 @@ pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 	return pmSuccess;
 }
 
-pmStatus pmPullSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus)
+pmProportionalSchedulingManager::pmProportionalSchedulingManager(pmLocalTask* pLocalTask)
+	: pmSingleAssignmentSchedulingManager(pLocalTask)
 {
-	FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 
-	if(HasTaskFinished())
-		PMTHROW(pmFatalErrorException());
+    std::vector<pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
+    ulong lDeviceCount = (ulong)(lDevices.size());
+    
+    if(lSubtaskCount == 0 || lDeviceCount == 0 || lSubtaskCount < lDeviceCount)
+        PMTHROW(pmFatalErrorException());
+    
+    ReadConfigurationFile(lDevices);
+        
+    ulong lStartSubtask = 0;
+    ulong lSubtasks = 0;
+    for(ulong i=0; i<lDeviceCount; ++i)
+    {
+        pmProcessingElement* lDevice = lDevices[i];
+        
+        if(i == lDeviceCount-1)
+            lSubtasks = lSubtaskCount - lStartSubtask;
+        else
+            lSubtasks = FindDeviceAssignment(lDevice, lSubtaskCount);
+      
+        pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(lStartSubtask, lStartSubtask+lSubtasks-1));
+        
+        mDevicePartitionMap[lDevice] = lUnfinishedPartitionPtr;
+        lStartSubtask += lSubtasks;
+    }
+}
+    
+pmProportionalSchedulingManager::~pmProportionalSchedulingManager()
+{
+    mDevicePartitionMap.clear();
+}
 
-	std::set<pmUnfinishedPartitionPtr>::iterator lIter = mUnacknowledgedPartitions.begin();
-	std::set<pmUnfinishedPartitionPtr>::iterator lEndIter = mUnacknowledgedPartitions.end();
-	
-	pmUnfinishedPartitionPtr lTargetPartitionPtr;
-	for(; lIter != lEndIter; ++lIter)
-	{
-		pmUnfinishedPartitionPtr lPartitionPtr = *lIter;
-		if(lPartitionPtr->firstSubtaskIndex <= pStartingSubtask && lPartitionPtr->lastSubtaskIndex >= pStartingSubtask + pSubtaskCount - 1)
-		{
-			mUnacknowledgedPartitions.erase(lIter);
-			lTargetPartitionPtr = lPartitionPtr;
-			break;
-		}
-	}
+pmStatus pmProportionalSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask)
+{
+	FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
 
-	if(!lTargetPartitionPtr.get())
-		PMTHROW(pmFatalErrorException());
+    assert(mDevicePartitionMap.find(pDevice) != mDevicePartitionMap.end());
+    
+	pmUnfinishedPartitionPtr lPartition = mDevicePartitionMap[pDevice];
+    
+	pStartingSubtask = lPartition->firstSubtaskIndex;
+	pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
 
-    if(lTargetPartitionPtr->firstSubtaskIndex < pStartingSubtask)
-        mUnacknowledgedPartitions.insert(pmUnfinishedPartitionPtr(new pmUnfinishedPartition(lTargetPartitionPtr->firstSubtaskIndex, pStartingSubtask - 1)));
+    return pmSuccess;
+}
 
-    if(lTargetPartitionPtr->lastSubtaskIndex > pStartingSubtask + pSubtaskCount - 1)
-        mUnacknowledgedPartitions.insert(pmUnfinishedPartitionPtr(new pmUnfinishedPartition(pStartingSubtask + pSubtaskCount, lTargetPartitionPtr->lastSubtaskIndex)));
-
-#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
-    UpdateExecutionProfile(pDevice, pSubtaskCount);
+pmStatus pmProportionalSchedulingManager::ReadConfigurationFile(std::vector<pmProcessingElement*>& pDevices)
+{
+    FILE* fp = fopen(PROPORTIONAL_SCHEDULING_CONF_FILE, "r");
+    if(!fp)
+        PMTHROW(pmConfFileNotFoundException());
+    
+    fscanf(fp, "%d %d", &mLocalCpuPower, &mRemoteCpuPower);
+    
+#ifdef SUPPORT_CUDA
+    fscanf(fp, " %d %d", &mLocalGpuPower, &mRemoteGpuPower);
 #endif
 
-	return pmSuccess;
+    mTotalClusterPower = 0;
+    ulong lDeviceCount = (ulong)(pDevices.size());
+    
+    for(ulong i=0; i<lDeviceCount; ++i)
+        mTotalClusterPower += GetDevicePower(pDevices[i]);
+    
+    // Check for overflow from file input
+    if(mTotalClusterPower < mLocalCpuPower || mTotalClusterPower < mRemoteCpuPower)
+        PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::ARITHMETIC_OVERFLOW));
+    
+#ifdef SUPPORT_CUDA
+    if(mTotalClusterPower < mLocalGpuPower || mTotalClusterPower < mRemoteGpuPower)
+        PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::ARITHMETIC_OVERFLOW));
+#endif
+
+    return pmSuccess;
+}
+    
+uint pmProportionalSchedulingManager::GetDevicePower(pmProcessingElement* pDevice)
+{
+    pmDeviceTypes lDeviceType = pDevice->GetType();
+    bool lIsLocalDevice = (pDevice->GetMachine() == PM_LOCAL_MACHINE);
+
+    if(lDeviceType == CPU)
+    {
+        if(lIsLocalDevice)
+            return mLocalCpuPower;
+        else
+            return mRemoteCpuPower;
+    }
+#ifdef SUPPORT_CUDA
+    else if(lDeviceType == GPU_CUDA)
+    {
+        if(lIsLocalDevice)
+            return mLocalGpuPower;
+        else
+            return mRemoteGpuPower;        
+    }
+#endif
+    
+    PMTHROW(pmFatalErrorException());
+    
+    return 0;
+}
+    
+ulong pmProportionalSchedulingManager::FindDeviceAssignment(pmProcessingElement* pDevice, ulong pSubtaskCount)
+{
+    uint lPower = GetDevicePower(pDevice);
+    
+    return (ulong)(((double)lPower/mTotalClusterPower)*pSubtaskCount);
 }
 
 }
+
+
+

@@ -19,14 +19,14 @@ class pmCallbackUnit : public pmBase
 {
 	public:
 		pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
-			pmDataScatterCB* pDataScatterCB, pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB);
+			pmDataRedistributionCB* pDataRedistributionCB, pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB);
 
 		virtual ~pmCallbackUnit();
 
 		pmDataDistributionCB* GetDataDistributionCB();
 		pmSubtaskCB* GetSubtaskCB();
 		pmDataReductionCB* GetDataReductionCB();
-		pmDataScatterCB* GetDataScatterCB();
+		pmDataRedistributionCB* GetDataRedistributionCB();
 		pmDeviceSelectionCB* GetDeviceSelectionCB();
 		pmPreDataTransferCB* GetPreDataTransferCB();
 		pmPostDataTransferCB* GetPostDataTransferCB();
@@ -39,7 +39,7 @@ class pmCallbackUnit : public pmBase
 		pmDataDistributionCB* mDataDistributionCB;
 		pmSubtaskCB* mSubtaskCB;
 		pmDataReductionCB* mDataReductionCB;
-		pmDataScatterCB* mDataScatterCB;
+		pmDataRedistributionCB* mDataRedistributionCB;
 		pmDeviceSelectionCB* mDeviceSelectionCB;
 		pmPreDataTransferCB* mPreDataTransferCB;
 		pmPostDataTransferCB* mPostDataTransferCB;

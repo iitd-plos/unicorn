@@ -62,7 +62,8 @@ static const char* pmErrorMessages[] =
 	"Invalid callback key or multiple invalid uses of same key",
 	"Key length exceeds the maximum limit",
 	"Internal failure in data packing/unpacking",
-    "No compatible processing element found in the cluster"
+    "No compatible processing element found in the cluster",
+    "Configuration file not found at expected location"
 };
 
 const char* pmGetLibVersion()
@@ -173,7 +174,7 @@ pmCallbacks::pmCallbacks()
 	subtask_cpu = NULL;
 	subtask_gpu_cuda = NULL;
 	dataReduction = NULL;
-	dataScatter = NULL;
+	dataRedistribution = NULL;
 	deviceSelection = NULL;
 	preDataTransfer = NULL;
 	postDataTransfer = NULL;
@@ -271,9 +272,15 @@ pmSubscriptionInfo::pmSubscriptionInfo()
 	//blockCount = 1;
 }
 
-pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pScatterGatherInfo)
+pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo)
 {
-	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pSubtaskId, pIsInputMemory, pScatterGatherInfo);
+	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pSubtaskId, pIsInputMemory, pSubscriptionInfo);
 }
+    
+pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned long pOrder)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pSubtaskId, pOffset, pLength, pOrder);
+}
+
 
 } // end namespace pm

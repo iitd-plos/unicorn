@@ -313,7 +313,7 @@ pmStatus pmExecutionStub::CommonPostExecuteOnCPU(pmTask* pTask, ulong pSubtaskId
 	if(lReduceCallback)
 		pTask->GetReducer()->AddSubtask(pSubtaskId);
 	else
-		INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataScatterCB, pTask->GetCallbackUnit()->GetDataScatterCB(), Invoke, pTask);
+		INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataRedistributionCB, pTask->GetCallbackUnit()->GetDataRedistributionCB(), Invoke, pTask, pSubtaskId);
 
 	return pmSuccess;
 }

@@ -200,7 +200,7 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	pmSubtaskCB* lSubtask = NULL;
 	pmDataReductionCB* lDataReduction = NULL;
 	pmDeviceSelectionCB* lDeviceSelection = NULL;
-	pmDataScatterCB* lDataScatter = NULL;
+	pmDataRedistributionCB* lpmDataRedistributionCB = NULL;
 	pmPreDataTransferCB* lPreDataTransfer = NULL;
 	pmPostDataTransferCB* lPostDataTransfer = NULL;
 	pmCallbackUnit* lCallbackUnit = NULL;
@@ -211,21 +211,21 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	*pCallbackHandle = NULL;
 
 	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
-		if(pCallbacks.dataDistribution)
-			DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataDistribution, pmDataDistributionCB, new pmDataDistributionCB(pCallbacks.dataDistribution));
+    if(pCallbacks.dataDistribution)
+        DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataDistribution, pmDataDistributionCB, new pmDataDistributionCB(pCallbacks.dataDistribution));
 	if(pCallbacks.subtask_cpu || pCallbacks.subtask_gpu_cuda)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, pmSubtaskCB, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda));
 	if(pCallbacks.dataReduction)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, pmDataReductionCB, new pmDataReductionCB(pCallbacks.dataReduction));
-	if(pCallbacks.dataScatter)
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataScatter, pmDataScatterCB, new pmDataScatterCB(pCallbacks.dataScatter));
+	if(pCallbacks.dataRedistribution)
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lpmDataRedistributionCB, pmDataRedistributionCB, new pmDataRedistributionCB(pCallbacks.dataRedistribution));
 	if(pCallbacks.deviceSelection)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDeviceSelection, pmDeviceSelectionCB, new pmDeviceSelectionCB(pCallbacks.deviceSelection));
 	if(pCallbacks.preDataTransfer)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPreDataTransfer, pmPreDataTransferCB, new pmPreDataTransferCB(pCallbacks.preDataTransfer));
 	if(pCallbacks.postDataTransfer)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPostDataTransfer, pmPostDataTransferCB, new pmPostDataTransferCB(pCallbacks.postDataTransfer));
-	DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lDataScatter, lPreDataTransfer, lPostDataTransfer));
+	DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lpmDataRedistributionCB, lPreDataTransfer, lPostDataTransfer));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
     *pCallbackHandle = lCallbackUnit;
@@ -308,6 +308,8 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
         lModel = scheduler::PULL;
     else if(pTaskDetails.policy == EQUAL_STATIC)
         lModel = scheduler::STATIC_EQUAL;
+    else if(pTaskDetails.policy == PROPORTIONAL_STATIC)
+        lModel = scheduler::STATIC_PROPORTIONAL;
     
 	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel);
 
@@ -337,11 +339,22 @@ pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandl
 	return pmSuccess;
 }
 
-pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pScatterGatherInfo)
+pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo)
 {
-	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(pSubtaskId, pIsInputMemory, pScatterGatherInfo);
+	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(pSubtaskId, pIsInputMemory, pSubscriptionInfo);
 }
 
+pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned long pOrder)
+{
+    pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
+    pmMemSection* lMemSection = lTask->GetMemSectionRW();
+    
+    if(lMemSection)
+        return lMemSection->RedistributeData(lTask->GetPriority(), pSubtaskId, pOffset, pLength, pOrder);
+    
+    return pmSuccess;
+}
+    
 pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
 {
 	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(pSubtaskId, pCudaLaunchConf);

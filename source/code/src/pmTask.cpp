@@ -361,7 +361,7 @@ pmLocalTask::~pmLocalTask()
 pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
 {
     pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
-    if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataScatterCB())
+    if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
     {
         pmTask::MarkSubtaskExecutionFinished();
         pmTaskManager::GetTaskManager()->DeleteTask(this);  // Local task is only erased from task manager. It is actually deleted from memory by user
@@ -388,6 +388,10 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
 		case scheduler::PULL:
 		case scheduler::STATIC_EQUAL:
 			mSubtaskManager = new pmPullSchedulingManager(this);
+			break;
+
+		case scheduler::STATIC_PROPORTIONAL:
+			mSubtaskManager = new pmProportionalSchedulingManager(this);
 			break;
 
 		default:
@@ -511,7 +515,7 @@ pmRemoteTask::~pmRemoteTask()
 pmStatus pmRemoteTask::MarkSubtaskExecutionFinished()
 {
 	pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
-	if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataScatterCB())
+	if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
 	{
 		pmTask::MarkSubtaskExecutionFinished();
 		delete this;

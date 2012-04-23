@@ -168,6 +168,11 @@ pmStatus pmMemSection::FlushOwnerships()
 	return pmSuccess;
 }
 
+pmStatus pmMemSection::RedistributeData(ushort pPriority, ulong pSubtaskId, size_t pOffset, size_t pLength, ulong pOrder)
+{
+    return pmSuccess;
+}    
+    
 pmStatus pmMemSection::Fetch(ushort pPriority)
 {
     const std::vector<pmCommunicatorCommandPtr>& lVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(this, pPriority, 0, GetLength());
