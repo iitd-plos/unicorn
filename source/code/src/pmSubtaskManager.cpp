@@ -621,15 +621,6 @@ pmStatus pmProportionalSchedulingManager::ReadConfigurationFile(std::vector<pmPr
     for(ulong i=0; i<lDeviceCount; ++i)
         mTotalClusterPower += GetDevicePower(pDevices[i]);
     
-    // Check for overflow from file input
-    if(mTotalClusterPower < mLocalCpuPower || mTotalClusterPower < mRemoteCpuPower)
-        PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::ARITHMETIC_OVERFLOW));
-    
-#ifdef SUPPORT_CUDA
-    if(mTotalClusterPower < mLocalGpuPower || mTotalClusterPower < mRemoteGpuPower)
-        PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::ARITHMETIC_OVERFLOW));
-#endif
-
     return pmSuccess;
 }
     

@@ -148,7 +148,7 @@ private:
     uint mLocalGpuPower, mRemoteGpuPower;
 #endif
     
-    uint mTotalClusterPower;
+    double mTotalClusterPower;
     
     std::map<pmProcessingElement*, pmUnfinishedPartitionPtr> mDevicePartitionMap;
 
