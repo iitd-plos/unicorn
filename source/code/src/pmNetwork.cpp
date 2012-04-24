@@ -1138,9 +1138,7 @@ pmStatus pmMPI::SetupDummyRequest()
 	{
 		mDummyReceiveRequest = new MPI_Request();
 
-		char lDummyBuffer[1];
-        lDummyBuffer[0] = '\0';
-		if( MPI_CALL("MPI_Irecv", (MPI_Irecv(lDummyBuffer, 1, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, mDummyReceiveRequest) != MPI_SUCCESS)) )
+		if( MPI_CALL("MPI_Irecv", (MPI_Irecv(NULL, 0, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, mDummyReceiveRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::DUMMY_REQUEST_CREATION_ERROR));
 	}
 
@@ -1152,10 +1150,9 @@ pmStatus pmMPI::CancelDummyRequest()
 {
 	if(mDummyReceiveRequest)
 	{
-        MPI_Request lRequest;
-		char lDummyBuffer[1];
+	        MPI_Request lRequest;
         
-		if( MPI_CALL("MPI_Isend", (MPI_Isend(lDummyBuffer, 1, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
+		if( MPI_CALL("MPI_Isend", (MPI_Isend(NULL, 0, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::DUMMY_REQUEST_CANCEL_ERROR));
 
 //		if( MPI_CALL("MPI_Cancel", (MPI_Cancel(mDummyReceiveRequest) != MPI_SUCCESS)) )
@@ -1598,11 +1595,11 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 				PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 
 			int lPos = 0;
-			uint lInternalTag;
+			uint lInternalTag = (uint)pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS;
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lPackedData, lLength, &lPos, &lInternalTag, 1, MPI_UNSIGNED, MPI_COMM_WORLD) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-			pmCommunicatorCommand::communicatorDataTypes lDataType;
+			pmCommunicatorCommand::communicatorDataTypes lDataType = pmCommunicatorCommand::MAX_COMMUNICATOR_DATA_TYPES;
 			pmCommunicatorCommand::communicatorCommandTags lTag = (pmCommunicatorCommand::communicatorCommandTags)lInternalTag;
 			switch(lTag)
 			{
