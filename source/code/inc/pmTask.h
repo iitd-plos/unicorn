@@ -7,14 +7,6 @@
 #include "pmTaskExecStats.h"
 #include "pmSubscriptionManager.h"
 
-/*
-#include "pmCluster.h"
-#include "pmNetwork.h"
-#include "pmMemSection.h"
-#include "pmReducer.h"
-#include "pmResourceLock.h"
-*/
-
 #include <map>
 #include <set>
 #include <vector>
@@ -29,6 +21,7 @@ class pmMemSection;
 class pmMachine;
 class pmCluster;
 class pmReducer;
+class pmRedistributor;
 
 extern pmMachine* PM_LOCAL_MACHINE;
 extern pmCluster* PM_GLOBAL_CLUSTER;
@@ -67,7 +60,8 @@ class pmTask : public pmBase
 		pmTaskInfo& GetTaskInfo();
 		pmStatus GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly);
 		pmSubscriptionManager& GetSubscriptionManager();
-		pmReducer* GetReducer();
+        pmReducer* GetReducer();
+        pmRedistributor* GetRedistributor();
 		virtual pmStatus MarkSubtaskExecutionFinished();
 		bool HasSubtaskExecutionFinished();
 		pmStatus IncrementSubtasksExecuted(ulong pSubtaskCount);
@@ -116,8 +110,10 @@ class pmTask : public pmBase
 		std::map<ulong, subtaskShadowMem> mShadowMemMap;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mShadowMemLock;
 
-	protected:
-		pmReducer* mReducer;
+        pmReducer* mReducer;
+        pmRedistributor* mRedistributor;
+
+    protected:
 		uint mAssignedDeviceCount;
 };
 

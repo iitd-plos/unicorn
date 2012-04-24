@@ -884,6 +884,12 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			break;
 		}
             
+		case pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::dataRedistributionStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+
 		default:
 			PMTHROW(pmFatalErrorException());
 	}
@@ -1037,6 +1043,17 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::hostFinalizationStruct, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.terminate, lTerminateMPI, MPI_UNSIGNED_SHORT, 0, 1);
 
+			break;
+		}
+
+		case pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT:
+		{
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::dataRedistributionStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtasksAccounted, lSubtasksAccountedMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.orderCount, lOrderCountMPI, MPI_UNSIGNED, 3, 1);
+            
 			break;
 		}
 

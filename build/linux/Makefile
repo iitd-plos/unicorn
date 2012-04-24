@@ -74,6 +74,7 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmMemSection.o \
 	$(OUTDIR)/pmNetwork.o \
 	$(OUTDIR)/pmReducer.o \
+	$(OUTDIR)/pmRedistributor.o \
 	$(OUTDIR)/pmPublicDefinitions.o \
 	$(OUTDIR)/pmResourceLock.o \
 	$(OUTDIR)/pmScheduler.o \

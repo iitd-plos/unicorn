@@ -63,7 +63,8 @@ typedef enum eventIdentifier
 	SUBTASK_REDUCE,
 	MEMORY_TRANSFER,
 	COMMAND_COMPLETION,
-    HOST_FINALIZATION
+    HOST_FINALIZATION,
+    REDISTRIBUTION_METADATA_EVENT
 } eventIdentifier;
 
 typedef struct taskSubmission
@@ -171,6 +172,14 @@ typedef struct hostFinalization
 {
     bool terminate; // true for final termination; false for task submission freeze
 } hostFinalization;
+    
+typedef struct redistributionMetaData
+{
+    pmTask* task;
+    uint orderCount;
+    void* data;
+    uint dataLength;
+} redistributionMetaData;
 
 typedef struct schedulerEvent
 {
@@ -192,6 +201,7 @@ typedef struct schedulerEvent
 		subtaskReduce subtaskReduceDetails;
 		memTransfer memTransferDetails;
         hostFinalization hostFinalizationDetails;
+        redistributionMetaData redistributionMetaDataDetails;
 	};
 
 	// Can't make this part of union as C++ standard does not allow anything with non-trivial constructor/copy-constructor/assignment to be part of an union
@@ -239,6 +249,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId);
 		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pTreatWriteOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority);
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
+        pmStatus RedistributionMetaDataEvent(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength);
 
 		pmStatus HandleCommandCompletion(pmCommandPtr pCommand);
 

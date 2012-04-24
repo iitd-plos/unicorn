@@ -9,6 +9,7 @@
 #include "pmTaskManager.h"
 #include "pmSubtaskManager.h"
 #include "pmReducer.h"
+#include "pmRedistributor.h"
 #include "pmMemSection.h"
 
 #include <vector>
@@ -44,6 +45,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 	mTaskInfo.taskHandle = NULL;
 	mSubtaskExecutionFinished = false;
     mReducer = NULL;
+    mRedistributor = NULL;
 	mSubtasksExecuted = 0;
 }
 
@@ -51,6 +53,9 @@ pmTask::~pmTask()
 {
 	if(mReducer)
 		delete mReducer;
+
+	if(mRedistributor)
+		delete mRedistributor;
 }
     
 pmStatus pmTask::TaskInternallyFinished()
@@ -208,6 +213,14 @@ pmReducer* pmTask::GetReducer()
 	return mReducer;
 }
 
+pmRedistributor* pmTask::GetRedistributor()
+{
+    if(!mRedistributor)
+        mRedistributor = new pmRedistributor(this);
+    
+    return mRedistributor;
+}
+
 pmStatus pmTask::MarkSubtaskExecutionFinished()
 {
 	// Auto lock/unlock scope
@@ -219,6 +232,9 @@ pmStatus pmTask::MarkSubtaskExecutionFinished()
 
 	if(mReducer)
 		mReducer->CheckReductionFinish();
+    
+    if(mRedistributor)
+        mRedistributor->PerformRedistribution();
 
 	return pmSuccess;
 }

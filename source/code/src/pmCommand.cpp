@@ -394,6 +394,7 @@ pmCommunicatorCommand::subtaskReducePacked::~subtaskReducePacked()
 {
 }
 
+/* struct pmCommunicatorCommand::memoryReceivePacked */
 pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked()
 {
 }
@@ -411,5 +412,24 @@ pmCommunicatorCommand::memoryReceivePacked::~memoryReceivePacked()
 {
 }
 
+/* struct pmCommunicatorCommand::dataRedistributionPacked */
+pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked()
+{
+}
+    
+pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength)
+{
+    this->redistributionStruct.originatingHost = *(pTask->GetOriginatingHost());
+    this->redistributionStruct.sequenceNumber = pTask->GetSequenceNumber();
+    this->redistributionStruct.subtasksAccounted = pTask->GetSubtasksExecuted();
+    this->redistributionStruct.orderCount = pOrderCount;
+    this->mem.ptr = pData;
+    this->mem.length = pDataLength;
+}
+    
+pmCommunicatorCommand::dataRedistributionPacked::~dataRedistributionPacked()
+{
+}
+    
 } // end namespace pm
 

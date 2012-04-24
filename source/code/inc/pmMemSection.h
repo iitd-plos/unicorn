@@ -65,7 +65,6 @@ class pmMemSection : public pmBase
 		pmStatus FlushOwnerships();
 		pmStatus GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
     
-        pmStatus RedistributeData(ushort pPriority, ulong pSubtaskId, size_t pOffset, size_t pLength, ulong pOrder);
         pmStatus Fetch(ushort pPriority);
 
 	protected:

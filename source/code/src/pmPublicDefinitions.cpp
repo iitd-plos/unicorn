@@ -277,7 +277,7 @@ pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, unsigned long pSubtaskId,
 	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pSubtaskId, pIsInputMemory, pSubscriptionInfo);
 }
     
-pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned long pOrder)
+pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
 {
     SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pSubtaskId, pOffset, pLength, pOrder);
 }

@@ -214,7 +214,7 @@ namespace pm
      *  produce data for that order. This function can only be called from DataRedistribution
      *  callback. The effect of calling this function otherwise is undefined.
      */
-    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned long pOrder);
+    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder);
 
     /** The CUDA launch configuration structure */
     typedef struct pmCudaLaunchConf

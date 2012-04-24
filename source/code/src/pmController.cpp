@@ -14,6 +14,7 @@
 #include "pmMemSection.h"
 #include "pmTask.h"
 #include "pmSignalWait.h"
+#include "pmRedistributor.h"
 
 namespace pm
 {
@@ -200,7 +201,7 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	pmSubtaskCB* lSubtask = NULL;
 	pmDataReductionCB* lDataReduction = NULL;
 	pmDeviceSelectionCB* lDeviceSelection = NULL;
-	pmDataRedistributionCB* lpmDataRedistributionCB = NULL;
+	pmDataRedistributionCB* lDataRedistributionCB = NULL;
 	pmPreDataTransferCB* lPreDataTransfer = NULL;
 	pmPostDataTransferCB* lPostDataTransfer = NULL;
 	pmCallbackUnit* lCallbackUnit = NULL;
@@ -218,14 +219,14 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	if(pCallbacks.dataReduction)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, pmDataReductionCB, new pmDataReductionCB(pCallbacks.dataReduction));
 	if(pCallbacks.dataRedistribution)
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lpmDataRedistributionCB, pmDataRedistributionCB, new pmDataRedistributionCB(pCallbacks.dataRedistribution));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataRedistributionCB, pmDataRedistributionCB, new pmDataRedistributionCB(pCallbacks.dataRedistribution));
 	if(pCallbacks.deviceSelection)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDeviceSelection, pmDeviceSelectionCB, new pmDeviceSelectionCB(pCallbacks.deviceSelection));
 	if(pCallbacks.preDataTransfer)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPreDataTransfer, pmPreDataTransferCB, new pmPreDataTransferCB(pCallbacks.preDataTransfer));
 	if(pCallbacks.postDataTransfer)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lPostDataTransfer, pmPostDataTransferCB, new pmPostDataTransferCB(pCallbacks.postDataTransfer));
-	DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lpmDataRedistributionCB, lPreDataTransfer, lPostDataTransfer));
+	DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lCallbackUnit, pmCallbackUnit, new pmCallbackUnit(pKey, lDataDistribution, lSubtask, lDataReduction, lDeviceSelection, lDataRedistributionCB, lPreDataTransfer, lPostDataTransfer));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
     *pCallbackHandle = lCallbackUnit;
@@ -344,13 +345,10 @@ pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong 
 	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(pSubtaskId, pIsInputMemory, pSubscriptionInfo);
 }
 
-pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned long pOrder)
+pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
 {
     pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
-    pmMemSection* lMemSection = lTask->GetMemSectionRW();
-    
-    if(lMemSection)
-        return lMemSection->RedistributeData(lTask->GetPriority(), pSubtaskId, pOffset, pLength, pOrder);
+    lTask->GetRedistributor()->RedistributeData(pSubtaskId, pOffset, pLength, pOrder);
     
     return pmSuccess;
 }

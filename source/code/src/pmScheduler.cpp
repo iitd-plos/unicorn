@@ -420,6 +420,18 @@ pmStatus pmScheduler::CommandCompletionEvent(pmCommandPtr pCommand)
 	return SwitchThread(lEvent, pCommand->GetPriority());
 }
 
+pmStatus pmScheduler::RedistributionMetaDataEvent(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength)
+{
+	schedulerEvent lEvent;
+	lEvent.eventId = REDISTRIBUTION_METADATA_EVENT;
+	lEvent.redistributionMetaDataDetails.task = pTask;
+    lEvent.redistributionMetaDataDetails.orderCount = pOrderCount;
+    lEvent.redistributionMetaDataDetails.data = pData;
+    lEvent.redistributionMetaDataDetails.dataLength = pDataLength;
+    
+	return SwitchThread(lEvent, pTask->GetPriority());
+}
+
 pmStatus pmScheduler::SendFinalizationSignal()
 {
 	schedulerEvent lEvent;

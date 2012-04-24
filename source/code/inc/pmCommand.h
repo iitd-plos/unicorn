@@ -320,8 +320,32 @@ class pmCommunicatorCommand : public pmCommand
 			} fieldCount;
 		    
 		} hostFinalizationStruct;
+    
+        typedef struct dataRedistributionStruct
+        {
+			uint originatingHost;
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
+			ulong subtasksAccounted;
+			uint orderCount;
+            
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 4
+			} fieldCount;            
+            
+        } dataRedistributionStruct;
 
-		typedef enum communicatorCommandTypes
+        typedef struct dataRedistributionPacked
+        {
+            dataRedistributionPacked();
+            dataRedistributionPacked(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength);
+            ~dataRedistributionPacked();
+            
+            dataRedistributionStruct redistributionStruct;
+            dataPtr mem;
+        } dataRedistributionPacked;
+
+        typedef enum communicatorCommandTypes
 		{
 			SEND,
 			RECEIVE,
@@ -345,6 +369,7 @@ class pmCommunicatorCommand : public pmCommand
 			SUBTASK_REDUCE_TAG,
 			UNKNOWN_LENGTH_TAG,
 			HOST_FINALIZATION_TAG,
+            DATA_REDISTRIBUTION_TAG,
 			MAX_COMMUNICATOR_COMMAND_TAGS
 		} communicatorCommandTags;
 
@@ -368,6 +393,8 @@ class pmCommunicatorCommand : public pmCommand
 			MEMORY_RECEIVE_STRUCT,
 			MEMORY_RECEIVE_PACKED,
 			HOST_FINALIZATION_STRUCT,
+            DATA_REDISTRIBUTION_STRUCT,
+            DATA_REDISTRIBUTION_PACKED,
 			MAX_COMMUNICATOR_DATA_TYPES
 		} communicatorDataTypes;
 
