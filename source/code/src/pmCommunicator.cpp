@@ -12,22 +12,15 @@ pmCommunicator* pmCommunicator::mCommunicator = NULL;
 
 pmCommunicator::pmCommunicator()
 {
+    if(mCommunicator)
+        PMTHROW(pmFatalErrorException());
+    
+    mCommunicator = this;
 }
 
 pmCommunicator* pmCommunicator::GetCommunicator()
 {
-	if(!mCommunicator)
-		mCommunicator = new pmCommunicator();
-
 	return mCommunicator;
-}
-
-pmStatus pmCommunicator::DestroyCommunicator()
-{
-	delete mCommunicator;
-	mCommunicator = NULL;
-
-	return pmSuccess;
 }
 
 pmStatus pmCommunicator::Send(pmCommunicatorCommandPtr pCommand, bool pBlocking /* = false */)

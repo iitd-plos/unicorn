@@ -14,6 +14,7 @@ namespace pm
 
 class pmLogger
 {
+    friend class pmController;
 	public:
 		typedef enum logLevel
 		{
@@ -30,7 +31,6 @@ class pmLogger
 		} logType;
 
 		static pmLogger* GetLogger();
-		static pmStatus DestroyLogger();
 
 		pmStatus SetHostId(uint pHostId);
 

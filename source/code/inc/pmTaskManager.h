@@ -25,9 +25,10 @@ class pmProcessingElement;
 
 class pmTaskManager : public pmBase
 {
-	public:
+    friend class pmController;
+
+    public:
 		static pmTaskManager* GetTaskManager();
-		static pmStatus DestroyTaskManager();
 
 		pmStatus SubmitTask(pmLocalTask* pLocalTask);
 		pmRemoteTask* CreateRemoteTask(pmCommunicatorCommand::remoteTaskAssignPacked* pRemoteTaskData);

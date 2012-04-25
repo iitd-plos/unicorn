@@ -35,10 +35,15 @@ std::map<void*, std::pair<size_t, pmLinuxMemoryManager::regionFetchData> > pmLin
 
 
 /* class pmLinuxMemoryManager */
-pmMemoryManager* pmLinuxMemoryManager::mMemoryManager = NULL;
+pmMemoryManager* pmMemoryManager::mMemoryManager = NULL;
 
 pmLinuxMemoryManager::pmLinuxMemoryManager()
 {
+    if(mMemoryManager)
+        PMTHROW(pmFatalErrorException());
+    
+    mMemoryManager = this;
+
 #ifdef USE_LAZY_MEMORY
 	InstallSegFaultHandler();
 #endif
@@ -65,18 +70,7 @@ pmLinuxMemoryManager::~pmLinuxMemoryManager()
 
 pmMemoryManager* pmLinuxMemoryManager::GetMemoryManager()
 {
-	if(!mMemoryManager)
-		mMemoryManager = new pmLinuxMemoryManager();
-
 	return mMemoryManager;
-}
-
-pmStatus pmLinuxMemoryManager::DestroyMemoryManager()
-{
-	delete mMemoryManager;
-	mMemoryManager = NULL;
-
-	return pmSuccess;
 }
 
 void* pmLinuxMemoryManager::AllocateMemory(size_t& pLength, size_t& pPageCount)

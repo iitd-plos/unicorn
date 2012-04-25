@@ -11,22 +11,16 @@ pmLogger* pmLogger::mLogger = NULL;
 
 pmLogger* pmLogger::GetLogger()
 {
-	if(!mLogger)
-		mLogger = new pmLogger(LOG_LEVEL);
-
 	return mLogger;
-}
-
-pmStatus pmLogger::DestroyLogger()
-{
-	delete mLogger;
-	mLogger = NULL;
-
-	return pmSuccess;
 }
 
 pmLogger::pmLogger(logLevel pLogLevel)
 {
+    if(mLogger)
+        PMTHROW(pmFatalErrorException());
+    
+    mLogger = this;
+    
 	mHostId = (uint)-1;	// Unknown initially
 	mLogLevel = pLogLevel;
 }

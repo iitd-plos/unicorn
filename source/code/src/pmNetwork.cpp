@@ -12,8 +12,7 @@ namespace pm
 
 using namespace network;
 
-pmNetwork* pmMPI::mNetwork = NULL;
-bool pmMPI::mTerminated = false;
+pmNetwork* pmNetwork::mNetwork = NULL;
 pmCluster* PM_GLOBAL_CLUSTER = NULL;
 
 //#define DUMP_MPI_CALLS
@@ -110,30 +109,16 @@ pmNetwork::~pmNetwork()
 /* class pmMPI */
 pmNetwork* pmMPI::GetNetwork()
 {
-	if(mTerminated)
-		PMTHROW(pmFatalErrorException());
-
-	if(!mNetwork)
-		mNetwork = new pmMPI();
-
 	return mNetwork;
-}
-
-pmStatus pmMPI::DestroyNetwork()
-{
-	delete mNetwork;
-	mNetwork = NULL;
-
-	mTerminated = true;
-
-	if(MPI_CALL("MPI_Finalize", (MPI_Finalize() == MPI_SUCCESS)))
-		return pmSuccess;
-
-	return pmNetworkTerminationError;
 }
 
 pmMPI::pmMPI() : pmNetwork()
 {
+    if(mNetwork)
+        PMTHROW(pmFatalErrorException());
+    
+    mNetwork = this;
+
 	int lThreadSupport, lMpiStatus;
 
 	//if(MPI_CALL("MPI_Init", ((lMpiStatus = MPI_Init(NULL, NULL)) != MPI_SUCCESS)))
@@ -185,7 +170,9 @@ pmMPI::~pmMPI()
 
 	delete dynamic_cast<pmClusterMPI*>(PM_GLOBAL_CLUSTER);
 
-	#ifdef DUMP_THREADS
+	MPI_CALL("MPI_Finalize", (MPI_Finalize() == MPI_SUCCESS));
+
+    #ifdef DUMP_THREADS
 	pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Shutting down network thread");
 	#endif
 }
@@ -411,7 +398,7 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
     
 bool pmMPI::IsUnknownLengthTag(pmCommunicatorCommand::communicatorCommandTags pTag)
 {
-    return (pTag == pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT || 
+    return (pTag == pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT_TAG || 
             pTag == pmCommunicatorCommand::SUBTASK_REDUCE_TAG ||
             pTag == pmCommunicatorCommand::MEMORY_RECEIVE_TAG);
 }
@@ -1589,7 +1576,8 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 			if( MPI_CALL("MPI_Get_count", (MPI_Get_count(&lProbeStatus, MPI_PACKED, &lLength) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::GET_COUNT_ERROR));
 
-			char* lPackedData = new char[lLength];	// Must be freed by receiving client
+            
+            FINALIZE_PTR_ARRAY(lPackedData, char, new char[lLength]);
 
 			if( MPI_CALL("MPI_Recv", (MPI_Recv(lPackedData, lLength, MPI_PACKED, lProbeStatus.MPI_SOURCE, (int)(pmCommunicatorCommand::UNKNOWN_LENGTH_TAG), MPI_COMM_WORLD, &lRecvStatus) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
@@ -1603,7 +1591,7 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 			pmCommunicatorCommand::communicatorCommandTags lTag = (pmCommunicatorCommand::communicatorCommandTags)lInternalTag;
 			switch(lTag)
 			{
-				case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT:
+				case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT_TAG:
 					lDataType = pmCommunicatorCommand::REMOTE_TASK_ASSIGN_PACKED;
 					break;
 		
@@ -1616,14 +1604,13 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 					break;
 				
 				default:
-					delete[] lPackedData;
 					continue;
 			}
 
-			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, lTag,	NULL, lDataType, lPackedData, lLength, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
+			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, lTag,	NULL, lDataType, NULL, 0, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
 
 			lCommand->MarkExecutionStart();
-			mMPI->UnpackData(lCommand, lPackedData, lLength, lPos);	
+			mMPI->UnpackData(lCommand, lPackedData, lLength, lPos);
 			mMPI->ReceiveComplete(lCommand, pmSuccess);
 		}
 		catch(pmException e)

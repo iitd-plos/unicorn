@@ -19,9 +19,10 @@ namespace pm
 
 class pmCommunicator : public pmBase
 {
-	public:
+    friend class pmController;
+
+    public:
 		static pmCommunicator* GetCommunicator();
-		static pmStatus DestroyCommunicator();
 
 		pmStatus Send(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
 		pmStatus Receive(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);	// If no source is provided, any machine is assumed (MPI_ANY) 

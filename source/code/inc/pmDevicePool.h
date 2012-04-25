@@ -34,7 +34,9 @@ class pmCluster;
 */
 class pmMachinePool : public pmBase
 {
-	public:
+    friend class pmController;
+
+    public:
 		typedef struct pmMachineData
 		{
 			uint cpuCores;
@@ -50,7 +52,6 @@ class pmMachinePool : public pmBase
 		virtual ~pmMachinePool();
 
 		static pmMachinePool* GetMachinePool();
-		static pmStatus DestroyMachinePool();
 
 		pmMachine* GetMachine(uint pIndex);
 		pmMachineData& GetMachineData(uint pIndex);
@@ -68,7 +69,7 @@ class pmMachinePool : public pmBase
 		pmStatus RegisterReceiveCompletion(pmMachine* pMachine, ulong pDataReceived, double pReceiveTime);
 
 	private:
-		pmMachinePool(uint pMachineCount);
+		pmMachinePool();
 
 		pmStatus All2AllMachineData(pmCommunicatorCommand::machinePool* pAll2AllBuffer);
 
@@ -81,7 +82,9 @@ class pmMachinePool : public pmBase
 
 class pmDevicePool : public pmBase
 {
-	public:
+    friend class pmMachinePool;
+
+    public:
 		typedef struct pmDeviceData
 		{
 			std::string name;
@@ -91,7 +94,6 @@ class pmDevicePool : public pmBase
 		virtual ~pmDevicePool();
 
 		static pmDevicePool* GetDevicePool();
-		pmStatus DestroyDevicePool();
 
 		uint GetDeviceCount();
 

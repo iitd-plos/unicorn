@@ -4,6 +4,15 @@
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
+#include "pmLogger.h"
+#include "pmDispatcherGPU.h"
+#include "pmStubManager.h"
+#include "pmNetwork.h"
+#include "pmCommunicator.h"
+#include "pmDevicePool.h"
+#include "pmMemoryManager.h"
+#include "pmTaskManager.h"
+#include "pmScheduler.h"
 
 namespace pm
 {
@@ -64,6 +73,16 @@ class pmController : public pmBase
 		uint mFinalizedHosts;
 	    
 		pmSignalWait* mSignalWait;
+
+        pmLogger mLogger;
+        pmDispatcherGPU mDispatcherGPU;
+        pmStubManager mStubManager;
+        NETWORK_IMPLEMENTATION_CLASS mNetwork;
+        pmCommunicator mCommunicator;
+        pmMachinePool mMachinePool;
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS mMemoryManager;
+        pmTaskManager mTaskManager;
+        pmScheduler mScheduler;
 };
 
 } // end namespace pm

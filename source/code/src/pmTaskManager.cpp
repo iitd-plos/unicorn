@@ -21,22 +21,15 @@ std::map<std::pair<pmMachine*, ulong>, std::vector<std::pair<pmSubtaskRange, pmP
 
 pmTaskManager::pmTaskManager()
 {
+    if(mTaskManager)
+        PMTHROW(pmFatalErrorException());
+    
+    mTaskManager = this;
 }
 
 pmTaskManager* pmTaskManager::GetTaskManager()
 {
-	if(!mTaskManager)
-		mTaskManager = new pmTaskManager();
-
 	return mTaskManager;
-}
-
-pmStatus pmTaskManager::DestroyTaskManager()
-{
-	delete mTaskManager;
-	mTaskManager = NULL;
-
-	return pmSuccess;
 }
 
 pmStatus pmTaskManager::SubmitTask(pmLocalTask* pLocalTask)

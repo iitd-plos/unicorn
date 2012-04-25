@@ -331,8 +331,7 @@ pmCommunicatorCommand::remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTas
 {
 	if(!pLocalTask)
 	{
-		taskConf.length = devices.length = 0;
-		taskConf.ptr = devices.ptr = NULL;
+        memset(this, 0, sizeof(*this));
 
 		return;
 	}
@@ -368,6 +367,7 @@ pmCommunicatorCommand::remoteTaskAssignPacked::~remoteTaskAssignPacked()
 /* struct pmCommunicatorCommand::subtaskReducePacked */
 pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked()
 {
+	memset(this, 0, sizeof(*this));
 }
 
 pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmTask* pTask, ulong pSubtaskId)
@@ -397,6 +397,7 @@ pmCommunicatorCommand::subtaskReducePacked::~subtaskReducePacked()
 /* struct pmCommunicatorCommand::memoryReceivePacked */
 pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked()
 {
+	memset(this, 0, sizeof(*this));
 }
 
 pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked(ulong pReceivingMemBaseAddr, ulong pOffset, ulong pLength, void* pMemPtr)
@@ -415,6 +416,7 @@ pmCommunicatorCommand::memoryReceivePacked::~memoryReceivePacked()
 /* struct pmCommunicatorCommand::dataRedistributionPacked */
 pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked()
 {
+	memset(this, 0, sizeof(*this));
 }
     
 pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength)

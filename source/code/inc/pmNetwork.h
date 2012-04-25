@@ -65,12 +65,17 @@ class pmNetwork : public pmBase
 		pmNetwork();
 		virtual ~pmNetwork();
 
+    protected:
+        static pmNetwork* mNetwork;
+
 	private:
 };
 
 class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
 {
-	public:
+    friend class pmController;
+
+    public:
 		enum pmRequestTag
 		{
 			PM_MPI_DUMMY_TAG = pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS,
@@ -98,7 +103,6 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		} pmUnknownLengthReceiveThread;
 
 		static pmNetwork* GetNetwork();
-		static pmStatus DestroyNetwork();
 
 		virtual pmStatus SendNonBlocking(pmCommunicatorCommandPtr pCommand);
 		virtual pmStatus BroadcastNonBlocking(pmCommunicatorCommandPtr pCommand);
@@ -143,9 +147,6 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 
 		pmStatus SetupDummyRequest();
 		pmStatus CancelDummyRequest();
-
-		static pmNetwork* mNetwork;
-        static bool mTerminated;
 
 		uint mTotalHosts;
 		uint mHostId;

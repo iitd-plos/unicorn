@@ -12,22 +12,16 @@ pmStubManager* pmStubManager::mStubManager = NULL;
 
 pmStubManager* pmStubManager::GetStubManager()
 {
-	if(!mStubManager)
-		mStubManager = new pmStubManager();
-
 	return mStubManager;
-}
-
-pmStatus pmStubManager::DestroyStubManager()
-{
-	delete mStubManager;
-	mStubManager = NULL;
-
-	return pmSuccess;
 }
 
 pmStubManager::pmStubManager()
 {
+    if(mStubManager)
+        PMTHROW(pmFatalErrorException());
+    
+    mStubManager = this;
+
 	CreateExecutionStubs();
 }
 

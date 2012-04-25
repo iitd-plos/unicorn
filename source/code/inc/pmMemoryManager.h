@@ -65,11 +65,14 @@ class pmMemoryManager : public pmBase
 	private:
 
 	protected:
+        static pmMemoryManager* mMemoryManager;
 		uint mPageSize;
 };
 
 class pmLinuxMemoryManager : public pmMemoryManager
 {
+    friend class pmController;
+    
 	public:
 		typedef struct regionFetchData
 		{
@@ -80,7 +83,6 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		} regionFetchData;
 
 		static pmMemoryManager* GetMemoryManager();
-		static pmStatus DestroyMemoryManager();
 
 		virtual void* AllocateMemory(size_t& pLength, size_t& pPageCount);
 
@@ -125,8 +127,6 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
 		static std::map<void*, std::pair<size_t, regionFetchData> > mInFlightMemoryMap;	// Map for lazy regions/pages being fetched; pair is length of region and regionFetchData
 		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mInFlightLock;
-
-		static pmMemoryManager* mMemoryManager;
 
 #ifdef TRACK_MEMORY_ALLOCATIONS
 		ulong mTotalAllocatedMemory;	// Lazy + Non-Lazy

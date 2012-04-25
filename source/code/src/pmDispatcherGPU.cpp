@@ -17,23 +17,17 @@ pmDispatcherGPU* pmDispatcherGPU::mDispatcherGPU = NULL;
 /* class pmDispatcherGPU */
 pmDispatcherGPU* pmDispatcherGPU::GetDispatcherGPU()
 {
-	if(!mDispatcherGPU)
-		mDispatcherGPU = new pmDispatcherGPU();
-
 	return mDispatcherGPU;
-}
-
-pmStatus pmDispatcherGPU::DestroyDispatcherGPU()
-{
-	delete mDispatcherGPU;
-	mDispatcherGPU = NULL;
-
-	return pmSuccess;
 }
 
 pmDispatcherGPU::pmDispatcherGPU()
 {
-#ifdef SUPPORT_CUDA
+    if(mDispatcherGPU)
+        PMTHROW(pmFatalErrorException());
+    
+    mDispatcherGPU = this;
+
+#ifdef SUPPORT_CUDA    
 	try
 	{
 		mDispatcherCUDA = new pmDispatcherCUDA();

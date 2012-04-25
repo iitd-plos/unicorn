@@ -17,9 +17,10 @@ class pmExecutionStub;
 
 class pmStubManager : public pmBase
 {
+    friend class pmController;
+    
 	public:
 		static pmStubManager* GetStubManager();
-		static pmStatus DestroyStubManager();
 
 		size_t GetProcessingElementsCPU();
 		size_t GetProcessingElementsGPU();

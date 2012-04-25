@@ -50,6 +50,11 @@ pmScheduler* pmScheduler::mScheduler = NULL;
 
 pmScheduler::pmScheduler()
 {
+    if(mScheduler)
+        PMTHROW(pmFatalErrorException());
+    
+    mScheduler = this;
+
 #ifdef TRACK_SUBTASK_EXECUTION
     mSubtasksAssigned = 0;
     mAcknowledgementsSent = 0;
@@ -91,18 +96,7 @@ pmScheduler::~pmScheduler()
 
 pmScheduler* pmScheduler::GetScheduler()
 {
-	if(!mScheduler)
-		mScheduler = new pmScheduler();
-
 	return mScheduler;
-}
-
-pmStatus pmScheduler::DestroyScheduler()
-{
-	delete mScheduler;
-	mScheduler = NULL;
-
-	return pmSuccess;
 }
 
 pmCommandCompletionCallback pmScheduler::GetUnknownLengthCommandCompletionCallback()
@@ -112,31 +106,15 @@ pmCommandCompletionCallback pmScheduler::GetUnknownLengthCommandCompletionCallba
 
 pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 {
-#define PERSISTENT_RECV_COMMAND(tag, structType, recvDataPtr, recvStruct) pmPersistentCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, \
+#define PERSISTENT_RECV_COMMAND(tag, structType, recvDataPtr) pmPersistentCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, \
 	pmCommunicatorCommand::tag, NULL, pmCommunicatorCommand::structType, recvDataPtr, 1, NULL, 0, gCommandCompletionCallback)
 
-	pmCommunicatorCommand::remoteSubtaskAssignStruct* lSubtaskAssignRecvData = NULL;
-	pmCommunicatorCommand::sendAcknowledgementStruct* lSendAckRecvData = NULL;
-	pmCommunicatorCommand::taskEventStruct* lTaskEventRecvData = NULL;
-	pmCommunicatorCommand::stealRequestStruct* lStealRequestRecvData = NULL;
-	pmCommunicatorCommand::stealResponseStruct* lStealResponseRecvData = NULL;
-	pmCommunicatorCommand::memorySubscriptionRequest* lMemSubscriptionRequestData = NULL;
-
-	START_DESTROY_ON_EXCEPTION(dBlock);
-
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lSubtaskAssignRecvData, pmCommunicatorCommand::remoteSubtaskAssignStruct, new pmCommunicatorCommand::remoteSubtaskAssignStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lSendAckRecvData, pmCommunicatorCommand::sendAcknowledgementStruct, new pmCommunicatorCommand::sendAcknowledgementStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lTaskEventRecvData, pmCommunicatorCommand::taskEventStruct, new pmCommunicatorCommand::taskEventStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealRequestRecvData, pmCommunicatorCommand::stealRequestStruct, new pmCommunicatorCommand::stealRequestStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lStealResponseRecvData, pmCommunicatorCommand::stealResponseStruct, new pmCommunicatorCommand::stealResponseStruct());
-	DESTROY_PTR_ON_EXCEPTION(dBlock, lMemSubscriptionRequestData, pmCommunicatorCommand::memorySubscriptionRequest, new pmCommunicatorCommand::memorySubscriptionRequest());
-
-	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT, REMOTE_SUBTASK_ASSIGN_STRUCT, lSubtaskAssignRecvData, remoteSubtaskAssignStruct);
-	mAcknowledgementRecvCommand = PERSISTENT_RECV_COMMAND(SEND_ACKNOWLEDGEMENT_TAG, SEND_ACKNOWLEDGEMENT_STRUCT, lSendAckRecvData, sendAcknowledgementStruct);
-	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, lTaskEventRecvData, taskEventStruct);
-	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	lStealRequestRecvData, stealRequestStruct);
-	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, lStealResponseRecvData, stealResponseStruct);
-	mMemSubscriptionRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_SUBSCRIPTION_TAG, MEMORY_SUBSCRIPTION_STRUCT, lMemSubscriptionRequestData, memorySubscriptionRequest);
+	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT_TAG, REMOTE_SUBTASK_ASSIGN_STRUCT, &mSubtaskAssignRecvData);
+	mAcknowledgementRecvCommand = PERSISTENT_RECV_COMMAND(SEND_ACKNOWLEDGEMENT_TAG, SEND_ACKNOWLEDGEMENT_STRUCT, &mSendAckRecvData);
+	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, &mTaskEventRecvData);
+	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	&mStealRequestRecvData);
+	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, &mStealResponseRecvData);
+	mMemSubscriptionRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_SUBSCRIPTION_TAG, MEMORY_SUBSCRIPTION_STRUCT, &mMemSubscriptionRequestData);
     
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
     lNetwork->InitializePersistentCommand(mRemoteSubtaskRecvCommand.get());
@@ -153,13 +131,10 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	SetupNewStealResponseReception();
 	SetupNewMemSubscriptionRequestReception();
 	
-	END_DESTROY_ON_EXCEPTION(dBlock);
-
 	// Only MPI master host receives finalization signal
 	if(pmMachinePool::GetMachinePool()->GetMachine(0) == PM_LOCAL_MACHINE)
 	{
-		pmCommunicatorCommand::hostFinalizationStruct* lHostFinalizationData = new pmCommunicatorCommand::hostFinalizationStruct();
-		mHostFinalizationCommand = PERSISTENT_RECV_COMMAND(HOST_FINALIZATION_TAG, HOST_FINALIZATION_STRUCT, lHostFinalizationData, hostFinalizationStruct);
+		mHostFinalizationCommand = PERSISTENT_RECV_COMMAND(HOST_FINALIZATION_TAG, HOST_FINALIZATION_STRUCT, &mHostFinalizationData);
         
         lNetwork->InitializePersistentCommand(mHostFinalizationCommand.get());
         
@@ -179,18 +154,8 @@ pmStatus pmScheduler::DestroyPersistentCommunicationCommands()
     lNetwork->TerminatePersistentCommand(mStealResponseRecvCommand.get());
     lNetwork->TerminatePersistentCommand(mMemSubscriptionRequestCommand.get());
 
-	delete (pmCommunicatorCommand::remoteSubtaskAssignStruct*)(mRemoteSubtaskRecvCommand->GetData());
-	delete (pmCommunicatorCommand::sendAcknowledgementStruct*)(mAcknowledgementRecvCommand->GetData());
-	delete (pmCommunicatorCommand::taskEventStruct*)(mTaskEventRecvCommand->GetData());
-	delete (pmCommunicatorCommand::stealRequestStruct*)(mStealRequestRecvCommand->GetData());
-	delete (pmCommunicatorCommand::stealResponseStruct*)(mStealResponseRecvCommand->GetData());
-	delete (pmCommunicatorCommand::memorySubscriptionRequest*)(mMemSubscriptionRequestCommand->GetData());
-
 	if(mHostFinalizationCommand.get())
-    {
         lNetwork->TerminatePersistentCommand(mHostFinalizationCommand.get());
-		delete (pmCommunicatorCommand::hostFinalizationStruct*)(mHostFinalizationCommand->GetData());
-    }
 
 	return pmSuccess;
 }
@@ -736,7 +701,7 @@ pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLoc
 		lSubtaskData->originatingHost = *(pLocalTask->GetOriginatingHost());
 		lSubtaskData->targetDeviceGlobalIndex = pDevice->GetGlobalDeviceIndex();
 
-		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, gCommandCompletionCallback);
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, gCommandCompletionCallback);
 
 		pmCommunicator::GetCommunicator()->Send(lCommand, false);
 	}
@@ -766,7 +731,7 @@ pmStatus pmScheduler::AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<pmM
 		{
 			pmCommunicatorCommand::remoteTaskAssignPacked* lPackedData = new pmCommunicatorCommand::remoteTaskAssignPacked(pLocalTask);
 
-			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT, lMachine, pmCommunicatorCommand::REMOTE_TASK_ASSIGN_PACKED,	lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_TASK_ASSIGN_PACKED,	lPackedData, 1, NULL, 0, gCommandCompletionCallback);
 
 			pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
 		}
@@ -1125,10 +1090,11 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 			switch(lCommunicatorCommand->GetTag())
 			{
-				case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT:
+				case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT_TAG:
 					delete (pmCommunicatorCommand::remoteTaskAssignPacked*)(lCommunicatorCommand->GetData());
+					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
-				case pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT:
+				case pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG:
 					delete (pmCommunicatorCommand::remoteSubtaskAssignStruct*)(lCommunicatorCommand->GetData());
 					break;
 				case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG:
@@ -1144,13 +1110,18 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					delete (pmCommunicatorCommand::stealResponseStruct*)(lCommunicatorCommand->GetData());
 					break;
 				case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG:
+                {
+                    std::cout << " Freeing up memory subscription" << std::endl;
 					delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lCommunicatorCommand->GetData());
+                }
 					break;
 				case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
 					delete (pmCommunicatorCommand::memoryReceivePacked*)(lCommunicatorCommand->GetData());
+					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
 				case pmCommunicatorCommand::SUBTASK_REDUCE_TAG:
 					delete (pmCommunicatorCommand::subtaskReducePacked*)(lCommunicatorCommand->GetData());
+					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
 				case pmCommunicatorCommand::HOST_FINALIZATION_TAG:
 					delete (pmCommunicatorCommand::hostFinalizationStruct*)(lCommunicatorCommand->GetData());
@@ -1166,14 +1137,14 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 		{
 			switch(lCommunicatorCommand->GetTag())
 			{
-				case pmCommunicatorCommand::MACHINE_POOL_TRANSFER:
-				case pmCommunicatorCommand::DEVICE_POOL_TRANSFER:
+				case pmCommunicatorCommand::MACHINE_POOL_TRANSFER_TAG:
+				case pmCommunicatorCommand::DEVICE_POOL_TRANSFER_TAG:
 				case pmCommunicatorCommand::UNKNOWN_LENGTH_TAG:
 				case pmCommunicatorCommand::MAX_COMMUNICATOR_COMMAND_TAGS:
 					PMTHROW(pmFatalErrorException());
 					break;
 
-				case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT:
+				case pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT_TAG:
 				{
 					pmCommunicatorCommand::remoteTaskAssignPacked* lData = (pmCommunicatorCommand::remoteTaskAssignPacked*)(lCommunicatorCommand->GetData());
 
@@ -1187,7 +1158,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					break;
 				}
 
-				case pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT:
+				case pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG:
 				{
 					pmCommunicatorCommand::remoteSubtaskAssignStruct* lData = (pmCommunicatorCommand::remoteSubtaskAssignStruct*)(lCommunicatorCommand->GetData());
 

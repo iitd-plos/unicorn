@@ -8,6 +8,8 @@
 #include "pmInternalDefinitions.h"
 #include <assert.h>
 
+#include <iostream>
+
 namespace pm
 {
 
@@ -22,10 +24,10 @@ class pmBase
 		pmBase();
 		virtual ~pmBase();
 
-		void* operator new (size_t pSize);		//implicitly declared as a static member function
-		void operator delete (void *pPtr);		//implicitly declared as a static member function
-		void* operator new [] (size_t pSize);	//implicitly declared as a static member function
-		void operator delete [] (void* pPtr);	//implicitly declared as a static member function
+//		void* operator new (size_t pSize);		//implicitly declared as a static member function
+//		void operator delete (void *pPtr);		//implicitly declared as a static member function
+//		void* operator new [] (size_t pSize);	//implicitly declared as a static member function
+//		void operator delete [] (void* pPtr);	//implicitly declared as a static member function
 
 		void* OpenLibrary(char* pPath);
 		pmStatus CloseLibrary(void* pLibHandle);

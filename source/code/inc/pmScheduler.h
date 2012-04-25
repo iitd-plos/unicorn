@@ -217,6 +217,7 @@ typedef struct schedulerEvent
 
 class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEvent>
 {
+    friend class pmController;
 	friend pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand);
 
 	public:
@@ -224,7 +225,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		virtual ~pmScheduler();
 
 		static pmScheduler* GetScheduler();
-		static pmStatus DestroyScheduler();
 
 		pmStatus SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus);
 		pmStatus ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus);
@@ -307,6 +307,14 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmPersistentCommunicatorCommandPtr mStealResponseRecvCommand;
 		pmPersistentCommunicatorCommandPtr mMemSubscriptionRequestCommand;
 		pmPersistentCommunicatorCommandPtr mHostFinalizationCommand;
+
+        pmCommunicatorCommand::remoteSubtaskAssignStruct mSubtaskAssignRecvData;
+        pmCommunicatorCommand::sendAcknowledgementStruct mSendAckRecvData;
+        pmCommunicatorCommand::taskEventStruct mTaskEventRecvData;
+        pmCommunicatorCommand::stealRequestStruct mStealRequestRecvData;
+        pmCommunicatorCommand::stealResponseStruct mStealResponseRecvData;
+        pmCommunicatorCommand::memorySubscriptionRequest mMemSubscriptionRequestData;
+        pmCommunicatorCommand::hostFinalizationStruct mHostFinalizationData;
     
 #ifdef TRACK_SUBTASK_EXECUTION
         ulong mSubtasksAssigned;

@@ -17,25 +17,20 @@ pmMachine* PM_LOCAL_MACHINE = NULL;
 /* class pmMachinePool */
 pmMachinePool* pmMachinePool::GetMachinePool()
 {
-	if(!mMachinePool)
-		mMachinePool = new pmMachinePool(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount());
-
 	return mMachinePool;
 }
 
-pmStatus pmMachinePool::DestroyMachinePool()
+pmMachinePool::pmMachinePool()
 {
-	delete mMachinePool;
-	mMachinePool = NULL;
+    if(mMachinePool)
+        PMTHROW(pmFatalErrorException());
+    
+    mMachinePool = this;
 
-	return pmSuccess;
-}
-
-pmMachinePool::pmMachinePool(uint pMachineCount)
-{
 	uint i=0;
+    uint lMachineCount = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 
-	FINALIZE_PTR_ARRAY(fAll2AllBuffer, pmCommunicatorCommand::machinePool, new pmCommunicatorCommand::machinePool[pMachineCount]);
+	FINALIZE_PTR_ARRAY(fAll2AllBuffer, pmCommunicatorCommand::machinePool, new pmCommunicatorCommand::machinePool[lMachineCount]);
 
 	{
 		FINALIZE_RESOURCE(fMachinePoolResource, (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MACHINE_POOL_STRUCT)), (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MACHINE_POOL_STRUCT)));
@@ -45,7 +40,7 @@ pmMachinePool::pmMachinePool(uint pMachineCount)
 
 	uint lLocalId = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
 
-	for(i=0; i<pMachineCount; ++i)
+	for(i=0; i<lMachineCount; ++i)
 	{
 		pmMachine* lMachine = new pmMachine(i);
 
@@ -60,11 +55,11 @@ pmMachinePool::pmMachinePool(uint pMachineCount)
 		mMachineDataVector.push_back(lData);
 	}
 
-	pmDevicePool* lDevicePool = pmDevicePool::GetDevicePool();
+	pmDevicePool* lDevicePool = new pmDevicePool();
 
 	FINALIZE_RESOURCE(fDevicePoolResource, (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::DEVICE_POOL_STRUCT)), (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::DEVICE_POOL_STRUCT)));
 
-	for(uint i=0; i<pMachineCount; ++i)
+	for(uint i=0; i<lMachineCount; ++i)
 	{
 		pmMachineData& lData = GetMachineData(i);
 		pmMachine* lMachine = GetMachine(i);
@@ -83,6 +78,8 @@ pmMachinePool::pmMachinePool(uint pMachineCount)
 
 pmMachinePool::~pmMachinePool()
 {
+    delete pmDevicePool::GetDevicePool();
+    
 	size_t lSize = mMachinesVector.size();
 
 	for(size_t i=0; i<lSize; ++i)
@@ -97,7 +94,7 @@ pmStatus pmMachinePool::All2AllMachineData(pmCommunicatorCommand::machinePool* p
 	lSendBuffer.cpuCores = (uint)(lManager->GetProcessingElementsCPU());
 	lSendBuffer.gpuCards = (uint)(lManager->GetProcessingElementsGPU());
 
-	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::ALL2ALL, pmCommunicatorCommand::MACHINE_POOL_TRANSFER, NULL, pmCommunicatorCommand::MACHINE_POOL_STRUCT, &lSendBuffer, 1, pAll2AllBuffer, 1);
+	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::ALL2ALL, pmCommunicatorCommand::MACHINE_POOL_TRANSFER_TAG, NULL, pmCommunicatorCommand::MACHINE_POOL_STRUCT, &lSendBuffer, 1, pAll2AllBuffer, 1);
 
 	pmCommunicator::GetCommunicator()->All2All(lCommand);
 
@@ -210,22 +207,16 @@ pmStatus pmMachinePool::RegisterReceiveCompletion(pmMachine* pMachine, ulong pDa
 /* class pmDevicePool */
 pmDevicePool* pmDevicePool::GetDevicePool()
 {
-	if(!mDevicePool)
-		mDevicePool = new pmDevicePool();
-
 	return mDevicePool;
-}
-
-pmStatus pmDevicePool::DestroyDevicePool()
-{
-	delete mDevicePool;
-	mDevicePool = NULL;
-
-	return pmSuccess;
 }
 
 pmDevicePool::pmDevicePool()
 {
+    if(mDevicePool)
+        PMTHROW(pmFatalErrorException());
+    
+    mDevicePool = this;
+    
 	mDevicesVector.clear();
 	mDeviceDataVector.clear();
 }
@@ -269,7 +260,7 @@ pmStatus pmDevicePool::BroadcastDeviceData(pmMachine* pMachine, pmCommunicatorCo
 		}
 	}
 	
-	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::BROADCAST, pmCommunicatorCommand::DEVICE_POOL_TRANSFER, pMachine,
+	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::BROADCAST, pmCommunicatorCommand::DEVICE_POOL_TRANSFER_TAG, pMachine,
 		pmCommunicatorCommand::DEVICE_POOL_STRUCT, pDeviceArray, pDeviceCount, NULL, NULL);
 
 	pmCommunicator::GetCommunicator()->Broadcast(lCommand);

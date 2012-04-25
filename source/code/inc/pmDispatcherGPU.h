@@ -77,9 +77,10 @@ class pmDispatcherCUDA : public pmGraphicsBase
 
 class pmDispatcherGPU : public pmGraphicsBase
 {
+    friend class pmController;
+    
 	public:
 		static pmDispatcherGPU* GetDispatcherGPU();
-		static pmStatus DestroyDispatcherGPU();
 
 		size_t ProbeProcessingElementsAndCreateStubs(std::vector<pmExecutionStub*>& pStubVector);
 		pmDispatcherCUDA* GetDispatcherCUDA();
