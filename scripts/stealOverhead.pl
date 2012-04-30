@@ -160,7 +160,7 @@ outer:
 
 		next outer if($flag == 0);
 
-		$device_profile = "$device_count $device_profile";
+		$device_profile = "$device_count$device_profile";
 
 		open(FH, ">propSchedConf.txt") || die "Can not open file propSchedConf.txt in write mode\n";
 		print FH "Devices\n$device_profile";

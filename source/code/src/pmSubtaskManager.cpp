@@ -4,6 +4,8 @@
 #include "pmCommand.h"
 #include "pmHardware.h"
 
+#include <string.h>
+
 namespace pm
 {
 
