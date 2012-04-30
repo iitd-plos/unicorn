@@ -563,7 +563,11 @@ pmProportionalSchedulingManager::pmProportionalSchedulingManager(pmLocalTask* pL
     if(lSubtaskCount == 0 || lDeviceCount == 0 || lSubtaskCount < lDeviceCount)
         PMTHROW(pmFatalErrorException());
     
+    mExactCount = 0;
     ReadConfigurationFile(lDevices);
+    
+    if(mExactMode && (mExactPartitions.size() != lDeviceCount || mExactCount != lSubtaskCount))
+        PMTHROW(pmFatalErrorException());
         
     ulong lStartSubtask = 0;
     ulong lSubtasks = 0;
@@ -607,19 +611,45 @@ pmStatus pmProportionalSchedulingManager::ReadConfigurationFile(std::vector<pmPr
     FILE* fp = fopen(PROPORTIONAL_SCHEDULING_CONF_FILE, "r");
     if(!fp)
         PMTHROW(pmConfFileNotFoundException());
-   
-    // fscanf is compiled with attribute unwarn_unused_result. To avoid compiler warning receiving it's return value
-    int lVal = fscanf(fp, "%d %d", &mLocalCpuPower, &mRemoteCpuPower);
     
-#ifdef SUPPORT_CUDA
-    lVal = fscanf(fp, " %d %d", &mLocalGpuPower, &mRemoteGpuPower);
-#endif
+    char dataStr[128];
 
-    mTotalClusterPower = 0;
-    ulong lDeviceCount = (ulong)(pDevices.size());
+    // fscanf is compiled with attribute unwarn_unused_result. To avoid compiler warning receiving it's return value
+    int lVal = fscanf(fp, "%s", dataStr);
     
-    for(ulong i=0; i<lDeviceCount; ++i)
-        mTotalClusterPower += GetDevicePower(pDevices[i]);
+    if(strcmp(dataStr, "Devices") == 0)
+    {
+        mExactMode = true;
+        
+        int lDevicesCount;
+        lVal = fscanf(fp, "%d", &lDevicesCount);
+        
+        for(int i=0; i<lDevicesCount; ++i)
+        {
+            uint lSubtasks;
+            lVal = fscanf(fp, " %d", &lSubtasks);
+            mExactPartitions.push_back(lSubtasks);
+            mExactCount += lSubtasks;
+        }
+    }
+    else
+    {
+        mExactMode = false;
+        
+        lVal = fscanf(fp, "%d %d", &mLocalCpuPower, &mRemoteCpuPower);
+        
+    #ifdef SUPPORT_CUDA
+        lVal = fscanf(fp, " %d %d", &mLocalGpuPower, &mRemoteGpuPower);
+    #endif
+
+        mTotalClusterPower = 0;
+        ulong lDeviceCount = (ulong)(pDevices.size());
+        
+        for(ulong i=0; i<lDeviceCount; ++i)
+            mTotalClusterPower += GetDevicePower(pDevices[i]);
+    }
+    
+    lVal = lVal; // Suppress compiler warning
     
     return pmSuccess;
 }
@@ -653,9 +683,18 @@ uint pmProportionalSchedulingManager::GetDevicePower(pmProcessingElement* pDevic
     
 ulong pmProportionalSchedulingManager::FindDeviceAssignment(pmProcessingElement* pDevice, ulong pSubtaskCount)
 {
-    uint lPower = GetDevicePower(pDevice);
+    if(mExactMode)
+    {
+        return mExactPartitions[pDevice->GetGlobalDeviceIndex()];
+    }
+    else
+    {
+        uint lPower = GetDevicePower(pDevice);
     
-    return (ulong)(((double)lPower/mTotalClusterPower)*pSubtaskCount);
+        return (ulong)(((double)lPower/mTotalClusterPower)*pSubtaskCount);
+    }
+    
+    return 0;
 }
 
 }

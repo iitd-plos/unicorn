@@ -10,7 +10,7 @@ my($linux) = `uname -a | grep Linux`;
 chomp($linux);
 
 #my($runLevel, $parallelTaskMode, $schedulingModel, $samples, $minProcs, $maxProcs, $hostsFile, $exec_varyings, $varying1_min, $varying1_max, $varying1_step, $varying2_min, $varying2_max, $varying2_step);
-my($minProcs, $maxProcs, $hostsFile, $exec_varyings, $varying1_min, $varying1_max, $varying1_step, $varying2_min, $varying2_max, $varying2_step);
+my($reportModel, $samples, $minProcs, $maxProcs, $hostsFile, $exec_varyings, $varying1_min, $varying1_max, $varying1_step, $varying2_min, $varying2_max, $varying2_step);
 
 my(@mach_4, @mach_5, @mach_6);
 
@@ -52,8 +52,10 @@ sub main
             $clusterHosts = "localhost";
         }
     }
+
+    $samples_count = $samples;
     
-    $~ = HEADER;
+    $~ = "HEADER$reportModel";
     write;
 
     computeResults($exec_path);
@@ -100,62 +102,123 @@ sub executeBenchmark
         $varying_str .= ":$iter2";
     }
 
-    $~ = SUBHEADER;
+    $~ = "SUBHEADER$reportModel";
     write;
 
-    my($i, $j);
+    my($i, $j, $k);
 
     for($i=0; $i<$procs; ++$i)
     {
-        for($j=0; $j<=3; ++$j)
+        for($j=0; $j<=2*$reportModel+1; ++$j)
         {
-            $mach_4[$j][$i] = "XXX";
-            $mach_5[$j][$i] = "XXX";
-            $mach_6[$j][$i] = "XXX";
+	    for($k=0; $k<$samples; ++$k)
+            {
+                $mach_4[$j][$i][$k] = "XXX";
+                $mach_5[$j][$i][$k] = "XXX";
+                $mach_6[$j][$i][$k] = "XXX";
+            }
         }
     }
 
-    execute($exec_path, 4, 0, $procs, $varying_str);
-    execute($exec_path, 4, 1, $procs, $varying_str);
-    execute($exec_path, 4, 2, $procs, $varying_str);
-    execute($exec_path, 4, 3, $procs, $varying_str);
-    execute($exec_path, 5, 0, $procs, $varying_str);
-    execute($exec_path, 5, 1, $procs, $varying_str);
-    execute($exec_path, 5, 2, $procs, $varying_str);
-    execute($exec_path, 5, 3, $procs, $varying_str);
-    execute($exec_path, 6, 0, $procs, $varying_str);
-    execute($exec_path, 6, 1, $procs, $varying_str);
-    execute($exec_path, 6, 2, $procs, $varying_str);
-    execute($exec_path, 6, 3, $procs, $varying_str);
+    for($k=0; $k<$samples; ++$k)
+    {
+    	execute($exec_path, 4, 0, $k, $procs, $varying_str);
+        execute($exec_path, 4, 1, $k, $procs, $varying_str);
+        execute($exec_path, 5, 0, $k, $procs, $varying_str);
+        execute($exec_path, 5, 1, $k, $procs, $varying_str);
+        execute($exec_path, 6, 0, $k, $procs, $varying_str);
+        execute($exec_path, 6, 1, $k, $procs, $varying_str);
 
-    $~ = DATA;
+	if($reportModel == 1)
+	{
+		execute($exec_path, 4, 2, $k, $procs, $varying_str);
+		execute($exec_path, 4, 3, $k, $procs, $varying_str);
+		execute($exec_path, 5, 2, $k, $procs, $varying_str);
+		execute($exec_path, 5, 3, $k, $procs, $varying_str);
+		execute($exec_path, 6, 2, $k, $procs, $varying_str);
+		execute($exec_path, 6, 3, $k, $procs, $varying_str);
+	}
+    }
+
+    $~ = "DATA$reportModel";
+
+    my($subtasks) = 0;
+    for($i=0; $i<$procs; ++$i)
+    {
+        $subtasks += $mach_4[0][$i][0];	
+    }
 
     for($i=0; $i<$procs; ++$i)
     {
         $machine_num = $i;
-        $gc_0_subtasks = $mach_4[0][$i];
-        $gc_1_subtasks = $mach_4[1][$i];
-        $gc_2_subtasks = $mach_4[2][$i];
-        $gc_3_subtasks = $mach_4[3][$i];
-        $gg_0_subtasks = $mach_5[0][$i];
-        $gg_1_subtasks = $mach_5[1][$i];
-        $gg_2_subtasks = $mach_5[2][$i];
-        $gg_3_subtasks = $mach_5[3][$i];
-        $gcg_0_subtasks = $mach_6[0][$i];
-        $gcg_1_subtasks = $mach_6[1][$i];
-        $gcg_2_subtasks = $mach_6[2][$i];
-        $gcg_3_subtasks = $mach_6[3][$i];
+
+	my(@dataArray4_0, @dataArray5_0, @dataArray6_0);
+	my(@dataArray4_1, @dataArray5_1, @dataArray6_1);
+	my(@dataArray4_2, @dataArray5_2, @dataArray6_2);
+	my(@dataArray4_3, @dataArray5_3, @dataArray6_3);
+    	for($k=0; $k<$samples; ++$k)
+	{
+		push(@dataArray4_0, 100.0 * $mach_4[0][$i][$k]/$subtasks);
+		push(@dataArray4_1, 100.0 * $mach_4[1][$i][$k]/$subtasks);
+		push(@dataArray4_2, 100.0 * $mach_4[2][$i][$k]/$subtasks);
+		push(@dataArray4_3, 100.0 * $mach_4[3][$i][$k]/$subtasks);
+		push(@dataArray5_0, 100.0 * $mach_5[0][$i][$k]/$subtasks);
+		push(@dataArray5_1, 100.0 * $mach_5[1][$i][$k]/$subtasks);
+		push(@dataArray5_2, 100.0 * $mach_5[2][$i][$k]/$subtasks);
+		push(@dataArray5_3, 100.0 * $mach_5[3][$i][$k]/$subtasks);
+		push(@dataArray6_0, 100.0 * $mach_6[0][$i][$k]/$subtasks);
+		push(@dataArray6_1, 100.0 * $mach_6[1][$i][$k]/$subtasks);
+		push(@dataArray6_2, 100.0 * $mach_6[2][$i][$k]/$subtasks);
+		push(@dataArray6_3, 100.0 * $mach_6[3][$i][$k]/$subtasks);
+	}
+
+        $gc_0_mean = mean(\@dataArray4_0);
+        $gc_0_median = median(\@dataArray4_0);
+        $gc_0_sd = standardDeviation(\@dataArray4_0, $gc_0_mean);
+        $gc_1_mean = mean(\@dataArray4_1);
+        $gc_1_median = median(\@dataArray4_1);
+        $gc_1_sd = standardDeviation(\@dataArray4_1, $gc_1_mean);
+        $gc_2_mean = mean(\@dataArray4_2);
+        $gc_2_median = median(\@dataArray4_2);
+        $gc_2_sd = standardDeviation(\@dataArray4_2, $gc_2_mean);
+        $gc_3_mean = mean(\@dataArray4_3);
+        $gc_3_median = median(\@dataArray4_3);
+        $gc_3_sd = standardDeviation(\@dataArray4_3, $gc_3_mean);
+        $gg_0_mean = mean(\@dataArray5_0);
+        $gg_0_median = median(\@dataArray5_0);
+        $gg_0_sd = standardDeviation(\@dataArray5_0, $gg_0_mean);
+        $gg_1_mean = mean(\@dataArray5_1);
+        $gg_1_median = median(\@dataArray5_1);
+        $gg_1_sd = standardDeviation(\@dataArray5_1, $gg_1_mean);
+        $gg_2_mean = mean(\@dataArray5_2);
+        $gg_2_median = median(\@dataArray5_2);
+        $gg_2_sd = standardDeviation(\@dataArray5_2, $gg_2_mean);
+        $gg_3_mean = mean(\@dataArray5_3);
+        $gg_3_median = median(\@dataArray5_3);
+        $gg_3_sd = standardDeviation(\@dataArray5_3, $gg_3_mean);
+        $gcg_0_mean = mean(\@dataArray6_0);
+        $gcg_0_median = median(\@dataArray6_0);
+        $gcg_0_sd = standardDeviation(\@dataArray6_0, $gcg_0_mean);
+        $gcg_1_mean = mean(\@dataArray6_1);
+        $gcg_1_median = median(\@dataArray6_1);
+        $gcg_1_sd = standardDeviation(\@dataArray6_1, $gcg_1_mean);
+        $gcg_2_mean = mean(\@dataArray6_2);
+        $gcg_2_median = median(\@dataArray6_2);
+        $gcg_2_sd = standardDeviation(\@dataArray6_2, $gcg_2_mean);
+        $gcg_3_mean = mean(\@dataArray6_3);
+        $gcg_3_median = median(\@dataArray6_3);
+        $gcg_3_sd = standardDeviation(\@dataArray6_3, $gcg_3_mean);
 
         write;
     }
 
-    $~ = FOOTER;
+    $~ = "FOOTER$reportModel";
     write;
 }
 
 sub execute
 {
-    my($exec_path, $parallelMode, $schedModel, $procs, $varying_str) = @_;
+    my($exec_path, $parallelMode, $schedModel, $sample, $procs, $varying_str) = @_;
 
     my($cmd) = "mpirun ";
     
@@ -180,15 +243,15 @@ sub execute
         {
             if($parallelMode == 4)
             {
-                $mach_4[$schedModel][$1] = $2;
+                $mach_4[$schedModel][$1][$sample] = $2;
             }
             elsif($parallelMode == 5)
             {
-                $mach_5[$schedModel][$1] = $2;
+                $mach_5[$schedModel][$1][$sample] = $2;
             }
             else
             {
-                $mach_6[$schedModel][$1] = $2;
+                $mach_6[$schedModel][$1][$sample] = $2;
             }
         }
     }
@@ -198,27 +261,27 @@ sub getInputs
 {
     #$runLevel = getIntegralInput(1, "\nSelect Run Level ... \n0. Don't compare to serial execution\n1. Compare to serial execution\n2. Only run serial\n", "Invalid Run Level", 0, 2);
     #$parallelTaskMode = getIntegralInput(2, "\nSelect Parallel Task Mode ... \n0. All\n1. Local CPU\n2. Local GPU\n3. Local CPU + GPU\n4. Global CPU\n5. Global GPU\n6. Global CPU + GPU\n", "Invalid Parallel Task Mode", 0, 6);
-    #$schedulingModel = getIntegralInput(3, "\nSelect Scheduling Model ... \n0. Push (Slow Start)\n1. Pull (Random Steal)\n2. Equal Static\n3. All\n", "Invalid Scheduling Model", 0, 3);
-    #$samples = getIntegralInput(4, "\nSamples ... ", "Invalid Samples", 1, 5);
-    $minProcs = getIntegralInput(1, "Min Procs ... ", "Invalid Min Procs", 1, 10000);
-    $maxProcs = getIntegralInput(2, "Max Procs ... ", "Invalid Max Procs", 1, 10000);
+    $reportModel = getIntegralInput(1, "\nSelect Report Model ... \n0. Push (Slow Start) vs. Pull (Random Steal)\n1. All\n", "Invalid Scheduling Model", 0, 1);
+    $samples = getIntegralInput(2, "\nSamples ... ", "Invalid Samples", 1, 5);
+    $minProcs = getIntegralInput(3, "Min Procs ... ", "Invalid Min Procs", 1, 10000);
+    $maxProcs = getIntegralInput(4, "Max Procs ... ", "Invalid Max Procs", 1, 10000);
     
     die "Min procs $minProcs can't be more than max procs $maxProcs" if($maxProcs < $minProcs);
     
-    $hostsFile = getHostsFile(3);
+    $hostsFile = getHostsFile(5);
     
-    $exec_varyings = getIntegralInput(4, "No. of varyings for the benchmark ... ", "Invalid Varyings", 1, 2);
-    $varying1_min = getIntegralInput(5, "Varying 1 min value ... ", "Invalid varying value", 0, 100000000000);
-    $varying1_max = getIntegralInput(6, "Varying 1 max value ... ", "Invalid varying value", 0, 100000000000);
-    $varying1_step = getIntegralInput(7, "Varying 1 step value ... ", "Invalid varying step value", 1, 100000000000);
+    $exec_varyings = getIntegralInput(6, "No. of varyings for the benchmark ... ", "Invalid Varyings", 1, 2);
+    $varying1_min = getIntegralInput(7, "Varying 1 min value ... ", "Invalid varying value", 0, 100000000000);
+    $varying1_max = getIntegralInput(8, "Varying 1 max value ... ", "Invalid varying value", 0, 100000000000);
+    $varying1_step = getIntegralInput(9, "Varying 1 step value ... ", "Invalid varying step value", 1, 100000000000);
 
     die "Varying min value $varying1_min can't be more than varying max value $varying1_max" if($varying1_max < $varying1_min);
 
     if($exec_varyings == 2)
     {
-        $varying2_min = getIntegralInput(8, "Varying 2 min value ... ", "Invalid varying value", 0, 100000000000);
-        $varying2_max = getIntegralInput(9, "Varying 2 max value ... ", "Invalid varying value", 0, 100000000000);
-        $varying2_step = getIntegralInput(10, "Varying 2 step value ... ", "Invalid varying step value", 1, 100000000000);
+        $varying2_min = getIntegralInput(10, "Varying 2 min value ... ", "Invalid varying value", 0, 100000000000);
+        $varying2_max = getIntegralInput(11, "Varying 2 max value ... ", "Invalid varying value", 0, 100000000000);
+        $varying2_step = getIntegralInput(12, "Varying 2 step value ... ", "Invalid varying step value", 1, 100000000000);
     
         die "Varying min value $varying2_min can't be more than varying max value $varying2_max" if($varying2_max < $varying2_min);
     }
@@ -353,34 +416,120 @@ sub verifyIntegerRange
     return 0;
 }
 
+sub mean
+{ 
+	my ($array_ref) = @_; 
+	my $sum = 0; 
+	my $count = scalar @$array_ref; 
+	foreach(@$array_ref) { $sum += $_; } 
 
-format HEADER = 
+	return roundTwoDecimalPlaces($sum / $count); 
+} 
+
+sub median 
+{ 
+	my ($array_ref) = @_; 
+	my $count = scalar @$array_ref; 
+
+	my @array = sort { $a <=> $b } @$array_ref; 
+	if ($count % 2)
+	{ 
+		return roundTwoDecimalPlaces($array[int($count/2)]); 
+	}
+	else
+	{ 
+		return roundTwoDecimalPlaces(($array[$count/2] + $array[$count/2 - 1]) / 2); 
+	} 
+} 
+
+sub standardDeviation
+{
+        my ($array_ref, $mean) = @_;
+        my $total = 0;
+        my $count = scalar @$array_ref;
+        foreach(@$array_ref) { $total += (($_ - $mean) ** 2); }
+
+        return roundTwoDecimalPlaces((($total / $count) ** 0.5));
+}
+
+sub roundTwoDecimalPlaces
+{
+	my($val) = @_;
+
+	return sprintf("%.2f", $val);
+}
+
+
+format HEADER1 = 
 =======================================================================================================================
 MPI Cluster Hosts: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 $clusterHosts
-Benchmark: @<<<<<<<<<<<<<<<<<<<<<<
-$benchmarkName
+Benchmark: @<<<<<<<<<<<<<<<<<<<<<<    Samples: @<<<<<
+$benchmarkName $samples_count
 =======================================================================================================================
 .
  
-format SUBHEADER =
+format SUBHEADER1 =
 =======================================================================================================================
-                                    Varying: @<<<<<<<<<<<<<<<<<<       Hosts: @<<<<<<       
+                   Varying: @<<<<<<<<<<<<<<<<<<        Hosts: @<<<<<<
 $varying_str $hosts
 =======================================================================================================================
-             |                                            Subtasks Executed                                           |
+             |                                          % Subtasks Executed                                           |
              |             Global CPU           |            Global GPU            |           Global CPU+GPU         |
     Hosts    |  Push  |  Pull  | Equal |  Prop  |  Push  |  Pull  | Equal |  Prop  |  Push  |  Pull  | Equal |  Prop  |
 =======================================================================================================================
 .
 
-format DATA =
-@<<<<<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<<
-$machine_num $gc_0_subtasks $gc_1_subtasks $gc_2_subtasks $gc_3_subtasks $gg_0_subtasks $gg_1_subtasks $gg_2_subtasks $gg_3_subtasks $gcg_0_subtasks $gcg_1_subtasks $gcg_2_subtasks $gcg_3_subtasks
+format DATA1 =
+@<<<<<<<<<<<< 
+$machine_num 
+   Mean       @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<<
+$gc_0_mean $gc_1_mean $gc_2_mean $gc_3_mean $gg_0_mean $gg_1_mean $gg_2_mean $gg_3_mean $gcg_0_mean $gcg_1_mean $gcg_2_mean $gcg_3_mean
+   Median     @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<<
+$gc_0_median $gc_1_median $gc_2_median $gc_3_median $gg_0_median $gg_1_median $gg_2_median $gg_3_median $gcg_0_median $gcg_1_median $gcg_2_median $gcg_3_median
+   Std. Dev.  @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<< @<<<<<<<
+$gc_0_sd $gc_1_sd $gc_2_sd $gc_3_sd $gg_0_sd $gg_1_sd $gg_2_sd $gg_3_sd $gcg_0_sd $gcg_1_sd $gcg_2_sd $gcg_3_sd
+
 .
- 
-format FOOTER =
+
+format FOOTER1 =
 =======================================================================================================================
+.
+
+format HEADER0 =
+====================================================================
+MPI Cluster Hosts: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+$clusterHosts
+Benchmark: @<<<<<<<<<<<<<<<<<<<<<<    Samples: @<<<<<
+$benchmarkName $samples_count
+====================================================================
+.
+
+format SUBHEADER0 =
+====================================================================
+        Varying: @<<<<<<<<<<<<<<<<<<        Hosts: @<<<<<<
+$varying_str $hosts
+====================================================================
+             |                 % Subtasks Executed                 |
+             |    Global CPU   |    Global GPU   |  Global CPU+GPU |
+    Hosts    |  Push  |  Pull  |  Push  |  Pull  |  Push  |  Pull  |
+====================================================================
+.
+
+format DATA0 =
+@<<<<<<<<<<<<
+$machine_num
+   Mean       @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<
+$gc_0_mean $gc_1_mean $gg_0_mean $gg_1_mean $gcg_0_mean $gcg_1_mean
+   Median     @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<
+$gc_0_median $gc_1_median $gg_0_median $gg_1_median $gcg_0_median $gcg_1_median
+   Std. Dev.  @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<
+$gc_0_sd $gc_1_sd $gg_0_sd $gg_1_sd $gcg_0_sd $gcg_1_sd
+
+.
+
+format FOOTER0 =
+====================================================================
 .
 
  

@@ -130,21 +130,102 @@ sub execute
 
     $cmd .= "-n $procs $exec_path $runLevel $parallelTaskMode $schedModel $varying_str";
     
-    my(@output) = `$cmd`;
+    my(@serial_time, @parallel1_time, @parallel2_time, @parallel3_time, @parallel4_time, @parallel5_time, @parallel6_time);
 
-    $serial_time = $parallel1_time = $parallel2_time = $parallel3_time = $parallel4_time = $parallel5_time = $parallel6_time = "XXX";
-    
-    my($line);
-    foreach $line(@output)
+    my($k);
+    for($k=0; $k<$samples; ++$k)
     {
-        if($line =~ /Serial Task Execution Time = ([0-9.]+)/)
-        {
-            $serial_time = $1;
-        }
-        elsif($line =~ /Parallel Task ([0-9]) Execution Time = ([0-9.]+)/)
-        {
-            ${"parallel$1_time"} = $2;
-        }
+	my(@output) = `$cmd`;
+
+	my($line);
+   	foreach $line(@output)
+   	{
+		if($line =~ /Serial Task Execution Time = ([0-9.]+)/)
+		{
+		    push(@serial_time, $1);
+		}
+		elsif($line =~ /Parallel Task 1 Execution Time = ([0-9.]+)/)
+		{
+		    push(@parallel1_time, $1);
+		}
+		elsif($line =~ /Parallel Task 2 Execution Time = ([0-9.]+)/)
+		{
+		    push(@parallel2_time, $1);
+		}
+		elsif($line =~ /Parallel Task 3 Execution Time = ([0-9.]+)/)
+		{
+		    push(@parallel3_time, $1);
+		}
+		elsif($line =~ /Parallel Task 4 Execution Time = ([0-9.]+)/)
+		{
+		    push(@parallel4_time, $1);
+		}
+		elsif($line =~ /Parallel Task 5 Execution Time = ([0-9.]+)/)
+		{
+		    push(@parallel5_time, $1);
+		}
+		elsif($line =~ /Parallel Task 6 Execution Time = ([0-9.]+)/)
+		{
+		    push(@parallel6_time, $1);
+		}
+	}
+    }
+
+    $serial_time_mean = $serial_time_median = $serial_time_sd = "XXX";
+    $parallel1_time_mean = $parallel1_time_median = $parallel1_time_sd = "XXX";
+    $parallel2_time_mean = $parallel2_time_median = $parallel2_time_sd = "XXX";
+    $parallel3_time_mean = $parallel3_time_median = $parallel3_time_sd = "XXX";
+    $parallel4_time_mean = $parallel4_time_median = $parallel4_time_sd = "XXX";
+    $parallel5_time_mean = $parallel5_time_median = $parallel5_time_sd = "XXX";
+    $parallel6_time_mean = $parallel6_time_median = $parallel6_time_sd = "XXX";
+
+    if($#serial_time >= 0)
+    {
+    	$serial_time_mean = mean(\@serial_time);
+    	$serial_time_median = median(\@serial_time);
+    	$serial_time_sd = standardDeviation(\@serial_time, $serial_time_mean);
+    }
+
+    if($#parallel1_time >= 0)
+    {
+    	$parallel1_time_mean = mean(\@parallel1_time);
+	$parallel1_time_median = median(\@parallel1_time);
+	$parallel1_time_sd = standardDeviation(\@parallel1_time, $parallel1_time_mean);
+    }
+
+    if($#parallel2_time >= 0)
+    {
+	$parallel2_time_mean = mean(\@parallel2_time);
+	$parallel2_time_median = median(\@parallel2_time);
+	$parallel2_time_sd = standardDeviation(\@parallel2_time, $parallel2_time_mean);
+    }
+
+    if($#parallel3_time >= 0)
+    {
+	$parallel3_time_mean = mean(\@parallel3_time);
+	$parallel3_time_median = median(\@parallel3_time);
+	$parallel3_time_sd = standardDeviation(\@parallel3_time, $parallel3_time_mean);
+    }
+
+    if($#parallel4_time >= 0)
+    {
+	$parallel4_time_mean = mean(\@parallel4_time);
+	$parallel4_time_median = median(\@parallel4_time);
+	$parallel4_time_sd = standardDeviation(\@parallel4_time, $parallel4_time_mean);
+    }
+
+    if($#parallel5_time >= 0)
+    {
+	$parallel5_time_mean = mean(\@parallel5_time);
+	$parallel5_time_median = median(\@parallel5_time);
+	$parallel5_time_sd = standardDeviation(\@parallel5_time, $parallel5_time_mean);
+    }
+
+    if($#parallel6_time >= 0)
+    {
+	$parallel6_time_mean = mean(\@parallel6_time);
+	$parallel6_time_median = median(\@parallel6_time);
+	$parallel6_time_sd = standardDeviation(\@parallel6_time, $parallel6_time_mean);
     }
     
     $~ = DATA;
@@ -315,33 +396,84 @@ sub verifyIntegerRange
     return 0;
 }
 
+sub mean
+{
+        my ($array_ref) = @_;
+        my $sum = 0;
+        my $count = scalar @$array_ref;
+        foreach(@$array_ref) { $sum += $_; }
+
+        return roundTwoDecimalPlaces($sum / $count);
+}
+
+sub median
+{
+        my ($array_ref) = @_;
+        my $count = scalar @$array_ref;
+
+        my @array = sort { $a <=> $b } @$array_ref;
+        if ($count % 2)
+        {
+                return roundTwoDecimalPlaces($array[int($count/2)]);
+        }
+        else
+        {
+                return roundTwoDecimalPlaces(($array[$count/2] + $array[$count/2 - 1]) / 2);
+        }
+}
+
+sub standardDeviation
+{
+        my ($array_ref, $mean) = @_;
+        my $total = 0;
+        my $count = scalar @$array_ref;
+        foreach(@$array_ref) { $total += (($_ - $mean) ** 2); }
+
+        return roundTwoDecimalPlaces((($total / $count) ** 0.5));
+}
+
+sub roundTwoDecimalPlaces
+{
+        my($val) = @_;
+
+        return sprintf("%.2f", $val);
+}
+
 
 format HEADER = 
-============================================================================================================================================
-MPI Cluster Hosts: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+====================================================================================
+MPI Cluster Hosts: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 $clusterHosts
 Benchmark: @<<<<<<<<<<<<<<<<<<<<<<     Samples: @<<<<<<<<<
 $benchmarkName $samples
-============================================================================================================================================
+====================================================================================
 .
  
 format SUBHEADER =
-============================================================================================================================================
-                                    Scheduling Model: @<<<<<<<<<<<<<<<<<<       Hosts: @<<<<<<       
+====================================================================================
+           Scheduling Model: @<<<<<<<<<<<<<<<<<<       Hosts: @<<<<<<       
 $schedulingModelName $hosts
-============================================================================================================================================
-                    |                                              Execution Time (in secs)                                                |
-       Varying      |     Serial     |    Local CPU   |    Local GPU   | Local CPU+GPU  |   Global CPU   |   Global GPU   | Global CPU+GPU |
-============================================================================================================================================
+====================================================================================
+                    |                  Execution Time (in secs)                    |
+       Varying      | Serial | Local | Local |  Local  | Global | Global | Global  |
+                    |        |  CPU  |  GPU  | CPU+GPU |  CPU   |  GPU   | CPU+GPU |
+====================================================================================
 .
 
 format DATA =
-@<<<<<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<< @<<<<<<<<<<<<<<<
-$varying_str $serial_time $parallel1_time $parallel2_time $parallel3_time $parallel4_time $parallel5_time $parallel6_time
+@<<<<<<<<<<<<<<<<<<< 
+$varying_str
+     Mean            @<<<<<<< @<<<<<< @<<<<<< @<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<<
+$serial_time_mean $parallel1_time_mean $parallel2_time_mean $parallel3_time_mean $parallel4_time_mean $parallel5_time_mean $parallel6_time_mean
+     Median          @<<<<<<< @<<<<<< @<<<<<< @<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<<
+$serial_time_median $parallel1_time_median $parallel2_time_median $parallel3_time_median $parallel4_time_median $parallel5_time_median $parallel6_time_median
+     Std. Dev.       @<<<<<<< @<<<<<< @<<<<<< @<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<<
+$serial_time_sd $parallel1_time_sd $parallel2_time_sd $parallel3_time_sd $parallel4_time_sd $parallel5_time_sd $parallel6_time_sd
+
 .
  
 format FOOTER =
-============================================================================================================================================
+====================================================================================
 .
 
  

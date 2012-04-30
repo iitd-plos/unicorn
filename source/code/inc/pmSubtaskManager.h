@@ -147,8 +147,12 @@ private:
 #ifdef SUPPORT_CUDA
     uint mLocalGpuPower, mRemoteGpuPower;
 #endif
-    
+
+    bool mExactMode;
     double mTotalClusterPower;
+    
+    std::vector<ulong> mExactPartitions;
+    ulong mExactCount;
     
     std::map<pmProcessingElement*, pmUnfinishedPartitionPtr> mDevicePartitionMap;
 
