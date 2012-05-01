@@ -2,6 +2,7 @@
 #include "pmHardware.h"
 #include "pmStubManager.h"
 #include "pmExecutionStub.h"
+#include "pmDevicePool.h"
 
 #include <string.h>
 
@@ -68,6 +69,9 @@ pmDeviceTypes pmProcessingElement::GetType()
 
 pmExecutionStub* pmProcessingElement::GetLocalExecutionStub()
 {
+	if(GetMachine() != PM_LOCAL_MACHINE)
+		PMTHROW(pmFatalErrorException());
+
 	return pmStubManager::GetStubManager()->GetStub(mDeviceIndexInMachine);
 }
 
@@ -75,9 +79,10 @@ pmDeviceInfo pmProcessingElement::GetDeviceInfo()
 {
 	pmDeviceInfo lDeviceInfo;
 
-	pmExecutionStub* lStub = GetLocalExecutionStub();
-	const char* lName = lStub->GetDeviceName().c_str();
-	const char* lDesc = lStub->GetDeviceDescription().c_str();
+	pmDevicePool::pmDeviceData& lDeviceData = pmDevicePool::GetDevicePool()->GetDeviceData(this);
+
+	const char* lName = lDeviceData.name.c_str();
+	const char* lDesc = lDeviceData.description.c_str();
 
 	size_t lNameLength = min(strlen(lName), (size_t)(MAX_NAME_STR_LEN-1));
 	size_t lDescLength = min(strlen(lDesc), (size_t)(MAX_DESC_STR_LEN-1));
