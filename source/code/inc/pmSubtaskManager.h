@@ -151,7 +151,7 @@ private:
     bool mExactMode;
     double mTotalClusterPower;
     
-    std::vector<ulong> mExactPartitions;
+    std::map<uint, ulong> mExactPartitions;
     ulong mExactCount;
     
     std::map<pmProcessingElement*, pmUnfinishedPartitionPtr> mDevicePartitionMap;

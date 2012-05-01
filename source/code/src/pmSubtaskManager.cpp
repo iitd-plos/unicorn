@@ -478,8 +478,8 @@ pmStatus pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(pmProces
         pmUnfinishedPartitionPtr lPartitionPtr = *lIter;
         if(lPartitionPtr->firstSubtaskIndex <= pStartingSubtask && lPartitionPtr->lastSubtaskIndex >= pStartingSubtask + pSubtaskCount - 1)
         {
-            mUnacknowledgedPartitions.erase(lIter);
             lTargetPartitionPtr = lPartitionPtr;
+            mUnacknowledgedPartitions.erase(lIter);
             break;
         }
     }
@@ -567,7 +567,7 @@ pmProportionalSchedulingManager::pmProportionalSchedulingManager(pmLocalTask* pL
     
     mExactCount = 0;
     ReadConfigurationFile(lDevices);
-    
+
     if(mExactMode && (mExactPartitions.size() != lDeviceCount || mExactCount != lSubtaskCount))
         PMTHROW(pmFatalErrorException());
         
@@ -618,19 +618,19 @@ pmStatus pmProportionalSchedulingManager::ReadConfigurationFile(std::vector<pmPr
 
     // fscanf is compiled with attribute unwarn_unused_result. To avoid compiler warning receiving it's return value
     int lVal = fscanf(fp, "%s", dataStr);
-    
+
     if(strcmp(dataStr, "Devices") == 0)
     {
         mExactMode = true;
         
         int lDevicesCount;
         lVal = fscanf(fp, "%d", &lDevicesCount);
-        
+
         for(int i=0; i<lDevicesCount; ++i)
         {
-            uint lSubtasks;
-            lVal = fscanf(fp, " %d", &lSubtasks);
-            mExactPartitions.push_back(lSubtasks);
+            uint lDeviceId, lSubtasks;
+            lVal = fscanf(fp, " %d=%d", &lDeviceId, &lSubtasks);
+            mExactPartitions[lDeviceId] = lSubtasks;
             mExactCount += lSubtasks;
         }
     }
@@ -687,7 +687,11 @@ ulong pmProportionalSchedulingManager::FindDeviceAssignment(pmProcessingElement*
 {
     if(mExactMode)
     {
-        return mExactPartitions[pDevice->GetGlobalDeviceIndex()];
+        uint lDeviceId = pDevice->GetGlobalDeviceIndex();
+	if(mExactPartitions.find(lDeviceId) == mExactPartitions.end())
+		PMTHROW(pmFatalErrorException());
+
+        return mExactPartitions[lDeviceId];
     }
     else
     {

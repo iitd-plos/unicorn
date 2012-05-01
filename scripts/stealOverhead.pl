@@ -151,9 +151,9 @@ outer:
 			    $flag = 1;
 			    $parallel_time = $1;
 			}
-			elsif($line =~ /Device [0-9]+ Subtasks ([0-9]+)/)
+			elsif($line =~ /Device ([0-9]+) Subtasks ([0-9]+)/)
 			{
-			    $device_profile .= " $1";
+			    $device_profile .= " $1=$2";
 			    ++$device_count;
 			}
 		}
