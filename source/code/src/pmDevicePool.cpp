@@ -72,7 +72,7 @@ pmMachinePool::pmMachinePool()
 		FINALIZE_PTR_ARRAY(fDevicesBuffer, pmCommunicatorCommand::devicePool, new pmCommunicatorCommand::devicePool[lDevicesCount]);
 		lDevicePool->BroadcastDeviceData(lMachine, fDevicesBuffer, lDevicesCount);
 
-		lDevicePool->CreateMachineDevices(lMachine, fDevicesBuffer, lGlobalIndex, lDevicesCount);
+		lDevicePool->CreateMachineDevices(lMachine, lData.cpuCores, fDevicesBuffer, lGlobalIndex, lDevicesCount);
 	}
 }
 
@@ -228,11 +228,16 @@ pmDevicePool::~pmDevicePool()
 		delete mDevicesVector[i];
 }
 
-pmStatus pmDevicePool::CreateMachineDevices(pmMachine* pMachine, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount)
+pmStatus pmDevicePool::CreateMachineDevices(pmMachine* pMachine, uint pCpuDeviceCount, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount)
 {
 	for(uint i=0; i<pDeviceCount; ++i)
 	{
-		pmProcessingElement* lDevice = new pmProcessingElement(pMachine, i, pGlobalStartingDeviceIndex + i);
+		pmDeviceTypes lDeviceType = CPU;
+#ifdef SUPPORT_CUDA
+		if(i >= pCpuDeviceCount)
+			lDeviceType = GPU_CUDA;
+#endif
+		pmProcessingElement* lDevice = new pmProcessingElement(pMachine, lDeviceType, i, pGlobalStartingDeviceIndex + i);
 
 		pmDeviceData lData;
 		lData.name = pDeviceData[i].name;

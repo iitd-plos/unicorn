@@ -97,7 +97,7 @@ class pmDevicePool : public pmBase
 
 		uint GetDeviceCount();
 
-		pmStatus CreateMachineDevices(pmMachine* pMachine, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount);
+		pmStatus CreateMachineDevices(pmMachine* pMachine, uint pCpuDeviceCount, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount);
 
 		pmDeviceData& GetDeviceData(pmProcessingElement* pDevice);
 		std::vector<pmProcessingElement*>& GetAllDevices();

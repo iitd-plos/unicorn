@@ -35,10 +35,11 @@ pmMachine::operator uint()
 
 
 /* class pmProcessingElement */
-pmProcessingElement::pmProcessingElement(pmMachine* pMachine, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex) : mMachine(pMachine)
+pmProcessingElement::pmProcessingElement(pmMachine* pMachine, pmDeviceTypes pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex) : mMachine(pMachine)
 {
 	mDeviceIndexInMachine = pDeviceIndexInMachine;
 	mGlobalDeviceIndex = pGlobalDeviceIndex;
+	mDeviceType = pDeviceType;
 }
 
 pmProcessingElement::~pmProcessingElement()
@@ -62,7 +63,7 @@ uint pmProcessingElement::GetGlobalDeviceIndex()
 
 pmDeviceTypes pmProcessingElement::GetType()
 {
-	return GetLocalExecutionStub()->GetType();
+	return mDeviceType;
 }
 
 pmExecutionStub* pmProcessingElement::GetLocalExecutionStub()

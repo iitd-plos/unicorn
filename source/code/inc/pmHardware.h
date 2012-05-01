@@ -65,11 +65,12 @@ class pmProcessingElement : public pmHardware
 		static pmStatus GetMachines(std::vector<pmProcessingElement*>& pDevices, std::vector<pmMachine*>& pMachines);
 
 	private:
-		pmProcessingElement(pmMachine* pMachine, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex);
+		pmProcessingElement(pmMachine* pMachine, pmDeviceTypes pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex);
 
 		pmMachine* mMachine;
 		uint mDeviceIndexInMachine;
 		uint mGlobalDeviceIndex;
+		pmDeviceTypes mDeviceType;
 };
 
 } // end namespace pm
