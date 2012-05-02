@@ -109,7 +109,7 @@ sub execute
     
     if($linux !~ /^\s*$/)
     {
-        $cmd_prefix .= "--mca btl_tcp_if_include lo,eth0 ";
+        $cmd_prefix .= "--mca btl_tcp_if_include lo,eth0 --mca mpi_preconnect_mpi 1 ";
     }
         
     if($hostsFile !~ /^$/)
