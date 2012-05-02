@@ -116,6 +116,8 @@ sub executeBenchmark
                 $mach_4[$j][$i][$k] = "XXX";
                 $mach_5[$j][$i][$k] = "XXX";
                 $mach_6[$j][$i][$k] = "XXX";
+                $mach_6_cpu[$j][$i][$k] = "XXX";
+                $mach_6_gpu[$j][$i][$k] = "XXX";
             }
         }
     }
@@ -152,10 +154,10 @@ sub executeBenchmark
     {
         $machine_num = $i;
 
-	my(@dataArray4_0, @dataArray5_0, @dataArray6_0);
-	my(@dataArray4_1, @dataArray5_1, @dataArray6_1);
-	my(@dataArray4_2, @dataArray5_2, @dataArray6_2);
-	my(@dataArray4_3, @dataArray5_3, @dataArray6_3);
+	my(@dataArray4_0, @dataArray5_0, @dataArray6_0, @dataArray6_0_cpu, @dataArray6_0_gpu);
+	my(@dataArray4_1, @dataArray5_1, @dataArray6_1, @dataArray6_1_cpu, @dataArray6_1_gpu);
+	my(@dataArray4_2, @dataArray5_2, @dataArray6_2, @dataArray6_2_cpu, @dataArray6_2_gpu);
+	my(@dataArray4_3, @dataArray5_3, @dataArray6_3, @dataArray6_3_cpu, @dataArray6_3_gpu);
     	for($k=0; $k<$samples; ++$k)
 	{
 		push(@dataArray4_0, 100.0 * $mach_4[0][$i][$k]/$subtasks);
@@ -170,6 +172,14 @@ sub executeBenchmark
 		push(@dataArray6_1, 100.0 * $mach_6[1][$i][$k]/$subtasks);
 		push(@dataArray6_2, 100.0 * $mach_6[2][$i][$k]/$subtasks);
 		push(@dataArray6_3, 100.0 * $mach_6[3][$i][$k]/$subtasks);
+                push(@dataArray6_0_cpu, 100.0 * $mach_6_cpu[0][$i][$k]/$subtasks);
+                push(@dataArray6_1_cpu, 100.0 * $mach_6_cpu[1][$i][$k]/$subtasks);
+                push(@dataArray6_2_cpu, 100.0 * $mach_6_cpu[2][$i][$k]/$subtasks);
+                push(@dataArray6_3_cpu, 100.0 * $mach_6_cpu[3][$i][$k]/$subtasks);
+                push(@dataArray6_0_gpu, 100.0 * $mach_6_gpu[0][$i][$k]/$subtasks);
+                push(@dataArray6_1_gpu, 100.0 * $mach_6_gpu[1][$i][$k]/$subtasks);
+                push(@dataArray6_2_gpu, 100.0 * $mach_6_gpu[2][$i][$k]/$subtasks);
+                push(@dataArray6_3_gpu, 100.0 * $mach_6_gpu[3][$i][$k]/$subtasks);
 	}
 
         $gc_0_mean = mean(\@dataArray4_0);
@@ -208,6 +218,30 @@ sub executeBenchmark
         $gcg_3_mean = mean(\@dataArray6_3);
         $gcg_3_median = median(\@dataArray6_3);
         $gcg_3_sd = standardDeviation(\@dataArray6_3, $gcg_3_mean);
+        $gcg_0_mean_cpu = mean(\@dataArray6_0_cpu);
+        $gcg_0_median_cpu = median(\@dataArray6_0_cpu);
+        $gcg_0_sd_cpu = standardDeviation(\@dataArray6_0_cpu, $gcg_0_mean_cpu);
+        $gcg_1_mean_cpu = mean(\@dataArray6_1_cpu);
+        $gcg_1_median_cpu = median(\@dataArray6_1_cpu);
+        $gcg_1_sd_cpu = standardDeviation(\@dataArray6_1_cpu, $gcg_1_mean_cpu);
+        $gcg_2_mean_cpu = mean(\@dataArray6_2_cpu);
+        $gcg_2_median_cpu = median(\@dataArray6_2_cpu);
+        $gcg_2_sd_cpu = standardDeviation(\@dataArray6_2_cpu, $gcg_2_mean_cpu);
+        $gcg_3_mean_cpu = mean(\@dataArray6_3_cpu);
+        $gcg_3_median_cpu = median(\@dataArray6_3_cpu);
+        $gcg_3_sd_cpu = standardDeviation(\@dataArray6_3_cpu, $gcg_3_mean_cpu);
+        $gcg_0_mean_gpu = mean(\@dataArray6_0_gpu);
+        $gcg_0_median_gpu = median(\@dataArray6_0_gpu);
+        $gcg_0_sd_gpu = standardDeviation(\@dataArray6_0_gpu, $gcg_0_mean_gpu);
+        $gcg_1_mean_gpu = mean(\@dataArray6_1_gpu);
+        $gcg_1_median_gpu = median(\@dataArray6_1_gpu);
+        $gcg_1_sd_gpu = standardDeviation(\@dataArray6_1_gpu, $gcg_1_mean_gpu);
+        $gcg_2_mean_gpu = mean(\@dataArray6_2_gpu);
+        $gcg_2_median_gpu = median(\@dataArray6_2_gpu);
+        $gcg_2_sd_gpu = standardDeviation(\@dataArray6_2_gpu, $gcg_2_mean_gpu);
+        $gcg_3_mean_gpu = mean(\@dataArray6_3_gpu);
+        $gcg_3_median_gpu = median(\@dataArray6_3_gpu);
+        $gcg_3_sd_gpu = standardDeviation(\@dataArray6_3_gpu, $gcg_3_mean_gpu);
 
         write;
     }
@@ -239,7 +273,7 @@ sub execute
     my($line);
     foreach $line(@output)
     {
-        if($line =~ /Machine ([0-9]+) Subtasks ([0-9]+)/)
+        if($line =~ /Machine ([0-9]+) Subtasks ([0-9]+) CPU-Subtasks ([0-9]+)/)
         {
             if($parallelMode == 4)
             {
@@ -252,6 +286,8 @@ sub execute
             else
             {
                 $mach_6[$schedModel][$1][$sample] = $2;
+                $mach_6_cpu[$schedModel][$1][$sample] = $3;
+                $mach_6_gpu[$schedModel][$1][$sample] = $2-$3;
             }
         }
     }
@@ -474,9 +510,9 @@ format SUBHEADER1 =
                    Varying: @<<<<<<<<<<<<<<<<<<        Hosts: @<<<<<<
 $varying_str $hosts
 =======================================================================================================================
-             |                                          % Subtasks Executed                                           |
-             |             Global CPU           |            Global GPU            |           Global CPU+GPU         |
-    Hosts    |  Push  |  Pull  | Equal |  Prop  |  Push  |  Pull  | Equal |  Prop  |  Push  |  Pull  | Equal |  Prop  |
+             |                                                                  % Subtasks Executed                                                                   |
+             |             Global CPU           |            Global GPU            |                                   Global CPU+GPU                                 |
+    Hosts    |  Push  |  Pull  | Equal |  Prop  |  Push  |  Pull  | Equal |  Prop  |        Push        |        Pull        |       Equal       |        Prop        |
 =======================================================================================================================
 .
 
@@ -510,21 +546,21 @@ format SUBHEADER0 =
         Varying: @<<<<<<<<<<<<<<<<<<        Hosts: @<<<<<<
 $varying_str $hosts
 ====================================================================
-             |                 % Subtasks Executed                 |
-             |    Global CPU   |    Global GPU   |  Global CPU+GPU |
-    Hosts    |  Push  |  Pull  |  Push  |  Pull  |  Push  |  Pull  |
+             |                             % Subtasks Executed                             |
+             |    Global CPU   |    Global GPU   |              Global CPU+GPU             |
+    Hosts    |  Push  |  Pull  |  Push  |  Pull  |        Push        |        Pull        |
 ====================================================================
 .
 
 format DATA0 =
 @<<<<<<<<<<<<
 $machine_num
-   Mean       @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<
-$gc_0_mean $gc_1_mean $gg_0_mean $gg_1_mean $gcg_0_mean $gcg_1_mean
-   Median     @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<
-$gc_0_median $gc_1_median $gg_0_median $gg_1_median $gcg_0_median $gcg_1_median
-   Std. Dev.  @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<
-$gc_0_sd $gc_1_sd $gg_0_sd $gg_1_sd $gcg_0_sd $gcg_1_sd
+   Mean       @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< (@<<<<<<<;@<<<<<<<) @<<<<<<< (@<<<<<<<;@<<<<<<<)
+$gc_0_mean $gc_1_mean $gg_0_mean $gg_1_mean $gcg_0_mean $gcg_0_mean_cpu $gcg_0_mean_gpu $gcg_1_mean $gcg_1_mean_cpu $gcg_1_mean_gpu
+   Median     @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< (@<<<<<<<;@<<<<<<<) @<<<<<<< (@<<<<<<<;@<<<<<<<)
+$gc_0_median $gc_1_median $gg_0_median $gg_1_median $gcg_0_median $gcg_0_median_cpu $gcg_0_median_gpu $gcg_1_median $gcg_1_median_cpu $gcg_1_median_gpu
+   Std. Dev.  @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<< (@<<<<<<<;@<<<<<<<) @<<<<<<< (@<<<<<<<;@<<<<<<<)
+$gc_0_sd $gc_1_sd $gg_0_sd $gg_1_sd $gcg_0_sd $gcg_0_sd_cpu $gcg_0_sd_gpu $gcg_1_sd $gcg_1_sd_cpu $gcg_1_sd_gpu
 
 .
 

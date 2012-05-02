@@ -2,7 +2,9 @@
 #include "pmSubtaskManager.h"
 #include "pmTask.h"
 #include "pmCommand.h"
+#include "pmDevicePool.h"
 #include "pmHardware.h"
+#include "pmNetwork.h"
 
 #include <string.h>
 
@@ -69,6 +71,8 @@ pmStatus pmSubtaskManager::PrintExecutionProfile()
         return pmSuccess;
     
     mExecutionProfilePrinted = true;
+
+    std::vector<ulong> lCpuSubtasks(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount(), 0);
     
     std::map<uint, ulong>::iterator lStart, lEnd;
     lStart = mDeviceExecutionProfile.begin();
@@ -76,7 +80,13 @@ pmStatus pmSubtaskManager::PrintExecutionProfile()
     
     std::cout << "Device Subtask Execution Profile ... " << std::endl;
     for(; lStart != lEnd; ++lStart)
+    {
         std::cout << "Device " << lStart->first << " Subtasks " << lStart->second << std::endl;
+
+	pmProcessingElement* lDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lStart->first);
+        if(lDevice->GetType() == CPU)
+            lCpuSubtasks[(uint)(*(lDevice->GetMachine()))] += lStart->second;
+    }
 
     std::cout << std::endl;
     
@@ -86,7 +96,7 @@ pmStatus pmSubtaskManager::PrintExecutionProfile()
     lEnd = mMachineExecutionProfile.end();
     for(; lStart != lEnd; ++lStart)
     {
-        std::cout << "Machine " << lStart->first << " Subtasks " << lStart->second << std::endl;
+        std::cout << "Machine " << lStart->first << " Subtasks " << lStart->second << " CPU-Subtasks " << lCpuSubtasks[lStart->first] << std::endl;
         lTotal += lStart->second;
     }
     
