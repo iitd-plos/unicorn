@@ -308,7 +308,10 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
 	taskId = pLocalTask->GetTaskId();
 	inputMemLength = lInputSection?((ulong)(lInputSection->GetLength())):0;
 	outputMemLength = lOutputSection?((ulong)(lOutputSection->GetLength())):0;
-	isOutputMemReadWrite = (ushort)(((pmOutputMemSection*)(pLocalTask->GetMemSectionRW()))->GetAccessType() == pmOutputMemSection::READ_WRITE);
+    
+    inputMemInfo = (ushort)((lInputSection->IsLazy()) ? INPUT_MEM_READ_ONLY_LAZY : INPUT_MEM_READ_ONLY);
+    outputMemInfo = (ushort)((((pmOutputMemSection*)lOutputSection)->GetAccessType() == pmOutputMemSection::READ_WRITE) ? ((lOutputSection->IsLazy()) ? OUTPUT_MEM_READ_WRITE_LAZY : OUTPUT_MEM_READ_WRITE) : OUTPUT_MEM_WRITE_ONLY);
+    
 	subtaskCount = pLocalTask->GetSubtaskCount();
 	assignedDeviceCount = pLocalTask->GetAssignedDeviceCount();
 	originatingHost = *(pLocalTask->GetOriginatingHost());

@@ -9,8 +9,6 @@
 /* Begin PBXBuildFile section */
 		0EFF67BA1545CF7800ED4E8F /* pmRedistributor.h in Headers */ = {isa = PBXBuildFile; fileRef = 0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */; };
 		0EFF67BD1545CF9A00ED4E8F /* pmRedistributor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */; };
-		2BCCED25151C7AA1006AA45D /* pmlib.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED24151C7AA1006AA45D /* pmlib.h */; };
-		2BCCED28151C7AA1006AA45D /* pmlib.cp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED27151C7AA1006AA45D /* pmlib.cp */; };
 		2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED2F151C7B07006AA45D /* pmBase.h */; };
 		2BCCED6F151C7B07006AA45D /* pmCallback.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED30151C7B07006AA45D /* pmCallback.h */; };
 		2BCCED70151C7B07006AA45D /* pmCallbackUnit.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED31151C7B07006AA45D /* pmCallbackUnit.h */; };
@@ -81,9 +79,6 @@
 		2BCCED21151C7AA1006AA45D /* pmlib-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "pmlib-Prefix.pch"; sourceTree = "<group>"; };
 		2BCCED22151C7AA1006AA45D /* pmlibProj.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = pmlibProj.xcconfig; sourceTree = "<group>"; };
 		2BCCED23151C7AA1006AA45D /* pmlibTarget.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = pmlibTarget.xcconfig; sourceTree = "<group>"; };
-		2BCCED24151C7AA1006AA45D /* pmlib.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmlib.h; sourceTree = "<group>"; };
-		2BCCED26151C7AA1006AA45D /* pmlibPriv.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmlibPriv.h; sourceTree = "<group>"; };
-		2BCCED27151C7AA1006AA45D /* pmlib.cp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = pmlib.cp; sourceTree = "<group>"; };
 		2BCCED2F151C7B07006AA45D /* pmBase.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmBase.h; sourceTree = "<group>"; };
 		2BCCED30151C7B07006AA45D /* pmCallback.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmCallback.h; sourceTree = "<group>"; };
 		2BCCED31151C7B07006AA45D /* pmCallbackUnit.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmCallbackUnit.h; sourceTree = "<group>"; };
@@ -182,9 +177,6 @@
 			children = (
 				2BCCED22151C7AA1006AA45D /* pmlibProj.xcconfig */,
 				2BCCED23151C7AA1006AA45D /* pmlibTarget.xcconfig */,
-				2BCCED24151C7AA1006AA45D /* pmlib.h */,
-				2BCCED26151C7AA1006AA45D /* pmlibPriv.h */,
-				2BCCED27151C7AA1006AA45D /* pmlib.cp */,
 				2BCCED20151C7AA1006AA45D /* Supporting Files */,
 			);
 			path = pmlib;
@@ -285,7 +277,6 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2BCCED25151C7AA1006AA45D /* pmlib.h in Headers */,
 				2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */,
 				2BCCED6F151C7B07006AA45D /* pmCallback.h in Headers */,
 				2BCCED70151C7B07006AA45D /* pmCallbackUnit.h in Headers */,
@@ -372,7 +363,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2BCCED28151C7AA1006AA45D /* pmlib.cp in Sources */,
 				2BCCED8E151C7B07006AA45D /* pmBase.cpp in Sources */,
 				2BCCED8F151C7B07006AA45D /* pmCallback.cpp in Sources */,
 				2BCCED90151C7B07006AA45D /* pmCallbackUnit.cpp in Sources */,

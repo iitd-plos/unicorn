@@ -160,7 +160,7 @@ typedef struct memTransfer
 	pmMachine* machine;
 	ulong destMemBaseAddr;
 	ushort priority;
-    bool writeOnly;
+    bool registerOnly;
 } memTransfer;
 
 typedef struct commandCompletion
@@ -247,7 +247,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus TaskCancelEvent(pmTask* pTask);
 		pmStatus TaskFinishEvent(pmTask* pTask);
 		pmStatus ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId);
-		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pTreatWriteOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority);
+		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority);
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
         pmStatus RedistributionMetaDataEvent(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength);
 

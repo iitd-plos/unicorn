@@ -56,29 +56,40 @@ class pmMemSection : public pmBase
 		virtual ~pmMemSection();
 		void* GetMem();
 		size_t GetLength();
-
+    
 		static pmMemSection* FindMemSection(void* pMem);
+        static pmMemSection* FindMemSectionContainingAddress(void* pPtr);
 	
         pmStatus AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
+
+#ifdef USE_LAZY_MEMORY
+        pmStatus AcquireOwnershipLazy(ulong pOffset, ulong pLength);
+#endif
+    
         pmStatus TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength);
     
 		pmStatus FlushOwnerships();
-		pmStatus GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
-    
+		pmStatus GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegisteration, pmMemSection::pmMemOwnership& pOwnerships);
+
+        bool IsLazy();
         pmStatus Fetch(ushort pPriority);
 
 	protected:
-		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr);
+		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy);
 
 	private:
-        pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength);
+        pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength, bool pIsLazyAcquisition);
     
 		void* mMem;
 		size_t mRequestedLength;
 		size_t mAllocatedLength;
 		size_t mVMPageCount;
+        bool mLazy;
 
-		pmMemOwnership mOwnershipMap;		// offset versus pair (of length of region and vmRangeOwner)
+        pmMemOwnership mLazyOwnershipMap;   // offset versus pair (of length of region and vmRangeOwner) - updated to mOwnershipMap at task end
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mLazyOwnershipLock;
+        
+        pmMemOwnership mOwnershipMap;       // offset versus pair (of length of region and vmRangeOwner) - dynamic
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
 
         std::vector<pmMemTransferData> mOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
@@ -91,7 +102,7 @@ class pmMemSection : public pmBase
 class pmInputMemSection : public pmMemSection
 {
 	public:
-		pmInputMemSection(size_t pLength, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
+		pmInputMemSection(size_t pLength, bool pIsLazy, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
 		~pmInputMemSection();
 
 	private:
@@ -106,7 +117,7 @@ class pmOutputMemSection : public pmMemSection
 			WRITE_ONLY
 		} accessType;
 
-		pmOutputMemSection(size_t pLength, accessType pAccess, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
+		pmOutputMemSection(size_t pLength, accessType pAccess, bool pIsLazy, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
 		~pmOutputMemSection();
 
 		pmStatus Update(size_t pOffset, size_t pLength, void* pSrcAddr);

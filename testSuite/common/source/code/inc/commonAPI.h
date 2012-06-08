@@ -42,9 +42,9 @@ void commonFinish();
 	pmMemHandle lOutputMem; \
 	pmTaskDetails lTaskDetails; \
 	if(inputMemSize) \
-		SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY, inputMemSize, &lInputMem) ); \
+		SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY_LAZY, inputMemSize, &lInputMem) ); \
 	if(outputMemSize) \
-		SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_WRITE_ONLY, outputMemSize, &lOutputMem) ); \
+		SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_READ_WRITE_LAZY, outputMemSize, &lOutputMem) ); \
 	lTaskDetails.inputMem = lInputMem; \
 	lTaskDetails.outputMem = lOutputMem; \
 	lTaskDetails.callbackHandle = cbHandle; \

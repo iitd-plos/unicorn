@@ -55,13 +55,7 @@ pmExecutionStub* pmStubManager::GetStub(pmProcessingElement* pDevice)
 pmExecutionStub* pmStubManager::GetStub(uint pIndex)
 {
 	if(pIndex >= mStubVector.size())
-	{
-		std::cout << pIndex << " " << mStubVector.size() << std::endl;
-		char* p = NULL;
-		*p = '1';
-
 		PMTHROW(pmStubException(pmStubException::INVALID_STUB_INDEX));
-	}
 
 	return mStubVector[pIndex];
 }

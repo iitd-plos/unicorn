@@ -32,10 +32,24 @@ void __dump_mem_transfer(const pmMemSection* memSection, ulong addr, size_t offs
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
+
+void __dump_mem_ack_transfer(const pmMemSection* memSection, ulong addr, size_t offset, size_t length, uint host)
+{
+    char lStr[512];
     
+    if(dynamic_cast<const pmInputMemSection*>(memSection))
+        sprintf(lStr, "Acknowledging input mem section %p (Remote Addr %p) from offset %ld for length %ld to host %d", memSection, (void*)(addr), offset, length, host);
+    else
+        sprintf(lStr, "Acknowledging out mem section %p (Remote Addr %p) from offset %ld for length %ld to host %d", memSection, (void*)(addr), offset, length, host);
+    
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
+}
+
+#define MEM_TRANSFER_ACK_DUMP(memSection, addr, offset, length, host) __dump_mem_ack_transfer(memSection, addr, offset, length, host);
 #define MEM_TRANSFER_DUMP(memSection, addr, offset, length, host) __dump_mem_transfer(memSection, addr, offset, length, host);
 #else
-#define MEM_TRANSFER_DUMP(memSection, addr, offset, length, host)    
+#define MEM_TRANSFER_ACK_DUMP(memSection, addr, offset, length, host)
+#define MEM_TRANSFER_DUMP(memSection, addr, offset, length, host)
 #endif
     
 pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand)
@@ -361,7 +375,7 @@ pmStatus pmScheduler::ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine,
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pTreatWriteOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority)
+pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = MEMORY_TRANSFER;
@@ -371,7 +385,7 @@ pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffs
 	lEvent.memTransferDetails.machine = pDestMachine;
 	lEvent.memTransferDetails.destMemBaseAddr = pDestMemBaseAddr;
 	lEvent.memTransferDetails.priority = pPriority;
-    lEvent.memTransferDetails.writeOnly = pTreatWriteOnly;
+    lEvent.memTransferDetails.registerOnly = pRegisterOnly;
 
 	return SwitchThread(lEvent, pPriority);
 }
@@ -602,24 +616,29 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                     PMTHROW(pmFatalErrorException());   // Cyclic reference
                 
 				if(dynamic_cast<pmOutputMemSection*>(lEventDetails.memSection))
-					lEventDetails.memSection->TransferOwnershipPostTaskCompletion(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length);
+                {
+                    if(!lEventDetails.memSection->IsLazy() || lEventDetails.registerOnly)
+                        lEventDetails.memSection->TransferOwnershipPostTaskCompletion(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length);
+                }
                 
                 pmCommunicatorCommand::memoryReceivePacked* lPackedData = NULL;
                 
-                if(lEventDetails.writeOnly)
+                if(lEventDetails.registerOnly)
                 {
                     // Send a 0 length buffer as an acknowledgement that the subscription information sent has been registered
                     lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.offset, 0, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+
+                    MEM_TRANSFER_ACK_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
                 }
                 else
                 {
                     lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+
+                    MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
                 }
                 
                 pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
                 
-                MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
-
                 pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
 
 				break;
@@ -1110,10 +1129,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					delete (pmCommunicatorCommand::stealResponseStruct*)(lCommunicatorCommand->GetData());
 					break;
 				case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG:
-                {
-                    std::cout << " Freeing up memory subscription" << std::endl;
 					delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lCommunicatorCommand->GetData());
-                }
 					break;
 				case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
 					delete (pmCommunicatorCommand::memoryReceivePacked*)(lCommunicatorCommand->GetData());
@@ -1337,7 +1353,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					if(!lMemSection)
 						PMTHROW(pmFatalErrorException());
 
-					MemTransferEvent(lMemSection, lData->offset, lData->length, (lData->writeOnly==1)?true:false, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, MAX_CONTROL_PRIORITY);
+					MemTransferEvent(lMemSection, lData->offset, lData->length, (lData->registerOnly==1)?true:false, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, MAX_CONTROL_PRIORITY);
 
 					SetupNewMemSubscriptionRequestReception();
 

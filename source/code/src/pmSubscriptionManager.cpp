@@ -116,14 +116,14 @@ bool pmSubscriptionManager::GetOutputMemSubscriptionForSubtask(ulong pSubtaskId,
 	return true;
 }
 
-pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId)
+pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId, pmDeviceTypes pDeviceType)
 {
 	pmSubscriptionInfo lInputMemSubscription, lOutputMemSubscription;
 	subscriptionData lInputMemSubscriptionData, lOutputMemSubscriptionData;
     
 	if(GetInputMemSubscriptionForSubtask(pSubtaskId, lInputMemSubscription))
     {
-		FetchSubscription(pSubtaskId, true, lInputMemSubscription, lInputMemSubscriptionData);
+		FetchSubscription(pSubtaskId, true, pDeviceType, lInputMemSubscription, lInputMemSubscriptionData);
 
         // Auto lock/unlock scope
         {
@@ -134,7 +134,7 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId)
 
 	if(GetOutputMemSubscriptionForSubtask(pSubtaskId, lOutputMemSubscription))
     {
-		FetchSubscription(pSubtaskId, false, lOutputMemSubscription, lOutputMemSubscriptionData);
+		FetchSubscription(pSubtaskId, false, pDeviceType, lOutputMemSubscription, lOutputMemSubscriptionData);
 
         // Auto lock/unlock scope
         {
@@ -146,10 +146,10 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId)
 	return WaitForSubscriptions(pSubtaskId);
 }
 
-pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
+pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInputMem, pmDeviceTypes pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
 {
 	pmMemSection* lMemSection = NULL;
-    bool lTreatWriteOnly = false;
+    bool lIsWriteOnly = false;
 
 	if(pIsInputMem)
     {
@@ -158,12 +158,12 @@ pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInpu
 	else
     {
 		lMemSection = mTask->GetMemSectionRW();
-        lTreatWriteOnly = (((pmOutputMemSection*)lMemSection)->GetAccessType() == pmOutputMemSection::WRITE_ONLY);
+        lIsWriteOnly = (((pmOutputMemSection*)lMemSection)->GetAccessType() == pmOutputMemSection::WRITE_ONLY);
     }
+    
+    bool lLazyRegisterOnly = (lMemSection->IsLazy() && pDeviceType == CPU);
 
-	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length, lTreatWriteOnly);
-
-	lMemSection->AcquireOwnershipImmediate(pSubscriptionInfo.offset, pSubscriptionInfo.length);
+	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection->GetMem(), mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length, (lLazyRegisterOnly || lIsWriteOnly));
 
 	return pmSuccess;
 }

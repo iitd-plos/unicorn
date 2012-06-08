@@ -110,7 +110,9 @@ namespace pm
 	{
 		INPUT_MEM_READ_ONLY,
 		OUTPUT_MEM_WRITE_ONLY,
-		OUTPUT_MEM_READ_WRITE
+		OUTPUT_MEM_READ_WRITE,
+		INPUT_MEM_READ_ONLY_LAZY,
+		OUTPUT_MEM_READ_WRITE_LAZY
 	} pmMemInfo;
 
 	typedef struct pmDataTransferInfo

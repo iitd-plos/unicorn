@@ -204,17 +204,44 @@ pmStatus pmController::CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, p
 {
 	*pMem = NULL;
 
-	if(pMemInfo == INPUT_MEM_READ_ONLY)
-	{
-		pmMemSection* lInputMem = new pmInputMemSection(pLength);
-		*pMem = lInputMem->GetMem();
-	}
-	else
-	{
-		pmMemSection* lOutputMem = new pmOutputMemSection(pLength, (pMemInfo == OUTPUT_MEM_WRITE_ONLY)?pmOutputMemSection::WRITE_ONLY:pmOutputMemSection::READ_WRITE);
-		*pMem = lOutputMem->GetMem();
-	}
+    switch(pMemInfo)
+    {
+        case INPUT_MEM_READ_ONLY:
+        {
+            pmMemSection* lInputMem = new pmInputMemSection(pLength, false);
+            *pMem = lInputMem->GetMem();
+            break;
+        }
+            
+        case INPUT_MEM_READ_ONLY_LAZY:
+        {
+            pmMemSection* lInputMem = new pmInputMemSection(pLength, true);
+            *pMem = lInputMem->GetMem();
+            break;
+        }
+            
+        case OUTPUT_MEM_WRITE_ONLY:
+        {
+            pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::WRITE_ONLY, false);
+            *pMem = lOutputMem->GetMem();
+            break;
+        }
 
+        case OUTPUT_MEM_READ_WRITE:
+        {
+            pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::READ_WRITE, false);
+            *pMem = lOutputMem->GetMem();
+            break;
+        }
+
+        case OUTPUT_MEM_READ_WRITE_LAZY:
+        {
+            pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::READ_WRITE, true);
+            *pMem = lOutputMem->GetMem();
+            break;
+        }
+    }
+    
 	return pmSuccess;
 }
 

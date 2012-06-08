@@ -405,8 +405,8 @@ bool pmMPI::IsUnknownLengthTag(pmCommunicatorCommand::communicatorCommandTags pT
 
 pmStatus pmMPI::SendNonBlocking(pmCommunicatorCommandPtr pCommand)
 {
-	void* lData;
-	ulong lLength;
+	void* lData = NULL;
+	ulong lLength = 0;
 
 	if(IsUnknownLengthTag(pCommand->GetTag()))
 	{
@@ -915,16 +915,17 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.taskId, lTaskIdMPI, MPI_UNSIGNED_LONG, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemLength, lInputMemLengthMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemLength, lOutputMemLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isOutputMemReadWrite, lIsOutputMemReadWriteMPI, MPI_UNSIGNED_SHORT, 4, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskCount, lSubtaskCountMPI, MPI_UNSIGNED_LONG, 5, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.callbackKey, lCallbackKeyMPI, MPI_CHAR, 6, MAX_CB_KEY_LEN);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.assignedDeviceCount, lAssignedDeviceCountMPI, MPI_UNSIGNED, 7, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 8, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 9, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.priority, lPriorityMPI, MPI_UNSIGNED_SHORT, 10, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.schedModel, lSchedModelMPI, MPI_UNSIGNED_SHORT, 11, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemAddr, lInputMemAddrMPI, MPI_UNSIGNED_LONG, 12, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemAddr, lOutputMemAddrMPI, MPI_UNSIGNED_LONG, 13, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemInfo, lInputMemInfo, MPI_UNSIGNED_SHORT, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemInfo, lOutputMemInfo, MPI_UNSIGNED_SHORT, 5, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskCount, lSubtaskCountMPI, MPI_UNSIGNED_LONG, 6, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.callbackKey, lCallbackKeyMPI, MPI_CHAR, 7, MAX_CB_KEY_LEN);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.assignedDeviceCount, lAssignedDeviceCountMPI, MPI_UNSIGNED, 8, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 9, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 10, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.priority, lPriorityMPI, MPI_UNSIGNED_SHORT, 11, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.schedModel, lSchedModelMPI, MPI_UNSIGNED_SHORT, 12, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemAddr, lInputMemAddrMPI, MPI_UNSIGNED_LONG, 13, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemAddr, lOutputMemAddrMPI, MPI_UNSIGNED_LONG, 14, 1);
 
 			break;
 		}
@@ -998,7 +999,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 4, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.writeOnly, lWriteOnlyMPI, MPI_UNSIGNED_SHORT, 5, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.registerOnly, lRegisterOnlyMPI, MPI_UNSIGNED_SHORT, 5, 1);
 
 			break;
 		}

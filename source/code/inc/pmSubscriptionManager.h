@@ -44,7 +44,7 @@ class pmSubscriptionManager : public pmBase
 
 		pmStatus InitializeSubtaskDefaults(ulong pSubtaskId);
 		pmStatus RegisterSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo);
-		pmStatus FetchSubtaskSubscriptions(ulong pSubtaskId);
+		pmStatus FetchSubtaskSubscriptions(ulong pSubtaskId, pmDeviceTypes pDeviceType);
 		pmStatus SetCudaLaunchConf(ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
 		pmCudaLaunchConf& GetCudaLaunchConf(ulong pSubtaskId);
 
@@ -53,7 +53,7 @@ class pmSubscriptionManager : public pmBase
 
 	private:
 		pmStatus WaitForSubscriptions(ulong pSubtaskId);
-		pmStatus FetchSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
+		pmStatus FetchSubscription(ulong pSubtaskId, bool pIsInputMem, pmDeviceTypes pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
 
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 		std::map<ulong, subscription::pmSubtask> mSubtaskMap;     // subtaskId to pmSubtask map

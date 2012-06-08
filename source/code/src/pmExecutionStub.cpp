@@ -297,7 +297,7 @@ pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
 	pTask->GetSubscriptionManager().InitializeSubtaskDefaults(pSubtaskId);
 	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, pTask, pSubtaskId, GetType());
-	pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(pSubtaskId);
+	pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(pSubtaskId, GetType());
 
 	if(pTask->GetMemSectionRW() && pTask->DoSubtasksNeedShadowMemory())
 		pTask->CreateSubtaskShadowMem(pSubtaskId);

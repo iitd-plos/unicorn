@@ -121,7 +121,8 @@ class pmCommunicatorCommand : public pmCommand
 			ulong taskId;
 			ulong inputMemLength;
 			ulong outputMemLength;
-			ushort isOutputMemReadWrite;
+			ushort inputMemInfo;    // enum pmMemInfo
+			ushort outputMemInfo;   // enum pmMemInfo
 			ulong subtaskCount;
 			char callbackKey[MAX_CB_KEY_LEN];
 			uint assignedDeviceCount;
@@ -137,7 +138,7 @@ class pmCommunicatorCommand : public pmCommand
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 14
+				FIELD_COUNT_VALUE = 15
 			} fieldCount;
 
 		} remoteTaskAssignStruct;
@@ -253,7 +254,7 @@ class pmCommunicatorCommand : public pmCommand
 			ulong offset;
 			ulong length;
 			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
-            ushort writeOnly;       // Signifies only subscription information transfer; no data is sent back
+            ushort registerOnly;    // Signifies only subscription information transfer; no data is sent back (used for lazy memory and WO memory)
 
 			typedef enum fieldCount
 			{
