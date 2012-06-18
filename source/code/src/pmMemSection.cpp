@@ -12,11 +12,7 @@ std::map<void*, pmMemSection*> pmMemSection::mMemSectionMap;
 RESOURCE_LOCK_IMPLEMENTATION_CLASS pmMemSection::mResourceLock;
 
 /* class pmMemSection */
-<<<<<<< .mine
 pmMemSection::pmMemSection(const pmMemSection& pMemSection)
-=======
-pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy)
->>>>>>> .r79
 {
     mRequestedLength = pMemSection.mRequestedLength;
     mAllocatedLength = pMemSection.mAllocatedLength;
@@ -30,7 +26,6 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
     
     pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
 
-<<<<<<< .mine
 #ifdef SUPPORT_LAZY_MEMORY
     mLazy = pIsLazy;
     
@@ -38,22 +33,6 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
         mMem = lMemoryManager->AllocateLazyMemory(pLength, mVMPageCount);
     else
         mMem = lMemoryManager->AllocateMemory(pLength, mVMPageCount);
-=======
-#ifdef USE_LAZY_MEMORY
-    mLazy = pIsLazy;
-    
-    if(mLazy)
-    {
-        mMem = lMemoryManager->AllocateLazyMemory(pLength, mVMPageCount);
-        
-        if(!pOwner || pOwner == PM_LOCAL_MACHINE)
-            lMemoryManager->RemoveLazyProtection(mMem, pLength);
-    }
-    else
-    {
-        mMem = lMemoryManager->AllocateMemory(pLength, mVMPageCount);
-    }
->>>>>>> .r79
 #else
     mLazy = false;
 	mMem = lMemoryManager->AllocateMemory(pLength, mVMPageCount);
@@ -68,9 +47,6 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
 		FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
 		mMemSectionMap[mMem] = this;
 	}
-
-    if(mLazy)
-        mLazyOwnershipMap = mOwnershipMap;
 }
 		
 pmMemSection::~pmMemSection()
@@ -149,7 +125,6 @@ pmMemSection* pmMemSection::FindMemSectionContainingAddress(void* pPtr)
             return lMemSection;
     }
     
-<<<<<<< .mine
     return NULL;
 }
 
@@ -163,21 +138,6 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
     
 	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
     
-=======
-    return NULL;
-}
-
-pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength, bool pIsLazyAcquisition)
-{
-    if(pIsLazyAcquisition && !IsLazy())
-        PMTHROW(pmFatalErrorException());
-    
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = pIsLazyAcquisition ? mLazyOwnershipLock : mOwnershipLock;
-    pmMemOwnership& lMap = pIsLazyAcquisition ? mLazyOwnershipMap : mOwnershipMap;
-    
-	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
-    
->>>>>>> .r79
 	// Remove present ownership
 	size_t lLastAddr = pOffset + pLength - 1;
 	size_t lOwnerLastAddr = pOwnerOffset + pLength - 1;
@@ -246,40 +206,22 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 
 pmStatus pmMemSection::AcquireOwnershipImmediate(ulong pOffset, ulong pLength)
 {
-<<<<<<< .mine
     return SetRangeOwner(PM_LOCAL_MACHINE, (ulong)(GetMem()), pOffset, pOffset, pLength, false);
-=======
-    return SetRangeOwner(PM_LOCAL_MACHINE, (ulong)(GetMem()), pOffset, pLength, false);
->>>>>>> .r79
 }
-<<<<<<< .mine
 
 #ifdef SUPPORT_LAZY_MEMORY
 pmStatus pmMemSection::AcquireOwnershipLazy(ulong pOffset, ulong pLength)
 {
     return SetRangeOwner(PM_LOCAL_MACHINE, (ulong)(GetMem()), pOffset, pOffset, pLength, true);
 }
-=======
-
-#ifdef USE_LAZY_MEMORY
-pmStatus pmMemSection::AcquireOwnershipLazy(ulong pOffset, ulong pLength)
-{
-    return SetRangeOwner(PM_LOCAL_MACHINE, (ulong)(GetMem()), pOffset, pLength, true);
-}
-#endif
->>>>>>> .r79
     
 void pmMemSection::AccessAllMemoryPages(ulong pOffset, ulong pLength)
 {
-<<<<<<< .mine
     if(!IsLazy())
         PMTHROW(pmFatalErrorException());
     
     pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
     uint lPageSize = lMemoryManager->GetVirtualMemoryPageSize();
-=======
-	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
->>>>>>> .r79
 
     char* lAddr = static_cast<char*>(mMem) + pOffset;
     char* lLastAddr = lAddr + pLength;
@@ -335,7 +277,6 @@ void pmMemSection::ClearOwnerships()
     
 pmStatus pmMemSection::FlushOwnerships()
 {
-<<<<<<< .mine
     if(IsLazy())
     {
         FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
@@ -344,15 +285,6 @@ pmStatus pmMemSection::FlushOwnerships()
         mOwnershipMap = mLazyOwnershipMap;
         mLazyOwnershipMap.clear();
     }
-=======
-    if(IsLazy())
-    {
-        FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
-        FINALIZE_RESOURCE_PTR(dLazyOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLazyOwnershipLock, Lock(), Unlock());
-        
-        mOwnershipMap = mLazyOwnershipMap;
-    }
->>>>>>> .r79
 
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
     
@@ -363,7 +295,6 @@ pmStatus pmMemSection::FlushOwnerships()
     {
         pmMemTransferData& lTransferData = *lIter;
 
-<<<<<<< .mine
         if(lTransferData.rangeOwner.host == PM_LOCAL_MACHINE)
             PMTHROW(pmFatalErrorException());
 
@@ -373,19 +304,6 @@ pmStatus pmMemSection::FlushOwnerships()
         if(IsLazy())
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->ApplyLazyProtection((void*)((char*)mMem + lTransferData.offset), lTransferData.length);
 #endif
-=======
-        if(lTransferData.rangeOwner.host == PM_LOCAL_MACHINE)
-            PMTHROW(pmFatalErrorException());
-
-        SetRangeOwner(lTransferData.rangeOwner.host, lTransferData.rangeOwner.hostBaseAddr, lTransferData.offset, lTransferData.length, false);
-
-#ifdef USE_LAZY_MEMORY
-        if(IsLazy())
-        {
-            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->ApplyLazyProtection((void*)((char*)mMem + lTransferData.offset), lTransferData.length);
-        }
-#endif
->>>>>>> .r79
     }
     
     mOwnershipTransferVector.clear();    
@@ -408,13 +326,8 @@ pmStatus pmMemSection::Fetch(ushort pPriority)
 
     return pmSuccess;
 }
-<<<<<<< .mine
     
 pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegisteration, pmMemSection::pmMemOwnership& pOwnerships)
-=======
-
-pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegisteration, pmMemSection::pmMemOwnership& pOwnerships)
->>>>>>> .r79
 {
     if(pIsLazyRegisteration && !IsLazy())
         PMTHROW(pmFatalErrorException());
@@ -474,12 +387,6 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegis
 	return pmSuccess;
 }
     
-bool pmMemSection::IsLazy()
-{
-    return mLazy;
-}
-    
-
 bool pmMemSection::IsLazy()
 {
     return mLazy;
