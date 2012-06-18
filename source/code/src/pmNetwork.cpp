@@ -290,6 +290,37 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 			break;
 		}
 
+		case pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED:
+		{
+			pmCommunicatorCommand::dataRedistributionPacked* lData = (pmCommunicatorCommand::dataRedistributionPacked*)(pCommand->GetData());
+			if(!lData)
+				PMTHROW(pmFatalErrorException());
+            
+			pmCommunicatorCommand::dataRedistributionStruct lStruct = lData->redistributionStruct;
+			lLength += sizeof(lStruct) + lData->redistributionStruct.orderDataCount * sizeof(pmCommunicatorCommand::redistributionOrderStruct);
+            
+			if(lLength > __MAX_SIGNED(int))
+				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
+            
+			lPackedData = new char[lLength];
+			int lPos = 0;
+			MPI_Comm lCommunicator;
+			SAFE_GET_MPI_COMMUNICATOR(lCommunicator, pCommand->GetDestination());
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->redistributionData, lData->redistributionStruct.orderDataCount, GetDataTypeMPI(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+            lLength = lPos;
+            
+			break;
+		}
+
 		default:
 			PMTHROW(pmFatalErrorException());
 	}
@@ -389,6 +420,22 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 			break;
 		}
 
+		case pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED:
+		{
+			pmCommunicatorCommand::dataRedistributionPacked* lPackedTask = new pmCommunicatorCommand::dataRedistributionPacked();
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedTask->redistributionStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            
+			lPackedTask->redistributionData = new pmCommunicatorCommand::redistributionOrderStruct[lPackedTask->redistributionStruct.orderDataCount];
+            
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->redistributionData, lPackedTask->redistributionStruct.orderDataCount, GetDataTypeMPI(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            
+            pCommand->SetData(lPackedTask, pPos);
+            
+			break;
+		}
+
 		default:
 			PMTHROW(pmFatalErrorException());
 	}
@@ -400,7 +447,8 @@ bool pmMPI::IsUnknownLengthTag(pmCommunicatorCommand::communicatorCommandTags pT
 {
     return (pTag == pmCommunicatorCommand::REMOTE_TASK_ASSIGNMENT_TAG || 
             pTag == pmCommunicatorCommand::SUBTASK_REDUCE_TAG ||
-            pTag == pmCommunicatorCommand::MEMORY_RECEIVE_TAG);
+            pTag == pmCommunicatorCommand::MEMORY_RECEIVE_TAG ||
+            pTag == pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG);
 }
 
 pmStatus pmMPI::SendNonBlocking(pmCommunicatorCommandPtr pCommand)
@@ -759,6 +807,7 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 		case pmCommunicatorCommand::REMOTE_TASK_ASSIGN_PACKED:
 		case pmCommunicatorCommand::SUBTASK_REDUCE_PACKED:
 		case pmCommunicatorCommand::MEMORY_RECEIVE_PACKED:
+        case pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED:
 			return MPI_PACKED;
 			break;
 
@@ -871,6 +920,12 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			break;
 		}
             
+		case pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::redistributionOrderStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+
 		case pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT:
 		{
 			lFieldCount = pmCommunicatorCommand::dataRedistributionStruct::FIELD_COUNT_VALUE;
@@ -996,10 +1051,11 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::memorySubscriptionRequest, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.ownerBaseAddr, lOwnerBaseAddrMPI, MPI_UNSIGNED_LONG, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receiverBaseAddr, lReceiverBaseAddrMPI, MPI_UNSIGNED_LONG, 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 4, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.registerOnly, lRegisterOnlyMPI, MPI_UNSIGNED_SHORT, 5, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receiverOffset, lReceiverOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 5, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.registerOnly, lRegisterOnlyMPI, MPI_UNSIGNED_SHORT, 6, 1);
 
 			break;
 		}
@@ -1034,13 +1090,25 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			break;
 		}
 
+		case pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT:
+		{
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::redistributionOrderStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.order, lOrderMPI, MPI_UNSIGNED, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 2, 1);
+            
+			break;
+		}
+
 		case pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::dataRedistributionStruct, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtasksAccounted, lSubtasksAccountedMPI, MPI_UNSIGNED_LONG, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.orderCount, lOrderCountMPI, MPI_UNSIGNED, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.remoteHost, lRemoteHostMPI, MPI_UNSIGNED, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.remoteHostMemBaseAddr, lRemoteHostMemBaseAddrMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtasksAccounted, lSubtasksAccountedMPI, MPI_UNSIGNED_LONG, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.orderDataCount, lOrderDataCountMPI, MPI_UNSIGNED, 5, 1);
             
 			break;
 		}
@@ -1604,6 +1672,10 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 					lDataType = pmCommunicatorCommand::MEMORY_RECEIVE_PACKED;
 					break;
 				
+				case pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG:
+					lDataType = pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED;
+					break;
+                    
 				default:
 					continue;
 			}

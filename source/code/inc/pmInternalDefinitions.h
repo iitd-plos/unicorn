@@ -82,7 +82,7 @@ const unsigned short DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 
 #define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (reinterpret_cast<size_t>(memAddr) % pageSize))
 
-//#define USE_LAZY_MEMORY
+#define SUPPORT_LAZY_MEMORY
 
 //#define DUMP_THREADS
 //#define TRACK_MEMORY_REQUESTS

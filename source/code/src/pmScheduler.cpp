@@ -13,6 +13,7 @@
 #include "pmDevicePool.h"
 #include "pmMemSection.h"
 #include "pmReducer.h"
+#include "pmRedistributor.h"
 #include "pmController.h"
 
 namespace pm
@@ -21,19 +22,19 @@ namespace pm
 using namespace scheduler;
 
 #ifdef TRACK_MEMORY_REQUESTS
-void __dump_mem_transfer(const pmMemSection* memSection, ulong addr, size_t offset, size_t length, uint host)
+void __dump_mem_transfer(const pmMemSection* memSection, ulong addr, size_t receiverOffset, size_t offset, size_t length, uint host)
 {
     char lStr[512];
     
     if(dynamic_cast<const pmInputMemSection*>(memSection))
-        sprintf(lStr, "Transferring input mem section %p (Remote Addr %p) from offset %ld for length %ld to host %d", memSection, (void*)(addr), offset, length, host);
+        sprintf(lStr, "Transferring input mem section %p (Remote Addr %p) from offset %ld (Remote offset %ld) for length %ld to host %d", memSection, (void*)(addr), offset, receiverOffset, length, host);
     else
-        sprintf(lStr, "Transferring out mem section %p (Remote Addr %p) from offset %ld for length %ld to host %d", memSection, (void*)(addr), offset, length, host);
+        sprintf(lStr, "Transferring out mem section %p (Remote Addr %p) from offset %ld (Remote Offset %ld) for length %ld to host %d", memSection, (void*)(addr), offset, receiverOffset, length, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-void __dump_mem_ack_transfer(const pmMemSection* memSection, ulong addr, size_t offset, size_t length, uint host)
+void __dump_mem_ack_transfer(const pmMemSection* memSection, ulong addr, size_t receiverOffset, size_t offset, size_t length, uint host)
 {
     char lStr[512];
     
@@ -45,11 +46,11 @@ void __dump_mem_ack_transfer(const pmMemSection* memSection, ulong addr, size_t 
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-#define MEM_TRANSFER_ACK_DUMP(memSection, addr, offset, length, host) __dump_mem_ack_transfer(memSection, addr, offset, length, host);
-#define MEM_TRANSFER_DUMP(memSection, addr, offset, length, host) __dump_mem_transfer(memSection, addr, offset, length, host);
+#define MEM_TRANSFER_ACK_DUMP(memSection, addr, receiverOffset, offset, length, host) __dump_mem_ack_transfer(memSection, addr, receiverOffset, offset, length, host);
+#define MEM_TRANSFER_DUMP(memSection, addr, receiverOffset, offset, length, host) __dump_mem_transfer(memSection, addr, receiverOffset, offset, length, host);
 #else
-#define MEM_TRANSFER_ACK_DUMP(memSection, addr, offset, length, host)
-#define MEM_TRANSFER_DUMP(memSection, addr, offset, length, host)
+#define MEM_TRANSFER_ACK_DUMP(memSection, addr, receiverOffset, offset, length, host)
+#define MEM_TRANSFER_DUMP(memSection, addr, receiverOffset, offset, length, host)
 #endif
     
 pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand)
@@ -84,6 +85,8 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT);
 
 	SetupPersistentCommunicationCommands();
 }
@@ -100,6 +103,8 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 
@@ -375,7 +380,7 @@ pmStatus pmScheduler::ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine,
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority)
+pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, ushort pPriority)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = MEMORY_TRANSFER;
@@ -384,6 +389,7 @@ pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffs
 	lEvent.memTransferDetails.length = pLength;
 	lEvent.memTransferDetails.machine = pDestMachine;
 	lEvent.memTransferDetails.destMemBaseAddr = pDestMemBaseAddr;
+	lEvent.memTransferDetails.receiverOffset = pReceiverOffset;
 	lEvent.memTransferDetails.priority = pPriority;
     lEvent.memTransferDetails.registerOnly = pRegisterOnly;
 
@@ -399,14 +405,13 @@ pmStatus pmScheduler::CommandCompletionEvent(pmCommandPtr pCommand)
 	return SwitchThread(lEvent, pCommand->GetPriority());
 }
 
-pmStatus pmScheduler::RedistributionMetaDataEvent(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength)
+pmStatus pmScheduler::RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = REDISTRIBUTION_METADATA_EVENT;
 	lEvent.redistributionMetaDataDetails.task = pTask;
-    lEvent.redistributionMetaDataDetails.orderCount = pOrderCount;
-    lEvent.redistributionMetaDataDetails.data = pData;
-    lEvent.redistributionMetaDataDetails.dataLength = pDataLength;
+    lEvent.redistributionMetaDataDetails.redistributionData = pRedistributionData;
+    lEvent.redistributionMetaDataDetails.count = pCount;
     
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
@@ -618,7 +623,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 				if(dynamic_cast<pmOutputMemSection*>(lEventDetails.memSection))
                 {
                     if(!lEventDetails.memSection->IsLazy() || lEventDetails.registerOnly)
-                        lEventDetails.memSection->TransferOwnershipPostTaskCompletion(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length);
+                        lEventDetails.memSection->TransferOwnershipPostTaskCompletion(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length);
                 }
                 
                 pmCommunicatorCommand::memoryReceivePacked* lPackedData = NULL;
@@ -626,13 +631,17 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 if(lEventDetails.registerOnly)
                 {
                     // Send a 0 length buffer as an acknowledgement that the subscription information sent has been registered
-                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.offset, 0, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, 0, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+
+                    MEM_TRANSFER_ACK_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
 
                     MEM_TRANSFER_ACK_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
                 }
                 else
                 {
-                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.length, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+
+                    MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
 
                     MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
                 }
@@ -652,6 +661,15 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
 				break;
 			}
+            
+        case REDISTRIBUTION_METADATA_EVENT:
+            {
+				redistributionMetaData& lEventDetails = pEvent.redistributionMetaDataDetails;
+
+                SendRedistributionData(lEventDetails.task, lEventDetails.redistributionData, lEventDetails.count);
+                
+                break;
+            }
 
 		case HOST_FINALIZATION:
 			{
@@ -691,6 +709,26 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
 	return pmSuccess;
 }
+    
+pmStatus pmScheduler::SendRedistributionData(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount)
+{
+    pmMachine* lMachine = pTask->GetOriginatingHost();
+    if(lMachine == PM_LOCAL_MACHINE)
+    {
+        return pTask->GetRedistributor()->PerformRedistribution(lMachine, reinterpret_cast<ulong>(pTask->GetMemSectionRW()->GetMem()), pTask->GetSubtasksExecuted(), *pRedistributionData);
+    }
+    else
+    {
+        pmCommunicatorCommand::dataRedistributionPacked* lPackedData = new pmCommunicatorCommand::dataRedistributionPacked(pTask, &(*pRedistributionData)[0], pCount);
+        
+        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG, lMachine, pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+        
+        return pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+    }
+    
+    return pmSuccess;
+}
+
 
 pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLocalTask* pLocalTask)
 {
@@ -1106,6 +1144,18 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 				delete lTask;
 			}
+			else if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG)
+			{
+				pmCommunicatorCommand::dataRedistributionPacked* lData = (pmCommunicatorCommand::dataRedistributionPacked*)(lCommunicatorCommand->GetData());
+                
+				pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->redistributionStruct.originatingHost);
+				pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->redistributionStruct.sequenceNumber);
+                
+                if(lOriginatingHost == PM_LOCAL_MACHINE)
+                    PMTHROW(pmFatalErrorException());
+                                
+				delete lTask;
+			}
 
 			switch(lCommunicatorCommand->GetTag())
 			{
@@ -1137,6 +1187,10 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					break;
 				case pmCommunicatorCommand::SUBTASK_REDUCE_TAG:
 					delete (pmCommunicatorCommand::subtaskReducePacked*)(lCommunicatorCommand->GetData());
+					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
+					break;
+				case pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG:
+					delete (pmCommunicatorCommand::dataRedistributionPacked*)(lCommunicatorCommand->GetData());
 					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
 				case pmCommunicatorCommand::HOST_FINALIZATION_TAG:
@@ -1264,6 +1318,24 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					break;
 				}
 
+				case pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG:
+				{
+					pmCommunicatorCommand::dataRedistributionPacked* lData = (pmCommunicatorCommand::dataRedistributionPacked*)(lCommunicatorCommand->GetData());
+                    
+					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->redistributionStruct.originatingHost);
+					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->redistributionStruct.sequenceNumber);
+                    
+                    if(lOriginatingHost != PM_LOCAL_MACHINE)
+                        PMTHROW(pmFatalErrorException());
+
+                    lTask->GetRedistributor()->PerformRedistribution(pmMachinePool::GetMachinePool()->GetMachine(lData->redistributionStruct.remoteHost), lData->redistributionStruct.remoteHostMemBaseAddr, lData->redistributionStruct.subtasksAccounted, std::vector<pmCommunicatorCommand::redistributionOrderStruct>(lData->redistributionData, lData->redistributionData + lData->redistributionStruct.orderDataCount));
+                    
+					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
+					delete[] (pmCommunicatorCommand::redistributionOrderStruct*)(lData->redistributionData);
+					delete (pmCommunicatorCommand::dataRedistributionPacked*)(lData);
+                    
+					break;
+				}
 				case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
 				{
 					pmCommunicatorCommand::memoryReceivePacked* lData = (pmCommunicatorCommand::memoryReceivePacked*)(lCommunicatorCommand->GetData());
@@ -1353,7 +1425,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					if(!lMemSection)
 						PMTHROW(pmFatalErrorException());
 
-					MemTransferEvent(lMemSection, lData->offset, lData->length, (lData->registerOnly==1)?true:false, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, MAX_CONTROL_PRIORITY);
+					MemTransferEvent(lMemSection, lData->offset, lData->length, (lData->registerOnly==1)?true:false, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, lData->receiverOffset, MAX_CONTROL_PRIORITY);
 
 					SetupNewMemSubscriptionRequestReception();
 

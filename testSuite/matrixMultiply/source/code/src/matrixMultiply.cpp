@@ -123,7 +123,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
 	
     if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
+    {
+        FREE_TASK_AND_RESOURCES
         return (double)-1.0;
+    }
     
 	SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMem) );
 

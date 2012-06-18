@@ -42,6 +42,7 @@ class pmMemSection : public pmBase
 		{
 			pmMachine* host;		// Host where memory page lives
 			ulong hostBaseAddr;		// Actual base addr on host
+            ulong hostOffset;       // Offset on host (in case of data redistribution offsets at source and destination hosts are different)
 		} vmRangeOwner;
     
         typedef struct pmMemTransferData
@@ -62,30 +63,39 @@ class pmMemSection : public pmBase
 	
         pmStatus AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
 
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
         pmStatus AcquireOwnershipLazy(ulong pOffset, ulong pLength);
+        void AccessAllMemoryPages(ulong pOffset, ulong pLength);
 #endif
     
-        pmStatus TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength);
+        pmStatus TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength);
     
 		pmStatus FlushOwnerships();
 		pmStatus GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegisteration, pmMemSection::pmMemOwnership& pOwnerships);
 
         bool IsLazy();
         pmStatus Fetch(ushort pPriority);
-
-	protected:
-		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy);
-
-	private:
-        pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOffset, ulong pLength, bool pIsLazyAcquisition);
     
-		void* mMem;
+    protected:
+		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy);
+        pmMemSection(const pmMemSection& pMemSection);
+
+        void ResetOwnerships(pmMachine* pOwner, ulong pBaseAddr);
+        void ClearOwnerships();
+
+        void* mMem;
+    
+        static std::map<void*, pmMemSection*> mMemSectionMap;	// Maps actual allocated memory regions to pmMemSection objects
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+    
+	private:
+        pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength, bool pIsLazyAcquisition);
+    
 		size_t mRequestedLength;
 		size_t mAllocatedLength;
 		size_t mVMPageCount;
         bool mLazy;
-
+        
         pmMemOwnership mLazyOwnershipMap;   // offset versus pair (of length of region and vmRangeOwner) - updated to mOwnershipMap at task end
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mLazyOwnershipLock;
         
@@ -94,9 +104,6 @@ class pmMemSection : public pmBase
 
         std::vector<pmMemTransferData> mOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipTransferLock;
-
-		static std::map<void*, pmMemSection*> mMemSectionMap;	// Maps actual allocated memory regions to pmMemSection objects
-		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 class pmInputMemSection : public pmMemSection
@@ -123,8 +130,12 @@ class pmOutputMemSection : public pmMemSection
 		pmStatus Update(size_t pOffset, size_t pLength, void* pSrcAddr);
 		accessType GetAccessType();
 
+        void SetupPostRedistributionMemSection(bool pAllocateNewMemory);
+        pmOutputMemSection* GetPostRedistributionMemSection();
+    
 	private:
 		accessType mAccess;
+        pmOutputMemSection* mPostRedistributionMemSection;
 };
 
 } // end namespace pm

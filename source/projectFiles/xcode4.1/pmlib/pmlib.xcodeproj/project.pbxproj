@@ -447,13 +447,37 @@
 		2BCCED2C151C7AA1006AA45D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				EXCLUDED_SOURCE_FILE_NAMES = (
+					pmSafePriorityQueue.cpp,
+					pmThread.cpp,
+				);
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					UNIX,
+					MACOS,
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_VERSION = com.apple.compilers.llvmgcc42;
+				HEADER_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				USER_HEADER_SEARCH_PATHS = "";
 			};
 			name = Debug;
 		};
 		2BCCED2D151C7AA1006AA45D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				EXCLUDED_SOURCE_FILE_NAMES = (
+					pmSafePriorityQueue.cpp,
+					pmThread.cpp,
+				);
+				GCC_OPTIMIZATION_LEVEL = 3;
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					MACOS,
+					UNIX,
+				);
+				GCC_VERSION = com.apple.compilers.llvmgcc42;
+				HEADER_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;

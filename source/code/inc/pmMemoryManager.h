@@ -27,7 +27,7 @@ class pmMemSection;
 class pmMachine;
 extern pmMachine* PM_LOCAL_MACHINE;
 
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
 	void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
 #endif
     
@@ -42,7 +42,7 @@ class pmMemoryManager : public pmBase
 
 		virtual void* AllocateMemory(size_t& pLength, size_t& pPageCount) = 0;
 
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
 		virtual void* AllocateLazyMemory(size_t& pLength, size_t& pPageCount) = 0;
         virtual pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr) = 0;
         virtual pmStatus ApplyLazyProtection(void* pAddr, size_t pLength) = 0;
@@ -83,7 +83,7 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
 		virtual void* AllocateMemory(size_t& pLength, size_t& pPageCount);
 
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
 		virtual void* AllocateLazyMemory(size_t& pLength, size_t& pPageCount);
 		virtual pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr);
         virtual pmStatus ApplyLazyProtection(void* pAddr, size_t pLength);
@@ -106,13 +106,13 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
         virtual void* AllocatePageAlignedMemoryInternal(size_t& pLength, size_t& pPageCount);
 
-        virtual pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, bool pRegisterOnly, pmInFlightRegions& pInFlightMap);
+        virtual pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, bool pRegisterOnly, pmInFlightRegions& pInFlightMap);
 
 		size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
 
         void FindRegionsNotInFlight(pmLinuxMemoryManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
     
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
 		pmStatus InstallSegFaultHandler();
 		pmStatus UninstallSegFaultHandler();
 #endif

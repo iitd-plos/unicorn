@@ -51,11 +51,8 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 
 pmTask::~pmTask()
 {
-	if(mReducer)
-		delete mReducer;
-
-	if(mRedistributor)
-		delete mRedistributor;
+    delete mReducer;
+    delete mRedistributor;
 }
     
 pmStatus pmTask::TaskInternallyFinished()
@@ -234,7 +231,7 @@ pmStatus pmTask::MarkSubtaskExecutionFinished()
 		mReducer->CheckReductionFinish();
     
     if(mRedistributor)
-        mRedistributor->PerformRedistribution();
+        mRedistributor->SendRedistributionInfo();
 
 	return pmSuccess;
 }
@@ -275,6 +272,7 @@ std::cout << "Pending Implementation" << std::endl;
 	(static_cast<pmOutputMemSection*>(mMemRW))->Update(lSubscriptionInfo.offset, lSubscriptionInfo.length, lShadowMem.addr);
 	return DestroySubtaskShadowMem(pSubtaskId);
 
+//    return CompleteTask();
 	//return (pmLocalTask*)this->MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus());
 }
 
@@ -377,20 +375,20 @@ pmLocalTask::~pmLocalTask()
 pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
 {
     pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
+    pmTask::MarkSubtaskExecutionFinished();
+
     if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
-    {
-        pmTask::MarkSubtaskExecutionFinished();
-        pmTaskManager::GetTaskManager()->DeleteTask(this);  // Local task is only erased from task manager. It is actually deleted from memory by user
-        
-        pmSubtaskManager* lManager = GetSubtaskManager();
-        MarkTaskEnd(lManager?lManager->GetTaskExecutionStatus():pmNoCompatibleDevice);
-    }
-    else
-    {
-        pmTask::MarkSubtaskExecutionFinished();
-    }
+        CompleteTask();
 
     return pmSuccess;
+}
+    
+pmStatus pmLocalTask::CompleteTask()
+{
+    pmTaskManager::GetTaskManager()->DeleteTask(this);  // Local task is only erased from task manager. It is actually deleted from memory by user
+    
+    pmSubtaskManager* lManager = GetSubtaskManager();
+    return MarkTaskEnd(lManager?lManager->GetTaskExecutionStatus():pmNoCompatibleDevice);    
 }
 
 pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel)

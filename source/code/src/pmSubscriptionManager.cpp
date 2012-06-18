@@ -161,10 +161,13 @@ pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInpu
         lIsWriteOnly = (((pmOutputMemSection*)lMemSection)->GetAccessType() == pmOutputMemSection::WRITE_ONLY);
     }
     
-    bool lLazyRegisterOnly = (lMemSection->IsLazy() && pDeviceType == CPU);
+	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection->GetMem(), mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length, (lMemSection->IsLazy() || lIsWriteOnly));
 
-	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection->GetMem(), mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length, (lLazyRegisterOnly || lIsWriteOnly));
-
+#ifdef SUPPORT_LAZY_MEMORY
+    if(lMemSection->IsLazy() && pDeviceType == CPU)
+        lMemSection->AccessAllMemoryPages(pSubscriptionInfo.offset, pSubscriptionInfo.length);
+#endif
+    
 	return pmSuccess;
 }
 

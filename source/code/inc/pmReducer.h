@@ -19,12 +19,13 @@ class pmReducer : public pmBase
 		pmReducer(pmTask* pTask);
 		virtual ~pmReducer();
 
-		pmStatus CheckReductionFinish(bool pAlreadyLocked = false);
+		pmStatus CheckReductionFinish();
 		pmStatus AddSubtask(ulong pSubtaskId);
 	
 	private:
 		pmStatus PopulateExternalMachineList();
 		ulong GetMaxPossibleExternalReductionReceives(uint pFollowingMachineCount);
+        pmStatus CheckReductionFinishInternal();
 
 		ulong mLastSubtaskId;
 		uint mCurrentStubId;
@@ -33,7 +34,7 @@ class pmReducer : public pmBase
 		ulong mExternalReductionsRequired;
 		bool mReduceState;
 
-		pmMachine* mSendToMachine;			// Index of machine to which this machine will send
+		pmMachine* mSendToMachine;			// Machine to which this machine will send
 		pmTask* mTask;
 
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;

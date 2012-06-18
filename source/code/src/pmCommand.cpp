@@ -422,14 +422,16 @@ pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked()
 	memset(this, 0, sizeof(*this));
 }
     
-pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength)
+pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked(pmTask* pTask, redistributionOrderStruct* pRedistributionData, uint pCount)
 {
     this->redistributionStruct.originatingHost = *(pTask->GetOriginatingHost());
     this->redistributionStruct.sequenceNumber = pTask->GetSequenceNumber();
+    this->redistributionStruct.remoteHost = *PM_LOCAL_MACHINE;
+    this->redistributionStruct.remoteHostMemBaseAddr = reinterpret_cast<ulong>(static_cast<pmOutputMemSection*>(pTask->GetMemSectionRW())->GetPostRedistributionMemSection()->GetMem());
+    
     this->redistributionStruct.subtasksAccounted = pTask->GetSubtasksExecuted();
-    this->redistributionStruct.orderCount = pOrderCount;
-    this->mem.ptr = pData;
-    this->mem.length = pDataLength;
+    this->redistributionStruct.orderDataCount = pCount;
+    this->redistributionData = pRedistributionData;
 }
     
 pmCommunicatorCommand::dataRedistributionPacked::~dataRedistributionPacked()

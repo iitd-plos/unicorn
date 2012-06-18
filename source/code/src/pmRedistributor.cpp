@@ -2,6 +2,7 @@
 #include "pmRedistributor.h"
 #include "pmHardware.h"
 #include "pmTask.h"
+#include "pmMemSection.h"
 
 namespace pm
 {
@@ -9,8 +10,8 @@ namespace pm
 pmRedistributor::pmRedistributor(pmTask* pTask)
 {
 	mTask = pTask;
-    mSubtasksRedistributed = 0;
-    mTotalLength = 0;
+    mTotalLengthAccounted = 0;
+    mSubtasksAccounted = 0;
 }
 
 pmRedistributor::~pmRedistributor()
@@ -19,54 +20,114 @@ pmRedistributor::~pmRedistributor()
 
 pmStatus pmRedistributor::RedistributeData(ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder)
 {
-	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mRedistributionLock, Lock(), Unlock());
-
-    mTotalLength += pLength;
-        
-    orderData lOrderData;
-    lOrderData.offset = pOffset;
-    lOrderData.length = pLength;
+    if(!pLength)
+        return pmSuccess;
     
-    if(mRedistributionMap.find(pOrder) != mRedistributionMap.end())
-    {
-        mRedistributionMap[pOrder].first.orderLength += pLength;
-        mRedistributionMap[pOrder].second.push_back(lOrderData);
-    }
-    else
-    {
-        orderMetaData lMetaData;
-        lMetaData.orderLength = pLength;
-        
-        std::vector<orderData> lVector;
-        lVector.push_back(lOrderData);
+    pmSubscriptionInfo lOutputMemSubscriptionInfo;
+    if(!mTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pSubtaskId, lOutputMemSubscriptionInfo))
+        return pmInvalidOffset;
 
-        mRedistributionMap[pOrder] = std::pair<orderMetaData, std::vector<orderData> >(lMetaData, lVector);
-    }
+    ulong lGlobalOffset = lOutputMemSubscriptionInfo.offset + pOffset;
+    if(lGlobalOffset >= mTask->GetMemSectionRW()->GetLength())
+        return pmInvalidOffset;
+        
+	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLocalRedistributionLock, Lock(), Unlock());
+
+    pmCommunicatorCommand::redistributionOrderStruct lOrderData;
+    lOrderData.order = pOrder;
+    lOrderData.offset = lGlobalOffset;
+    lOrderData.length = pLength;
+
+    mLocalRedistributionData.push_back(lOrderData);
         
     return pmSuccess;
 }
     
-pmStatus pmRedistributor::PerformRedistribution()
+pmStatus pmRedistributor::SendRedistributionInfo()
 {
+	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLocalRedistributionLock, Lock(), Unlock());
+
     if(mTask->GetOriginatingHost() != PM_LOCAL_MACHINE)
     {
-        uint lOrderCount = mRedistributionMap.size();
-        
-        std::map<ulong, std::pair<orderMetaData, std::vector<orderData> > >::iterator lStart, lEnd;
-        lStart = mRedistributionMap.begin();
-        lEnd = mRedistributionMap.end();
-        
-        for(; lStart != lEnd; ++lStart)
-        {
-            mTransferMetaData.push_back(lStart->first);
-            mTransferMetaData.push_back(lStart->second.first.orderLength);
-        }
-        
-        pmScheduler::GetScheduler()->RedistributionMetaDataEvent(mTask, lOrderCount, (void*)((uint*)(&mTransferMetaData[0])), mTransferMetaData.size()*sizeof(uint));
+        pmOutputMemSection* lMemSection = static_cast<pmOutputMemSection*>(mTask->GetMemSectionRW());
+        lMemSection->SetupPostRedistributionMemSection(false);
     }
+
+    pmScheduler::GetScheduler()->RedistributionMetaDataEvent(mTask, &mLocalRedistributionData, (uint)mLocalRedistributionData.size());
     
     return pmSuccess;
 }
 
+pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pBaseMemAddr, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector)
+{
+    if(mTask->GetOriginatingHost() != PM_LOCAL_MACHINE)
+        PMTHROW(pmFatalErrorException());
+    
+	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mGlobalRedistributionLock, Lock(), Unlock());
+    
+    std::vector<pmCommunicatorCommand::redistributionOrderStruct>::const_iterator lStart = pVector.begin(), lEnd = pVector.end();
+    for(; lStart != lEnd; ++lStart)
+    {
+        const pmCommunicatorCommand::redistributionOrderStruct& lData = *lStart;
+        
+        orderData lOrderData;
+        lOrderData.host = pHost;
+        lOrderData.hostMemBaseAddr = pBaseMemAddr;
+        lOrderData.offset = lData.offset;
+        lOrderData.length = lData.length;
+        
+        mGlobalRedistributionMap[lData.order].push_back(lOrderData);
+    }
+        
+    mSubtasksAccounted += pSubtasksAccounted;
+
+    if(mSubtasksAccounted == mTask->GetSubtaskCount())
+        SetRedistributedOwnership();
+    
+    return pmSuccess;
 }
+
+// This method must be called with mGlobalRedistributionLock acquired
+void pmRedistributor::SetRedistributedOwnership()
+{
+    pmOutputMemSection* lMemSection = static_cast<pmOutputMemSection*>(mTask->GetMemSectionRW());
+    lMemSection->SetupPostRedistributionMemSection(true);
+
+    pmOutputMemSection* lTempMemSection = lMemSection->GetPostRedistributionMemSection();
+    char* lTempMemAddr = reinterpret_cast<char*>(lTempMemSection->GetMem());
+    
+    ulong lCurrentOffset = 0;
+    std::map<uint, std::vector<orderData> >::iterator lStartIter = mGlobalRedistributionMap.begin(), lEndIter = mGlobalRedistributionMap.end();
+    for(; lStartIter != lEndIter; ++lStartIter)
+    {
+        std::vector<orderData>& lVector = lStartIter->second;
+        
+        std::vector<orderData>::iterator lInnerStartIter = lVector.begin(), lInnerEndIter = lVector.end();
+        for(; lInnerStartIter != lInnerEndIter; ++lInnerStartIter)
+        {
+            orderData& lData = *lInnerStartIter;
+            if(lData.host == PM_LOCAL_MACHINE)
+            {
+                lMemSection->AcquireOwnershipImmediate(lCurrentOffset, lData.length);
+                lMemSection->Update(lCurrentOffset, lData.length, lTempMemAddr + lData.offset);
+            }
+            else
+            {
+                lMemSection->TransferOwnershipPostTaskCompletion(lData.host, lData.hostMemBaseAddr, lData.offset, lCurrentOffset, lData.length);
+            }
+            
+            lCurrentOffset += lData.length;
+        }
+    }
+
+    lMemSection->FlushOwnerships();
+
+    dynamic_cast<pmLocalTask*>(mTask)->CompleteTask();
+}
+    
+}
+
+
+
+
 

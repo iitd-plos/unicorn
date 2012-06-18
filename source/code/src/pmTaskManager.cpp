@@ -104,7 +104,7 @@ pmStatus pmTaskManager::DeleteTask(pmLocalTask* pLocalTask)
 {
     FINALIZE_RESOURCE(dResourceLock, mLocalTaskResourceLock.Lock(), mLocalTaskResourceLock.Unlock());
     mLocalTasks.erase(pLocalTask);
-    
+
     pLocalTask->TaskInternallyFinished();
 
     mTaskFinishSignalWait.Signal();

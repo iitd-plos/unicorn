@@ -63,7 +63,8 @@ static const char* pmErrorMessages[] =
 	"Key length exceeds the maximum limit",
 	"Internal failure in data packing/unpacking",
     "No compatible processing element found in the cluster",
-    "Configuration file not found at expected location"
+    "Configuration file not found at expected location",
+    "Memory offset out of bounds"
 };
 
 const char* pmGetLibVersion()

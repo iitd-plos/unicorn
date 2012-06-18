@@ -4,6 +4,7 @@
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
+#include "pmCommand.h"
 
 #include <map>
 #include <vector>
@@ -17,35 +18,34 @@ class pmMachine;
 class pmRedistributor : public pmBase
 {
 	public:
-        typedef struct orderMetaData
-        {
-            ulong orderLength;
-        } orderMetaData;
-    
-        typedef struct orderData
-        {
-            ulong offset;
-            ulong length;
-        } orderData;
-    
 		pmRedistributor(pmTask* pTask);
 		virtual ~pmRedistributor();
 
         pmStatus RedistributeData(ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder);
+        pmStatus PerformRedistribution(pmMachine* pHost, ulong pBaseMemAddr, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector);
     
-        pmStatus PerformRedistribution();
+        pmStatus SendRedistributionInfo();
 	
 	private:
+        typedef struct orderData
+        {
+            pmMachine* host;
+            ulong hostMemBaseAddr;
+            ulong offset;
+            ulong length;
+        } orderData;
+    
+        void SetRedistributedOwnership();
+    
 		pmTask* mTask;
+        ulong mTotalLengthAccounted;
+        ulong mSubtasksAccounted;
+    
+        std::map<uint, std::vector<orderData> > mGlobalRedistributionMap;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mGlobalRedistributionLock;
 
-        ulong mTotalLength;
-        std::map<ulong, std::pair<orderMetaData, std::vector<orderData> > > mRedistributionMap;     // Order number vs. redistribution data
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mRedistributionLock;
-
-        ulong mSubtasksRedistributed;
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCountLock;
-
-        std::vector<uint> mTransferMetaData;
+        std::vector<pmCommunicatorCommand::redistributionOrderStruct> mLocalRedistributionData;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mLocalRedistributionLock;
 };
 
 } // end namespace pm

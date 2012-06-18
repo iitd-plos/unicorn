@@ -11,21 +11,21 @@ namespace pm
 {
         
 #ifdef TRACK_MEMORY_REQUESTS
-void __dump_mem_req(const pmMemSection* memSection, const void* addr, size_t offset, size_t length, uint host)
+void __dump_mem_req(const pmMemSection* memSection, const void* addr, size_t receiverOffset, size_t offset, size_t length, uint host)
 {
     char lStr[512];
    
     if(dynamic_cast<const pmInputMemSection*>(memSection))
-        sprintf(lStr, "Requesting input memory %p (Mem Section %p) at offset %ld for length %ld from host %d", addr, memSection, offset, length, host);
+        sprintf(lStr, "Requesting input memory %p (Mem Section %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, memSection, receiverOffset, offset, length, host);
     else
-        sprintf(lStr, "Requesting output memory %p (Mem Section %p) at offset %ld for length %ld from host %d", addr, memSection, offset, length, host);
+        sprintf(lStr, "Requesting output memory %p (Mem Section %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, memSection, receiverOffset, offset, length, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-#define MEM_REQ_DUMP(memSection, addr, offset, length, host) __dump_mem_req(memSection, addr, offset, length, host);
+#define MEM_REQ_DUMP(memSection, addr, receiverOffset, offset, length, host) __dump_mem_req(memSection, addr, receiverOffset, offset, length, host);
 #else
-#define MEM_REQ_DUMP(memSection, addr, offset, length, host)    
+#define MEM_REQ_DUMP(memSection, addr, receiverOffset, offset, length, host)    
 #endif
     
 RESOURCE_LOCK_IMPLEMENTATION_CLASS pmLinuxMemoryManager::mInFlightLock;
@@ -44,7 +44,7 @@ pmLinuxMemoryManager::pmLinuxMemoryManager()
     
     mMemoryManager = this;
 
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
 	InstallSegFaultHandler();
 #endif
 
@@ -63,7 +63,7 @@ pmLinuxMemoryManager::pmLinuxMemoryManager()
 
 pmLinuxMemoryManager::~pmLinuxMemoryManager()
 {
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
 	UninstallSegFaultHandler();
 #endif
 }
@@ -107,7 +107,7 @@ void* pmLinuxMemoryManager::AllocateMemory(size_t& pLength, size_t& pPageCount)
 	return lPtr;
 }
 
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
 void* pmLinuxMemoryManager::AllocateLazyMemory(size_t& pLength, size_t& pPageCount)
 {   
     void* lPtr = AllocatePageAlignedMemoryInternal(pLength, pPageCount);
@@ -183,7 +183,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
     {
         assert(lPair.first == pLength);
         
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
         if(pMemSection->IsLazy())
         {
             if(pLength > GetVirtualMemoryPageSize())
@@ -198,7 +198,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
     
     regionFetchData& lData = lPair.second;        
 
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
     if(lIsLazyRegisteration)
         pMemSection->AcquireOwnershipLazy(pOffset, lPair.first);
     else
@@ -341,7 +341,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 
 			if(lRangeOwner.host != PM_LOCAL_MACHINE)
 			{
-				pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr, pRegisterOnly, lMap);
+				pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr, lRangeOwner.hostOffset, pRegisterOnly, lMap);
 
 				if(lCommand.get())
 					lCommandVector.push_back(lCommand);
@@ -352,30 +352,29 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 	return lCommandVector;
 }
 
-pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, bool pRegisterOnly, pmInFlightRegions& pInFlightMap)
+pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, bool pRegisterOnly, pmInFlightRegions& pInFlightMap)
 {	
 	regionFetchData lFetchData;
 
 	pmCommunicatorCommand::memorySubscriptionRequest* lData = new pmCommunicatorCommand::memorySubscriptionRequest();
 	lData->ownerBaseAddr = pOwnerBaseMemAddr;	// page aligned
 	lData->receiverBaseAddr = (ulong)pMem;		// page aligned
-	lData->offset = pOffset;
+    lData->receiverOffset = pOffset;
+	lData->offset = pOwnerOffset;
 	lData->length = pLength;
 	lData->destHost = *PM_LOCAL_MACHINE;
     lData->registerOnly = pRegisterOnly?1:0;
     
 	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine,	pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, 1, NULL, 0);
 
-	char* lAddr = (char*)pMem;
-	lAddr += lData->offset;
-
 	pmCommunicator::GetCommunicator()->Send(lFetchData.sendCommand);
 
-    MEM_REQ_DUMP(pMemSection, pMem, pOffset, pLength, (uint)(*pOwnerMachine));
+    MEM_REQ_DUMP(pMemSection, pMem, pOffset, pOwnerOffset, pLength, (uint)(*pOwnerMachine));
         
     // For write only memory, a zero length buffer will be received back as an acknowledgement of subscription registration
 	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine, pmCommunicatorCommand::BYTE, NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
     
+	char* lAddr = (char*)pMem + lData->receiverOffset;
     pInFlightMap[lAddr] = std::make_pair(lData->length, lFetchData);
 
 	lFetchData.receiveCommand->MarkExecutionStart();
@@ -386,7 +385,7 @@ pmLinuxMemoryManager::regionFetchData::regionFetchData()
 {
 }
 
-#ifdef USE_LAZY_MEMORY
+#ifdef SUPPORT_LAZY_MEMORY
 pmStatus pmLinuxMemoryManager::ApplyLazyProtection(void* pAddr, size_t pLength)
 {
 	size_t lPageSize = static_cast<size_t>(GetVirtualMemoryPageSize());

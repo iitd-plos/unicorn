@@ -251,6 +251,7 @@ class pmCommunicatorCommand : public pmCommand
 		{
 			ulong ownerBaseAddr;	// Actual base memory address on serving host
 			ulong receiverBaseAddr;	// Actual base memory address on receiving host (on destHost)
+            ulong receiverOffset;
 			ulong offset;
 			ulong length;
 			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
@@ -258,7 +259,7 @@ class pmCommunicatorCommand : public pmCommand
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 6
+				FIELD_COUNT_VALUE = 7
 			} fieldCount;
 
 		} memorySubscriptionRequest;
@@ -322,16 +323,31 @@ class pmCommunicatorCommand : public pmCommand
 		    
 		} hostFinalizationStruct;
     
+        typedef struct redistributionOrderStruct
+        {
+            uint order;
+            ulong offset;
+            ulong length;
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 3
+			} fieldCount;            
+            
+        } redistributionOrderStruct;
+
         typedef struct dataRedistributionStruct
         {
 			uint originatingHost;
 			ulong sequenceNumber;	// sequence number of local task object (on originating host)
+            uint remoteHost;
+            ulong remoteHostMemBaseAddr;
 			ulong subtasksAccounted;
-			uint orderCount;
+			uint orderDataCount;
             
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 4
+				FIELD_COUNT_VALUE = 6
 			} fieldCount;            
             
         } dataRedistributionStruct;
@@ -339,11 +355,11 @@ class pmCommunicatorCommand : public pmCommand
         typedef struct dataRedistributionPacked
         {
             dataRedistributionPacked();
-            dataRedistributionPacked(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength);
+            dataRedistributionPacked(pmTask* pTask, redistributionOrderStruct* pRedistributionData, uint pCount);
             ~dataRedistributionPacked();
             
             dataRedistributionStruct redistributionStruct;
-            dataPtr mem;
+            redistributionOrderStruct* redistributionData;
         } dataRedistributionPacked;
 
         typedef enum communicatorCommandTypes
@@ -394,6 +410,7 @@ class pmCommunicatorCommand : public pmCommand
 			MEMORY_RECEIVE_STRUCT,
 			MEMORY_RECEIVE_PACKED,
 			HOST_FINALIZATION_STRUCT,
+            REDISTRIBUTION_ORDER_STRUCT,
             DATA_REDISTRIBUTION_STRUCT,
             DATA_REDISTRIBUTION_PACKED,
 			MAX_COMMUNICATOR_DATA_TYPES

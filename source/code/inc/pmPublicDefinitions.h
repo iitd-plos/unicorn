@@ -44,6 +44,7 @@ namespace pm
 		pmDataProcessingFailure,
         pmNoCompatibleDevice,
         pmConfFileNotFound,
+        pmInvalidOffset,
 		pmMaxStatusValues
 	} pmStatus;
 

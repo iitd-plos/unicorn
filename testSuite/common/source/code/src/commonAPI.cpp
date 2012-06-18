@@ -39,7 +39,7 @@ void RegisterLibraryCallback(int pParallelMode, std::string pCallbackKey, pmCall
 	if(pParallelMode <= 3)
 		pCallbacks.deviceSelection = LOCAL_DEVICE_SELECTION_CALLBACK;    
 
-    static char* lArray[6] = {"1", "2", "3", "4", "5", "6"};
+    static const char* lArray[6] = {"1", "2", "3", "4", "5", "6"};
 
     std::string lTempKey;
     lTempKey = pCallbackKey + lArray[pParallelMode-1];

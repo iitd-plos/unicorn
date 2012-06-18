@@ -127,18 +127,23 @@ pmStatus pmReducer::AddSubtask(ulong pSubtaskId)
 		mLastSubtaskId = pSubtaskId;
 		mReduceState = true;
 
-		CheckReductionFinish(true);
+		CheckReductionFinishInternal();
 	}
 
 	return pmSuccess;
 }
 
-pmStatus pmReducer::CheckReductionFinish(bool pAlreadyLocked /* = false */)
+pmStatus pmReducer::CheckReductionFinish()
 {
-	if(!pAlreadyLocked)
-		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    return CheckReductionFinishInternal();
+}
 
-	if(!mReduceState && mTask->HasSubtaskExecutionFinished() && (mReductionsDone == (mExternalReductionsRequired + mTask->GetSubtaskCount() - 1)))
+/* This function must be called with mResourceLock acquired */
+pmStatus pmReducer::CheckReductionFinishInternal()
+{
+	if(mReduceState && mTask->HasSubtaskExecutionFinished() && (mReductionsDone == (mExternalReductionsRequired + mTask->GetSubtasksExecuted() - 1)))
 	{
 		if(mSendToMachine)
 		{

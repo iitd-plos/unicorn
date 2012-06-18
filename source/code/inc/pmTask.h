@@ -135,6 +135,7 @@ class pmLocalTask : public pmTask
 		pmStatus MarkTaskEnd(pmStatus pStatus);
 
 		virtual pmStatus MarkSubtaskExecutionFinished();
+        pmStatus CompleteTask();
 
 		pmStatus GetStatus();
 

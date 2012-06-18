@@ -159,6 +159,7 @@ typedef struct memTransfer
 	ulong length;
 	pmMachine* machine;
 	ulong destMemBaseAddr;
+    ulong receiverOffset;
 	ushort priority;
     bool registerOnly;
 } memTransfer;
@@ -176,9 +177,8 @@ typedef struct hostFinalization
 typedef struct redistributionMetaData
 {
     pmTask* task;
-    uint orderCount;
-    void* data;
-    uint dataLength;
+    std::vector<pmCommunicatorCommand::redistributionOrderStruct>* redistributionData;
+    uint count;
 } redistributionMetaData;
 
 typedef struct schedulerEvent
@@ -204,7 +204,6 @@ typedef struct schedulerEvent
         redistributionMetaData redistributionMetaDataDetails;
 	};
 
-	// Can't make this part of union as C++ standard does not allow anything with non-trivial constructor/copy-constructor/assignment to be part of an union
 	commandCompletion commandCompletionDetails;	
 } schedulerEvent;
 
@@ -247,9 +246,9 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus TaskCancelEvent(pmTask* pTask);
 		pmStatus TaskFinishEvent(pmTask* pTask);
 		pmStatus ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId);
-		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ushort pPriority);
+		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, ushort pPriority);
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
-        pmStatus RedistributionMetaDataEvent(pmTask* pTask, uint pOrderCount, void* pData, uint pDataLength);
+        pmStatus RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
 
 		pmStatus HandleCommandCompletion(pmCommandPtr pCommand);
 
@@ -261,6 +260,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 
         pmStatus SendFinalizationSignal();
 		pmStatus BroadcastTerminationSignal();
+    
+        pmStatus SendRedistributionData(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
 
 	private:
 		pmScheduler();
