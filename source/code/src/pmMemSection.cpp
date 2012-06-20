@@ -1,4 +1,23 @@
 
+/**
+ * Copyright (c) 2011 Indian Institute of Technology, New Delhi
+ * All Rights Reserved
+ *
+ * Entire information in this file and PMLIB software is property
+ * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * modification and any use in source form is strictly prohibited
+ * without formal written approval from Indian Institute of Technology, 
+ * New Delhi. Use of software in binary form is allowed provided
+ * the using application clearly highlights the credits.
+ *
+ * This work is the doctoral project of Tarun Beri under the guidance
+ * of Prof. Subodh Kumar and Prof. Sorav Bansal. More information
+ * about the authors is available at their websites -
+ * Prof. Subodh Kumar - http://www.cse.iitd.ernet.in/~subodh/
+ * Prof. Sorav Bansal - http://www.cse.iitd.ernet.in/~sbansal/
+ * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
+ */
+
 #include "pmMemSection.h"
 #include "pmMemoryManager.h"
 #include "pmHardware.h"
@@ -12,18 +31,11 @@ std::map<void*, pmMemSection*> pmMemSection::mMemSectionMap;
 RESOURCE_LOCK_IMPLEMENTATION_CLASS pmMemSection::mResourceLock;
 
 /* class pmMemSection */
-pmMemSection::pmMemSection(const pmMemSection& pMemSection)
-{
-    mRequestedLength = pMemSection.mRequestedLength;
-    mAllocatedLength = pMemSection.mAllocatedLength;
-    mMem = NULL;
-    mLazy = false;
-}
-    
 pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy)
+    : mOwner(pOwner?pOwner:PM_LOCAL_MACHINE),
+    mUserMemHandle(NULL),
+    mRequestedLength(pLength)
 {
-	mRequestedLength = pLength;
-    
     pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
 
 #ifdef SUPPORT_LAZY_MEMORY
@@ -40,7 +52,7 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
 
 	mAllocatedLength = pLength;
 
-    ResetOwnerships(pOwner?pOwner:PM_LOCAL_MACHINE, pOwner?pOwnerBaseMemAddr:(ulong)mMem);
+    ResetOwnerships(mOwner, ((mOwner == PM_LOCAL_MACHINE) ? (ulong)mMem : pOwnerBaseMemAddr));
     
 	if(mMem)
 	{
@@ -48,13 +60,97 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
 		mMemSectionMap[mMem] = this;
 	}
 }
+    
+pmMemSection::pmMemSection(const pmMemSection& pMemSection)
+{
+    mOwner = pMemSection.mOwner;
+    mUserMemHandle = NULL;
+    mRequestedLength = pMemSection.mRequestedLength;
+    mAllocatedLength = pMemSection.mAllocatedLength;
+    mVMPageCount = pMemSection.mVMPageCount;
+    mLazy = pMemSection.mLazy;
+    mMem = NULL;
+}
 		
 pmMemSection::~pmMemSection()
+{    
+    DisposeMemory();
+    
+    if(mOwner == PM_LOCAL_MACHINE)
+        DeleteAssociations();
+}
+    
+void pmMemSection::DisposeMemory()
 {
-	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
-	mMemSectionMap.erase(mMem);
+    if(mMem)
+    {
+        FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
+        mMemSectionMap.erase(mMem);
+        
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mMem);
+        mMem = NULL;
+    }
+}
 
-	MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mMem);
+void pmMemSection::DeleteAssociations()
+{
+    DeleteLocalAssociations();
+    DeleteRemoteAssociations();
+}
+    
+void pmMemSection::DeleteLocalAssociations()
+{
+    std::vector<pmMemSection*>::iterator lStart = mLocalAssociations.begin(), lEnd = mLocalAssociations.end();
+    for(; lStart != lEnd; ++lStart)
+        delete *lStart;
+}
+
+void pmMemSection::DeleteRemoteAssociations()
+{
+}
+    
+void pmMemSection::CreateLocalAssociation(pmMemSection* pMemSection)
+{
+    mLocalAssociations.push_back(pMemSection);
+}
+
+void pmMemSection::SetUserMemHandle(pmUserMemHandle* pUserMemHandle)
+{
+    mUserMemHandle = pUserMemHandle;
+}
+
+pmUserMemHandle* pmMemSection::GetUserMemHandle()
+{
+    return mUserMemHandle;
+}
+
+void pmMemSection::SwapMemoryAndOwnerships(pmMemSection* pMemSection1, pmMemSection* pMemSection2)
+{
+    std::swap(pMemSection1->mMem, pMemSection2->mMem);
+    std::swap(pMemSection1->mOwnershipMap, pMemSection2->mOwnershipMap);
+    
+    FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
+
+    if(pMemSection1->mMem)
+        mMemSectionMap[pMemSection1->mMem] = pMemSection1;
+
+    if(pMemSection2->mMem)
+        mMemSectionMap[pMemSection2->mMem] = pMemSection2;
+}
+
+pmInputMemSection* pmMemSection::ConvertOutputMemSectionToInputMemSection(pmOutputMemSection* pOutputMemSection)
+{
+    pmInputMemSection* lInputMemSection = new pmInputMemSection(*pOutputMemSection);
+    
+    SwapMemoryAndOwnerships(lInputMemSection, pOutputMemSection);
+    
+    pmUserMemHandle* lUserMemHandle = pOutputMemSection->GetUserMemHandle();
+    if(lUserMemHandle)
+        lUserMemHandle->Reset(lInputMemSection);
+    
+    lInputMemSection->CreateLocalAssociation(pOutputMemSection);
+    
+    return lInputMemSection;
 }
     
 void pmMemSection::ResetOwnerships(pmMachine* pOwner, ulong pBaseAddr)
@@ -386,16 +482,21 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegis
 
 	return pmSuccess;
 }
-    
+
 bool pmMemSection::IsLazy()
 {
     return mLazy;
 }
-    
+
 
 /* class pmInputMemSection */
 pmInputMemSection::pmInputMemSection(size_t pLength, bool pIsLazy, pmMachine* pOwner /* = NULL */, ulong pOwnerMemSectionAddr /* = 0 */)
 	: pmMemSection(pLength, pOwner, pOwnerMemSectionAddr, pIsLazy)
+{
+}
+    
+pmInputMemSection::pmInputMemSection(const pmOutputMemSection& pOutputMemSection)
+    : pmMemSection(pOutputMemSection)
 {
 }
 
@@ -409,12 +510,10 @@ pmOutputMemSection::pmOutputMemSection(size_t pLength, accessType pAccess, bool 
 	: pmMemSection(pLength, pOwner, pOwnerMemSectionAddr, pIsLazy)
 {
 	mAccess = pAccess;
-    mPostRedistributionMemSection = NULL;
 }
 
 pmOutputMemSection::~pmOutputMemSection()
 {
-    delete mPostRedistributionMemSection;    
 }
 
 pmStatus pmOutputMemSection::Update(size_t pOffset, size_t pLength, void* pSrcAddr)
@@ -430,36 +529,30 @@ pmOutputMemSection::accessType pmOutputMemSection::GetAccessType()
 	return mAccess;
 }
     
-void pmOutputMemSection::SetupPostRedistributionMemSection(bool pAllocateNewMemory)
+
+/* class pmUserMemHandle */
+pmUserMemHandle::pmUserMemHandle(pmMemSection* pMemSection)
+    : mMemSection(pMemSection)
 {
-    if(mPostRedistributionMemSection)
-        PMTHROW(pmFatalErrorException());
-    
-    ClearOwnerships();
-    
-    if(pAllocateNewMemory)
-    {
-        mPostRedistributionMemSection = new pmOutputMemSection(GetLength(), GetAccessType(), IsLazy());
-        memcpy(mPostRedistributionMemSection->mMem, mMem, GetLength());
-        
-        ResetOwnerships(PM_LOCAL_MACHINE, reinterpret_cast<ulong>(GetMem()));
-    }
-    else
-    {
-        FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
-
-        mPostRedistributionMemSection = new pmOutputMemSection(*this);
-
-		mMemSectionMap[mMem] = mPostRedistributionMemSection;
-        std::swap(mMem, mPostRedistributionMemSection->mMem);
-    }
+    pMemSection->SetUserMemHandle(this);
 }
     
-pmOutputMemSection* pmOutputMemSection::GetPostRedistributionMemSection()
+pmUserMemHandle::~pmUserMemHandle()
 {
-    return mPostRedistributionMemSection;
 }
 
+void pmUserMemHandle::Reset(pmMemSection* pMemSection)
+{
+    mMemSection->SetUserMemHandle(NULL);
+    mMemSection = pMemSection;
+    mMemSection->SetUserMemHandle(this);
+}
+
+pmMemSection* pmUserMemHandle::GetMemSection()
+{
+    return mMemSection;
+}
+    
 };
 
 

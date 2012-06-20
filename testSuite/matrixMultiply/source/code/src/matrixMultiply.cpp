@@ -44,10 +44,7 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSub
 	pmSubscriptionInfo lSubscriptionInfo;
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
 
-	// Subscribe to entire first and second input matrix
-	//lSubscriptionInfo.offset = 0;
-	//lSubscriptionInfo.length = lTaskConf->matrixDim * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	//pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
+	// Subscribe to entire first and second input matrix (default PMLIB behaviour)
 
 	// Subscribe to one row of the output matrix
 	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
@@ -77,8 +74,7 @@ pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 #define READ_NON_COMMON_ARGS \
 	int lMatrixDim = DEFAULT_MATRIX_DIM; \
 	FETCH_INT_ARG(lMatrixDim, pCommonArgs, argc, argv); \
-	size_t lMatrixElems = lMatrixDim * lMatrixDim; \
-	size_t lMatrixSize = lMatrixElems * sizeof(MATRIX_DATA_TYPE);
+	size_t lMatrixElems = lMatrixDim * lMatrixDim;
 
 // Returns execution time on success; 0 on error
 double DoSerialProcess(int argc, char** argv, int pCommonArgs)
@@ -101,6 +97,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	double lStartTime = getCurrentTimeInSecs();
 
+	size_t lMatrixSize = lMatrixElems * sizeof(MATRIX_DATA_TYPE);
+
 	// Input Mem contains both input matrices one after the other
 	// Output Mem contains the result matrix
 	// Number of subtasks is equal to the number of rows
@@ -109,7 +107,11 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	CREATE_TASK(lInputMemSize, lOutputMemSize, lMatrixDim, pCallbackHandle, pSchedulingPolicy)
 
-	memcpy(lTaskDetails.inputMem, gSampleInput, lInputMemSize);
+    pmRawMemPtr lRawInputPtr, lRawOutputPtr;
+    pmGetRawMemPtr(lTaskDetails.inputMemHandle, &lRawInputPtr);
+    pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
+    
+	memcpy(lRawInputPtr, gSampleInput, lInputMemSize);
 
 	matrixMultiplyTaskConf lTaskConf;
 	lTaskConf.matrixDim = lMatrixDim;
@@ -128,9 +130,9 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         return (double)-1.0;
     }
     
-	SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMem) );
+	SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
 
-	memcpy(gParallelOutput, lTaskDetails.outputMem, lOutputMemSize);
+	memcpy(gParallelOutput, lRawOutputPtr, lOutputMemSize);
 
 	FREE_TASK_AND_RESOURCES
 

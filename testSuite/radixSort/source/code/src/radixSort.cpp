@@ -122,7 +122,7 @@ pmStatus radixSortDataRedistribution(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtas
     size_t lOffset = 0;
 	for(int k=0; k<BINS_COUNT; ++k)
     {
-        pmRedistributeData(pTaskInfo.taskHandle, pSubtaskInfo.subtaskId, lOffset, lBins[k] * sizeof(DATA_TYPE), k);
+        pmRedistributeData(pTaskInfo.taskHandle, pSubtaskInfo.subtaskId, lOffset, lBins[k] * sizeof(DATA_TYPE), pTaskInfo.subtaskCount * k + pSubtaskInfo.subtaskId);
         lOffset += lBins[k] * sizeof(DATA_TYPE);
     }
     
@@ -147,12 +147,12 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 	return (lEndTime - lStartTime);
 }
 
-pmMemHandle ParallelSort(bool pMsbSort, pmMemHandle pInputMem, unsigned int pArrayLength, int pRound, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+pmMemHandle ParallelSort(bool pMsbSort, pmMemHandle pInputMemHandle, unsigned int pArrayLength, int pRound, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
     size_t lMemSize = pArrayLength * sizeof(DATA_TYPE);
 	CREATE_TASK(0, lMemSize, (pArrayLength/ELEMS_PER_SUBTASK) + ((pArrayLength%ELEMS_PER_SUBTASK)?1:0), pCallbackHandle, pSchedulingPolicy)
 
-	lTaskDetails.inputMem = pInputMem;
+	lTaskDetails.inputMemHandle = pInputMemHandle;
 
 	radixSortTaskConf lTaskConf;
 	lTaskConf.arrayLen = pArrayLength;
@@ -169,9 +169,9 @@ pmMemHandle ParallelSort(bool pMsbSort, pmMemHandle pInputMem, unsigned int pArr
     }
 
 	pmReleaseTask(lTaskHandle);
-	pmReleaseMemory(lTaskDetails.inputMem);
+	pmReleaseMemory(lTaskDetails.inputMemHandle);
     
-	return lTaskDetails.outputMem;
+	return lTaskDetails.outputMemHandle;
 }
 
 // Returns execution time on success; 0 on error
@@ -182,28 +182,41 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	// Input Mem contains input unsorted array
 	// Output Mem contains final sorted array
 	// Number of subtasks is arrayLength/ELEMS_PER_SUBTASK if arrayLength is divisible by ELEMS_PER_SUBTASK; otherwise arrayLength/ELEMS_PER_SUBTASK + 1
-    pmMemHandle lInputMem;
+    pmMemHandle lInputMemHandle;
 	size_t lMemSize = lArrayLength * sizeof(DATA_TYPE);
     
 	double lStartTime = getCurrentTimeInSecs();
 
-    CREATE_INPUT_MEM(lMemSize, lInputMem);
-    memcpy(lInputMem, gSampleInput, lMemSize);
+    CREATE_INPUT_MEM(lMemSize, lInputMemHandle);
+
+    pmRawMemPtr lRawInputPtr;
+    pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
+    
+    memcpy(lRawInputPtr, gSampleInput, lMemSize);
 
     for(int i=0; i<TOTAL_ROUNDS; ++i)
     {
-        pmMemHandle lOutputMem;
-        if((lOutputMem = ParallelSort(false, lInputMem, lArrayLength, i, pCallbackHandle, pSchedulingPolicy)) == NULL)
+        pmMemHandle lOutputMemHandle;
+        if((lOutputMemHandle = ParallelSort(false, lInputMemHandle, lArrayLength, i, pCallbackHandle, pSchedulingPolicy)) == NULL)
             return (double)-1.0;
         
-        lInputMem = lOutputMem;
+        lInputMemHandle = lOutputMemHandle;
+
+//        SAFE_PM_EXEC( pmFetchMemory(lInputMemHandle) );
+//        pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
+//        memcpy(gParallelOutput, lRawInputPtr, lMemSize);
+//        for(unsigned int i=0; i<lArrayLength; ++i)
+//            std::cout << gParallelOutput[i] << " ";
+//        
+//        std::cout << std::endl;
     }
 
-	SAFE_PM_EXEC( pmFetchMemory(lInputMem) );
+	SAFE_PM_EXEC( pmFetchMemory(lInputMemHandle) );
     
-	memcpy(gParallelOutput, lInputMem, lMemSize);
+	pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
+    memcpy(gParallelOutput, lRawInputPtr, lMemSize);
     
-	pmReleaseMemory(lInputMem);
+	pmReleaseMemory(lInputMemHandle);
 
 	double lEndTime = getCurrentTimeInSecs();
 

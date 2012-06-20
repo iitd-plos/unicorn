@@ -1,4 +1,23 @@
 
+/**
+ * Copyright (c) 2011 Indian Institute of Technology, New Delhi
+ * All Rights Reserved
+ *
+ * Entire information in this file and PMLIB software is property
+ * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * modification and any use in source form is strictly prohibited
+ * without formal written approval from Indian Institute of Technology, 
+ * New Delhi. Use of software in binary form is allowed provided
+ * the using application clearly highlights the credits.
+ *
+ * This work is the doctoral project of Tarun Beri under the guidance
+ * of Prof. Subodh Kumar and Prof. Sorav Bansal. More information
+ * about the authors is available at their websites -
+ * Prof. Subodh Kumar - http://www.cse.iitd.ernet.in/~subodh/
+ * Prof. Sorav Bansal - http://www.cse.iitd.ernet.in/~sbansal/
+ * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
+ */
+
 #include "pmController.h"
 #include "pmCommunicator.h"
 #include "pmDevicePool.h"
@@ -209,35 +228,35 @@ pmStatus pmController::CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, p
         case INPUT_MEM_READ_ONLY:
         {
             pmMemSection* lInputMem = new pmInputMemSection(pLength, false);
-            *pMem = lInputMem->GetMem();
+            *pMem = new pmUserMemHandle(lInputMem);
             break;
         }
             
         case INPUT_MEM_READ_ONLY_LAZY:
         {
             pmMemSection* lInputMem = new pmInputMemSection(pLength, true);
-            *pMem = lInputMem->GetMem();
+            *pMem = new pmUserMemHandle(lInputMem);
             break;
         }
             
         case OUTPUT_MEM_WRITE_ONLY:
         {
             pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::WRITE_ONLY, false);
-            *pMem = lOutputMem->GetMem();
+            *pMem = new pmUserMemHandle(lOutputMem);
             break;
         }
 
         case OUTPUT_MEM_READ_WRITE:
         {
             pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::READ_WRITE, false);
-            *pMem = lOutputMem->GetMem();
+            *pMem = new pmUserMemHandle(lOutputMem);
             break;
         }
 
         case OUTPUT_MEM_READ_WRITE_LAZY:
         {
             pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::READ_WRITE, true);
-            *pMem = lOutputMem->GetMem();
+            *pMem = new pmUserMemHandle(lOutputMem);
             break;
         }
     }
@@ -247,8 +266,9 @@ pmStatus pmController::CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, p
 
 pmStatus pmController::ReleaseMemory_Public(pmMemHandle pMem)
 {
-	pmMemSection* lMemSection = pmMemSection::FindMemSection(pMem);
+	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
 
+    delete (reinterpret_cast<pmUserMemHandle*>(pMem));
 	delete lMemSection;
 
 	return pmSuccess;
@@ -256,19 +276,33 @@ pmStatus pmController::ReleaseMemory_Public(pmMemHandle pMem)
 
 pmStatus pmController::FetchMemory_Public(pmMemHandle pMem)
 {
-    pmMemSection* lMemSection = pmMemSection::FindMemSection(pMem);
+	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
     
     return lMemSection->Fetch(MAX_PRIORITY_LEVEL);
 }
+
+pmStatus pmController::GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr)
+{
+	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
+    *pPtr = lMemSection->GetMem();
     
+    return pmSuccess;
+}
+
 pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)
 {
 	*pTaskHandle = NULL;
 
-	pmMemSection* lInputMem = pmMemSection::FindMemSection(pTaskDetails.inputMem);
-	pmMemSection* lOutputMem = pmMemSection::FindMemSection(pTaskDetails.outputMem);
+	pmMemSection* lInputMem = (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.inputMemHandle))->GetMemSection();
+	pmMemSection* lOutputMem = (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.outputMemHandle))->GetMemSection();
 
-	if(!dynamic_cast<pmInputMemSection*>(lInputMem) || !dynamic_cast<pmOutputMemSection*>(lOutputMem))
+    if(lInputMem)
+    {
+        if(dynamic_cast<pmOutputMemSection*>(lInputMem))
+            lInputMem = pmMemSection::ConvertOutputMemSectionToInputMemSection(static_cast<pmOutputMemSection*>(lInputMem));
+    }
+    
+	if(lOutputMem && !dynamic_cast<pmOutputMemSection*>(lOutputMem))
 		PMTHROW(pmUnrecognizedMemoryException());
 
 	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(pTaskDetails.callbackHandle);

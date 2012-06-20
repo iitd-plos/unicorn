@@ -1,4 +1,23 @@
 
+/**
+ * Copyright (c) 2011 Indian Institute of Technology, New Delhi
+ * All Rights Reserved
+ *
+ * Entire information in this file and PMLIB software is property
+ * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * modification and any use in source form is strictly prohibited
+ * without formal written approval from Indian Institute of Technology, 
+ * New Delhi. Use of software in binary form is allowed provided
+ * the using application clearly highlights the credits.
+ *
+ * This work is the doctoral project of Tarun Beri under the guidance
+ * of Prof. Subodh Kumar and Prof. Sorav Bansal. More information
+ * about the authors is available at their websites -
+ * Prof. Subodh Kumar - http://www.cse.iitd.ernet.in/~subodh/
+ * Prof. Sorav Bansal - http://www.cse.iitd.ernet.in/~sbansal/
+ * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
+ */
+
 #ifndef __PM_PUBLIC_DEFINITIONS__
 #define __PM_PUBLIC_DEFINITIONS__
 
@@ -70,6 +89,7 @@ namespace pm
 	
 	/** Some basic type definitions */
 	typedef void* pmMemHandle;
+	typedef void* pmRawMemPtr;
 	typedef void* pmTaskHandle;
 	typedef void* pmCallbackHandle;
 	typedef void* pmClusterHandle;
@@ -90,8 +110,8 @@ namespace pm
 	typedef struct pmSubtaskInfo
 	{
 		unsigned long subtaskId;
-		pmMemHandle inputMem;
-		pmMemHandle outputMem;
+		pmRawMemPtr inputMem;
+		pmRawMemPtr outputMem;
 		size_t inputMemLength;
 		size_t outputMemLength;
 	} pmSubtaskInfo;
@@ -118,7 +138,7 @@ namespace pm
 
 	typedef struct pmDataTransferInfo
 	{
-		pmMemHandle mem;
+		pmMemHandle memHandle;
 		size_t memLength;
 		size_t* operatedMemLength;	// Mem Length after programmer's compression/encryption
 		pmMemInfo memInfo;
@@ -188,16 +208,21 @@ namespace pm
 	pmStatus pmReleaseCallbacks(pmCallbackHandle pCallbackHandle);
 
 	
-	/** The memory creation API. The allocated memory is returned in the variable pMem. */
-	pmStatus pmCreateMemory(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMem);
+	/** The memory creation API. The allocated memory is returned in the variable pMemHandle */
+	pmStatus pmCreateMemory(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMemHandle);
 
-	/* The memory destruction API. The same interface is used for both input and output memory. */
-	pmStatus pmReleaseMemory(pmMemHandle pMem);
+	/* The memory destruction API. The same interface is used for both input and output memory */
+	pmStatus pmReleaseMemory(pmMemHandle pMemHandle);
     
     /** This routine reads the entire distributed memory pointed to by pMem from the entire cluster into the local buffer.
      *  This is a blocking call. 
      */
-    pmStatus pmFetchMemory(pmMemHandle pMem);
+    pmStatus pmFetchMemory(pmMemHandle pMemHandle);
+    
+    /** This routine returns the naked memory pointer associated with pMem handle.
+     *  This pointer may be used in memcpy and related functions.
+     */
+    pmStatus pmGetRawMemPtr(pmMemHandle pMemHandle, pmRawMemPtr* pPtr);
 
 	// The following two defines may be used in 3rd argument to pmSubscribeToMemory
 	#define INPUT_MEM 1
@@ -245,8 +270,8 @@ namespace pm
 	{
 		void* taskConf;
 		unsigned int taskConfLength;
-		pmMemHandle inputMem;
-		pmMemHandle outputMem;
+		pmMemHandle inputMemHandle;
+		pmMemHandle outputMemHandle;
 		pmCallbackHandle callbackHandle;
 		unsigned long subtaskCount;
 		unsigned long taskId;		/* Meant for application to assign and identify tasks */

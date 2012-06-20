@@ -41,23 +41,23 @@ void commonFinish();
 
 #define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
 	pmTaskHandle lTaskHandle; \
-	pmMemHandle lInputMem; \
-	pmMemHandle lOutputMem; \
+	pmMemHandle lInputMemHandle; \
+	pmMemHandle lOutputMemHandle; \
 	pmTaskDetails lTaskDetails; \
 	if(inputMemSize) \
-		CREATE_INPUT_MEM(inputMemSize, lInputMem); \
+		CREATE_INPUT_MEM(inputMemSize, lInputMemHandle); \
 	if(outputMemSize) \
-		CREATE_OUTPUT_MEM(outputMemSize, lOutputMem); \
-	lTaskDetails.inputMem = lInputMem; \
-	lTaskDetails.outputMem = lOutputMem; \
+		CREATE_OUTPUT_MEM(outputMemSize, lOutputMemHandle); \
+	lTaskDetails.inputMemHandle = lInputMemHandle; \
+	lTaskDetails.outputMemHandle = lOutputMemHandle; \
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
     lTaskDetails.policy = schedPolicy;
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \
-	SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.inputMem) ); \
-	SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.outputMem) );
+	SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.inputMemHandle) ); \
+	SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.outputMemHandle) );
 
 
 

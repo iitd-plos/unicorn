@@ -1,4 +1,23 @@
 
+/**
+ * Copyright (c) 2011 Indian Institute of Technology, New Delhi
+ * All Rights Reserved
+ *
+ * Entire information in this file and PMLIB software is property
+ * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * modification and any use in source form is strictly prohibited
+ * without formal written approval from Indian Institute of Technology, 
+ * New Delhi. Use of software in binary form is allowed provided
+ * the using application clearly highlights the credits.
+ *
+ * This work is the doctoral project of Tarun Beri under the guidance
+ * of Prof. Subodh Kumar and Prof. Sorav Bansal. More information
+ * about the authors is available at their websites -
+ * Prof. Subodh Kumar - http://www.cse.iitd.ernet.in/~subodh/
+ * Prof. Sorav Bansal - http://www.cse.iitd.ernet.in/~sbansal/
+ * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
+ */
+
 #include "pmPublicDefinitions.h"
 #include "pmInternalDefinitions.h"
 #include "pmErrorDefinitions.h"
@@ -206,12 +225,17 @@ pmStatus pmFetchMemory(pmMemHandle pMem)
     SAFE_EXECUTE_ON_CONTROLLER(FetchMemory_Public, pMem);
 }
     
+pmStatus pmGetRawMemPtr(pmMemHandle pMem, void** pPtr)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(GetRawMemPtr_Public, pMem, pPtr);
+}
+    
 pmTaskDetails::pmTaskDetails()
 {
 	taskConf = NULL;
 	taskConfLength = 0;
-	inputMem = NULL;
-	outputMem = NULL;
+	inputMemHandle = NULL;
+	outputMemHandle = NULL;
 	cluster = NULL;
 	subtaskCount = 0;
 	taskId = 0;
@@ -243,8 +267,8 @@ pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTas
 {
 	pmStatus lStatus1 = pmReleaseTask(pTaskHandle);
 	pmStatus lStatus2 = pmReleaseCallbacks(pTaskDetails.callbackHandle);
-	pmStatus lStatus3 = pmReleaseMemory(pTaskDetails.inputMem);
-	pmStatus lStatus4 = pmReleaseMemory(pTaskDetails.outputMem);
+	pmStatus lStatus3 = pmReleaseMemory(pTaskDetails.inputMemHandle);
+	pmStatus lStatus4 = pmReleaseMemory(pTaskDetails.outputMemHandle);
 
 	if(lStatus2 != pmSuccess) return lStatus1;
 	if(lStatus3 != pmSuccess) return lStatus2;
