@@ -85,7 +85,7 @@ namespace pm
 
 	/** This function returns the total number of hosts */
 	unsigned int pmGetHostCount();
-
+    
 	
 	/** Some basic type definitions */
 	typedef void* pmMemHandle;
@@ -306,6 +306,12 @@ namespace pm
 	 */
 	pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTaskHandle);
 
+    
+    /** This function returns a writable buffer accessible to subtask, reduction and data redistribution callbacks. Size parameter
+     is only honored for the first invocation of this function for a particular subtask. Successive invocations return the buffer
+     allocated at initial request size. This buffer is only used to pass information generated in one callback to other callbacks */
+    void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pBufferSize);
+    
 } // end namespace pm
 
 #endif

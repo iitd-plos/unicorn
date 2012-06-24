@@ -16,27 +16,30 @@ DATA_TYPE* gParallelOutput;
 #define MSB_RIGHT_SHIFT_BITS(round) (TOTAL_BITS - ((round + 1) * BITS_PER_ROUND))
 #define RIGHT_SHIFT_BITS(isMsb, round) (isMsb ? MSB_RIGHT_SHIFT_BITS(round) : LSB_RIGHT_SHIFT_BITS(round))
 
-void serialRadixSortRound(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigned int pCount, int pRightShiftBits, DATA_TYPE pBitmask)
+void serialRadixSortRound(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigned int pCount, int* pBins, int pRightShiftBits, DATA_TYPE pBitmask)
 {    
 	int lBins[BINS_COUNT] = {0};
 	for(unsigned i=0; i<pCount; ++i)
 		++lBins[((pInputArray[i] >> pRightShiftBits) & pBitmask)];
-
+    
+    if(pBins)
+        memcpy(pBins, lBins, sizeof(lBins));
+    
 	for(int k=1; k<BINS_COUNT; ++k)
 		lBins[k] += lBins[k-1];
-
+    
 	for(int j=(int)pCount-1; j>=0; --j)
 		pOutputArray[--lBins[((pInputArray[j] >> pRightShiftBits) & pBitmask)]] = pInputArray[j];
 }
 
-void serialMsbRadixSortRound(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigned int pCount, int pRound)
+void serialMsbRadixSortRound(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigned int pCount, int pRound, int* pBins)
 {
-	serialRadixSortRound(pInputArray, pOutputArray, pCount, RIGHT_SHIFT_BITS(true, pRound), BIT_MASK);
+	serialRadixSortRound(pInputArray, pOutputArray, pCount, pBins, RIGHT_SHIFT_BITS(true, pRound), BIT_MASK);
 }
 
-void serialLsbRadixSortRound(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigned int pCount, int pRound)
+void serialLsbRadixSortRound(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigned int pCount, int pRound, int* pBins)
 {
-	serialRadixSortRound(pInputArray, pOutputArray, pCount, RIGHT_SHIFT_BITS(false, pRound), BIT_MASK);
+	serialRadixSortRound(pInputArray, pOutputArray, pCount, pBins, RIGHT_SHIFT_BITS(false, pRound), BIT_MASK);
 }
 
 void serialLsbRadixSort(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigned int pCount, int pRounds)
@@ -65,7 +68,7 @@ void serialLsbRadixSort(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigne
         else
             lOutputArray = pOutputArray;
             
-		serialLsbRadixSortRound(lInputArray, lOutputArray, pCount, i);
+		serialLsbRadixSortRound(lInputArray, lOutputArray, pCount, i, NULL);
         
         if(i == pRounds-1 && lOutputArray == lTempArray)
             memcpy(pOutputArray, lTempArray, pCount * sizeof(DATA_TYPE));
@@ -97,27 +100,20 @@ pmStatus radixSortDataDistribution(pmTaskInfo pTaskInfo, unsigned long pSubtaskI
 pmStatus radixSort_cpu(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	radixSortTaskConf* lTaskConf = (radixSortTaskConf*)(pTaskInfo.taskConf);
+    
+    int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pSubtaskInfo.subtaskId, sizeof(int) * BINS_COUNT);
 	
 	if(lTaskConf->sortFromMsb)
-		serialMsbRadixSortRound((DATA_TYPE*)(pSubtaskInfo.inputMem), (DATA_TYPE*)(pSubtaskInfo.outputMem), lTaskConf->arrayLen, lTaskConf->round);
+		serialMsbRadixSortRound((DATA_TYPE*)(pSubtaskInfo.inputMem), (DATA_TYPE*)(pSubtaskInfo.outputMem), (pSubtaskInfo.inputMemLength)/sizeof(DATA_TYPE), lTaskConf->round, lBins);
 	else
-        serialLsbRadixSortRound((DATA_TYPE*)(pSubtaskInfo.inputMem), (DATA_TYPE*)(pSubtaskInfo.outputMem), (pSubtaskInfo.inputMemLength)/sizeof(DATA_TYPE), lTaskConf->round);
+        serialLsbRadixSortRound((DATA_TYPE*)(pSubtaskInfo.inputMem), (DATA_TYPE*)(pSubtaskInfo.outputMem), (pSubtaskInfo.inputMemLength)/sizeof(DATA_TYPE), lTaskConf->round, lBins);
     
 	return pmSuccess;
 }
 
 pmStatus radixSortDataRedistribution(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 {
-	radixSortTaskConf* lTaskConf = (radixSortTaskConf*)(pTaskInfo.taskConf);
-
-    DATA_TYPE lBitmask = BIT_MASK;
-    int lRightShiftBits = RIGHT_SHIFT_BITS(lTaskConf->sortFromMsb, lTaskConf->round);
-    DATA_TYPE* lOutputArray = (DATA_TYPE*)(pSubtaskInfo.outputMem);
-    unsigned int lCount = (pSubtaskInfo.inputMemLength)/sizeof(DATA_TYPE);
-                                               
-	int lBins[BINS_COUNT]= {0};
-	for(unsigned int i=0; i<lCount; ++i)
-		++lBins[((lOutputArray[i] >> lRightShiftBits) & lBitmask)];
+    int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pSubtaskInfo.subtaskId, 0);
 
     size_t lOffset = 0;
 	for(int k=0; k<BINS_COUNT; ++k)
@@ -147,12 +143,12 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 	return (lEndTime - lStartTime);
 }
 
-pmMemHandle ParallelSort(bool pMsbSort, pmMemHandle pInputMemHandle, unsigned int pArrayLength, int pRound, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+bool ParallelSort(bool pMsbSort, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, unsigned int pArrayLength, int pRound, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
-    size_t lMemSize = pArrayLength * sizeof(DATA_TYPE);
-	CREATE_TASK(0, lMemSize, (pArrayLength/ELEMS_PER_SUBTASK) + ((pArrayLength%ELEMS_PER_SUBTASK)?1:0), pCallbackHandle, pSchedulingPolicy)
+	CREATE_TASK(0, 0, (pArrayLength/ELEMS_PER_SUBTASK) + ((pArrayLength%ELEMS_PER_SUBTASK)?1:0), pCallbackHandle, pSchedulingPolicy)
 
 	lTaskDetails.inputMemHandle = pInputMemHandle;
+	lTaskDetails.outputMemHandle = pOutputMemHandle;
 
 	radixSortTaskConf lTaskConf;
 	lTaskConf.arrayLen = pArrayLength;
@@ -165,13 +161,12 @@ pmMemHandle ParallelSort(bool pMsbSort, pmMemHandle pInputMemHandle, unsigned in
     if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
     {
         FREE_TASK_AND_RESOURCES
-        return NULL;
+        return false;
     }
 
 	pmReleaseTask(lTaskHandle);
-	pmReleaseMemory(lTaskDetails.inputMemHandle);
-    
-	return lTaskDetails.outputMemHandle;
+
+	return true;
 }
 
 // Returns execution time on success; 0 on error
@@ -182,41 +177,44 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	// Input Mem contains input unsorted array
 	// Output Mem contains final sorted array
 	// Number of subtasks is arrayLength/ELEMS_PER_SUBTASK if arrayLength is divisible by ELEMS_PER_SUBTASK; otherwise arrayLength/ELEMS_PER_SUBTASK + 1
-    pmMemHandle lInputMemHandle;
+    pmMemHandle lInputMemHandle, lOutputMemHandle;
 	size_t lMemSize = lArrayLength * sizeof(DATA_TYPE);
     
 	double lStartTime = getCurrentTimeInSecs();
 
     CREATE_INPUT_MEM(lMemSize, lInputMemHandle);
+    CREATE_OUTPUT_MEM(lMemSize, lOutputMemHandle);
 
-    pmRawMemPtr lRawInputPtr;
-    pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
-    
+    pmRawMemPtr lRawInputPtr, lRawOutputPtr;
+    pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);    
     memcpy(lRawInputPtr, gSampleInput, lMemSize);
 
     for(int i=0; i<TOTAL_ROUNDS; ++i)
     {
         pmMemHandle lOutputMemHandle;
-        if((lOutputMemHandle = ParallelSort(false, lInputMemHandle, lArrayLength, i, pCallbackHandle, pSchedulingPolicy)) == NULL)
+        if(!ParallelSort(false, lInputMemHandle, lOutputMemHandle, lArrayLength, i, pCallbackHandle, pSchedulingPolicy))
             return (double)-1.0;
         
-        lInputMemHandle = lOutputMemHandle;
-
-//        SAFE_PM_EXEC( pmFetchMemory(lInputMemHandle) );
-//        pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
-//        memcpy(gParallelOutput, lRawInputPtr, lMemSize);
+//        SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
+//        pmGetRawMemPtr(lOutputMemHandle, &lRawOutputPtr);
+//        memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
 //        for(unsigned int i=0; i<lArrayLength; ++i)
 //            std::cout << gParallelOutput[i] << " ";
 //        
 //        std::cout << std::endl;
+
+        pmMemHandle lTempMemHandle = lInputMemHandle;
+        lInputMemHandle = lOutputMemHandle;
+        lOutputMemHandle = lTempMemHandle;
     }
 
-	SAFE_PM_EXEC( pmFetchMemory(lInputMemHandle) );
+	SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
     
-	pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
-    memcpy(gParallelOutput, lRawInputPtr, lMemSize);
+	pmGetRawMemPtr(lOutputMemHandle, &lRawOutputPtr);
+    memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
     
 	pmReleaseMemory(lInputMemHandle);
+	pmReleaseMemory(lOutputMemHandle);
 
 	double lEndTime = getCurrentTimeInSecs();
 

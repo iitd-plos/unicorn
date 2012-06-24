@@ -170,64 +170,15 @@ pmStatus pmLinuxMemoryManager::DeallocateMemory(void* pMem)
 
 size_t pmLinuxMemoryManager::FindAllocationSize(size_t pLength, size_t& pPageCount)
 {
-	uint lPageSize = GetVirtualMemoryPageSize();
+	size_t lPageSize = GetVirtualMemoryPageSize();
 	pPageCount = ((pLength/lPageSize) + ((pLength%lPageSize != 0)?1:0));
 
 	return (pPageCount*lPageSize);
 }
 
-uint pmLinuxMemoryManager::GetVirtualMemoryPageSize()
+size_t pmLinuxMemoryManager::GetVirtualMemoryPageSize()
 {
 	return mPageSize;
-}
-
-pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem)
-{
-    bool lIsLazyRegisteration = (pMemSection->IsLazy() && !pLength);
-    pmInFlightRegions& lMap = lIsLazyRegisteration ? mInFlightLazyRegisterations : mInFlightMemoryMap;
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lIsLazyRegisteration ? mInFlightLazyRegisterationLock : mInFlightLock;
-    
-	FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
-
-	char* lAddr = (char*)pDestMem + pOffset;
-
-    if(lMap.find(lAddr) == lMap.end())
-        PMTHROW(pmFatalErrorException());
-        
-    std::pair<size_t, regionFetchData> lPair = lMap[lAddr];
-    lMap.erase(lAddr);
-    
-    // Zero length is sent as an acknowledgement when registerOnly request is sent
-    if(pLength)
-    {
-        assert(lPair.first == pLength);
-        
-#ifdef SUPPORT_LAZY_MEMORY
-        if(pMemSection->IsLazy())
-        {
-            if(pLength > GetVirtualMemoryPageSize())
-                PMTHROW(pmFatalErrorException());
-            
-            RemoveLazyProtection((void*)lAddr, (size_t)pLength);
-        }
-#endif
-        
-        memcpy((void*)lAddr, pSrcMem, pLength);
-    }
-    
-    regionFetchData& lData = lPair.second;        
-
-#ifdef SUPPORT_LAZY_MEMORY
-    if(lIsLazyRegisteration)
-        pMemSection->AcquireOwnershipLazy(pOffset, lPair.first);
-    else
-#endif
-        pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
-    
-	delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
-	lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
-
-	return pmSuccess;
 }
 
 // This function must be called after acquiring lock on pInFlightMap
@@ -400,17 +351,57 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 	return lFetchData.receiveCommand;
 }
     
-pmLinuxMemoryManager::regionFetchData::regionFetchData()
+pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem)
 {
+    bool lIsLazyRegisteration = (pMemSection->IsLazy() && !pLength);
+    pmInFlightRegions& lMap = lIsLazyRegisteration ? mInFlightLazyRegisterations : mInFlightMemoryMap;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lIsLazyRegisteration ? mInFlightLazyRegisterationLock : mInFlightLock;
+    
+    FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
+    
+    char* lAddr = (char*)pDestMem + pOffset;
+    
+    if(lMap.find(lAddr) == lMap.end())
+        PMTHROW(pmFatalErrorException());
+    
+    std::pair<size_t, regionFetchData> lPair = lMap[lAddr];
+    lMap.erase(lAddr);
+    
+    // Zero length is sent as an acknowledgement when registerOnly request is sent
+    if(pLength)
+    {
+        assert(lPair.first == pLength);
+        
+#ifdef SUPPORT_LAZY_MEMORY
+        if(pMemSection->IsLazy())
+            RemoveLazyProtection((void*)lAddr, (size_t)pLength);
+#endif
+        
+        memcpy((void*)lAddr, pSrcMem, pLength);
+    }
+    
+    regionFetchData& lData = lPair.second;        
+    
+#ifdef SUPPORT_LAZY_MEMORY
+    if(lIsLazyRegisteration)
+        pMemSection->AcquireOwnershipLazy(pOffset, lPair.first);
+    else
+#endif
+        pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
+    
+    delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
+    lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
+    
+    return pmSuccess;
 }
-
+    
 #ifdef SUPPORT_LAZY_MEMORY
 pmStatus pmLinuxMemoryManager::ApplyLazyProtection(void* pAddr, size_t pLength)
 {
 	size_t lPageSize = static_cast<size_t>(GetVirtualMemoryPageSize());
-	char* lPageAddr = GET_VM_PAGE_START_ADDRESS(static_cast<char*>(pAddr), lPageSize);
+	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(reinterpret_cast<size_t>(pAddr), lPageSize);
 
-	if(::mprotect(lPageAddr, pLength + reinterpret_cast<size_t>(pAddr) - reinterpret_cast<size_t>(lPageAddr), PROT_NONE) != 0)
+	if(::mprotect(reinterpret_cast<void*>(lPageAddr), pLength + reinterpret_cast<size_t>(pAddr) - lPageAddr, PROT_NONE) != 0)
 		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MEM_PROT_NONE_FAILED));
 
     return pmSuccess;
@@ -419,37 +410,38 @@ pmStatus pmLinuxMemoryManager::ApplyLazyProtection(void* pAddr, size_t pLength)
 pmStatus pmLinuxMemoryManager::RemoveLazyProtection(void* pAddr, size_t pLength)
 {
 	size_t lPageSize = static_cast<size_t>(GetVirtualMemoryPageSize());
-	char* lPageAddr = GET_VM_PAGE_START_ADDRESS(static_cast<char*>(pAddr), lPageSize);
+	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(reinterpret_cast<size_t>(pAddr), lPageSize);
     
-	if(::mprotect(lPageAddr, pLength + reinterpret_cast<size_t>(pAddr) - reinterpret_cast<size_t>(lPageAddr), PROT_READ | PROT_WRITE) != 0)
+	if(::mprotect(reinterpret_cast<void*>(lPageAddr), pLength + reinterpret_cast<size_t>(pAddr) - lPageAddr, PROT_READ | PROT_WRITE) != 0)
         PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MEM_PROT_RW_FAILED));
     
     return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr)
+pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount)
 {
 #ifdef TRACK_MEMORY_ALLOCATIONS
 	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
 	++mTotalLazySegFaults;
 #endif
 
-	char* lStartAddr = static_cast<char*>(pMemSection->GetMem());
+	size_t lPageSize = GetVirtualMemoryPageSize();
+    size_t lBytesToBeFetched = (1 + pForwardPrefetchPageCount) * lPageSize;
+
+	size_t lStartAddr = reinterpret_cast<size_t>(pMemSection->GetMem());
 	size_t lLength = pMemSection->GetLength();
+	size_t lLastAddr = lStartAddr + lLength;
 
-	size_t lPageSize = static_cast<size_t>(GetVirtualMemoryPageSize());
-	char* lLastAddr = lStartAddr + lLength;
-
-	char* lMemAddr = static_cast<char*>(pLazyMemAddr);
-	char* lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
+	size_t lMemAddr = reinterpret_cast<size_t>(pLazyMemAddr);
+	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
 
 	size_t lOffset = lPageAddr - lStartAddr;
-	size_t lLeftoverLength = (size_t)(lLastAddr - lPageAddr);
+	size_t lLeftoverLength = lLastAddr - lPageAddr;
 
-	if(lLeftoverLength > lPageSize)
-		lLeftoverLength = lPageSize;
+	if(lLeftoverLength > lBytesToBeFetched)
+		lLeftoverLength = lBytesToBeFetched;
 
-	const std::vector<pmCommunicatorCommandPtr>& lCommandVector = FetchMemoryRegion(lStartAddr, MAX_CONTROL_PRIORITY, lOffset, lLeftoverLength, false);
+	const std::vector<pmCommunicatorCommandPtr>& lCommandVector = FetchMemoryRegion(pMemSection->GetMem(), MAX_CONTROL_PRIORITY, lOffset, lLeftoverLength, false);
     
     std::vector<pmCommunicatorCommandPtr>::const_iterator lStartIter = lCommandVector.begin();
     std::vector<pmCommunicatorCommandPtr>::const_iterator lEndIter = lCommandVector.end();
@@ -465,6 +457,11 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmMemSection* pMemSection, voi
     }
     
 	return pmSuccess;
+}
+    
+pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr)
+{
+    return LoadLazyMemoryPage(pMemSection, pLazyMemAddr, pMemSection->GetLazyForwardPrefetchPageCount());
 }
 
 pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()

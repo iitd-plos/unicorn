@@ -106,12 +106,14 @@ class pmMemSection : public pmBase
     
         static void SwapMemoryAndOwnerships(pmMemSection* pMemSection1, pmMemSection* pMemSection2);
         static pmInputMemSection* ConvertOutputMemSectionToInputMemSection(pmOutputMemSection* pOutputMemSection);
+        static pmOutputMemSection* ConvertInputMemSectionToOutputMemSection(pmInputMemSection* pInputMemSection);
 	
         pmStatus AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
 
 #ifdef SUPPORT_LAZY_MEMORY
+        uint GetLazyForwardPrefetchPageCount();
         pmStatus AcquireOwnershipLazy(ulong pOffset, ulong pLength);
-        void AccessAllMemoryPages(ulong pOffset, ulong pLength);
+        void GetPageAlignedAddresses(size_t& pOffset, size_t& pLength);
 #endif
     
         pmStatus TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength);
@@ -178,7 +180,8 @@ class pmOutputMemSection : public pmMemSection
 			WRITE_ONLY
 		} accessType;
 
-		pmOutputMemSection(size_t pLength, accessType pAccess, bool pIsLazy, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
+        pmOutputMemSection(size_t pLength, accessType pAccess, bool pIsLazy, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
+        pmOutputMemSection(const pmInputMemSection& pInputMemSection);
 		~pmOutputMemSection();
 
 		pmStatus Update(size_t pOffset, size_t pLength, void* pSrcAddr);

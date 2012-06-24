@@ -74,6 +74,7 @@ class pmController : public pmBase
 		pmStatus SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo);
         pmStatus RedistributeData_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder);
 		pmStatus SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
+        void* GetScratchBuffer_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, size_t pBufferSize);
 
 		uint GetHostId_Public();
 		uint GetHostCount_Public();

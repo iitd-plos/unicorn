@@ -43,7 +43,7 @@ namespace pm
 	class finalize_ptr
 	{
 		public:
-			finalize_ptr<T>(T* pMem) : mMem(pMem)
+			finalize_ptr<T>(T* pMem = NULL) : mMem(pMem)
 			{
 			}
 
@@ -57,7 +57,13 @@ namespace pm
 				return mMem;
 			}
 
-		private:
+            void reset(T* pMem)
+            {
+                delete (T*)(mMem);
+                mMem = pMem;
+            }        
+
+        private:
 			T* mMem;
 	};
 
@@ -65,7 +71,7 @@ namespace pm
 	class finalize_ptr_array
 	{
 		public:
-			finalize_ptr_array<T>(T* pMem) : mMem(pMem)
+			finalize_ptr_array<T>(T* pMem = NULL) : mMem(pMem)
 			{
 			}
 
@@ -78,6 +84,12 @@ namespace pm
 			{
 				return mMem;
 			}
+        
+            void reset(T* pMem)
+            {
+                delete[] (T*)(mMem);
+                mMem = pMem;
+            }
 
 		private:
 			T* mMem;

@@ -46,9 +46,7 @@ pmStatus pmSubscriptionManager::InitializeSubtaskDefaults(ulong pSubtaskId)
 	if(mSubtaskMap.find(pSubtaskId) != mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
 
-	pmSubtask lSubtask;
-	lSubtask.Initialize(mTask);
-	mSubtaskMap[pSubtaskId] = lSubtask;
+	mSubtaskMap[pSubtaskId].Initialize(mTask);
 
 	return pmSuccess;
 }
@@ -103,6 +101,23 @@ pmCudaLaunchConf& pmSubscriptionManager::GetCudaLaunchConf(ulong pSubtaskId)
 		PMTHROW(pmFatalErrorException());
 
 	return mSubtaskMap[pSubtaskId].mCudaLaunchConf;
+}
+    
+void* pmSubscriptionManager::GetScratchBuffer(ulong pSubtaskId, size_t pBufferSize)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+		PMTHROW(pmFatalErrorException());
+    
+	char* lScratchBuffer = mSubtaskMap[pSubtaskId].mScratchBuffer.get_ptr();
+    if(!lScratchBuffer)
+    {
+        lScratchBuffer = new char[pBufferSize];
+        mSubtaskMap[pSubtaskId].mScratchBuffer.reset(lScratchBuffer);
+    }
+    
+    return lScratchBuffer;
 }
 
 bool pmSubscriptionManager::GetInputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo)
@@ -181,12 +196,22 @@ pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInpu
     }
     
 	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection->GetMem(), mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length, (lMemSection->IsLazy() || lIsWriteOnly));
-
-#ifdef SUPPORT_LAZY_MEMORY
-    if(lMemSection->IsLazy() && pDeviceType == CPU)
-        lMemSection->AccessAllMemoryPages(pSubscriptionInfo.offset, pSubscriptionInfo.length);
-#endif
     
+#ifdef SUPPORT_LAZY_MEMORY
+    if(lMemSection->IsLazy() && pDeviceType != CPU)
+    {
+        std::vector<pmCommunicatorCommandPtr> lReceiveVector;
+        size_t lOffset = pSubscriptionInfo.offset;
+        size_t lLength = pSubscriptionInfo.length;
+        
+        lMemSection->GetPageAlignedAddresses(lOffset, lLength);
+
+        lReceiveVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection->GetMem(), mTask->GetPriority(), lOffset, lLength, false);
+        
+        pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
+    }
+#endif
+
 	return pmSuccess;
 }
 
@@ -252,7 +277,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 
 	return pmSuccess;
 }
-
+    
 pmStatus pmSubtask::Initialize(pmTask* pTask)
 {
 	pmMemSection* lInputMemSection = pTask->GetMemSectionRO();
@@ -287,6 +312,8 @@ pmStatus pmSubtask::Initialize(pmTask* pTask)
 		lVector2.push_back(lSubscriptionData);
 		mOutputMemSubscriptions = SUBSCRIPTION_DATA_TYPE(lVector1, lVector2);
 	}
+    
+    mScratchBuffer = NULL;
 
 	return pmSuccess;
 }

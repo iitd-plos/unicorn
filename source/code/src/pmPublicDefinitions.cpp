@@ -187,6 +187,25 @@ unsigned int pmGetHostCount()
 
 	return 0;
 }
+    
+void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, ulong pSubtaskId, size_t pBufferSize)
+{
+    try
+    {
+		pmController* lController = pmController::GetController();
+		if(!lController)
+			return NULL;
+        
+        return lController->GetScratchBuffer_Public(pTaskHandle, pSubtaskId, pBufferSize);
+    }
+    catch(pmException& e)
+    {
+        pmStatus lStatus = e.GetStatusCode();
+        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::ERROR, pmErrorMessages[lStatus]);
+    }
+    
+    return NULL;
+}
 
 pmCallbacks::pmCallbacks()
 {
@@ -306,6 +325,5 @@ pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, 
 {
     SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pSubtaskId, pOffset, pLength, pOrder);
 }
-
 
 } // end namespace pm

@@ -152,7 +152,22 @@ pmInputMemSection* pmMemSection::ConvertOutputMemSectionToInputMemSection(pmOutp
     
     return lInputMemSection;
 }
+
+pmOutputMemSection* pmMemSection::ConvertInputMemSectionToOutputMemSection(pmInputMemSection* pInputMemSection)
+{
+    pmOutputMemSection* lOutputMemSection = new pmOutputMemSection(*pInputMemSection);
     
+    SwapMemoryAndOwnerships(lOutputMemSection, pInputMemSection);
+    
+    pmUserMemHandle* lUserMemHandle = pInputMemSection->GetUserMemHandle();
+    if(lUserMemHandle)
+        lUserMemHandle->Reset(lOutputMemSection);
+    
+    lOutputMemSection->CreateLocalAssociation(pInputMemSection);
+    
+    return lOutputMemSection;
+}
+
 void pmMemSection::ResetOwnerships(pmMachine* pOwner, ulong pBaseAddr)
 {
     mOwnershipMap.clear();
@@ -266,7 +281,7 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 
 	if(lStartOffset < pOffset)
 	{
-		if(lStartOwner.host == pOwner && lStartOwner.hostBaseAddr == pOwnerBaseMemAddr && lStartOwner.hostOffset == (pOwnerOffset - (pOffset -lStartOffset)))
+		if(lStartOwner.host == pOwner && lStartOwner.hostBaseAddr == pOwnerBaseMemAddr && lStartOwner.hostOffset == (pOwnerOffset - (pOffset - lStartOffset)))
         {
             pOwnerOffset -= (pOffset - lStartOffset);
 			pOffset = lStartOffset;		// Combine with previous range
@@ -306,28 +321,32 @@ pmStatus pmMemSection::AcquireOwnershipImmediate(ulong pOffset, ulong pLength)
 }
 
 #ifdef SUPPORT_LAZY_MEMORY
+uint pmMemSection::GetLazyForwardPrefetchPageCount()
+{
+    return LAZY_FORWARD_PREFETCH_PAGE_COUNT;
+}
+    
 pmStatus pmMemSection::AcquireOwnershipLazy(ulong pOffset, ulong pLength)
 {
     return SetRangeOwner(PM_LOCAL_MACHINE, (ulong)(GetMem()), pOffset, pOffset, pLength, true);
 }
     
-void pmMemSection::AccessAllMemoryPages(ulong pOffset, ulong pLength)
+void pmMemSection::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
 {
-    if(!IsLazy())
-        PMTHROW(pmFatalErrorException());
+    size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
     
-    pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
-    uint lPageSize = lMemoryManager->GetVirtualMemoryPageSize();
+    size_t lStartAddress = reinterpret_cast<size_t>(GetMem()) + pOffset;
+    size_t lEndPageAddress = lStartAddress + pLength;
 
-    char* lAddr = static_cast<char*>(mMem) + pOffset;
-    char* lLastAddr = lAddr + pLength;
-    while(lAddr < lLastAddr)
-    {
-        volatile char lRead = *lAddr;
-        lRead = lRead;
-        
-        lAddr += lPageSize;
-    }
+    pOffset = GET_VM_PAGE_START_ADDRESS(lStartAddress, lPageSize);
+    lEndPageAddress = GET_VM_PAGE_START_ADDRESS(lEndPageAddress, lPageSize);
+    
+    size_t lEndAddress = lEndPageAddress + lPageSize - 1;
+    size_t lMaxAddress = reinterpret_cast<size_t>(GetMem()) + GetLength() - 1;
+    if(lEndAddress > lMaxAddress)
+        lEndAddress = lMaxAddress;
+    
+    pLength = lEndAddress - pOffset;
 }
 #endif
     
@@ -381,7 +400,7 @@ pmStatus pmMemSection::FlushOwnerships()
         mOwnershipMap = mLazyOwnershipMap;
         mLazyOwnershipMap.clear();
     }
-
+    
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
     
     std::vector<pmMemTransferData>::iterator lIter = mOwnershipTransferVector.begin();
@@ -510,6 +529,12 @@ pmOutputMemSection::pmOutputMemSection(size_t pLength, accessType pAccess, bool 
 	: pmMemSection(pLength, pOwner, pOwnerMemSectionAddr, pIsLazy)
 {
 	mAccess = pAccess;
+}
+    
+pmOutputMemSection::pmOutputMemSection(const pmInputMemSection& pInputMemSection)
+    : pmMemSection(pInputMemSection)
+{
+    mAccess = READ_WRITE;
 }
 
 pmOutputMemSection::~pmOutputMemSection()

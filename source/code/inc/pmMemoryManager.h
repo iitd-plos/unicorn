@@ -63,14 +63,13 @@ class pmMemoryManager : public pmBase
 
 #ifdef SUPPORT_LAZY_MEMORY
 		virtual void* AllocateLazyMemory(size_t& pLength, size_t& pPageCount) = 0;
-        virtual pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr) = 0;
         virtual pmStatus ApplyLazyProtection(void* pAddr, size_t pLength) = 0;
         virtual pmStatus RemoveLazyProtection(void* pAddr, size_t pLength) = 0;
 #endif
 
 		virtual pmStatus DeallocateMemory(void* pMem) = 0;
 
-		virtual uint GetVirtualMemoryPageSize() = 0;
+		virtual size_t GetVirtualMemoryPageSize() = 0;
 
 		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
 
@@ -79,7 +78,7 @@ class pmMemoryManager : public pmBase
 
 	protected:
         static pmMemoryManager* mMemoryManager;
-		uint mPageSize;
+		size_t mPageSize;
 };
 
 
@@ -92,8 +91,6 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		{
 			pmCommunicatorCommandPtr sendCommand;
 			pmCommunicatorCommandPtr receiveCommand;
-
-			regionFetchData();
 		} regionFetchData;
 
         typedef std::map<void*, std::pair<size_t, regionFetchData> > pmInFlightRegions;
@@ -104,16 +101,18 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
 #ifdef SUPPORT_LAZY_MEMORY
 		virtual void* AllocateLazyMemory(size_t& pLength, size_t& pPageCount);
-		virtual pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr);
         virtual pmStatus ApplyLazyProtection(void* pAddr, size_t pLength);
         virtual pmStatus RemoveLazyProtection(void* pAddr, size_t pLength);
 
-		friend void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
+        pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr);
+        pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
+
+        friend void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
 #endif
 
 		virtual pmStatus DeallocateMemory(void* pMem);
 
-		virtual uint GetVirtualMemoryPageSize();
+		virtual size_t GetVirtualMemoryPageSize();
 
 		virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
 

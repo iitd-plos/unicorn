@@ -302,8 +302,11 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
             lInputMem = pmMemSection::ConvertOutputMemSectionToInputMemSection(static_cast<pmOutputMemSection*>(lInputMem));
     }
     
-	if(lOutputMem && !dynamic_cast<pmOutputMemSection*>(lOutputMem))
-		PMTHROW(pmUnrecognizedMemoryException());
+	if(lOutputMem)
+    {
+        if(dynamic_cast<pmInputMemSection*>(lOutputMem))
+            lOutputMem = pmMemSection::ConvertInputMemSectionToOutputMemSection(static_cast<pmInputMemSection*>(lOutputMem));
+    }
 
 	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(pTaskDetails.callbackHandle);
 
@@ -379,5 +382,13 @@ uint pmController::GetHostCount_Public()
 
 	return NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 }
+    
+void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, size_t pBufferSize)
+{
+    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(pSubtaskId, pBufferSize);
+    
+    return NULL;
+}
+
 
 } // end namespace pm

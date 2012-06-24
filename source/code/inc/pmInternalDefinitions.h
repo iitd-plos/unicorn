@@ -95,16 +95,18 @@ const unsigned short DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 #define SLOW_START_SCHEDULING_UPPER_LIMIT_EXEC_TIME_PER_ALLOCATION 15	// in seconds
 #define SLOW_START_SCHEDULING_LOWER_LIMIT_EXEC_TIME_PER_ALLOCATION 8	// in seconds
 
-#define MAX_STEAL_ATTEMPTS 25
-
 #define PROPAGATE_FAILURE_RET_STATUS(x) {pmStatus dRetStatus = x; if(dRetStatus != pmSuccess) return dRetStatus;}
 
-#define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (reinterpret_cast<size_t>(memAddr) % pageSize))
+#define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (memAddr % pageSize))
 
 #define SUPPORT_LAZY_MEMORY
 
+#ifdef SUPPORT_LAZY_MEMORY
+    #define LAZY_FORWARD_PREFETCH_PAGE_COUNT 5
+#endif
+
 //#define DUMP_THREADS
-//#define TRACK_MEMORY_REQUESTS
+#define TRACK_MEMORY_REQUESTS
 //#define TRACK_SUBTASK_EXECUTION
 #define BUILD_SUBTASK_EXECUTION_PROFILE
 

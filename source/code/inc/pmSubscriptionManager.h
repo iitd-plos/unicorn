@@ -45,6 +45,7 @@ namespace subscription
 	typedef struct pmSubtask
 	{
 		pmCudaLaunchConf mCudaLaunchConf;
+        finalize_ptr_array<char> mScratchBuffer;
 
 		// Only one contiguous input mem and one output mem subscription for each subtask
 
@@ -66,6 +67,7 @@ class pmSubscriptionManager : public pmBase
 		pmStatus FetchSubtaskSubscriptions(ulong pSubtaskId, pmDeviceTypes pDeviceType);
 		pmStatus SetCudaLaunchConf(ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
 		pmCudaLaunchConf& GetCudaLaunchConf(ulong pSubtaskId);
+        void* GetScratchBuffer(ulong pSubtaskId, size_t pBufferSize);
 
 		bool GetInputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
 		bool GetOutputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
