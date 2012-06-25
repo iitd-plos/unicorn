@@ -334,19 +334,20 @@ pmStatus pmMemSection::AcquireOwnershipLazy(ulong pOffset, ulong pLength)
 void pmMemSection::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
 {
     size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
-    
+
     size_t lStartAddress = reinterpret_cast<size_t>(GetMem()) + pOffset;
-    size_t lEndPageAddress = lStartAddress + pLength;
+    size_t lEndPageAddress = lStartAddress + pLength - 1;
 
     pOffset = GET_VM_PAGE_START_ADDRESS(lStartAddress, lPageSize);
     lEndPageAddress = GET_VM_PAGE_START_ADDRESS(lEndPageAddress, lPageSize);
-    
+
     size_t lEndAddress = lEndPageAddress + lPageSize - 1;
     size_t lMaxAddress = reinterpret_cast<size_t>(GetMem()) + GetLength() - 1;
     if(lEndAddress > lMaxAddress)
         lEndAddress = lMaxAddress;
-    
-    pLength = lEndAddress - pOffset;
+
+    pLength = lEndAddress - pOffset + 1;
+    pOffset -= reinterpret_cast<size_t>(GetMem());
 }
 #endif
     
