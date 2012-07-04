@@ -114,7 +114,7 @@ pmStatus radixSort_cpu(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 pmStatus radixSortDataRedistribution(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 {
     int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pSubtaskInfo.subtaskId, 0);
-
+    
     size_t lOffset = 0;
 	for(int k=0; k<BINS_COUNT; ++k)
     {
@@ -191,21 +191,15 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     for(int i=0; i<TOTAL_ROUNDS; ++i)
     {
-        pmMemHandle lOutputMemHandle;
+        if(i != 0)
+        {
+            pmMemHandle lTempMemHandle = lInputMemHandle;
+            lInputMemHandle = lOutputMemHandle;
+            lOutputMemHandle = lTempMemHandle;
+        }
+
         if(!ParallelSort(false, lInputMemHandle, lOutputMemHandle, lArrayLength, i, pCallbackHandle, pSchedulingPolicy))
             return (double)-1.0;
-        
-//        SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
-//        pmGetRawMemPtr(lOutputMemHandle, &lRawOutputPtr);
-//        memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
-//        for(unsigned int i=0; i<lArrayLength; ++i)
-//            std::cout << gParallelOutput[i] << " ";
-//        
-//        std::cout << std::endl;
-
-        pmMemHandle lTempMemHandle = lInputMemHandle;
-        lInputMemHandle = lOutputMemHandle;
-        lOutputMemHandle = lTempMemHandle;
     }
 
 	SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );

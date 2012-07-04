@@ -41,6 +41,22 @@ namespace pm
 using namespace scheduler;
 
 #ifdef TRACK_MEMORY_REQUESTS
+void __dump_mem_forward(const pmMemSection* memSection, ulong addr, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, size_t newAddr, ulong newOffset);
+void __dump_mem_transfer(const pmMemSection* memSection, ulong addr, size_t receiverOffset, size_t offset, size_t length, uint host);
+void __dump_mem_ack_transfer(const pmMemSection* memSection, ulong addr, size_t receiverOffset, size_t offset, size_t length, uint host);
+    
+void __dump_mem_forward(const pmMemSection* memSection, ulong addr, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, size_t newAddr, ulong newOffset)
+{
+    char lStr[512];
+    
+    if(dynamic_cast<const pmInputMemSection*>(memSection))
+        sprintf(lStr, "Forwarding input mem section %p (Dest Addr %p; Remote Addr %p) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", memSection, (void*)(addr), (void*)newAddr, offset, receiverOffset, newOffset, length, newHost, host);
+    else
+        sprintf(lStr, "Forwarding out mem section %p (Dest Addr %p; Remote Addr %p) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", memSection, (void*)(addr), (void*)newAddr, offset, receiverOffset, newOffset, length, newHost, host);
+    
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
+}
+
 void __dump_mem_transfer(const pmMemSection* memSection, ulong addr, size_t receiverOffset, size_t offset, size_t length, uint host)
 {
     char lStr[512];
@@ -67,9 +83,11 @@ void __dump_mem_ack_transfer(const pmMemSection* memSection, ulong addr, size_t 
 
 #define MEM_TRANSFER_ACK_DUMP(memSection, addr, receiverOffset, offset, length, host) __dump_mem_ack_transfer(memSection, addr, receiverOffset, offset, length, host);
 #define MEM_TRANSFER_DUMP(memSection, addr, receiverOffset, offset, length, host) __dump_mem_transfer(memSection, addr, receiverOffset, offset, length, host);
+#define MEM_FORWARD_DUMP(memSection, addr, receiverOffset, offset, length, host, newHost, newAddr, newOffset) __dump_mem_forward(memSection, addr, receiverOffset, offset, length, host, newHost, newAddr, newOffset);
 #else
 #define MEM_TRANSFER_ACK_DUMP(memSection, addr, receiverOffset, offset, length, host)
 #define MEM_TRANSFER_DUMP(memSection, addr, receiverOffset, offset, length, host)
+#define MEM_FORWARD_DUMP(memSection, addr, receiverOffset, offset, length, host, newHost, newAddr, newOffset)
 #endif
     
 pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand)
@@ -399,7 +417,7 @@ pmStatus pmScheduler::ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine,
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, ushort pPriority)
+pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = MEMORY_TRANSFER;
@@ -411,6 +429,7 @@ pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffs
 	lEvent.memTransferDetails.receiverOffset = pReceiverOffset;
 	lEvent.memTransferDetails.priority = pPriority;
     lEvent.memTransferDetails.registerOnly = pRegisterOnly;
+    lEvent.memTransferDetails.isForwarded = pIsForwarded;
 
 	return SwitchThread(lEvent, pPriority);
 }
@@ -636,7 +655,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 			{
 				memTransfer& lEventDetails = pEvent.memTransferDetails;
 
-                if(lEventDetails.machine == PM_LOCAL_MACHINE)
+                if(lEventDetails.machine == PM_LOCAL_MACHINE && !lEventDetails.isForwarded)
                     PMTHROW(pmFatalErrorException());   // Cyclic reference
                 
 				if(dynamic_cast<pmOutputMemSection*>(lEventDetails.memSection))
@@ -649,22 +668,65 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 
                 if(lEventDetails.registerOnly)
                 {
+                    if(lEventDetails.isForwarded)
+                        PMTHROW(pmFatalErrorException());
+                    
                     // Send a 0 length buffer as an acknowledgement that the subscription information sent has been registered
                     lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, 0, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
 
                     MEM_TRANSFER_ACK_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
+
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+                    
+                    pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
                 }
                 else
                 {
-                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.length, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
+                    // Check if the memory is residing locally or forward the request to the owner machine
+                    pmMemSection::pmMemOwnership lOwnerships;
+                    lEventDetails.memSection->GetOwners(lEventDetails.offset, lEventDetails.length, false, lOwnerships);
+                    
+                    pmMemSection::pmMemOwnership::iterator lStartIter = lOwnerships.begin(), lEndIter = lOwnerships.end(), lIter;                    
+                    for(lIter = lStartIter; lIter != lEndIter; ++lIter)
+                    {
+                        ulong lInternalOffset = lIter->first;
+                        ulong lInternalLength = lIter->second.first;
+                        pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
+                        
+                        if(lRangeOwner.host == PM_LOCAL_MACHINE)
+                        {
+                            lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lEventDetails.memSection->GetMem()) + lInternalOffset));
+                            
+                            MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
 
-                    MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
+                            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+                            
+                            pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+                        }
+                        else
+                        {
+                            if(lEventDetails.isForwarded)
+                                PMTHROW(pmFatalErrorException());
+                            
+                            pmCommunicatorCommand::memorySubscriptionRequest* lData = new pmCommunicatorCommand::memorySubscriptionRequest();
+                            lData->ownerBaseAddr = lRangeOwner.hostBaseAddr;    // page aligned
+                            lData->receiverBaseAddr = lEventDetails.destMemBaseAddr;    // page aligned
+                            lData->receiverOffset = lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset;
+                            lData->offset = lRangeOwner.hostOffset;
+                            lData->length = lInternalLength;
+                            lData->destHost = *(lEventDetails.machine);
+                            lData->registerOnly = 0;
+                            lData->isForwarded = 1;
+                            
+                            MEM_FORWARD_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.hostBaseAddr, lRangeOwner.hostOffset)
+
+                            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, lRangeOwner.host, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, 1, NULL, 0, gCommandCompletionCallback);
+                            
+                            pmCommunicator::GetCommunicator()->Send(lCommand);
+                        }
+                    }
                 }
                 
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
-                
-                pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
-
 				break;
 			}
 
@@ -1440,7 +1502,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					if(!lMemSection)
 						PMTHROW(pmFatalErrorException());
 
-					MemTransferEvent(lMemSection, lData->offset, lData->length, (lData->registerOnly==1)?true:false, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, lData->receiverOffset, MAX_CONTROL_PRIORITY);
+					MemTransferEvent(lMemSection, lData->offset, lData->length, (lData->registerOnly==1)?true:false, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
 
 					SetupNewMemSubscriptionRequestReception();
 

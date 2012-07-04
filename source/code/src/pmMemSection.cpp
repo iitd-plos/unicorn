@@ -129,6 +129,9 @@ void pmMemSection::SwapMemoryAndOwnerships(pmMemSection* pMemSection1, pmMemSect
     std::swap(pMemSection1->mMem, pMemSection2->mMem);
     std::swap(pMemSection1->mOwnershipMap, pMemSection2->mOwnershipMap);
     
+    pMemSection1->mLazyOwnershipMap = pMemSection1->mOwnershipMap;
+    pMemSection2->mLazyOwnershipMap = pMemSection2->mOwnershipMap;
+    
     FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
 
     if(pMemSection1->mMem)
@@ -248,6 +251,16 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
     pmMemOwnership& lMap = pIsLazyAcquisition ? mLazyOwnershipMap : mOwnershipMap;
     
 	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
+
+#if _DEBUG
+#if 0
+    if(!pIsLazyAcquisition)
+    {
+        PrintOwnerships();
+        std::cout << "Host " << pmGetHostId() << " Set Range Owner: (Offset, Length, Owner, Owner Offset, OwnerBaseAddr): (" << pOffset << ", " << pLength << ", " << (uint)(*pOwner) << ", " << pOwnerOffset << ", " << (void*)pOwnerBaseMemAddr << ")" << std::endl;
+    }
+#endif
+#endif
     
 	// Remove present ownership
 	size_t lLastAddr = pOffset + pLength - 1;
@@ -291,6 +304,34 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 			lMap[lStartOffset] = std::pair<size_t, vmRangeOwner>(pOffset-lStartOffset, lStartOwner);
         }
 	}
+    else
+    {
+        if(lStartOffset != pOffset)
+            PMTHROW(pmFatalErrorException());
+        
+        pmMemOwnership::iterator lPrevIter;
+        pmMemOwnership::iterator* lPrevIterAddr = &lPrevIter;
+
+        if(pOffset)
+        {
+            size_t lPrevAddr = pOffset - 1;
+            FIND_FLOOR_ELEM(pmMemOwnership, lMap, lPrevAddr, lPrevIterAddr);
+            if(lPrevIterAddr)
+            {
+                size_t lPrevOffset = lPrevIter->first;
+                size_t lPrevLength = lPrevIter->second.first;
+                vmRangeOwner lPrevOwner = lPrevIter->second.second;
+                
+                if(lPrevOwner.host == pOwner && lPrevOwner.hostBaseAddr == pOwnerBaseMemAddr && lPrevOwner.hostOffset + lPrevLength == pOwnerOffset)
+                {
+                    pOwnerOffset -= (lStartOffset - lPrevOffset);
+                    pOffset = lPrevOffset;		// Combine with previous range                
+
+                    lMap.erase(lPrevIter);
+                }
+            }
+        }
+    }
 
 	if(lEndOffset + lEndLength - 1 > lLastAddr)
 	{
@@ -305,6 +346,33 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
 			lMap[lLastAddr + 1] = std::pair<size_t, vmRangeOwner>(lEndOffset + lEndLength - 1 - lLastAddr, lEndRangeOwner);
         }
 	}
+    else
+    {
+        if(lEndOffset + lEndLength - 1 != lLastAddr)
+            PMTHROW(pmFatalErrorException());
+
+        pmMemOwnership::iterator lNextIter;
+        pmMemOwnership::iterator* lNextIterAddr = &lNextIter;
+    
+        if(lLastAddr + 1 < GetLength())
+        {
+            size_t lNextAddr = lLastAddr + 1;
+            FIND_FLOOR_ELEM(pmMemOwnership, lMap, lNextAddr, lNextIterAddr);
+            if(lNextIterAddr)
+            {
+                size_t lNextOffset = lNextIter->first;
+                size_t lNextLength = lNextIter->second.first;
+                vmRangeOwner lNextOwner = lNextIter->second.second;
+                
+                if(lNextOwner.host == pOwner && lNextOwner.hostBaseAddr == pOwnerBaseMemAddr && lNextOwner.hostOffset == lOwnerLastAddr + 1)
+                {
+                    lLastAddr = lNextOffset + lNextLength - 1;	// Combine with following range
+
+                    lMap.erase(lNextIter);
+                }
+            }
+        }
+    }
 
 	vmRangeOwner lRangeOwner;
 	lRangeOwner.host = pOwner;
@@ -312,8 +380,57 @@ pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr,
     lRangeOwner.hostOffset = pOwnerOffset;
 	lMap[pOffset] = std::pair<size_t, vmRangeOwner>(lLastAddr - pOffset + 1, lRangeOwner);
 
+#ifdef _DEBUG
+    SanitizeOwnerships();
+#endif
+    
 	return pmSuccess;
 }
+
+#ifdef _DEBUG
+void pmMemSection::CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2)
+{
+    size_t lOffset1 = pRange1->first;
+    size_t lOffset2 = pRange2->first;
+    size_t lLength1 = pRange1->second.first;
+    size_t lLength2 = pRange2->second.first;
+    vmRangeOwner& lRangeOwner1 = pRange1->second.second;
+    vmRangeOwner& lRangeOwner2 = pRange2->second.second;
+    
+    if(lOffset1 + lLength1 != lOffset2)
+        std::cout << "<<< ERROR >>> Host " << pmGetHostId() << " Range end points don't match. Range 1: Offset = " << lOffset1 << " Length = " << lLength1 << " Range 2: Offset = " << lOffset2 << std::endl;
+    
+    if(lRangeOwner1.host == lRangeOwner2.host && lRangeOwner1.hostBaseAddr == lRangeOwner2.hostBaseAddr && lRangeOwner1.hostOffset + lLength1 == lRangeOwner2.hostOffset)
+        std::cout << "<<< ERROR >>> Host " << pmGetHostId() << " Mergable Ranges Found (" << lOffset1 << ", " << lLength1 << ") - (" << lOffset2 << ", " << lLength2 << ") map to (" << lRangeOwner1.hostOffset << ", " << lLength1 << ") - (" << lRangeOwner2.hostOffset << ", " << lLength2 << ") on host " << (uint)(*lRangeOwner1.host) << " Base addr " << mMem << " maps to " << (void*)lRangeOwner1.hostBaseAddr << std::endl;
+}
+    
+void pmMemSection::SanitizeOwnerships()
+{
+    if(mOwnershipMap.size() == 1)
+        return;
+    
+    pmMemOwnership::iterator lIter, lBegin = mOwnershipMap.begin(), lEnd = mOwnershipMap.end(), lPenultimate = lEnd;
+    --lPenultimate;
+    
+    for(lIter = lBegin; lIter != lPenultimate; ++lIter)
+    {
+        pmMemOwnership::iterator lNext = lIter;
+        ++lNext;
+        
+        CheckMergability(lIter, lNext);
+    }
+}
+
+void pmMemSection::PrintOwnerships()
+{
+    std::cout << "Host " << pmGetHostId() << " Ownership Dump " << std::endl;
+    pmMemOwnership::iterator lIter, lBegin = mOwnershipMap.begin(), lEnd = mOwnershipMap.end();
+    for(lIter = lBegin; lIter != lEnd; ++lIter)
+        std::cout << "Range (" << lIter->first << " , " << lIter->second.first << ") is owned by host " << (uint)(*(lIter->second.second.host)) << " (" << lIter->second.second.hostOffset << ", " << lIter->second.first << ")" << std::endl;
+        
+    std::cout << std::endl;
+}
+#endif
 
 pmStatus pmMemSection::AcquireOwnershipImmediate(ulong pOffset, ulong pLength)
 {
@@ -354,7 +471,7 @@ void pmMemSection::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
 pmStatus pmMemSection::TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength)
 {
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
-
+    
     vmRangeOwner lRangeOwner;
     lRangeOwner.host = pOwner;
     lRangeOwner.hostBaseAddr = pOwnerBaseMemAddr;
@@ -401,7 +518,7 @@ pmStatus pmMemSection::FlushOwnerships()
         mOwnershipMap = mLazyOwnershipMap;
         mLazyOwnershipMap.clear();
     }
-    
+        
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
     
     std::vector<pmMemTransferData>::iterator lIter = mOwnershipTransferVector.begin();
@@ -463,13 +580,17 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegis
 	FIND_FLOOR_ELEM(pmMemOwnership, lMap, lLastAddr, lEndIterAddr);
 
 	if(!lStartIterAddr || !lEndIterAddr)
+    {
+        std::cout << pOffset << " " << pLength << " " << lStartIterAddr << " " << lEndIterAddr << " " << lMap.size() << " " << lMap.begin()->first << " " << lMap.begin()->second.first << std::endl;
 		PMTHROW(pmFatalErrorException());
+    }
 
     size_t lSpan = lStartIter->first + lStartIter->second.first - 1;
     if(lLastAddr < lSpan)
     {
         lSpan = lLastAddr;
-        assert(lStartIter == lEndIter);
+        if(lStartIter != lEndIter)
+            PMTHROW(pmFatalErrorException());
     }
     
     vmRangeOwner lRangeOwner = lStartIter->second.second;
@@ -487,7 +608,8 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegis
             if(lLastAddr < lSpan)
             {
                 lSpan = lLastAddr;
-                assert(lIter == lEndIter);
+                if(lIter != lEndIter)
+                    PMTHROW(pmFatalErrorException());
             }
             
 			pOwnerships[lIter->first] = std::make_pair(lSpan - lIter->first + 1, lIter->second.second);

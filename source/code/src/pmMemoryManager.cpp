@@ -30,6 +30,8 @@ namespace pm
 {
         
 #ifdef TRACK_MEMORY_REQUESTS
+void __dump_mem_req(const pmMemSection* memSection, const void* addr, size_t receiverOffset, size_t offset, size_t length, uint host);
+    
 void __dump_mem_req(const pmMemSection* memSection, const void* addr, size_t receiverOffset, size_t offset, size_t length, uint host)
 {
     char lStr[512];
@@ -99,7 +101,7 @@ void* pmLinuxMemoryManager::AllocatePageAlignedMemoryInternal(size_t& pLength, s
 
 	pLength = FindAllocationSize(pLength, pPageCount);
     
-	uint lPageSize = GetVirtualMemoryPageSize();
+	size_t lPageSize = GetVirtualMemoryPageSize();
 
 	void* lPtr = NULL;
 	void** lRef = (void**)(&lPtr);
@@ -334,6 +336,7 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 	lData->length = pLength;
 	lData->destHost = *PM_LOCAL_MACHINE;
     lData->registerOnly = pRegisterOnly?1:0;
+    lData->isForwarded = 0;
     
 	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine,	pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, 1, NULL, 0);
 
@@ -361,36 +364,157 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
     
     char* lAddr = (char*)pDestMem + pOffset;
     
-    if(lMap.find(lAddr) == lMap.end())
-        PMTHROW(pmFatalErrorException());
-    
-    std::pair<size_t, regionFetchData> lPair = lMap[lAddr];
-    lMap.erase(lAddr);
-    
-    // Zero length is sent as an acknowledgement when registerOnly request is sent
-    if(pLength)
+    pmInFlightRegions::iterator lIter = lMap.find(lAddr);
+    if((lIter != lMap.end()) && (!pLength || lIter->second.first == pLength))
     {
-        assert(lPair.first == pLength);
+        std::pair<size_t, regionFetchData>& lPair = lIter->second;
         
-#ifdef SUPPORT_LAZY_MEMORY
-        if(pMemSection->IsLazy())
-            RemoveLazyProtection((void*)lAddr, (size_t)pLength);
-#endif
+        // Zero length is sent as an acknowledgement when registerOnly request is sent
+        if(pLength)
+        {
+    #ifdef SUPPORT_LAZY_MEMORY
+            if(pMemSection->IsLazy())
+                RemoveLazyProtection((void*)lAddr, (size_t)pLength);
+    #endif
+            
+            memcpy((void*)lAddr, pSrcMem, pLength);
+        }
         
-        memcpy((void*)lAddr, pSrcMem, pLength);
+        regionFetchData& lData = lPair.second;     
+        
+    #ifdef SUPPORT_LAZY_MEMORY
+        if(lIsLazyRegisteration)
+            pMemSection->AcquireOwnershipLazy(pOffset, lPair.first);
+        else
+    #endif
+            pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
+        
+        delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
+        lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
+
+        lMap.erase(lIter);
     }
-    
-    regionFetchData& lData = lPair.second;        
-    
-#ifdef SUPPORT_LAZY_MEMORY
-    if(lIsLazyRegisteration)
-        pMemSection->AcquireOwnershipLazy(pOffset, lPair.first);
     else
+    {
+        if(!pLength)
+            PMTHROW(pmFatalErrorException());
+        
+        pmInFlightRegions::iterator lBaseIter;
+        pmInFlightRegions::iterator* lBaseIterAddr = &lBaseIter;
+        FIND_FLOOR_ELEM(pmInFlightRegions, mInFlightMemoryMap, lAddr, lBaseIterAddr);
+        
+        if(!lBaseIterAddr)
+            PMTHROW(pmFatalErrorException());
+        
+        size_t lStartAddr = reinterpret_cast<size_t>(lBaseIter->first);
+        std::pair<size_t, regionFetchData>& lPair = lBaseIter->second;
+        
+        size_t lRecvAddr = reinterpret_cast<size_t>(lAddr);
+        if((lRecvAddr < lStartAddr) || (lRecvAddr + pLength > lStartAddr + lPair.first))
+            PMTHROW(pmFatalErrorException());
+        
+        typedef std::map<size_t, size_t> partialReceiveRecordType;
+        regionFetchData& lData = lPair.second;
+        partialReceiveRecordType& lPartialReceiveRecordMap = lData.partialReceiveRecordMap;
+                
+        partialReceiveRecordType::iterator lPartialIter;
+        partialReceiveRecordType::iterator* lPartialIterAddr = &lPartialIter;
+        FIND_FLOOR_ELEM(partialReceiveRecordType, lPartialReceiveRecordMap, lRecvAddr, lPartialIterAddr);
+        
+        if(lPartialIterAddr && lPartialIter->first + lPartialIter->second - 1 >= lRecvAddr)
+            PMTHROW(pmFatalErrorException());   // Multiple overlapping partial receives
+
+        lData.accumulatedPartialReceivesLength += pLength;
+        if(lData.accumulatedPartialReceivesLength > lPair.first)
+            PMTHROW(pmFatalErrorException());
+
+        bool lTransferComplete = (lData.accumulatedPartialReceivesLength == lPair.first);
+
+        if(lTransferComplete)
+        {
+            if(pMemSection->IsLazy())
+            {
+#ifdef SUPPORT_LAZY_MEMORY                
+                RemoveLazyProtection(lBaseIter->first, lPair.first);
+
+                memcpy((void*)lAddr, pSrcMem, pLength);
+                
+                typedef std::map<void*, std::vector<char> > partialPageReceiveBufferType;
+                partialPageReceiveBufferType& lPartialPageReceiveBufferMap = lData.partialPageReceiveBufferMap;
+
+                partialPageReceiveBufferType::iterator lBegin = lPartialPageReceiveBufferMap.begin();
+                partialPageReceiveBufferType::iterator lEnd = lPartialPageReceiveBufferMap.end();
+                
+                for(; lBegin != lEnd; ++lBegin)
+                    memcpy(lBegin->first, (void*)(&(lBegin->second[0])), lBegin->second.size());
 #endif
-        pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
-    
-    delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
-    lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
+            }
+            else
+            {
+                memcpy((void*)lAddr, pSrcMem, pLength);                
+            }
+
+            size_t lOffset = lStartAddr - reinterpret_cast<size_t>(pDestMem);
+            pMemSection->AcquireOwnershipImmediate(lOffset, lPair.first);
+            
+            delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
+            lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
+
+            mInFlightMemoryMap.erase(lBaseIter);
+        }
+        else
+        {            
+            // Make partial receive entry
+            lPartialReceiveRecordMap[lRecvAddr] = pLength;
+            
+            if(pMemSection->IsLazy())
+            {
+#ifdef SUPPORT_LAZY_MEMORY
+                typedef std::map<void*, std::vector<char> > partialPageReceiveBufferType;
+                partialPageReceiveBufferType& lPartialPageReceiveBufferMap = lData.partialPageReceiveBufferMap;
+
+                size_t lPageSize = GetVirtualMemoryPageSize();
+
+                size_t lPageStartAddr = GET_VM_PAGE_START_ADDRESS(lRecvAddr, lPageSize);
+                if(lPageStartAddr < lRecvAddr)
+                    lPageStartAddr += lPageSize;
+                
+                if(lPageStartAddr != lRecvAddr)
+                {
+                    lPartialPageReceiveBufferMap[lAddr].resize(lPageStartAddr - lRecvAddr);
+                    memcpy((void*)(&(lPartialPageReceiveBufferMap[lAddr][0])), pSrcMem, lPageStartAddr - lRecvAddr);
+                }
+                
+                for(; lPageStartAddr + lPageSize <= lRecvAddr + pLength; lPageStartAddr += lPageSize)
+                {
+                    RemoveLazyProtection(reinterpret_cast<void*>(lPageStartAddr), lPageSize);
+          
+                    void* lSrcAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSrcMem) + lPageStartAddr - lRecvAddr);
+                    memcpy(reinterpret_cast<void*>(lPageStartAddr), lSrcAddr, lPageSize);
+
+                    size_t lOffset = lPageStartAddr - reinterpret_cast<size_t>(pDestMem);
+                    pMemSection->AcquireOwnershipImmediate(lOffset, lPageSize);
+                }
+                
+                if(lPageStartAddr != lRecvAddr + pLength)
+                {
+                    void* lTempAddr = reinterpret_cast<void*>(lPageStartAddr);
+                    void* lSrcAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSrcMem) + lPageStartAddr - lRecvAddr);
+                    
+                    lPartialPageReceiveBufferMap[lTempAddr].resize(lRecvAddr + pLength - lPageStartAddr);
+                    memcpy((void*)(&(lPartialPageReceiveBufferMap[lTempAddr][0])), lSrcAddr, lRecvAddr + pLength - lPageStartAddr);                    
+                }
+#endif                
+            }
+            else
+            {
+                memcpy((void*)lAddr, pSrcMem, pLength);
+
+                size_t lOffset = lRecvAddr - reinterpret_cast<size_t>(pDestMem);
+                pMemSection->AcquireOwnershipImmediate(lOffset, pLength);
+            }
+        }
+    }
     
     return pmSuccess;
 }
@@ -441,14 +565,21 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmMemSection* pMemSection, voi
 	if(lLeftoverLength > lBytesToBeFetched)
 		lLeftoverLength = lBytesToBeFetched;
 
-	const std::vector<pmCommunicatorCommandPtr>& lCommandVector = FetchMemoryRegion(pMemSection->GetMem(), MAX_CONTROL_PRIORITY, lOffset, lLeftoverLength, false);
+    // We want to fetch lazy memory page and prefetch pages collectively. But we do not want this thread to resume execution as soon as
+    // lazy memory page is fetched without waiting for prefetch pages to come. To do this, we make two FetchMemoryRequests - first with
+    // lazy memory page and prefetch pages and second with lazy memory page only. The in-flight memory system will piggy back second
+    // request onto the first one. The current thread only waits on commands returned by second Fetch statement.
+    if(pForwardPrefetchPageCount)
+        FetchMemoryRegion(pMemSection->GetMem(), MAX_CONTROL_PRIORITY, lOffset, lLeftoverLength, false);
+
+	const std::vector<pmCommunicatorCommandPtr>& lCommandVector = FetchMemoryRegion(pMemSection->GetMem(), MAX_CONTROL_PRIORITY, lOffset, ((lLeftoverLength > lPageSize) ? lPageSize : lLeftoverLength), false);
     
     std::vector<pmCommunicatorCommandPtr>::const_iterator lStartIter = lCommandVector.begin();
     std::vector<pmCommunicatorCommandPtr>::const_iterator lEndIter = lCommandVector.end();
 
     for(; lStartIter != lEndIter; ++lStartIter)
     {
-        pmCommunicatorCommandPtr lCommand = *lStartIter;
+        const pmCommunicatorCommandPtr& lCommand = *lStartIter;
         if(lCommand)
         {
             if(lCommand->WaitForFinish() != pmSuccess)
@@ -515,6 +646,9 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
 }
 #endif
 
+pmLinuxMemoryManager::regionFetchData::regionFetchData()
+{
+    accumulatedPartialReceivesLength = 0;
 }
 
-
+}

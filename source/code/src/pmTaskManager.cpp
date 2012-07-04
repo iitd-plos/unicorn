@@ -122,6 +122,9 @@ pmStatus pmTaskManager::SubmitTask(pmRemoteTask* pRemoteTask)
 pmStatus pmTaskManager::DeleteTask(pmLocalTask* pLocalTask)
 {
     FINALIZE_RESOURCE(dResourceLock, mLocalTaskResourceLock.Lock(), mLocalTaskResourceLock.Unlock());
+    if(mLocalTasks.find(pLocalTask) == mLocalTasks.end())
+        return pmSuccess;   // Already deleted
+    
     mLocalTasks.erase(pLocalTask);
 
     pLocalTask->TaskInternallyFinished();

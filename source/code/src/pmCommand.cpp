@@ -372,7 +372,7 @@ pmCommunicatorCommand::remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTas
 			lDeviceArray[i] = lDevices[i]->GetGlobalDeviceIndex();
 
 		devices.ptr = lDeviceArray;
-		devices.length = sizeof(uint) * taskStruct.assignedDeviceCount;
+		devices.length = (uint)(sizeof(uint)) * taskStruct.assignedDeviceCount;
 	}
 	else
 	{

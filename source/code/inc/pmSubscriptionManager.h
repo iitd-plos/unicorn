@@ -47,8 +47,9 @@ namespace subscription
 		pmCudaLaunchConf mCudaLaunchConf;
         finalize_ptr_array<char> mScratchBuffer;
 
-		// Only one contiguous input mem and one output mem subscription for each subtask
-
+        pmSubscriptionInfo mConsolidatedInputMemSubscription;   // The contiguous range enclosing all ranges in mInputMemSubscriptions
+        pmSubscriptionInfo mConsolidatedOutputMemSubscription;   // The contiguous range enclosing all ranges in mOutputMemSubscriptions
+        
 		SUBSCRIPTION_DATA_TYPE mInputMemSubscriptions;
 		SUBSCRIPTION_DATA_TYPE mOutputMemSubscriptions;
 

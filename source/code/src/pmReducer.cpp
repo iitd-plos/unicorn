@@ -68,7 +68,7 @@ pmStatus pmReducer::PopulateExternalMachineList()
 
 	uint lLocalMachineIndex = (uint)(lIter - lMachines.begin());
 
-	mExternalReductionsRequired = GetMaxPossibleExternalReductionReceives(lMachines.size() - lLocalMachineIndex);
+	mExternalReductionsRequired = GetMaxPossibleExternalReductionReceives((uint)(lMachines.size()) - lLocalMachineIndex);
 
 	if(lLocalMachineIndex != 0)
 	{

@@ -181,6 +181,7 @@ typedef struct memTransfer
     ulong receiverOffset;
 	ushort priority;
     bool registerOnly;
+    bool isForwarded;
 } memTransfer;
 
 typedef struct commandCompletion
@@ -265,7 +266,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus TaskCancelEvent(pmTask* pTask);
 		pmStatus TaskFinishEvent(pmTask* pTask);
 		pmStatus ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId);
-		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, ushort pPriority);
+		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
         pmStatus RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
 

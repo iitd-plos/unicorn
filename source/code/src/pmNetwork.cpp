@@ -58,16 +58,16 @@ void __mpi_debug_hook()
 #ifdef DUMP_MPI_CALLS
 bool __dump_mpi_call(const char* name, int line)
 {
-        char lStr[512];
-        sprintf(lStr, "MPI Call: %s (%s:%d)", name, __FILE__, line);
-        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, lStr);
+    char lStr[512];
+    sprintf(lStr, "MPI Call: %s (%s:%d)", name, __FILE__, line);
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, lStr);
 
 	return true;
 }
 
 #define MPI_CALL(name, call) (__dump_mpi_call(name, __LINE__) && call)
 #else
-#define MPI_CALL(name, call) call
+#define MPI_CALL(name, call) (call)
 #endif
 
 #define SAFE_GET_MACHINE_POOL(x) { x = pmMachinePool::GetMachinePool(); if(!x) PMTHROW(pmFatalErrorException()); }
@@ -235,7 +235,7 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 			
 			if(lData->devices.ptr)
 			{
-				if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->devices.ptr, lData->devices.length/sizeof(uint), MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->devices.ptr, lData->devices.length/((uint)(sizeof(uint))), MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 					PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 			}
             
@@ -385,7 +385,7 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
                 if(lPackedTask->taskStruct.schedModel == scheduler::PULL || lReductionCB)
                 {
                     lPackedTask->devices.ptr = new uint[lPackedTask->taskStruct.assignedDeviceCount];
-                    lPackedTask->devices.length = lPackedTask->taskStruct.assignedDeviceCount * sizeof(uint);
+                    lPackedTask->devices.length = lPackedTask->taskStruct.assignedDeviceCount * (uint)(sizeof(uint));
 
                     if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->devices.ptr, lPackedTask->taskStruct.assignedDeviceCount, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
                         PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
@@ -404,7 +404,7 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
 			lPackedTask->subtaskMem.ptr = new char[lPackedTask->reduceStruct.subtaskMemLength];
-			lPackedTask->subtaskMem.length = lPackedTask->reduceStruct.subtaskMemLength;
+			lPackedTask->subtaskMem.length = (uint)lPackedTask->reduceStruct.subtaskMemLength;
 				
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->subtaskMem.ptr, lPackedTask->subtaskMem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
@@ -428,7 +428,7 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 			else
 			{
 				lPackedTask->mem.ptr = new char[lPackedTask->receiveStruct.length];
-				lPackedTask->mem.length = lPackedTask->receiveStruct.length;
+				lPackedTask->mem.length = (uint)(lPackedTask->receiveStruct.length);
 				
 				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->mem.ptr, lPackedTask->mem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
 					PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
@@ -498,7 +498,7 @@ pmStatus pmMPI::SendNonBlocking(pmCommunicatorCommandPtr pCommand)
 
 	ulong lBlocks = lLength/MPI_TRANSFER_MAX_LIMIT;
 	
-	int lLastBlockLength = lLength - lBlocks * MPI_TRANSFER_MAX_LIMIT;
+	ulong lLastBlockLength = lLength - lBlocks * MPI_TRANSFER_MAX_LIMIT;
 
 	if(std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(pCommand) && lBlocks != 0)
 		PMTHROW(pmFatalErrorException());
@@ -507,7 +507,7 @@ pmStatus pmMPI::SendNonBlocking(pmCommunicatorCommandPtr pCommand)
 		SendNonBlockingInternal(pCommand, (void*)((char*)lData + i*MPI_TRANSFER_MAX_LIMIT), MPI_TRANSFER_MAX_LIMIT);
 
 	if(lLastBlockLength)
-		SendNonBlockingInternal(pCommand, (void*)((char*)lData + lBlocks*MPI_TRANSFER_MAX_LIMIT), lLastBlockLength);
+		SendNonBlockingInternal(pCommand, (void*)((char*)lData + lBlocks*MPI_TRANSFER_MAX_LIMIT), (uint)lLastBlockLength);
 
 	return pmSuccess;
 }
@@ -531,7 +531,7 @@ pmStatus pmMPI::BroadcastNonBlocking(pmCommunicatorCommandPtr pCommand)
 
 	MPI_Datatype lDataType = GetDataTypeMPI((pmCommunicatorCommand::communicatorDataTypes)(pCommand->GetDataType()));
 
-	if( MPI_CALL("MPI_Bcast", (MPI_Bcast(lData, lDataLength, lDataType, lRoot, lCommunicator) != MPI_SUCCESS)) )
+	if( MPI_CALL("MPI_Bcast", (MPI_Bcast(lData, (uint)lDataLength, lDataType, lRoot, lCommunicator) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::BROADCAST_ERROR));
 
 	pCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(pCommand));
@@ -559,7 +559,7 @@ pmStatus pmMPI::All2AllNonBlocking(pmCommunicatorCommandPtr pCommand)
 
 	MPI_Datatype lDataType = GetDataTypeMPI((pmCommunicatorCommand::communicatorDataTypes)(pCommand->GetDataType()));
 
-	if( MPI_CALL("MPI_Allgather", (MPI_Allgather(lSendData, lSendLength, lDataType, lRecvData, lRecvLength, lDataType, lCommunicator) != MPI_SUCCESS)) )
+	if( MPI_CALL("MPI_Allgather", (MPI_Allgather(lSendData, (uint)lSendLength, lDataType, lRecvData, (uint)lRecvLength, lDataType, lCommunicator) != MPI_SUCCESS)) )
 		PMTHROW(pmNetworkException(pmNetworkException::ALL2ALL_ERROR));
 
 	pCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(pCommand));
@@ -585,7 +585,7 @@ pmStatus pmMPI::ReceiveNonBlocking(pmCommunicatorCommandPtr pCommand)
 
 	ulong lBlocks = lLength/MPI_TRANSFER_MAX_LIMIT;
 	
-	int lLastBlockLength = lLength - lBlocks * MPI_TRANSFER_MAX_LIMIT;
+	ulong lLastBlockLength = lLength - lBlocks * MPI_TRANSFER_MAX_LIMIT;
 
 	if(std::tr1::dynamic_pointer_cast<pmPersistentCommunicatorCommand>(pCommand) && lBlocks != 0)
 		PMTHROW(pmFatalErrorException());
@@ -594,7 +594,7 @@ pmStatus pmMPI::ReceiveNonBlocking(pmCommunicatorCommandPtr pCommand)
 		ReceiveNonBlockingInternal(pCommand, (void*)((char*)lData + i*MPI_TRANSFER_MAX_LIMIT), MPI_TRANSFER_MAX_LIMIT);
 
 	if(lLastBlockLength)
-		ReceiveNonBlockingInternal(pCommand, (void*)((char*)lData + lBlocks*MPI_TRANSFER_MAX_LIMIT), lLastBlockLength);
+		ReceiveNonBlockingInternal(pCommand, (void*)((char*)lData + lBlocks*MPI_TRANSFER_MAX_LIMIT), (uint)lLastBlockLength);
 
 	return pmSuccess;
 }
@@ -726,7 +726,7 @@ pmStatus pmMPI::InitializePersistentCommand(pmPersistentCommunicatorCommand* pCo
 		if(mPersistentSendRequest.find(pCommand) != mPersistentSendRequest.end())
 			PMTHROW(pmFatalErrorException());
 
-		if( MPI_CALL("MPI_Send_init", (MPI_Send_init(pCommand->GetData(), pCommand->GetDataLength(), lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, lRequest) != MPI_SUCCESS)) )
+		if( MPI_CALL("MPI_Send_init", (MPI_Send_init(pCommand->GetData(), (uint)(pCommand->GetDataLength()), lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
 
 		mPersistentSendRequest[pCommand] = lRequest;
@@ -738,7 +738,7 @@ pmStatus pmMPI::InitializePersistentCommand(pmPersistentCommunicatorCommand* pCo
 			if(mPersistentRecvRequest.find(pCommand) != mPersistentRecvRequest.end())
 				PMTHROW(pmFatalErrorException());
 
-			if( MPI_CALL("MPI_Recv_init", (MPI_Recv_init(pCommand->GetData(), pCommand->GetDataLength(), lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, lRequest) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Recv_init", (MPI_Recv_init(pCommand->GetData(), (uint)(pCommand->GetDataLength()), lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, lRequest) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
 
 			mPersistentRecvRequest[pCommand] = lRequest;
@@ -1075,6 +1075,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 4, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 5, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.registerOnly, lRegisterOnlyMPI, MPI_UNSIGNED_SHORT, 6, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isForwarded, lIsForwardedMPI, MPI_UNSIGNED_SHORT, 7, 1);
 
 			break;
 		}

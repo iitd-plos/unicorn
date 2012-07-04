@@ -36,8 +36,8 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 
 void commonFinish();
 
-#define CREATE_INPUT_MEM(inputMemSize, lInputMem) SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY_LAZY, inputMemSize, &lInputMem) )
-#define CREATE_OUTPUT_MEM(outputMemSize, lOutputMem) SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_READ_WRITE_LAZY, outputMemSize, &lOutputMem) )
+#define CREATE_INPUT_MEM(inputMemSize, lInputMem) SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY, inputMemSize, &lInputMem) )
+#define CREATE_OUTPUT_MEM(outputMemSize, lOutputMem) SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_READ_WRITE, outputMemSize, &lOutputMem) )
 
 #define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
 	pmTaskHandle lTaskHandle; \

@@ -68,7 +68,7 @@ pmExecutionStub* pmStubManager::GetStub(pmProcessingElement* pDevice)
 {
 	size_t pIndex = (size_t)(pDevice->GetDeviceIndexInMachine());
 
-	return GetStub(pIndex);
+	return GetStub((uint)pIndex);
 }
 
 pmExecutionStub* pmStubManager::GetStub(uint pIndex)
@@ -89,7 +89,7 @@ pmStatus pmStubManager::CreateExecutionStubs()
 
 	mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
 	for(size_t i=0; i<mProcessingElementsCPU; ++i)
-		mStubVector.push_back(new pmStubCPU(i, mStubVector.size()));
+		mStubVector.push_back(new pmStubCPU(i, (uint)(mStubVector.size())));
 
 	mProcessingElementsGPU = pmDispatcherGPU::GetDispatcherGPU()->ProbeProcessingElementsAndCreateStubs(mStubVector);
 

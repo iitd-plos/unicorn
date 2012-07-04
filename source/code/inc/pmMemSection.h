@@ -133,6 +133,12 @@ class pmMemSection : public pmBase
     
     private:
         pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength, bool pIsLazyAcquisition);
+    
+#ifdef _DEBUG
+        void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
+        void SanitizeOwnerships();
+        void PrintOwnerships();
+#endif
 
         pmMachine* mOwner;
         pmUserMemHandle* mUserMemHandle;

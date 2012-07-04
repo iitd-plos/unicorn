@@ -58,24 +58,51 @@ pmStatus pmSubscriptionManager::RegisterSubscription(ulong pSubtaskId, bool pIsI
 	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
 
-	// Only one subscription allowed per subtask (for now)
 	if(pIsInputMem)
 	{
 		if(!mTask->GetMemSectionRO())
 			PMTHROW(pmFatalErrorException());
 
-		std::vector<pmSubscriptionInfo> lVector;
-		lVector.push_back(pSubscriptionInfo);
-		mSubtaskMap[pSubtaskId].mInputMemSubscriptions.first = lVector;
+		mSubtaskMap[pSubtaskId].mInputMemSubscriptions.first.push_back(pSubscriptionInfo);
+        if(mSubtaskMap[pSubtaskId].mInputMemSubscriptions.first.size() == 1)
+        {
+            mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription = pSubscriptionInfo;
+        }
+        else
+        {
+            size_t lExistingOffset = mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription.offset;
+            size_t lExistingLength = mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription.length;
+            size_t lExistingSpan = lExistingOffset + lExistingLength;
+            size_t lNewOffset = pSubscriptionInfo.offset;
+            size_t lNewLength = pSubscriptionInfo.length;
+            size_t lNewSpan = lNewOffset + lNewLength;
+            
+            mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription.offset = std::min(lExistingOffset, lNewOffset);
+            mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription.length = (std::max(lExistingSpan, lNewSpan) - mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription.offset);
+        }
 	}
 	else
 	{
 		if(!mTask->GetMemSectionRW())
 			PMTHROW(pmFatalErrorException());
 
-		std::vector<pmSubscriptionInfo> lVector;
-		lVector.push_back(pSubscriptionInfo);
-		mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.first = lVector;
+		mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.first.push_back(pSubscriptionInfo);
+        if(mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.first.size() == 1)
+        {
+            mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription = pSubscriptionInfo;
+        }
+        else
+        {
+            size_t lExistingOffset = mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription.offset;
+            size_t lExistingLength = mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription.length;
+            size_t lExistingSpan = lExistingOffset + lExistingLength;
+            size_t lNewOffset = pSubscriptionInfo.offset;
+            size_t lNewLength = pSubscriptionInfo.length;
+            size_t lNewSpan = lNewOffset + lNewLength;
+            
+            mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription.offset = std::min(lExistingOffset, lNewOffset);
+            mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription.length = (std::max(lExistingSpan, lNewSpan) - mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription.offset);
+        }
 	}
 
 	return pmSuccess;
@@ -130,7 +157,7 @@ bool pmSubscriptionManager::GetInputMemSubscriptionForSubtask(ulong pSubtaskId, 
 	if(!mTask->GetMemSectionRO())
 		return false;
 
-	pSubscriptionInfo = mSubtaskMap[pSubtaskId].mInputMemSubscriptions.first[0];
+	pSubscriptionInfo = mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription;
 
 	return true;
 }
@@ -145,35 +172,46 @@ bool pmSubscriptionManager::GetOutputMemSubscriptionForSubtask(ulong pSubtaskId,
 	if(!mTask->GetMemSectionRW())
 		return false;
 
-	pSubscriptionInfo = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.first[0];
+	pSubscriptionInfo = mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription;
 
 	return true;
 }
 
 pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId, pmDeviceTypes pDeviceType)
 {
-	pmSubscriptionInfo lInputMemSubscription, lOutputMemSubscription;
-	subscriptionData lInputMemSubscriptionData, lOutputMemSubscriptionData;
-    
-	if(GetInputMemSubscriptionForSubtask(pSubtaskId, lInputMemSubscription))
+	if(mTask->GetMemSectionRO())
     {
-		FetchSubscription(pSubtaskId, true, pDeviceType, lInputMemSubscription, lInputMemSubscriptionData);
-
-        // Auto lock/unlock scope
+        size_t lCount = mSubtaskMap[pSubtaskId].mInputMemSubscriptions.first.size();
+        mSubtaskMap[pSubtaskId].mInputMemSubscriptions.second.resize(lCount);
+        for(size_t i=0; i<lCount; ++i)
         {
-            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-            mSubtaskMap[pSubtaskId].mInputMemSubscriptions.second.push_back(lInputMemSubscriptionData);
+            pmSubscriptionInfo& lSubscription = mSubtaskMap[pSubtaskId].mInputMemSubscriptions.first[i];
+            subscriptionData lSubscriptionData;
+            FetchSubscription(pSubtaskId, true, pDeviceType, lSubscription, lSubscriptionData);
+
+            // Auto lock/unlock scope
+            {
+                FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+                mSubtaskMap[pSubtaskId].mInputMemSubscriptions.second[i] = lSubscriptionData;
+            }
         }
     }
 
-	if(GetOutputMemSubscriptionForSubtask(pSubtaskId, lOutputMemSubscription))
+	if(mTask->GetMemSectionRW())
     {
-		FetchSubscription(pSubtaskId, false, pDeviceType, lOutputMemSubscription, lOutputMemSubscriptionData);
-
-        // Auto lock/unlock scope
+        size_t lCount = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.first.size();
+        mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.second.resize(lCount);
+        for(size_t i=0; i<lCount; ++i)
         {
-            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-            mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.second.push_back(lOutputMemSubscriptionData);
+            pmSubscriptionInfo& lSubscription = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.first[i];
+            subscriptionData lSubscriptionData;
+            FetchSubscription(pSubtaskId, false, pDeviceType, lSubscription, lSubscriptionData);
+
+            // Auto lock/unlock scope
+            {
+                FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+                mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.second[i] = lSubscriptionData;
+            }
         }
     }
 
@@ -221,18 +259,18 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 
 	if(mTask->GetMemSectionRO())
 	{
-		std::vector<subscriptionData> lInputMemVector;
+		std::vector<subscriptionData>* lInputMemVector = NULL;
 
 		// Auto lock/unlock scope
 		{
 			FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-			lInputMemVector = mSubtaskMap[pSubtaskId].mInputMemSubscriptions.second;
+			lInputMemVector = &(mSubtaskMap[pSubtaskId].mInputMemSubscriptions.second);
 		}
 
-		lSize = lInputMemVector.size();
+		lSize = lInputMemVector->size();
 		for(i=0; i<lSize; ++i)
 		{
-			std::vector<pmCommunicatorCommandPtr>& lCommandVector = (lInputMemVector[i]).receiveCommandVector;
+			std::vector<pmCommunicatorCommandPtr>& lCommandVector = ((*lInputMemVector)[i]).receiveCommandVector;
 
 			lInnerSize = lCommandVector.size();
 			for(j=0; j<lInnerSize; ++j)
@@ -249,18 +287,18 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 
 	if(mTask->GetMemSectionRW())
 	{
-		std::vector<subscriptionData> lOutputMemVector;
+		std::vector<subscriptionData>* lOutputMemVector;
 
 		// Auto lock/unlock scope
 		{
 			FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-			lOutputMemVector = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.second;
+			lOutputMemVector = &(mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.second);
 		}
 
-		lSize = lOutputMemVector.size();
+		lSize = lOutputMemVector->size();
 		for(i=0; i<lSize; ++i)
 		{
-			std::vector<pmCommunicatorCommandPtr>& lCommandVector = (lOutputMemVector[i]).receiveCommandVector;
+			std::vector<pmCommunicatorCommandPtr>& lCommandVector = ((*lOutputMemVector)[i]).receiveCommandVector;
 
 			lInnerSize = lCommandVector.size();
 			for(j=0; j<lInnerSize; ++j)
@@ -285,32 +323,14 @@ pmStatus pmSubtask::Initialize(pmTask* pTask)
 
 	if(lInputMemSection)
 	{
-		pmSubscriptionInfo lInputMemSubscription;
-
-		lInputMemSubscription.offset = 0;
-		lInputMemSubscription.length = lInputMemSection->GetLength();
-
-		subscriptionData lSubscriptionData;
-		std::vector<pmSubscriptionInfo> lVector1;
-		std::vector<subscriptionData> lVector2;
-		lVector1.push_back(lInputMemSubscription);
-		lVector2.push_back(lSubscriptionData);
-		mInputMemSubscriptions = SUBSCRIPTION_DATA_TYPE(lVector1, lVector2);
+		mConsolidatedInputMemSubscription.offset = 0;
+		mConsolidatedInputMemSubscription.length = lInputMemSection->GetLength();
 	}
 
 	if(lOutputMemSection)
 	{
-		pmSubscriptionInfo lOutputMemSubscription;
-
-		lOutputMemSubscription.offset = 0;
-		lOutputMemSubscription.length = lOutputMemSection->GetLength();
-
-		subscriptionData lSubscriptionData;
-		std::vector<pmSubscriptionInfo> lVector1;
-		std::vector<subscriptionData> lVector2;
-		lVector1.push_back(lOutputMemSubscription);
-		lVector2.push_back(lSubscriptionData);
-		mOutputMemSubscriptions = SUBSCRIPTION_DATA_TYPE(lVector1, lVector2);
+		mConsolidatedOutputMemSubscription.offset = 0;
+		mConsolidatedOutputMemSubscription.length = lOutputMemSection->GetLength();
 	}
     
     mScratchBuffer = NULL;

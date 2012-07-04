@@ -275,10 +275,11 @@ class pmCommunicatorCommand : public pmCommand
 			ulong length;
 			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
             ushort registerOnly;    // Signifies only subscription information transfer; no data is sent back (used for lazy memory and WO memory)
+            ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host. If this flag is set, registerOnly flag is ignored
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 7
+				FIELD_COUNT_VALUE = 8
 			} fieldCount;
 
 		} memorySubscriptionRequest;

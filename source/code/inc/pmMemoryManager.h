@@ -91,6 +91,14 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		{
 			pmCommunicatorCommandPtr sendCommand;
 			pmCommunicatorCommandPtr receiveCommand;
+
+            std::map<size_t, size_t> partialReceiveRecordMap;
+#ifdef SUPPORT_LAZY_MEMORY
+            std::map<void*, std::vector<char> > partialPageReceiveBufferMap;
+#endif
+            size_t accumulatedPartialReceivesLength;
+            
+            regionFetchData();
 		} regionFetchData;
 
         typedef std::map<void*, std::pair<size_t, regionFetchData> > pmInFlightRegions;

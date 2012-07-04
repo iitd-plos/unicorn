@@ -7,6 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0EDFDC4715A0D879003DE0D1 /* libmpi.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0EDFDC4615A0D879003DE0D1 /* libmpi.0.dylib */; };
+		0EDFDC4915A0D8AD003DE0D1 /* libmpi_cxx.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0EDFDC4815A0D8AD003DE0D1 /* libmpi_cxx.0.dylib */; };
 		0EFF67BA1545CF7800ED4E8F /* pmRedistributor.h in Headers */ = {isa = PBXBuildFile; fileRef = 0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */; };
 		0EFF67BD1545CF9A00ED4E8F /* pmRedistributor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */; };
 		2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED2F151C7B07006AA45D /* pmBase.h */; };
@@ -73,6 +75,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0EDFDC4615A0D879003DE0D1 /* libmpi.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi.0.dylib; path = "../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib/libmpi.0.dylib"; sourceTree = "<group>"; };
+		0EDFDC4815A0D8AD003DE0D1 /* libmpi_cxx.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi_cxx.0.dylib; path = "../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib/libmpi_cxx.0.dylib"; sourceTree = "<group>"; };
 		0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = pmRedistributor.h; path = ../../../../../../../Users/tarunberi/Development/pmlib/source/code/inc/pmRedistributor.h; sourceTree = "<group>"; };
 		0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = pmRedistributor.cpp; path = ../../../../../../../Users/tarunberi/Development/pmlib/source/code/src/pmRedistributor.cpp; sourceTree = "<group>"; };
 		2BCCED1D151C7AA1006AA45D /* pmlib.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -148,6 +152,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0EDFDC4915A0D8AD003DE0D1 /* libmpi_cxx.0.dylib in Frameworks */,
+				0EDFDC4715A0D879003DE0D1 /* libmpi.0.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -157,6 +163,8 @@
 		2BCCED12151C7AA1006AA45D = {
 			isa = PBXGroup;
 			children = (
+				0EDFDC4815A0D8AD003DE0D1 /* libmpi_cxx.0.dylib */,
+				0EDFDC4615A0D879003DE0D1 /* libmpi.0.dylib */,
 				2BCCED2E151C7B07006AA45D /* inc */,
 				2BCCED4F151C7B07006AA45D /* src */,
 				2BCCED1F151C7AA1006AA45D /* pmlib */,
@@ -459,6 +467,11 @@
 				);
 				GCC_VERSION = com.apple.compilers.llvmgcc42;
 				HEADER_SEARCH_PATHS = "";
+				"HEADER_SEARCH_PATHS[arch=*]" = "/Users/tarunberi/Installations/openmpi-1.4.5-multithreaded/debug/include/";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"$(SRCROOT)/../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib\"",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				USER_HEADER_SEARCH_PATHS = "";
 			};
@@ -478,6 +491,11 @@
 				);
 				GCC_VERSION = com.apple.compilers.llvmgcc42;
 				HEADER_SEARCH_PATHS = "";
+				"HEADER_SEARCH_PATHS[arch=*]" = "/Users/tarunberi/Installations/openmpi-1.4.5-multithreaded/release/include/";
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"$(SRCROOT)/../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib\"",
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
