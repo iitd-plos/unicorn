@@ -24,7 +24,6 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 #include "pmTimer.h"
-#include TIMER_IMPLEMENTATION_HEADER
 
 #include <tr1/memory>	// For std::tr1
 

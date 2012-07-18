@@ -99,9 +99,6 @@ namespace pm
 	{
 		size_t offset;				/* Offset from the start of the memory region */
 		size_t length;				/* Number of bytes to be subscribed */
-		//size_t blockLength;			/* The length of each block */
-		//size_t jumpLength;			/* Number of bytes between start of two consecutive blocks */
-		//unsigned long blockCount;	/* Total number of blocks */
 
 		pmSubscriptionInfo();
 	} pmSubscriptionInfo;
@@ -173,7 +170,7 @@ namespace pm
 
 
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
-	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, unsigned long pSubtaskId, pmDeviceTypes pDeviceType);
+	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, unsigned long pSubtaskId, pmDeviceTypes pDeviceType);
 	typedef pmStatus (*pmSubtaskCallback_CPU)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
 	typedef pmStatus (*pmDataReductionCallback)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtask1Info, pmSubtaskInfo pSubtask2Info);

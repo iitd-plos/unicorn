@@ -127,6 +127,10 @@ class pmMemSection : public pmBase
         void SetUserMemHandle(pmUserMemHandle* pUserMemHandle);
         pmUserMemHandle* GetUserMemHandle();
     
+        void Lock(pmTask* pTask);
+        void Unlock(pmTask* pTask);
+        pmTask* GetLockingTask();
+
     protected:
 		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy);
         pmMemSection(const pmMemSection& pMemSection);
@@ -164,6 +168,9 @@ class pmMemSection : public pmBase
         
         std::vector<pmMemTransferData> mOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipTransferLock;
+
+        pmTask* mLockingTask;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mTaskLock;
 };
 
 class pmInputMemSection : public pmMemSection

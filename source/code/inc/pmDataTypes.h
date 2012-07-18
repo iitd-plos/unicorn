@@ -140,63 +140,63 @@ namespace pm
 			virtual void SetDelete(bool pDelete) = 0;
 	};
 
-        template<typename T>
-        class selective_finalize_ptr : public selective_finalize_base
-        {
-                public:
-                        selective_finalize_ptr<T>(T* pMem) : mMem(pMem), mDeleteMem(true)
-                        {
-                        }
+    template<typename T>
+    class selective_finalize_ptr : public selective_finalize_base
+    {
+        public:
+            selective_finalize_ptr<T>(T* pMem) : mMem(pMem), mDeleteMem(true)
+            {
+            }
 
-                        ~selective_finalize_ptr()
-                        {
-				if(mDeleteMem)
-                                	delete (T*)(mMem);
-                        }
-			
-			virtual void SetDelete(bool pDelete)
-			{
-				mDeleteMem = pDelete;
-			}
+            ~selective_finalize_ptr()
+            {
+                if(mDeleteMem)
+                    delete (T*)(mMem);
+            }
+        
+            virtual void SetDelete(bool pDelete)
+            {
+                mDeleteMem = pDelete;
+            }
 
-                        T* get_ptr()
-                        {
-                                return mMem;
-                        }
+            T* get_ptr()
+            {
+                    return mMem;
+            }
 
-                private:
-                        T* mMem;
-			bool mDeleteMem;
-        };
+        private:
+            T* mMem;
+            bool mDeleteMem;
+    };
 
-        template<typename T>
-        class selective_finalize_ptr_array : public selective_finalize_base
-        {
-                public:
-                        selective_finalize_ptr_array<T>(T* pMem) : mMem(pMem), mDeleteMem(true)
-                        {
-                        }
+    template<typename T>
+    class selective_finalize_ptr_array : public selective_finalize_base
+    {
+        public:
+            selective_finalize_ptr_array<T>(T* pMem) : mMem(pMem), mDeleteMem(true)
+            {
+            }
 
-                        ~selective_finalize_ptr_array()
-                        {
-				if(mDeleteMem)
-                                	delete[] (T*)(mMem);
-                        }
+            ~selective_finalize_ptr_array()
+            {
+                if(mDeleteMem)
+                    delete[] (T*)(mMem);
+            }
 
-			virtual void SetDelete(bool pDelete)
-			{
-				mDeleteMem = pDelete;
-			}
+            virtual void SetDelete(bool pDelete)
+            {
+                mDeleteMem = pDelete;
+            }
 
-                        T* get_ptr()
-                        {
-                                return mMem;
-                        }
+            T* get_ptr()
+            {
+                return mMem;
+            }
 
-                private:
-                        T* mMem;
-			bool mDeleteMem;
-        };
+        private:
+            T* mMem;
+            bool mDeleteMem;
+    };
 
 	typedef class pmDestroyOnException
 	{

@@ -314,18 +314,42 @@ bool pmExecutionStub::IsHighPriorityEventWaiting(ushort pPriority)
 
 pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmTaskProfiler* lTaskProfiler = pTask->GetTaskProfiler();
+
+    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, true);
+	pTask->GetSubscriptionManager().InitializeSubtaskDefaults(pSubtaskId);
+	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, pTask, pSubtaskId, GetType());
+    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, false);
+
+	pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(pSubtaskId, GetType());
+    
+	if(pTask->GetMemSectionRW() && pTask->DoSubtasksNeedShadowMemory())
+    {
+        lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_REDUCTION, true);
+		pTask->CreateSubtaskShadowMem(pSubtaskId);
+        lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_REDUCTION, false);
+    }
+
+    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::SUBTASK_EXECUTION, true);
+#else
 	pTask->GetSubscriptionManager().InitializeSubtaskDefaults(pSubtaskId);
 	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, pTask, pSubtaskId, GetType());
 	pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(pSubtaskId, GetType());
 
 	if(pTask->GetMemSectionRW() && pTask->DoSubtasksNeedShadowMemory())
 		pTask->CreateSubtaskShadowMem(pSubtaskId);
+#endif
 	
 	return pmSuccess;
 }
 
 pmStatus pmExecutionStub::CommonPostExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_EXECUTION, false);
+#endif
+
 	pmCallbackUnit* lCallbackUnit = pTask->GetCallbackUnit();
 	pmDataReductionCB* lReduceCallback = lCallbackUnit->GetDataReductionCB();
 

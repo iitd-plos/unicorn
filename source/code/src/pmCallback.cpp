@@ -23,6 +23,7 @@
 #include "pmDispatcherGPU.h"
 #include "pmTask.h"
 #include "pmHardware.h"
+#include "pmMemSection.h"
 
 namespace pm
 {
@@ -51,7 +52,13 @@ pmStatus pmDataDistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId, pmDeviceT
 	if(!mCallback)
 		return pmSuccess;
 
-	return mCallback(pTask->GetTaskInfo(), pSubtaskId, pDeviceType);
+    pmMemSection* lInputMemSection = pTask->GetMemSectionRO();
+    pmMemSection* lOutputMemSection = pTask->GetMemSectionRW();
+    
+    void* lInputMem = (lInputMemSection && lInputMemSection->IsLazy()) ? (lInputMemSection->GetMem()) : NULL;
+    void* lOutputMem = (lOutputMemSection && lOutputMemSection->IsLazy()) ? (lOutputMemSection->GetMem()) : NULL;
+
+	return mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pSubtaskId, pDeviceType);
 }
 
 

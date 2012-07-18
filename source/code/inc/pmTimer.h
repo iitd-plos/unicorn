@@ -44,6 +44,7 @@ class pmTimer : public pmBase
 		} timerState;
 
 		pmTimer();
+        virtual ~pmTimer();
 
 		virtual pmStatus Start() = 0;
 		virtual pmStatus Stop() = 0;
@@ -64,7 +65,8 @@ class pmTimer : public pmBase
 class pmLinuxTimer : public pmTimer
 {
 	public:
-		pmLinuxTimer();
+        pmLinuxTimer();
+        virtual ~pmLinuxTimer();
 
 		virtual pmStatus Start();
 		virtual pmStatus Stop();

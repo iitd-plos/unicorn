@@ -42,6 +42,10 @@ pmStatus pmRedistributor::RedistributeData(ulong pSubtaskId, ulong pOffset, ulon
     if(!pLength)
         return pmSuccess;
     
+#ifdef ENABLE_TASK_PROFILING
+    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, true);
+#endif
+
     pmSubscriptionInfo lOutputMemSubscriptionInfo;
     if(!mTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pSubtaskId, lOutputMemSubscriptionInfo))
         return pmInvalidOffset;
@@ -59,6 +63,10 @@ pmStatus pmRedistributor::RedistributeData(ulong pSubtaskId, ulong pOffset, ulon
 
     mLocalRedistributionData.push_back(lOrderData);
         
+#ifdef ENABLE_TASK_PROFILING
+    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, false);
+#endif
+    
     return pmSuccess;
 }
     
@@ -72,10 +80,14 @@ pmStatus pmRedistributor::SendRedistributionInfo()
 }
 
 pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pBaseMemAddr, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector)
-{
+{    
     if(mTask->GetOriginatingHost() != PM_LOCAL_MACHINE)
         PMTHROW(pmFatalErrorException());
     
+#ifdef ENABLE_TASK_PROFILING
+    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, true);
+#endif
+
 	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mGlobalRedistributionLock, Lock(), Unlock());
     
     std::vector<pmCommunicatorCommand::redistributionOrderStruct>::const_iterator lStart = pVector.begin(), lEnd = pVector.end();
@@ -97,6 +109,10 @@ pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pBaseMem
     if(mSubtasksAccounted == mTask->GetSubtaskCount())
         SetRedistributedOwnership();
     
+#ifdef ENABLE_TASK_PROFILING
+    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, false);
+#endif
+
     return pmSuccess;
 }
 
@@ -107,7 +123,7 @@ void pmRedistributor::SetRedistributedOwnership()
     char* lMemAddr = reinterpret_cast<char*>(lMemSection->GetMem());
 
     pmOutputMemSection* lRedistributedMemSection = new pmOutputMemSection(lMemSection->GetLength(), lMemSection->GetAccessType(), lMemSection->IsLazy());
-    
+
     ulong lCurrentOffset = 0;
     std::map<uint, std::vector<orderData> >::iterator lStartIter = mGlobalRedistributionMap.begin(), lEndIter = mGlobalRedistributionMap.end();
     for(; lStartIter != lEndIter; ++lStartIter)

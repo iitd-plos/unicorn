@@ -26,6 +26,10 @@
 #include "pmTaskExecStats.h"
 #include "pmSubscriptionManager.h"
 
+#ifdef ENABLE_TASK_PROFILING
+    #include "pmTaskProfiler.h"
+#endif
+
 #include <map>
 #include <set>
 #include <vector>
@@ -97,6 +101,10 @@ class pmTask : public pmBase
         pmStatus SetSequenceNumber(ulong pSequenceNumber);
     
         pmStatus TaskInternallyFinished();
+
+#ifdef ENABLE_TASK_PROFILING
+        pmTaskProfiler* GetTaskProfiler();
+#endif
     
 	protected:
 		pmStatus RandomizeDevices(std::vector<pmProcessingElement*>& pDevices);
@@ -120,6 +128,10 @@ class pmTask : public pmBase
 		pmSubscriptionManager mSubscriptionManager;
 		pmTaskExecStats mTaskExecStats;
         ulong mSequenceNumber;  // Sequence Id of task on originating host (This along with originating machine is the global unique identifier for a task)
+    
+#ifdef ENABLE_TASK_PROFILING
+        pmTaskProfiler mTaskProfiler;
+#endif
 
 		/* Updating properties require locking */
 		ulong mSubtasksExecuted;

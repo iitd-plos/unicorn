@@ -32,15 +32,14 @@ namespace pm
 
 class pmTask;
 
-
-#define SUBSCRIPTION_DATA_TYPE std::pair<std::vector<pmSubscriptionInfo>, std::vector<subscriptionData> >
-
 namespace subscription
 {
 	typedef struct subscriptionData
 	{
 		std::vector<pmCommunicatorCommandPtr> receiveCommandVector;
 	} subscriptionData;
+
+    typedef std::map<size_t, std::pair<size_t, subscriptionData> > subscriptionRecordType;
 
 	typedef struct pmSubtask
 	{
@@ -50,8 +49,8 @@ namespace subscription
         pmSubscriptionInfo mConsolidatedInputMemSubscription;   // The contiguous range enclosing all ranges in mInputMemSubscriptions
         pmSubscriptionInfo mConsolidatedOutputMemSubscription;   // The contiguous range enclosing all ranges in mOutputMemSubscriptions
         
-		SUBSCRIPTION_DATA_TYPE mInputMemSubscriptions;
-		SUBSCRIPTION_DATA_TYPE mOutputMemSubscriptions;
+		subscriptionRecordType mInputMemSubscriptions;
+		subscriptionRecordType mOutputMemSubscriptions;
 
 		pmStatus Initialize(pmTask* pTask);
 	} pmSubtask;
@@ -72,6 +71,11 @@ class pmSubscriptionManager : public pmBase
 
 		bool GetInputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
 		bool GetOutputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
+    
+        bool GetNonConsolidatedInputMemSubscriptionsForSubtask(ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
+        bool GetNonConsolidatedOutputMemSubscriptionsForSubtask(ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
+
+        bool SubtasksHaveMatchingSubscriptions(ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem);
 
 	private:
 		pmStatus WaitForSubscriptions(ulong pSubtaskId);
@@ -82,6 +86,9 @@ class pmSubscriptionManager : public pmBase
 
 		pmTask* mTask;
 };
+
+bool operator==(pmSubscriptionInfo& pSubscription1, pmSubscriptionInfo& pSubscription2);
+bool operator!=(pmSubscriptionInfo& pSubscription1, pmSubscriptionInfo& pSubscription2);
 
 } // end namespace pm
 

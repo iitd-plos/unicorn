@@ -38,6 +38,7 @@ pmCluster* PM_GLOBAL_CLUSTER = NULL;
 //#define ENABLE_MPI_DEBUG_HOOK
 
 #ifdef ENABLE_MPI_DEBUG_HOOK
+void __mpi_debug_hook();
 void __mpi_debug_hook()
 {
 	volatile bool hook = true;

@@ -33,35 +33,35 @@ namespace pm
 
 class pmLogger
 {
-    friend class pmController;
-	public:
-		typedef enum logLevel
-		{
-			MINIMAL,
-			DEATILED,
-			DEBUG_INTERNAL	/* Internal use Only; Not for production builds */
-		} logLevel;
+friend class pmController;
+public:
+    typedef enum logLevel
+    {
+        MINIMAL,
+        DEATILED,
+        DEBUG_INTERNAL	/* Internal use Only; Not for production builds */
+    } logLevel;
 
-		typedef enum logType
-		{
-			INFORMATION,
-			WARNING,
-			ERROR
-		} logType;
+    typedef enum logType
+    {
+        INFORMATION,
+        WARNING,
+        ERROR
+    } logType;
 
-		static pmLogger* GetLogger();
+    static pmLogger* GetLogger();
 
-		pmStatus SetHostId(uint pHostId);
+    pmStatus SetHostId(uint pHostId);
 
-		pmStatus Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg);
+    pmStatus Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg);
 
-	private:
-		pmLogger(logLevel pLogLevel);
-		virtual ~pmLogger();
+private:
+    pmLogger(logLevel pLogLevel);
+    virtual ~pmLogger();
 
-		ushort mLogLevel;
-		uint mHostId;
-		static pmLogger* mLogger;
+    ushort mLogLevel;
+    uint mHostId;
+    static pmLogger* mLogger;
 };
 
 } // end namespace pm

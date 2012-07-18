@@ -66,20 +66,26 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     mReducer = NULL;
     mRedistributor = NULL;
 	mSubtasksExecuted = 0;
+    
+    pMemRO->Lock(this);
+    pMemRW->Lock(this);
 }
 
 pmTask::~pmTask()
 {
+    mMemRO->Unlock(this);
+    mMemRW->Unlock(this);
+
     delete mReducer;
     delete mRedistributor;
 }
     
 pmStatus pmTask::TaskInternallyFinished()
 {
-    if(mMemRO)
+    if(mMemRO && mMemRO->GetMem())
         mMemRO->FlushOwnerships();
     
-    if(mMemRW)
+    if(mMemRW && mMemRW->GetMem())
         mMemRW->FlushOwnerships();
 
     return pmSuccess;
@@ -240,6 +246,13 @@ pmRedistributor* pmTask::GetRedistributor()
     
     return mRedistributor;
 }
+    
+#ifdef ENABLE_TASK_PROFILING
+pmTaskProfiler* pmTask::GetTaskProfiler()
+{
+    return &mTaskProfiler;
+}
+#endif
 
 pmStatus pmTask::MarkSubtaskExecutionFinished()
 {

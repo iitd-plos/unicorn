@@ -28,6 +28,10 @@ pmTimer::pmTimer()
 {
 	mState = pmTimer::NOT_STARTED;
 }
+    
+pmTimer::~pmTimer()
+{
+}
 
 pmStatus pmTimer::SetState(pmTimer::timerState pState)
 {
@@ -49,6 +53,10 @@ pmLinuxTimer::pmLinuxTimer()
 {
 	mStartTime = (double)0;
 	mUnpausedTime = (double)0;
+}
+    
+pmLinuxTimer::~pmLinuxTimer()
+{
 }
 
 pmStatus pmLinuxTimer::Start()

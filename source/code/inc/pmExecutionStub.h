@@ -117,7 +117,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		pmStatus StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pExecutionRate);
 		pmStatus CancelSubtasks(pmTask* pTask);
 
-	        pmStatus ClearPendingStealCommands(pmTask* pTask);
+        pmStatus ClearPendingStealCommands(pmTask* pTask);
 
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);

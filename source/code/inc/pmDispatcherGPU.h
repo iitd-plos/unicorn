@@ -46,17 +46,17 @@ class pmGraphicsBase : public pmBase
 };
 
 #ifdef SUPPORT_CUDA
-    namespace dispatcherCUDA
+namespace dispatcherCUDA
+{
+    typedef struct lastExecutionRecord
     {
-        typedef struct lastExecutionRecord
-        {
-            uint taskOriginatingMachineIndex;
-            ulong taskSequenceNumber;
-            bool fullInputMemSubscription;
-            void* inputMemCudaPtr;
-            void* taskConfCudaPtr;
-        } lastExecutionRecord;
-    }
+        uint taskOriginatingMachineIndex;
+        ulong taskSequenceNumber;
+        ulong lastSubtaskId;
+        void* inputMemCudaPtr;
+        void* taskConfCudaPtr;
+    } lastExecutionRecord;
+}
 #endif
     
 class pmDispatcherCUDA : public pmGraphicsBase

@@ -34,7 +34,8 @@ RESOURCE_LOCK_IMPLEMENTATION_CLASS pmMemSection::mResourceLock;
 pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy)
     : mOwner(pOwner?pOwner:PM_LOCAL_MACHINE),
     mUserMemHandle(NULL),
-    mRequestedLength(pLength)
+    mRequestedLength(pLength),
+    mLockingTask(NULL)
 {
     pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
 
@@ -70,10 +71,14 @@ pmMemSection::pmMemSection(const pmMemSection& pMemSection)
     mVMPageCount = pMemSection.mVMPageCount;
     mLazy = pMemSection.mLazy;
     mMem = NULL;
+    mLockingTask = pMemSection.mLockingTask;
 }
 		
 pmMemSection::~pmMemSection()
-{    
+{
+    if(mLockingTask)
+        PMTHROW(pmFatalErrorException());
+    
     DisposeMemory();
     
     if(mOwner == PM_LOCAL_MACHINE)
@@ -240,6 +245,33 @@ pmMemSection* pmMemSection::FindMemSectionContainingAddress(void* pPtr)
     }
     
     return NULL;
+}
+    
+void pmMemSection::Lock(pmTask* pTask)
+{
+	FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
+
+    if(mLockingTask)
+        PMTHROW(pmFatalErrorException());
+    
+    mLockingTask = pTask;
+}
+    
+void pmMemSection::Unlock(pmTask* pTask)
+{
+	FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
+
+    if(mLockingTask != pTask)
+        PMTHROW(pmFatalErrorException());
+    
+    mLockingTask = NULL;
+}
+    
+pmTask* pmMemSection::GetLockingTask()
+{
+	FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
+
+    return mLockingTask;
 }
 
 pmStatus pmMemSection::SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength, bool pIsLazyAcquisition)

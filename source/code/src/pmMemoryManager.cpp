@@ -23,6 +23,8 @@
 #include "pmCommunicator.h"
 #include "pmMemSection.h"
 #include "pmHardware.h"
+#include "pmTaskProfiler.h"
+#include "pmTask.h"
 
 #include <string.h>
 
@@ -298,27 +300,30 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 		ulong lOffset = lRegionsToBeFetched[i].first - (ulong)pMem;
 		ulong lLength = lRegionsToBeFetched[i].second - lRegionsToBeFetched[i].first + 1;
         
-		pmMemSection::pmMemOwnership lOwnerships;
-        lMemSection->GetOwners(lOffset, lLength, lIsLazyRegisteration, lOwnerships);
+        if(lLength)
+        {
+            pmMemSection::pmMemOwnership lOwnerships;
+            lMemSection->GetOwners(lOffset, lLength, lIsLazyRegisteration, lOwnerships);
 
-		pmMemSection::pmMemOwnership::iterator lStartIter, lEndIter, lIter;
-		lStartIter = lOwnerships.begin();
-		lEndIter = lOwnerships.end();
+            pmMemSection::pmMemOwnership::iterator lStartIter, lEndIter, lIter;
+            lStartIter = lOwnerships.begin();
+            lEndIter = lOwnerships.end();
 
-		for(lIter = lStartIter; lIter != lEndIter; ++lIter)
-		{
-			ulong lInternalOffset = lIter->first;
-			ulong lInternalLength = lIter->second.first;
-			pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
+            for(lIter = lStartIter; lIter != lEndIter; ++lIter)
+            {
+                ulong lInternalOffset = lIter->first;
+                ulong lInternalLength = lIter->second.first;
+                pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
 
-			if(lRangeOwner.host != PM_LOCAL_MACHINE)
-			{
-				pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr, lRangeOwner.hostOffset, pRegisterOnly, lMap);
+                if(lRangeOwner.host != PM_LOCAL_MACHINE)
+                {
+                    pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr, lRangeOwner.hostOffset, pRegisterOnly, lMap);
 
-				if(lCommand.get())
-					lCommandVector.push_back(lCommand);
-			}
-		}
+                    if(lCommand.get())
+                        lCommandVector.push_back(lCommand);
+                }
+            }
+        }
 	}
 
 	return lCommandVector;
@@ -350,6 +355,11 @@ pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(u
 	char* lAddr = (char*)pMem + lData->receiverOffset;
     pInFlightMap[lAddr] = std::make_pair(lData->length, lFetchData);
 
+#ifdef ENABLE_TASK_PROFILING
+    if(pMemSection->GetLockingTask())
+        pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(dynamic_cast<pmInputMemSection*>(pMemSection)?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, true);
+#endif
+    
 	lFetchData.receiveCommand->MarkExecutionStart();
 	return lFetchData.receiveCommand;
 }
@@ -388,7 +398,12 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
         else
     #endif
             pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
-        
+
+#ifdef ENABLE_TASK_PROFILING
+        if(pMemSection->GetLockingTask())
+            pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(dynamic_cast<pmInputMemSection*>(pMemSection)?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+#endif
+
         delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
         lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
 
@@ -457,6 +472,11 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
             size_t lOffset = lStartAddr - reinterpret_cast<size_t>(pDestMem);
             pMemSection->AcquireOwnershipImmediate(lOffset, lPair.first);
             
+#ifdef ENABLE_TASK_PROFILING
+            if(pMemSection->GetLockingTask())
+                pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(dynamic_cast<pmInputMemSection*>(pMemSection)?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+#endif
+
             delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
             lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
 

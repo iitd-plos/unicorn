@@ -85,6 +85,7 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmTask.o \
 	$(OUTDIR)/pmTaskExecStats.o \
 	$(OUTDIR)/pmTaskManager.o \
+	$(OUTDIR)/pmTaskProfiler.o \
 	$(OUTDIR)/pmTimer.o
 
 
