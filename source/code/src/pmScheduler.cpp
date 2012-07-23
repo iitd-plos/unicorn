@@ -90,6 +90,35 @@ void __dump_mem_ack_transfer(const pmMemSection* memSection, ulong addr, size_t 
 #define MEM_FORWARD_DUMP(memSection, addr, receiverOffset, offset, length, host, newHost, newAddr, newOffset)
 #endif
     
+#ifdef TRACK_SUBTASK_STEALS
+void __dump_steal_request(uint sourceHost, uint targetHost, uint stealingDevice, uint targetDevice, double stealDeviceExecutionRate);
+void __dump_steal_response(uint sourceHost, uint targetHost, uint stealingDevice, uint targetDevice, double targetDeviceExecutionRate, ulong transferredSubtasks);
+
+void __dump_steal_request(uint sourceHost, uint targetHost, uint stealingDevice, uint targetDevice, double stealDeviceExecutionRate)
+{
+    char lStr[512];
+    
+    sprintf(lStr, "Steal request from host %d device %d at execution rate %f to host %d device %d", sourceHost, stealingDevice, stealDeviceExecutionRate, targetHost, targetDevice);
+    
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);    
+}
+    
+void __dump_steal_response(uint sourceHost, uint targetHost, uint stealingDevice, uint targetDevice, double targetDeviceExecutionRate, ulong transferredSubtasks)
+{
+    char lStr[512];
+    
+    sprintf(lStr, "Steal response from host %d device %d at execution rate %f to host %d device %d assigning %ld subtasks", targetHost, targetDevice, targetDeviceExecutionRate, sourceHost, stealingDevice, transferredSubtasks);
+    
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);    
+}
+    
+#define STEAL_REQUEST_DUMP(sourceHost, targetHost, stealingDevice, targetDevice, stealDeviceExecutionRate) __dump_steal_request(sourceHost, targetHost, stealingDevice, targetDevice, stealDeviceExecutionRate);
+#define STEAL_RESPONSE_DUMP(sourceHost, targetHost, stealingDevice, targetDevice, targetDeviceExecutionRate, transferredSubtasks) __dump_steal_response(sourceHost, targetHost, stealingDevice, targetDevice, targetDeviceExecutionRate, transferredSubtasks);
+#else
+#define STEAL_REQUEST_DUMP(sourceHost, targetHost, stealingDevice, targetDevice, stealDeviceExecutionRate)
+#define STEAL_RESPONSE_DUMP(sourceHost, targetHost, stealingDevice, targetDevice, targetDeviceExecutionRate, transferredSubtasks)
+#endif
+    
 pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand)
 {
 	pmScheduler* lScheduler = pmScheduler::GetScheduler();
@@ -280,6 +309,8 @@ pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pm
     if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pTask))
         return pmSuccess;
     
+    pTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, true);
+    
 	schedulerEvent lEvent;
 	lEvent.eventId = STEAL_REQUEST_STEALER;
 	lEvent.stealRequestDetails.stealingDevice = pStealingDevice;
@@ -294,6 +325,8 @@ pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pm
     if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pTask))
         return pmSuccess;
     
+    pTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, true);
+
 	schedulerEvent lEvent;
 	lEvent.eventId = STEAL_PROCESS_TARGET;
 	lEvent.stealProcessDetails.stealingDevice = pStealingDevice;
@@ -511,10 +544,10 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 break;
 			}
 
-		case STEAL_PROCESS_TARGET:	/* Comes from netwrok thread */
+		case STEAL_PROCESS_TARGET:	/* Comes from network thread */
 			{
 				stealProcess& lEventDetails = pEvent.stealProcessDetails;
-                
+
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.task))
                     return ServeStealRequest(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task, lEventDetails.stealingDeviceExecutionRate);
                 
@@ -524,7 +557,9 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 		case STEAL_SUCCESS_TARGET:	/* Comes from stub thread */
 			{
 				stealSuccessTarget& lEventDetails = pEvent.stealSuccessTargetDetails;
-                
+
+                lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, false);
+
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.range.task))
                     return SendStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
                 
@@ -534,6 +569,8 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 		case STEAL_FAIL_TARGET: /* Comes from stub thread */
 			{
 				stealFailTarget& lEventDetails = pEvent.stealFailTargetDetails;
+
+                lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, false);
 
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.task))
                     return SendFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
@@ -545,6 +582,8 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 			{
 				stealSuccessStealer& lEventDetails = pEvent.stealSuccessStealerDetails;
 
+                lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, false);
+            
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.range.task))
                     return ReceiveStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
                 
@@ -554,6 +593,8 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 		case STEAL_FAIL_STEALER: /* Comes from network thread */
 			{
 				stealFailStealer& lEventDetails = pEvent.stealFailStealerDetails;
+
+                lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, false);
 
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.task))
                     return ReceiveFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
@@ -1000,16 +1041,17 @@ pmProcessingElement* pmScheduler::RandomlySelectStealTarget(pmProcessingElement*
 
 	lTaskExecStats.RecordStealAttempt(lStub);
 
-	std::vector<pmProcessingElement*>& lRandomizedDevices = (dynamic_cast<pmLocalTask*>(pTask) != NULL) ? (((pmLocalTask*)pTask)->GetAssignedDevices()) : (((pmRemoteTask*)pTask)->GetAssignedDevices());
-
-	return lRandomizedDevices[lAttempts];
+    return (pTask->GetStealListForDevice(pStealingDevice))[lAttempts];
 }
 
 pmStatus pmScheduler::StealSubtasks(pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate)
 {
 	pmProcessingElement* lTargetDevice = RandomlySelectStealTarget(pStealingDevice, pTask);
+                          
 	if(lTargetDevice)
 	{
+        STEAL_REQUEST_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*(lTargetDevice->GetMachine())), pStealingDevice->GetGlobalDeviceIndex(), lTargetDevice->GetGlobalDeviceIndex(), pExecutionRate);
+    
 		pmMachine* lTargetMachine = lTargetDevice->GetMachine();
 
 		if(lTargetMachine == PM_LOCAL_MACHINE)
@@ -1049,6 +1091,8 @@ pmStatus pmScheduler::ServeStealRequest(pmProcessingElement* pStealingDevice, pm
 
 pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
 {
+    STEAL_RESPONSE_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*(pTargetDevice->GetMachine())), pStealingDevice->GetGlobalDeviceIndex(), pTargetDevice->GetGlobalDeviceIndex(), pRange.task->GetTaskExecStats().GetStubExecutionRate(pmStubManager::GetStubManager()->GetStub(pTargetDevice)), pRange.endSubtask - pRange.startSubtask + 1);
+
 	pmMachine* lMachine = pStealingDevice->GetMachine();
 	if(lMachine == PM_LOCAL_MACHINE)
 	{
@@ -1083,6 +1127,8 @@ pmStatus pmScheduler::ReceiveStealResponse(pmProcessingElement* pStealingDevice,
 
 pmStatus pmScheduler::SendFailedStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
+    STEAL_RESPONSE_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*(pTargetDevice->GetMachine())), pStealingDevice->GetGlobalDeviceIndex(), pTargetDevice->GetGlobalDeviceIndex(), pTask->GetTaskExecStats().GetStubExecutionRate(pmStubManager::GetStubManager()->GetStub(pTargetDevice)), 0);
+
 	pmMachine* lMachine = pStealingDevice->GetMachine();
 	if(lMachine == PM_LOCAL_MACHINE)
 	{
@@ -1119,7 +1165,7 @@ pmStatus pmScheduler::ReceiveFailedStealResponse(pmProcessingElement* pStealingD
 
 	pmTaskExecStats& lTaskExecStats = pTask->GetTaskExecStats();
 
-	return StealSubtasks(pStealingDevice, pTask, lTaskExecStats.GetStubExecutionRate(lStub));
+    return StealRequestEvent(pStealingDevice, pTask, lTaskExecStats.GetStubExecutionRate(lStub));
 }
 
 

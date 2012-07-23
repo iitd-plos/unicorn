@@ -50,7 +50,7 @@ pmController::pmController()
     mMemoryManager(), 
     mTaskManager(), 
     mScheduler()
-{
+{    
 	mLastErrorCode = 0;
 	mFinalizedHosts = 0;
 	mSignalWait = NULL;

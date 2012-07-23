@@ -32,11 +32,14 @@ static const char* profileName[] =
 {
     (char*)"INPUT_MEMORY_TRANSFER",
     (char*)"OUTPUT_MEMORY_TRANSFER",
+    (char*)"TOTAL_MEMORY_TRANSFER",
     (char*)"DATA_PARTITIONING",
     (char*)"SUBTASK_EXECUTION",
     (char*)"SUBTASK_REDUCTION",
     (char*)"DATA_REDISTRIBUTION",
-    (char*)"UNIVERSAL",
+    (char*)"SUBTASK_STEAL_WAIT",
+    (char*)"SUBTASK_STEAL_SERVE",
+    (char*)"UNIVERSAL"
 };
 
 pmTaskProfiler::pmTaskProfiler()
@@ -61,9 +64,6 @@ pmTaskProfiler::~pmTaskProfiler()
     
     for(int i=0; i<MAX_PROFILE_TYPES; ++i)
     {
-        if(mRecursionCount[i] != 0)
-            PMTHROW(pmFatalErrorException());
-
         mTimer[i].Stop();
 
         lStream << profileName[i] << " => Accumulated Time: " << mAccumulatedTime[i] << "s; Actual Time = " << mActualTime[i] << "s; Overlapped Time = " << mAccumulatedTime[i] - mActualTime[i] << "s" << std::endl;
@@ -84,10 +84,13 @@ void pmTaskProfiler::AccountForElapsedTime(profileType pProfileType)
 
 void pmTaskProfiler::RecordProfileEvent(profileType pProfileType, bool pStart)
 {
-    if(pProfileType == UNIVERSAL)
+    if(pProfileType == UNIVERSAL || pProfileType == TOTAL_MEMORY_TRANSFER)
         PMTHROW(pmFatalErrorException());
-    
+	
     RecordProfileEventInternal(pProfileType, pStart);
+    if(pProfileType == INPUT_MEMORY_TRANSFER || pProfileType == OUTPUT_MEMORY_TRANSFER)
+        RecordProfileEventInternal(TOTAL_MEMORY_TRANSFER, pStart);
+        
     RecordProfileEventInternal(UNIVERSAL, pStart);
 }
     

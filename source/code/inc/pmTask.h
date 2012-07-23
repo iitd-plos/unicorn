@@ -97,6 +97,8 @@ class pmTask : public pmBase
 		subtaskShadowMem& GetSubtaskShadowMem(ulong pSubtaskId);
 		pmStatus DestroySubtaskShadowMem(ulong pSubtaskId);
     
+        std::vector<pmProcessingElement*>& GetStealListForDevice(pmProcessingElement* pDevice);
+    
         ulong GetSequenceNumber();
         pmStatus SetSequenceNumber(ulong pSequenceNumber);
     
@@ -106,11 +108,9 @@ class pmTask : public pmBase
         pmTaskProfiler* GetTaskProfiler();
 #endif
     
-	protected:
-		pmStatus RandomizeDevices(std::vector<pmProcessingElement*>& pDevices);
-
 	private:
 		pmStatus BuildTaskInfo();
+        pmStatus RandomizeDevices(std::vector<pmProcessingElement*>& pDevices);
 
 		/* Constant properties -- no updates, locking not required */
 		ulong mTaskId;
@@ -146,6 +146,9 @@ class pmTask : public pmBase
     
         pmRedistributor* mRedistributor;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mRedistributorLock;
+    
+        std::map<pmProcessingElement*, std::vector<pmProcessingElement*> > mStealListForDevice;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mStealListLock;
 
     protected:
 		uint mAssignedDeviceCount;

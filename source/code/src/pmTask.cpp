@@ -163,6 +163,22 @@ pmStatus pmTask::RandomizeDevices(std::vector<pmProcessingElement*>& pDevices)
 	return pmSuccess;
 }
 
+std::vector<pmProcessingElement*>& pmTask::GetStealListForDevice(pmProcessingElement* pDevice)
+{
+    FINALIZE_RESOURCE_PTR(dStealListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealListLock, Lock(), Unlock());
+
+    if(mStealListForDevice.find(pDevice) == mStealListForDevice.end())
+    {
+        std::vector<pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
+
+        std::srand(reinterpret_cast<size_t>(pDevice));
+        mStealListForDevice[pDevice] = lDevices;
+        RandomizeDevices(mStealListForDevice[pDevice]);
+    }
+    
+    return mStealListForDevice[pDevice];    
+}
+
 pmStatus pmTask::BuildTaskInfo()
 {
 	mTaskInfo.taskHandle = (void*)this;
@@ -536,9 +552,6 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
     
     pDevices.erase(lIter, pDevices.end());
 
-	if(GetSchedulingModel() == scheduler::PULL)
-		RandomizeDevices(mDevices);
-
 	return pmSuccess;
 }
 
@@ -586,9 +599,6 @@ pmStatus pmRemoteTask::AddAssignedDevice(pmProcessingElement* pDevice)
 	uint lSize = (uint)(mDevices.size());
 	if(lSize > lCount)
 		PMTHROW(pmFatalErrorException());
-
-	if(lSize == lCount && GetSchedulingModel() == scheduler::PULL)
-		RandomizeDevices(mDevices);
 
 	return pmSuccess;
 }

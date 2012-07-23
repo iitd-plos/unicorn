@@ -19,6 +19,8 @@
  */
 
 #include "pmTaskExecStats.h"
+#include "pmExecutionStub.h"
+#include "pmHardware.h"
 
 namespace pm
 {
@@ -29,6 +31,19 @@ pmTaskExecStats::pmTaskExecStats()
 
 pmTaskExecStats::~pmTaskExecStats()
 {
+#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.begin(), lEndIter = mStats.end();
+    
+    for(; lIter != lEndIter; ++lIter)
+    {
+        char lStr[512];
+
+        pmProcessingElement* lDevice = lIter->first->GetProcessingElement();
+        sprintf(lStr, "Host %d - Device %d - Execution Rate - %lf", (uint)(*(lDevice->GetMachine())), lDevice->GetGlobalDeviceIndex(), GetStubExecutionRate(lIter->first));
+        
+        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);    
+    }
+#endif
 }
 
 pmStatus pmTaskExecStats::RecordSubtaskExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs)
