@@ -127,6 +127,13 @@ class pmMemSection : public pmBase
         void SetUserMemHandle(pmUserMemHandle* pUserMemHandle);
         pmUserMemHandle* GetUserMemHandle();
     
+        static void DeleteAllLocalMemSections();
+    
+#ifdef ENABLE_MEM_PROFILING
+        void RecordMemReceive(size_t pReceiveSize);
+        void RecordMemTransfer(size_t pTransferSize);
+#endif
+    
         void Lock(pmTask* pTask);
         void Unlock(pmTask* pTask);
         pmTask* GetLockingTask();
@@ -151,7 +158,7 @@ class pmMemSection : public pmBase
 		size_t mVMPageCount;
         bool mLazy;
         void* mMem;
-
+    
         void ResetOwnerships(pmMachine* pOwner, ulong pBaseAddr);
         void ClearOwnerships();
     
@@ -171,6 +178,15 @@ class pmMemSection : public pmBase
 
         pmTask* mLockingTask;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mTaskLock;
+    
+    protected:
+#ifdef ENABLE_MEM_PROFILING
+    size_t mMemReceived;
+    size_t mMemTransferred;
+    ulong mMemReceiveEvents;
+    ulong mMemTransferEvents;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mMemProfileLock;
+#endif
 };
 
 class pmInputMemSection : public pmMemSection

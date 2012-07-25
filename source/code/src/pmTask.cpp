@@ -171,7 +171,7 @@ std::vector<pmProcessingElement*>& pmTask::GetStealListForDevice(pmProcessingEle
     {
         std::vector<pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
 
-        std::srand(reinterpret_cast<size_t>(pDevice));
+        std::srand((uint)reinterpret_cast<size_t>(pDevice));
         mStealListForDevice[pDevice] = lDevices;
         RandomizeDevices(mStealListForDevice[pDevice]);
     }

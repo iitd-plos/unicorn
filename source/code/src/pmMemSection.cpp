@@ -24,6 +24,10 @@
 
 #include <string.h>
 
+#ifdef ENABLE_MEM_PROFILING
+#include <sstream>
+#endif
+
 namespace pm
 {
 
@@ -32,10 +36,16 @@ RESOURCE_LOCK_IMPLEMENTATION_CLASS pmMemSection::mResourceLock;
 
 /* class pmMemSection */
 pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy)
-    : mOwner(pOwner?pOwner:PM_LOCAL_MACHINE),
-    mUserMemHandle(NULL),
-    mRequestedLength(pLength),
-    mLockingTask(NULL)
+    : mOwner(pOwner?pOwner:PM_LOCAL_MACHINE)
+    , mUserMemHandle(NULL)
+    , mRequestedLength(pLength)
+    , mLockingTask(NULL)
+#ifdef ENABLE_MEM_PROFILING
+    , mMemReceived(0)
+    , mMemTransferred(0)
+    , mMemReceiveEvents(0)
+    , mMemTransferEvents(0)
+#endif
 {
     pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
 
@@ -63,6 +73,12 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
 }
     
 pmMemSection::pmMemSection(const pmMemSection& pMemSection)
+#ifdef ENABLE_MEM_PROFILING
+    : mMemReceived(0)
+    , mMemTransferred(0)
+    , mMemReceiveEvents(0)
+    , mMemTransferEvents(0)
+#endif
 {
     mOwner = pMemSection.mOwner;
     mUserMemHandle = NULL;
@@ -580,6 +596,11 @@ pmStatus pmMemSection::Fetch(ushort pPriority)
 {
     if(IsLazy())
         return pmSuccess;
+
+#ifdef ENABLE_MEM_PROFILING
+    TIMER_IMPLEMENTATION_CLASS lTimer;
+    lTimer.Start();
+#endif
     
     const std::vector<pmCommunicatorCommandPtr>& lVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(mMem, pPriority, 0, GetLength(), false);
     
@@ -589,6 +610,15 @@ pmStatus pmMemSection::Fetch(ushort pPriority)
     for(; lIter != lEndIter; ++lIter)
         (*lIter)->WaitForFinish();
 
+#ifdef ENABLE_MEM_PROFILING
+    lTimer.Stop();
+    
+    char lStr[512];
+    sprintf(lStr, "%s memory Fetch Time = %lfs", (dynamic_cast<pmInputMemSection*>(this) != NULL)?(char*)"Input":(char*)"Output", lTimer.GetElapsedTimeInSecs());
+    
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr, true);
+#endif
+    
     return pmSuccess;
 }
     
@@ -657,10 +687,46 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegis
 	return pmSuccess;
 }
 
+void pmMemSection::DeleteAllLocalMemSections()
+{
+    std::vector<pmMemSection*> lMemSections;
+    
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
+
+        std::map<void*, pmMemSection*>::iterator lIter = mMemSectionMap.begin(), lEndIter = mMemSectionMap.end();
+        for(; lIter != lEndIter; ++lIter)
+            lMemSections.push_back(lIter->second);
+    }
+
+    std::vector<pmMemSection*>::iterator lExternalIter = lMemSections.begin(), lExternalEndIter = lMemSections.end();
+    for(; lExternalIter != lExternalEndIter; ++lExternalIter)
+        delete *lExternalIter;
+}
+    
 bool pmMemSection::IsLazy()
 {
     return mLazy;
 }
+
+#ifdef ENABLE_MEM_PROFILING
+void pmMemSection::RecordMemReceive(size_t pReceiveSize)
+{
+    FINALIZE_RESOURCE_PTR(dMemProfileLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mMemProfileLock, Lock(), Unlock());
+
+    mMemReceived += pReceiveSize;
+    ++mMemReceiveEvents;
+}
+
+void pmMemSection::RecordMemTransfer(size_t pTransferSize)
+{
+    FINALIZE_RESOURCE_PTR(dMemProfileLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mMemProfileLock, Lock(), Unlock());
+
+    mMemTransferred += pTransferSize;
+    ++mMemTransferEvents;
+}
+#endif
 
 
 /* class pmInputMemSection */
@@ -676,6 +742,15 @@ pmInputMemSection::pmInputMemSection(const pmOutputMemSection& pOutputMemSection
 
 pmInputMemSection::~pmInputMemSection()
 {
+#ifdef ENABLE_MEM_PROFILING
+    std::stringstream lStream;    
+    lStream << mMemReceived << " bytes input memory received in " << mMemReceiveEvents << " events";
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+    
+    lStream.str(std::string()); // clear stream
+    lStream << mMemTransferred << " bytes input memory transferred in " << mMemTransferEvents << " events";
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+#endif    
 }
 
 
@@ -694,6 +769,15 @@ pmOutputMemSection::pmOutputMemSection(const pmInputMemSection& pInputMemSection
 
 pmOutputMemSection::~pmOutputMemSection()
 {
+#ifdef ENABLE_MEM_PROFILING
+    std::stringstream lStream;    
+    lStream << mMemReceived << " bytes output memory received in " << mMemReceiveEvents << " events";
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+
+    lStream.str(std::string()); // clear stream
+    lStream << mMemTransferred << " bytes output memory transferred in " << mMemTransferEvents << " events";
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+#endif    
 }
 
 pmStatus pmOutputMemSection::Update(size_t pOffset, size_t pLength, void* pSrcAddr)

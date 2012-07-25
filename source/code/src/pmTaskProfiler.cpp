@@ -59,8 +59,8 @@ pmTaskProfiler::~pmTaskProfiler()
 {
     std::stringstream lStream;
     lStream << std::endl;
-    lStream << "Task Profiler (";
-    lStream << "Host " << pmGetHostId() << ") ............" << std::endl;
+    lStream << "Task Profiler [";
+    lStream << "Host " << pmGetHostId() << "] ............" << std::endl;
     
     for(int i=0; i<MAX_PROFILE_TYPES; ++i)
     {

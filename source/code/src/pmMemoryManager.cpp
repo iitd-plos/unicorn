@@ -382,12 +382,18 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
         // Zero length is sent as an acknowledgement when registerOnly request is sent
         if(pLength)
         {
-    #ifdef SUPPORT_LAZY_MEMORY
             if(pMemSection->IsLazy())
+            {
+    #ifdef SUPPORT_LAZY_MEMORY
+                RemoveLazyWriteProtection((void*)lAddr, (size_t)pLength);
+                memcpy((void*)lAddr, pSrcMem, pLength);
                 RemoveLazyProtection((void*)lAddr, (size_t)pLength);
     #endif
-            
-            memcpy((void*)lAddr, pSrcMem, pLength);
+            }
+            else
+            {
+                memcpy((void*)lAddr, pSrcMem, pLength);
+            }
         }
         
         regionFetchData& lData = lPair.second;     
@@ -400,10 +406,16 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
             pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
 
 #ifdef ENABLE_TASK_PROFILING
-        if(pMemSection->GetLockingTask())
-            pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(dynamic_cast<pmInputMemSection*>(pMemSection)?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+        pmTask* lLockingTask = pMemSection->GetLockingTask();
+        if(lLockingTask)
+            lLockingTask->GetTaskProfiler()->RecordProfileEvent(dynamic_cast<pmInputMemSection*>(pMemSection)?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, false);
 #endif
 
+#ifdef ENABLE_MEM_PROFILING
+        if(pLength)
+            pMemSection->RecordMemReceive(pLength);
+#endif
+    
         delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
         lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
 
@@ -450,9 +462,9 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
             if(pMemSection->IsLazy())
             {
 #ifdef SUPPORT_LAZY_MEMORY                
-                RemoveLazyProtection(lBaseIter->first, lPair.first);
-
+                RemoveLazyWriteProtection((void*)lAddr, pLength);
                 memcpy((void*)lAddr, pSrcMem, pLength);
+                RemoveLazyProtection(lBaseIter->first, lPair.first);
                 
                 typedef std::map<void*, std::vector<char> > partialPageReceiveBufferType;
                 partialPageReceiveBufferType& lPartialPageReceiveBufferMap = lData.partialPageReceiveBufferMap;
@@ -472,9 +484,15 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
             size_t lOffset = lStartAddr - reinterpret_cast<size_t>(pDestMem);
             pMemSection->AcquireOwnershipImmediate(lOffset, lPair.first);
             
-#ifdef ENABLE_TASK_PROFILING
-            if(pMemSection->GetLockingTask())
+#ifdef ENABLE_TASK_PROFILING        
+            pmTask* lLockingTask = pMemSection->GetLockingTask();
+            if(lLockingTask)
                 pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(dynamic_cast<pmInputMemSection*>(pMemSection)?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+#endif
+
+#ifdef ENABLE_MEM_PROFILING
+            if(pLength)
+                pMemSection->RecordMemReceive(pLength);
 #endif
 
             delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
@@ -507,10 +525,10 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
                 
                 for(; lPageStartAddr + lPageSize <= lRecvAddr + pLength; lPageStartAddr += lPageSize)
                 {
-                    RemoveLazyProtection(reinterpret_cast<void*>(lPageStartAddr), lPageSize);
-          
                     void* lSrcAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSrcMem) + lPageStartAddr - lRecvAddr);
+                    RemoveLazyWriteProtection(reinterpret_cast<void*>(lPageStartAddr), lPageSize);
                     memcpy(reinterpret_cast<void*>(lPageStartAddr), lSrcAddr, lPageSize);
+                    RemoveLazyProtection(reinterpret_cast<void*>(lPageStartAddr), lPageSize);
 
                     size_t lOffset = lPageStartAddr - reinterpret_cast<size_t>(pDestMem);
                     pMemSection->AcquireOwnershipImmediate(lOffset, lPageSize);
@@ -557,6 +575,17 @@ pmStatus pmLinuxMemoryManager::RemoveLazyProtection(void* pAddr, size_t pLength)
 	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(reinterpret_cast<size_t>(pAddr), lPageSize);
     
 	if(::mprotect(reinterpret_cast<void*>(lPageAddr), pLength + reinterpret_cast<size_t>(pAddr) - lPageAddr, PROT_READ | PROT_WRITE) != 0)
+        PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MEM_PROT_RW_FAILED));
+    
+    return pmSuccess;
+}
+
+pmStatus pmLinuxMemoryManager::RemoveLazyWriteProtection(void* pAddr, size_t pLength)
+{
+	size_t lPageSize = static_cast<size_t>(GetVirtualMemoryPageSize());
+	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(reinterpret_cast<size_t>(pAddr), lPageSize);
+    
+	if(::mprotect(reinterpret_cast<void*>(lPageAddr), pLength + reinterpret_cast<size_t>(pAddr) - lPageAddr, PROT_READ) != 0)
         PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MEM_PROT_RW_FAILED));
     
     return pmSuccess;

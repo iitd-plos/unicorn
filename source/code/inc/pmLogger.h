@@ -53,7 +53,7 @@ public:
 
     pmStatus SetHostId(uint pHostId);
 
-    pmStatus Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg);
+    pmStatus Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine = false);
 
 private:
     pmLogger(logLevel pLogLevel);

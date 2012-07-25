@@ -308,8 +308,10 @@ pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pm
 {
     if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pTask))
         return pmSuccess;
-    
+
+#ifdef ENABLE_TASK_PROFILING
     pTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, true);
+#endif
     
 	schedulerEvent lEvent;
 	lEvent.eventId = STEAL_REQUEST_STEALER;
@@ -325,8 +327,10 @@ pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pm
     if(!pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(pTask))
         return pmSuccess;
     
+#ifdef ENABLE_TASK_PROFILING
     pTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, true);
-
+#endif
+    
 	schedulerEvent lEvent;
 	lEvent.eventId = STEAL_PROCESS_TARGET;
 	lEvent.stealProcessDetails.stealingDevice = pStealingDevice;
@@ -558,8 +562,9 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 			{
 				stealSuccessTarget& lEventDetails = pEvent.stealSuccessTargetDetails;
 
+#ifdef ENABLE_TASK_PROFILING
                 lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, false);
-
+#endif
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.range.task))
                     return SendStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
                 
@@ -570,8 +575,9 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 			{
 				stealFailTarget& lEventDetails = pEvent.stealFailTargetDetails;
 
+#ifdef ENABLE_TASK_PROFILING
                 lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, false);
-
+#endif
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.task))
                     return SendFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
                 
@@ -582,8 +588,9 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 			{
 				stealSuccessStealer& lEventDetails = pEvent.stealSuccessStealerDetails;
 
+#ifdef ENABLE_TASK_PROFILING
                 lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, false);
-            
+#endif            
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.range.task))
                     return ReceiveStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
                 
@@ -594,8 +601,9 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 			{
 				stealFailStealer& lEventDetails = pEvent.stealFailStealerDetails;
 
+#ifdef ENABLE_TASK_PROFILING
                 lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, false);
-
+#endif
                 if(pmTaskManager::GetTaskManager()->IsTaskOpenToSteal(lEventDetails.task))
                     return ReceiveFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
                 
@@ -715,6 +723,10 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                     // Send a 0 length buffer as an acknowledgement that the subscription information sent has been registered
                     lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, 0, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
 
+                #ifdef ENABLE_MEM_PROFILING
+                    lEventDetails.memSection->RecordMemTransfer(0);
+                #endif
+
                     MEM_TRANSFER_ACK_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
 
                     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
@@ -737,7 +749,11 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                         if(lRangeOwner.host == PM_LOCAL_MACHINE)
                         {
                             lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lEventDetails.memSection->GetMem()) + lInternalOffset));
-                            
+                        
+                        #ifdef ENABLE_MEM_PROFILING
+                            lEventDetails.memSection->RecordMemTransfer(lInternalLength);
+                        #endif
+                        
                             MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
 
                             pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
@@ -1122,6 +1138,9 @@ pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pm
 
 pmStatus pmScheduler::ReceiveStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
 {
+	pmTaskExecStats& lTaskExecStats = pRange.task->GetTaskExecStats();
+	lTaskExecStats.RecordSuccessfulStealAttempt(pmStubManager::GetStubManager()->GetStub(pStealingDevice));
+
 	return PushEvent(pStealingDevice, pRange);
 }
 
@@ -1164,6 +1183,7 @@ pmStatus pmScheduler::ReceiveFailedStealResponse(pmProcessingElement* pStealingD
 		PMTHROW(pmFatalErrorException());
 
 	pmTaskExecStats& lTaskExecStats = pTask->GetTaskExecStats();
+	lTaskExecStats.RecordFailedStealAttempt(pmStubManager::GetStubManager()->GetStub(pStealingDevice));
 
     return StealRequestEvent(pStealingDevice, pTask, lTaskExecStats.GetStubExecutionRate(lStub));
 }
