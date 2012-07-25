@@ -65,6 +65,7 @@ class pmMemoryManager : public pmBase
 		virtual void* AllocateLazyMemory(size_t& pLength, size_t& pPageCount) = 0;
         virtual pmStatus ApplyLazyProtection(void* pAddr, size_t pLength) = 0;
         virtual pmStatus RemoveLazyProtection(void* pAddr, size_t pLength) = 0;
+        virtual pmStatus RemoveLazyWriteProtection(void* pAddr, size_t pLength) = 0;
 #endif
 
 		virtual pmStatus DeallocateMemory(void* pMem) = 0;
@@ -111,6 +112,7 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		virtual void* AllocateLazyMemory(size_t& pLength, size_t& pPageCount);
         virtual pmStatus ApplyLazyProtection(void* pAddr, size_t pLength);
         virtual pmStatus RemoveLazyProtection(void* pAddr, size_t pLength);
+        virtual pmStatus RemoveLazyWriteProtection(void* pAddr, size_t pLength);
 
         pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr);
         pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);

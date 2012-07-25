@@ -39,6 +39,8 @@ class pmTaskExecStats : public pmBase
 			ulong subtasksExecuted;
 			double executionTime;	  // in secs
 			uint stealAttempts;
+            uint successfulSteals;
+            uint failedSteals;
 
 			stubStats();
 		} stubStats;
@@ -52,9 +54,14 @@ class pmTaskExecStats : public pmBase
 		uint GetStealAttempts(pmExecutionStub* pStub);
 		pmStatus RecordStealAttempt(pmExecutionStub* pStub);
 		pmStatus ClearStealAttempts(pmExecutionStub* pStub);
-
+    
+        uint GetSuccessfulStealAttempts(pmExecutionStub* pStub);
+        uint GetFailedStealAttempts(pmExecutionStub* pStub);
+        void RecordSuccessfulStealAttempt(pmExecutionStub* pStub);
+        void RecordFailedStealAttempt(pmExecutionStub* pStub);
+    
 	private:
-		std::map<pmExecutionStub*, stubStats> mStats;
+        std::map<pmExecutionStub*, stubStats> mStats;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 

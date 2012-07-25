@@ -55,18 +55,24 @@ pmStatus pmLogger::SetHostId(uint pHostId)
 	return pmSuccess;
 }
 
-pmStatus pmLogger::Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg)
+pmStatus pmLogger::Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine /* = false */)
 {
 	if(pMsgLevel <= mLogLevel)
 	{
 		if(pMsgType == INFORMATION)
 		{
+            if(pLeadingBlankLine)
+                fprintf(stdout, "\n");
+        
 			fprintf(stdout, "PMLIB [Host %d] %s\n", mHostId, pMsg);
 			fflush(stdout);
 		}
 		else
 		{
-			fprintf(stderr, "PMLIB [Host %d] %s\n", mHostId, pMsg);
+            if(pLeadingBlankLine)
+                fprintf(stderr, "\n");
+
+            fprintf(stderr, "PMLIB [Host %d] %s\n", mHostId, pMsg);
 			fflush(stderr);
 		}
 	}
