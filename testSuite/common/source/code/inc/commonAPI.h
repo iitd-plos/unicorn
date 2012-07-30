@@ -52,7 +52,8 @@ void commonFinish();
 	lTaskDetails.outputMemHandle = lOutputMemHandle; \
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
-    lTaskDetails.policy = schedPolicy;
+    lTaskDetails.policy = schedPolicy; \
+    lTaskDetails.autoFetchOutputMem = false;
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \

@@ -274,6 +274,8 @@ namespace pm
 		unsigned long taskId;		/* Meant for application to assign and identify tasks */
 		unsigned short priority;	/* By default, this is set to max priority level (0) */
         pmSchedulingPolicy policy;  /* By default, this is SLOW_START */
+        unsigned long timeOutInSecs;/* By default, this is max possible value in unsigned long */
+        bool autoFetchOutputMem;    /* By default, this is true */        
 		pmClusterHandle cluster;	/* Unused */
 
 		pmTaskDetails();

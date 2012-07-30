@@ -41,11 +41,10 @@ namespace execStub
 
 typedef enum eventIdentifier
 {
-        THREAD_BIND,
-        SUBTASK_EXEC,
-        SUBTASK_REDUCE,
-        SUBTASK_CANCEL,
-        SUBTASK_STEAL,
+    THREAD_BIND,
+    SUBTASK_EXEC,
+    SUBTASK_REDUCE,
+    SUBTASK_CANCEL,
 	FREE_GPU_RESOURCES
 } eventIdentifier;
 
@@ -55,42 +54,34 @@ typedef struct threadBind
 
 typedef struct subtaskExec
 {
-        pmSubtaskRange range;
-        bool rangeExecutedOnce;
-        ulong lastExecutedSubtaskId;
+    pmSubtaskRange range;
+    bool rangeExecutedOnce;
+    ulong lastExecutedSubtaskId;
 } subtaskExec;
 
 typedef struct subtaskReduce
 {
-        pmTask* task;
-        ulong subtaskId1;
-        ulong subtaskId2;
+    pmTask* task;
+    ulong subtaskId1;
+    ulong subtaskId2;
 } subtaskReduce;
 
 typedef struct subtaskCancel
 {
-        pmTask* task;   /* not to be dereferenced */
-        ushort priority;
+    pmTask* task;   /* not to be dereferenced */
+    ushort priority;
 } subtaskCancel;
-
-typedef struct subtaskSteal
-{
-        pmTask* task;
-        pmProcessingElement* requestingDevice;
-        double requestingDeviceExecutionRate;
-} subtaskSteal;
 
 typedef struct stubEvent
 {
-        eventIdentifier eventId;
-        union
-        {
-                threadBind bindDetails;
-                subtaskExec execDetails;
-                subtaskReduce reduceDetails;
-                subtaskCancel cancelDetails;
-                subtaskSteal stealDetails;
-        };
+    eventIdentifier eventId;
+    union
+    {
+        threadBind bindDetails;
+        subtaskExec execDetails;
+        subtaskReduce reduceDetails;
+        subtaskCancel cancelDetails;
+    };
 } stubEvent;
 
 }
@@ -117,8 +108,6 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		pmStatus StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pExecutionRate);
 		pmStatus CancelSubtasks(pmTask* pTask);
 
-        pmStatus ClearPendingStealCommands(pmTask* pTask);
-
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
 		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId);
@@ -130,7 +119,8 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 	private:
 		pmStatus ProcessEvent(execStub::stubEvent& pEvent);
-		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId) = 0;
+//		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId) = 0;
+        virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
 
 		uint mDeviceIndexOnMachine;
 		size_t mCoreId;
@@ -152,7 +142,7 @@ class pmStubGPU : public pmExecutionStub
 		virtual pmStatus FreeResources() = 0;
 		virtual pmStatus FreeLastExecutionResources() = 0;
 
-		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId) = 0;
+//		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId) = 0;
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
 
 	private:
@@ -172,7 +162,7 @@ class pmStubCPU : public pmExecutionStub
 
 		virtual pmDeviceTypes GetType();
 
-		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId);
+//		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId);
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId);
 
 	private:
@@ -195,7 +185,7 @@ class pmStubCUDA : public pmStubGPU
 		virtual pmStatus FreeResources();
 		virtual pmStatus FreeLastExecutionResources();
 
-		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId);
+//		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId);
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId);
 
 	private:
@@ -203,7 +193,6 @@ class pmStubCUDA : public pmStubGPU
 };
 
 bool execEventMatchFunc(execStub::stubEvent& pEvent, void* pCriterion);
-bool stealEventClearMatchFunc(execStub::stubEvent& pEvent, void* pCriterion);
 
 } // end namespace pm
 

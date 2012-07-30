@@ -260,6 +260,8 @@ pmTaskDetails::pmTaskDetails()
 	taskId = 0;
 	priority = DEFAULT_PRIORITY_LEVEL;
     policy = SLOW_START;
+    timeOutInSecs = __MAX(ulong);
+    autoFetchOutputMem = true;
 }
 
 pmStatus pmSubmitTask(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)

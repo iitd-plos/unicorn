@@ -101,15 +101,69 @@ pmStatus pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, ulong
 
 pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pExecutionRate)
 {
-	stubEvent lEvent;
-	subtaskSteal lStealDetails;
-	lStealDetails.requestingDevice = pRequestingDevice;
-	lStealDetails.requestingDeviceExecutionRate = pExecutionRate;
-	lStealDetails.task = pTask;
-	lEvent.eventId = SUBTASK_STEAL;
-	lEvent.stealDetails = lStealDetails;
-
-	return SwitchThread(lEvent, pTask->GetPriority() - 1);	// Steal events are sent at one higher priority level than the task
+    bool lStealSuccess = false;
+    ushort lPriority = pTask->GetPriority();
+    
+    stubEvent lTaskEvent;
+    if(DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pTask, lTaskEvent) == pmSuccess)
+    {    
+        double lLocalRate = pTask->GetTaskExecStats().GetStubExecutionRate(this);
+        double lRemoteRate = pExecutionRate;
+        double lTotalExecRate = lLocalRate + lRemoteRate;
+        
+        ulong lAvailableSubtasks;
+        if(lTaskEvent.execDetails.rangeExecutedOnce)
+            lAvailableSubtasks = lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.lastExecutedSubtaskId;
+        else
+            lAvailableSubtasks = lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.range.startSubtask + 1;
+        
+        double lOverheadTime = 0;	// Add network and other overheads here
+        ulong lStealCount = 0;
+        
+        if(lLocalRate == (double)0.0)
+        {
+            lStealCount = lAvailableSubtasks;
+        }
+        else
+        {
+            double lTotalExecutionTimeRequired = lAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
+            double lLocalExecutionTimeForAllSubtasks = lAvailableSubtasks / lLocalRate;	// if all subtasks are executed locally, how much time it will take
+            double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired + lOverheadTime;
+            
+            if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
+            {
+                double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
+                lStealCount = (ulong)(lTimeDiff * lLocalRate);
+            }
+        }
+        
+        if(lStealCount)
+        {                    
+            pmSubtaskRange lStolenRange;
+            lStolenRange.task = pTask;
+            lStolenRange.startSubtask = (lTaskEvent.execDetails.range.endSubtask - lStealCount) + 1;
+            lStolenRange.endSubtask = lTaskEvent.execDetails.range.endSubtask;
+            
+            lTaskEvent.execDetails.range.endSubtask -= lStealCount;
+            
+            if(lTaskEvent.execDetails.rangeExecutedOnce && lTaskEvent.execDetails.lastExecutedSubtaskId == lTaskEvent.execDetails.range.endSubtask)
+                pmScheduler::GetScheduler()->SendAcknowledment(GetProcessingElement(), lTaskEvent.execDetails.range, pmSuccess);
+            else
+                SwitchThread(lTaskEvent, pTask->GetPriority());
+            
+            lStealSuccess = true;
+            pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, GetProcessingElement(), lStolenRange);
+        }
+        else
+        {
+            SwitchThread(lTaskEvent, pTask->GetPriority());                    
+        }
+    }
+    
+    if(!lStealSuccess)
+        pmScheduler::GetScheduler()->StealFailedEvent(pRequestingDevice, GetProcessingElement(), pTask);
+    
+    return pmSuccess;
 }
 
 pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
@@ -136,13 +190,6 @@ pmStatus pmExecutionStub::FreeGpuResources()
 	return pmSuccess;
 }
     
-pmStatus pmExecutionStub::ClearPendingStealCommands(pmTask* pTask)
-{
-    DeleteMatchingCommands(pTask->GetPriority() - 1, stealEventClearMatchFunc, pTask); 	// Steal events are sent at one higher priority level than the task
-    
-    return WaitIfCurrentCommandMatches(stealEventClearMatchFunc, pTask);
-}
-
 pmStatus pmExecutionStub::ThreadSwitchCallback(stubEvent& pEvent)
 {
 	try
@@ -186,9 +233,9 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 				lCurrentRange = lRange;
 			}
 
+#if 0       // Extract all subtasks together (this will prevent subtasks from being stolen)
 			lCommand->MarkExecutionStart();
 			pmStatus lExecStatus = Execute(lCurrentRange, lLastExecutedSubtaskId);
-
 			lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
 
 			if(lLastExecutedSubtaskId < lRange.startSubtask || lLastExecutedSubtaskId > lRange.endSubtask)
@@ -196,16 +243,34 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
             pEvent.execDetails.rangeExecutedOnce = true;
             lCompletedCount = lLastExecutedSubtaskId - lCurrentRange.startSubtask + 1;
-
-			pEvent.execDetails.lastExecutedSubtaskId = lLastExecutedSubtaskId;
-
-			lRange.task->GetTaskExecStats().RecordSubtaskExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
-
-			if(lLastExecutedSubtaskId == lRange.endSubtask)
-				pmScheduler::GetScheduler()->SendAcknowledment(GetProcessingElement(), lRange, lExecStatus);
+            
+            pEvent.execDetails.lastExecutedSubtaskId = lLastExecutedSubtaskId;
+            
+            lRange.task->GetTaskExecStats().RecordSubtaskExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
+            
+            if(lLastExecutedSubtaskId == lRange.endSubtask)
+                pmScheduler::GetScheduler()->SendAcknowledment(GetProcessingElement(), lRange, lExecStatus);
             else
                 SwitchThread(pEvent, lRange.task->GetPriority());
+#else       // Only extract one subtask at a time (others subtasks might get stolen)
+            lLastExecutedSubtaskId = lCurrentRange.startSubtask;
+            lCompletedCount = 1;
+        
+            pEvent.execDetails.rangeExecutedOnce = true;
+            pEvent.execDetails.lastExecutedSubtaskId = lLastExecutedSubtaskId;
+        
+            if(lLastExecutedSubtaskId != lRange.endSubtask)
+                SwitchThread(pEvent, lRange.task->GetPriority());
 
+            lCommand->MarkExecutionStart();
+            pmStatus lExecStatus = Execute(lCurrentRange.task, lLastExecutedSubtaskId);
+            lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
+
+            lRange.task->GetTaskExecStats().RecordSubtaskExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
+
+            if(lLastExecutedSubtaskId == lRange.endSubtask)
+                pmScheduler::GetScheduler()->SendAcknowledment(GetProcessingElement(), lRange, lExecStatus);
+#endif
 			break;
 		}
 
@@ -223,74 +288,6 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			ushort lPriority = pEvent.cancelDetails.priority;
 
 			DeleteMatchingCommands(lPriority, execEventMatchFunc, lTask);
-
-			break;
-		}
-
-		case SUBTASK_STEAL:	/* Comes from scheduler thread */
-		{
-			bool lStealSuccess = false;
-			pmTask* lTask = pEvent.stealDetails.task;
-			ushort lPriority = lTask->GetPriority();
-
-			stubEvent lTaskEvent;
-			if(DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, lTask, lTaskEvent) == pmSuccess)
-			{    
-				double lLocalRate = lTask->GetTaskExecStats().GetStubExecutionRate(this);
-				double lRemoteRate = pEvent.stealDetails.requestingDeviceExecutionRate;
-				double lTotalExecRate = lLocalRate + lRemoteRate;
-			
-				ulong lAvailableSubtasks;
-				if(lTaskEvent.execDetails.rangeExecutedOnce)
-					lAvailableSubtasks = lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.lastExecutedSubtaskId;
-				else
-					lAvailableSubtasks = lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.range.startSubtask + 1;
-
-				double lOverheadTime = 0;	// Add network and other overheads here
-                ulong lStealCount = 0;
-                
-                if(lLocalRate == (double)0.0)
-                {
-                    lStealCount = lAvailableSubtasks;
-                }
-                else
-                {
-                    double lTotalExecutionTimeRequired = lAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
-                    double lLocalExecutionTimeForAllSubtasks = lAvailableSubtasks / lLocalRate;	// if all subtasks are executed locally, how much time it will take
-                    double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired + lOverheadTime;
-
-                    if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
-                    {
-                        double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
-                        lStealCount = (ulong)(lTimeDiff * lLocalRate);
-                    }
-                }
-                
-                if(lStealCount)
-                {                    
-                    pmSubtaskRange lStolenRange;
-                    lStolenRange.task = lTask;
-                    lStolenRange.startSubtask = (lTaskEvent.execDetails.range.endSubtask - lStealCount) + 1;
-                    lStolenRange.endSubtask = lTaskEvent.execDetails.range.endSubtask;
-                    
-                    lTaskEvent.execDetails.range.endSubtask -= lStealCount;
-                    
-                    if(lTaskEvent.execDetails.rangeExecutedOnce && lTaskEvent.execDetails.lastExecutedSubtaskId == lTaskEvent.execDetails.range.endSubtask)
-                        pmScheduler::GetScheduler()->SendAcknowledment(GetProcessingElement(), lTaskEvent.execDetails.range, pmSuccess);
-                    else
-                        SwitchThread(lTaskEvent, lTask->GetPriority());
-                    
-                    lStealSuccess = true;
-                    pmScheduler::GetScheduler()->StealSuccessEvent(pEvent.stealDetails.requestingDevice, GetProcessingElement(), lStolenRange);
-                }
-                else
-                {
-                    SwitchThread(lTaskEvent, lTask->GetPriority());                    
-                }
-			}
-
-			if(!lStealSuccess)
-				pmScheduler::GetScheduler()->StealFailedEvent(pEvent.stealDetails.requestingDevice, GetProcessingElement(), lTask);
 
 			break;
 		}
@@ -425,24 +422,24 @@ pmDeviceTypes pmStubCPU::GetType()
 	return CPU;
 }
 
-pmStatus pmStubCPU::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
-{
-	ulong index = pRange.startSubtask;
-	for(; index <= pRange.endSubtask; ++index)
-	{
-		Execute(pRange.task, index);
-
-		if(IsHighPriorityEventWaiting(pRange.task->GetPriority()))
-		{
-			pLastExecutedSubtaskId = index;            
-			return pmSuccess;
-		}
-	}
-
-	pLastExecutedSubtaskId = pRange.endSubtask;
-
-	return pmSuccess;
-}
+//pmStatus pmStubCPU::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
+//{
+//	ulong index = pRange.startSubtask;
+//	for(; index <= pRange.endSubtask; ++index)
+//	{
+//		Execute(pRange.task, index);
+//
+//		if(IsHighPriorityEventWaiting(pRange.task->GetPriority()))
+//		{
+//			pLastExecutedSubtaskId = index;            
+//			return pmSuccess;
+//		}
+//	}
+//
+//	pLastExecutedSubtaskId = pRange.endSubtask;
+//
+//	return pmSuccess;
+//}
 
 pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId)
 {
@@ -528,24 +525,24 @@ pmDeviceTypes pmStubCUDA::GetType()
 #endif
 }
 
-pmStatus pmStubCUDA::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
-{
-	ulong index = pRange.startSubtask;
-	for(; index <= pRange.endSubtask; ++index)
-	{
-		Execute(pRange.task, index);
-
-		if(IsHighPriorityEventWaiting(pRange.task->GetPriority()))
-		{
-			pLastExecutedSubtaskId = index;
-			return pmSuccess;
-		}
-	}
-
-	pLastExecutedSubtaskId = pRange.endSubtask;
-
-	return pmSuccess;
-}
+//pmStatus pmStubCUDA::Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId)
+//{
+//	ulong index = pRange.startSubtask;
+//	for(; index <= pRange.endSubtask; ++index)
+//	{
+//		Execute(pRange.task, index);
+//
+//		if(IsHighPriorityEventWaiting(pRange.task->GetPriority()))
+//		{
+//			pLastExecutedSubtaskId = index;
+//			return pmSuccess;
+//		}
+//	}
+//
+//	pLastExecutedSubtaskId = pRange.endSubtask;
+//
+//	return pmSuccess;
+//}
 
 pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId)
 {
@@ -567,12 +564,4 @@ bool execEventMatchFunc(stubEvent& pEvent, void* pCriterion)
 	return false;
 }
     
-bool stealEventClearMatchFunc(execStub::stubEvent& pEvent, void* pCriterion)
-{
-	if(pEvent.eventId == SUBTASK_STEAL && pEvent.execDetails.range.task == (pmTask*)pCriterion)
-		return true;
-    
-	return false;    
-}
-
 };

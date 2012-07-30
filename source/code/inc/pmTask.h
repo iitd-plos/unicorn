@@ -102,6 +102,7 @@ class pmTask : public pmBase
         ulong GetSequenceNumber();
         pmStatus SetSequenceNumber(ulong pSequenceNumber);
     
+        bool ShouldStartFaultTolerance();
         pmStatus TaskInternallyFinished();
 
 #ifdef ENABLE_TASK_PROFILING
@@ -149,6 +150,9 @@ class pmTask : public pmBase
     
         std::map<pmProcessingElement*, std::vector<pmProcessingElement*> > mStealListForDevice;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mStealListLock;
+    
+        bool mCanStartFaultTolerance;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mFaultToleranceLock;    
 
     protected:
 		uint mAssignedDeviceCount;

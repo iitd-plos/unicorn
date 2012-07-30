@@ -438,6 +438,11 @@ pmStatus pmPushSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement*
 
 	return pmSuccess;
 }
+    
+pmStatus pmPushSchedulingManager::DoFaultTolerance()
+{
+    return pmScheduler::GetScheduler()->FaultToleranceEvent(mLocalTask);
+}
 
 /* struct partitionSorter */
 bool pmPushSchedulingManager::partitionSorter::operator() (const pmSubtaskManager::pmUnfinishedPartitionPtr& pPartition1Ptr, const pmSubtaskManager::pmUnfinishedPartitionPtr& pPartition2Ptr) const
@@ -527,6 +532,11 @@ pmStatus pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(pmProces
 #endif
     
     return pmSuccess;
+}
+    
+pmStatus pmSingleAssignmentSchedulingManager::DoFaultTolerance()
+{
+    return pmScheduler::GetScheduler()->FaultToleranceEvent(mLocalTask);
 }
 
 

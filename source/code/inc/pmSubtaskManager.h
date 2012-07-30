@@ -57,6 +57,7 @@ class pmSubtaskManager : public pmBase
 		virtual bool HasTaskFinished() = 0;
 		virtual pmStatus AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask) = 0;
 		virtual pmStatus RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus) = 0;
+        virtual pmStatus DoFaultTolerance() = 0;
 
 	protected:
 		pmSubtaskManager(pmLocalTask* pLocalTask);
@@ -90,10 +91,10 @@ class pmPushSchedulingManager : public pmSubtaskManager
 		virtual ~pmPushSchedulingManager();
 
 		virtual bool HasTaskFinished();
-
 		virtual pmStatus AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask);
 		virtual pmStatus RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
-
+        virtual pmStatus DoFaultTolerance();
+    
 	private:
 		pmStatus FreezeAllocationSize(pmProcessingElement* pDevice, ulong pFreezedSize);
 		pmStatus UnfreezeAllocationSize(pmProcessingElement* pDevice);
@@ -122,9 +123,9 @@ public:
     virtual ~pmSingleAssignmentSchedulingManager();	
     
     virtual bool HasTaskFinished();
-    
     virtual pmStatus AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask) = 0;
     virtual pmStatus RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
+    virtual pmStatus DoFaultTolerance();
     
 private:
     bool HasTaskFinished_Internal();

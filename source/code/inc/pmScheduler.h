@@ -83,7 +83,8 @@ typedef enum eventIdentifier
 	MEMORY_TRANSFER,
 	COMMAND_COMPLETION,
     HOST_FINALIZATION,
-    REDISTRIBUTION_METADATA_EVENT
+    REDISTRIBUTION_METADATA_EVENT,
+    FAULT_TOLERANCE_EVENT
 } eventIdentifier;
 
 typedef struct taskSubmission
@@ -200,6 +201,11 @@ typedef struct redistributionMetaData
     std::vector<pmCommunicatorCommand::redistributionOrderStruct>* redistributionData;
     uint count;
 } redistributionMetaData;
+    
+typedef struct faultTolerance
+{
+    pmLocalTask* localTask;
+} faultTolerance;
 
 typedef struct schedulerEvent
 {
@@ -222,6 +228,7 @@ typedef struct schedulerEvent
 		memTransfer memTransferDetails;
         hostFinalization hostFinalizationDetails;
         redistributionMetaData redistributionMetaDataDetails;
+        faultTolerance faultToleranceDetails;
 	};
 
 	commandCompletion commandCompletionDetails;	
@@ -269,6 +276,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
         pmStatus RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
+        pmStatus FaultToleranceEvent(pmLocalTask* pLocalTask);
 
 		pmStatus HandleCommandCompletion(pmCommandPtr pCommand);
 
@@ -315,7 +323,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus ReceiveFailedStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask);
 		pmStatus ReceiveStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
 
-        pmStatus ClearPendingStealCommands(pmTask* pTask);
+        pmStatus ClearPendingTaskCommands(pmTask* pTask);
 		pmStatus SendTaskFinishToMachines(pmLocalTask* pLocalTask);
 
 		pmCommunicatorCommandPtr mRemoteTaskCommand;
@@ -346,7 +354,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
     static pmScheduler* mScheduler;
 };
 
-bool stealClearMatchFunc(scheduler::schedulerEvent& pEvent, void* pCriterion);
+bool taskClearMatchFunc(scheduler::schedulerEvent& pEvent, void* pCriterion);
 
 } // end namespace pm
 

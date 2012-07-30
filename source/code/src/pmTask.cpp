@@ -55,6 +55,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 	mSubtaskCount = pSubtaskCount;
 	mAssignedDeviceCount = pAssignedDeviceCount;
 	mSchedulingModel = pSchedulingModel;
+    mCanStartFaultTolerance = true;
 
 	if(pPriority < MAX_PRIORITY_LEVEL)
 		mPriority = MAX_PRIORITY_LEVEL;
@@ -399,6 +400,19 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
     mSequenceNumber = pSequenceNumber;
     
     return pmSuccess;
+}
+    
+bool pmTask::ShouldStartFaultTolerance()
+{
+	FINALIZE_RESOURCE_PTR(dFaultToleranceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mFaultToleranceLock, Lock(), Unlock());
+
+    if(mCanStartFaultTolerance)
+    {
+        mCanStartFaultTolerance = false;
+        return true;
+    }
+    
+    return false;
 }
     
 
