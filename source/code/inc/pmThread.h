@@ -29,7 +29,7 @@
 namespace pm
 {
 
-template<typename T>
+template<typename T, typename P>
 void* ThreadLoop(void* pThreadData);
 
 /**
@@ -49,7 +49,7 @@ void* ThreadLoop(void* pThreadData);
 
 // T must be default constructible
 
-template<typename T>
+template<typename T, typename P = ushort>
 class pmThread : public pmBase
 {
 	public:
@@ -61,8 +61,8 @@ class pmThread : public pmBase
 			void* clientMatchCriterion;
 		} internalMatchCriterion;
 
-		virtual ~pmThread<T>() {}
-		virtual pmStatus SwitchThread(T& pCommand, ushort pPriority) = 0;
+		virtual ~pmThread<T, P>() {}
+		virtual pmStatus SwitchThread(T& pCommand, P pPriority) = 0;
 
 		virtual pmStatus SetProcessorAffinity(int pProcesorId) = 0;
 		
@@ -73,8 +73,8 @@ class pmThread : public pmBase
     
         virtual pmStatus WaitIfCurrentCommandMatches(internalMatchFuncPtr pMatchFunc, void* pMatchCriterion) = 0;
 
-		virtual pmStatus DeleteAndGetFirstMatchingCommand(ushort pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
-        virtual pmStatus DeleteMatchingCommands(ushort pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
+		virtual pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
+        virtual pmStatus DeleteMatchingCommands(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
 
 		enum internalMessage
 		{
@@ -86,26 +86,26 @@ class pmThread : public pmBase
 		{
 			internalMessage msg;
 			T cmd;
-			typedef pmThread<T> outerType;
+			typedef pmThread<T, P> outerType;
 		} internalType;
 		
-		pmSafePQ<typename pmThread<T>::internalType>& GetPriorityQueue() {return this->mSafePQ;}
+		pmSafePQ<typename pmThread<T, P>::internalType>& GetPriorityQueue() {return this->mSafePQ;}
 
 	protected:
-		pmSafePQ<typename pmThread<T>::internalType> mSafePQ;
+		pmSafePQ<typename pmThread<T, P>::internalType> mSafePQ;
 
 	private:
 		virtual pmStatus TerminateThread() = 0;
 };
 
-template<typename T>
-class pmPThread : public pmThread<T>
+template<typename T, typename P = ushort>
+class pmPThread : public pmThread<T, P>
 {
 	public:
-		pmPThread<T>();
-		virtual ~pmPThread<T>();
+		pmPThread<T, P>();
+		virtual ~pmPThread<T, P>();
 
-		virtual pmStatus SwitchThread(T& pCommand, ushort pPriority);
+		virtual pmStatus SwitchThread(T& pCommand, P pPriority);
 
 		virtual pmStatus SetProcessorAffinity(int pProcesorId);
 
@@ -114,12 +114,12 @@ class pmPThread : public pmThread<T>
 		
         virtual pmStatus WaitForQueuedCommands();
 
-        virtual pmStatus WaitIfCurrentCommandMatches(typename pmThread<T>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
+        virtual pmStatus WaitIfCurrentCommandMatches(typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
 
-        friend void* ThreadLoop <T> (void* pThreadData);
+        friend void* ThreadLoop <T, P> (void* pThreadData);
 
 	private:
-		virtual pmStatus SubmitCommand(typename pmThread<T>::internalType& pInternalCommand, ushort pPriority);
+		virtual pmStatus SubmitCommand(typename pmThread<T, P>::internalType& pInternalCommand, P pPriority);
 		virtual pmStatus ThreadCommandLoop();
 		virtual pmStatus TerminateThread();
 
@@ -128,7 +128,7 @@ class pmPThread : public pmThread<T>
 
 		pthread_t mThread;
 
-        typename pmThread<T>::internalType mCurrentCommand;
+        typename pmThread<T, P>::internalType mCurrentCommand;
 };
 
 template<typename T> 

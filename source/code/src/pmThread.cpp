@@ -22,23 +22,23 @@ namespace pm
 {
 
 /* pmPThread Class */
-template<typename T>
-pmPThread<T>::pmPThread()
+template<typename T, typename P>
+pmPThread<T, P>::pmPThread()
 {
-	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop<T>, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
+	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop<T, P>, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
 }
 
-template<typename T>
-pmPThread<T>::~pmPThread()
+template<typename T, typename P>
+pmPThread<T, P>::~pmPThread()
 {
 	TerminateThread();
 }
 
-template<typename T>
-pmStatus pmPThread<T>::TerminateThread()
+template<typename T, typename P>
+pmStatus pmPThread<T, P>::TerminateThread()
 {
-	typename pmThread<T>::internalType lInternalCommand;
-	lInternalCommand.msg = pmThread<T>::TERMINATE;
+	typename pmThread<T, P>::internalType lInternalCommand;
+	lInternalCommand.msg = pmThread<T, P>::TERMINATE;
 
 	SubmitCommand(lInternalCommand, RESERVED_PRIORITY);
 
@@ -48,18 +48,18 @@ pmStatus pmPThread<T>::TerminateThread()
 	return pmSuccess;
 }
 
-template<typename T>
-pmStatus pmPThread<T>::SwitchThread(T& pCommand, ushort pPriority)
+template<typename T, typename P>
+pmStatus pmPThread<T, P>::SwitchThread(T& pCommand, P pPriority)
 {
-	typename pmThread<T>::internalType lInternalCommand;
-	lInternalCommand.msg = pmThread<T>::DISPATCH_COMMAND;
+	typename pmThread<T, P>::internalType lInternalCommand;
+	lInternalCommand.msg = pmThread<T, P>::DISPATCH_COMMAND;
 	lInternalCommand.cmd = pCommand;
 
 	return SubmitCommand(lInternalCommand, pPriority);
 }
 
-template<typename T>
-pmStatus pmPThread<T>::ThreadCommandLoop()
+template<typename T, typename P>
+pmStatus pmPThread<T, P>::ThreadCommandLoop()
 {
 	while(1)
 	{
@@ -71,7 +71,7 @@ pmStatus pmPThread<T>::ThreadCommandLoop()
             {
                 switch(mCurrentCommand.msg)
                 {
-                    case pmThread<T>::TERMINATE:
+                    case pmThread<T, P>::TERMINATE:
                     {
                         #ifdef DUMP_THREADS
                         pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Thread Exiting");
@@ -80,7 +80,7 @@ pmStatus pmPThread<T>::ThreadCommandLoop()
                         return pmSuccess;
                     }
                     
-                    case pmThread<T>::DISPATCH_COMMAND:
+                    case pmThread<T, P>::DISPATCH_COMMAND:
                     {
                         ThreadSwitchCallback(mCurrentCommand.cmd);
                         break;
@@ -97,18 +97,18 @@ pmStatus pmPThread<T>::ThreadCommandLoop()
 	return pmSuccess;
 }
 
-template<typename T>    
-pmStatus pmPThread<T>::WaitIfCurrentCommandMatches(typename pmThread<T>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
+template<typename T, typename P>
+pmStatus pmPThread<T, P>::WaitIfCurrentCommandMatches(typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
-	typename pmThread<T>::internalMatchCriterion lInternalMatchCriterion;
+	typename pmThread<T, P>::internalMatchCriterion lInternalMatchCriterion;
 	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
 	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
 
     return this->mSafePQ.WaitIfMatchingItemBeingProcessed(mCurrentCommand, internalMatchFunc, (void*)(&lInternalMatchCriterion));
 }
     
-template<typename T>
-pmStatus pmPThread<T>::WaitForQueuedCommands()
+template<typename T, typename P>
+pmStatus pmPThread<T, P>::WaitForQueuedCommands()
 {
     while(!this->mSafePQ.IsEmpty())
         mReverseSignalWait.Wait();
@@ -116,8 +116,8 @@ pmStatus pmPThread<T>::WaitForQueuedCommands()
     return pmSuccess;
 }
 
-template<typename T>
-pmStatus pmPThread<T>::SubmitCommand(typename pmThread<T>::internalType& pInternalCommand, ushort pPriority)
+template<typename T, typename P>
+pmStatus pmPThread<T, P>::SubmitCommand(typename pmThread<T, P>::internalType& pInternalCommand, P pPriority)
 {
 	this->mSafePQ.InsertItem(pInternalCommand, pPriority);
     mSignalWait.Signal();
@@ -125,32 +125,32 @@ pmStatus pmPThread<T>::SubmitCommand(typename pmThread<T>::internalType& pIntern
 	return pmSuccess;
 }
 
-template<typename T>
-pmStatus pmThread<T>::DeleteAndGetFirstMatchingCommand(ushort pPriority, typename pmThread<T>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem)
+template<typename T, typename P>
+pmStatus pmThread<T, P>::DeleteAndGetFirstMatchingCommand(P pPriority, typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem)
 {
-	typename pmThread<T>::internalMatchCriterion lInternalMatchCriterion;
+	typename pmThread<T, P>::internalMatchCriterion lInternalMatchCriterion;
 	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
 	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
 
-	typename pmThread<T>::internalType lInternalItem;
+	typename pmThread<T, P>::internalType lInternalItem;
 	pmStatus lStatus = this->mSafePQ.DeleteAndGetFirstMatchingItem(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion), lInternalItem);
 	pItem = lInternalItem.cmd;
 
 	return lStatus;
 }
 
-template<typename T>
-pmStatus pmThread<T>::DeleteMatchingCommands(ushort pPriority, typename pmThread<T>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
+template<typename T, typename P>
+pmStatus pmThread<T, P>::DeleteMatchingCommands(P pPriority, typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
-	typename pmThread<T>::internalMatchCriterion lInternalMatchCriterion;
+	typename pmThread<T, P>::internalMatchCriterion lInternalMatchCriterion;
 	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
 	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
 
 	return this->mSafePQ.DeleteMatchingItems(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion));
 }
 
-template<typename T>
-pmStatus pmPThread<T>::SetProcessorAffinity(int pProcessorId)
+template<typename T, typename P>
+pmStatus pmPThread<T, P>::SetProcessorAffinity(int pProcessorId)
 {
 #ifdef LINUX
 	pthread_t lThread = pthread_self();
@@ -171,10 +171,10 @@ pmStatus pmPThread<T>::SetProcessorAffinity(int pProcessorId)
 	return pmSuccess;
 }
 
-template<typename T>
+template<typename T, typename P>
 void* ThreadLoop(void* pThreadData)
 {
-	pmPThread<T>* lObjectPtr = (pmPThread<T>*)pThreadData;
+	pmPThread<T, P>* lObjectPtr = (pmPThread<T, P>*)pThreadData;
 	lObjectPtr->ThreadCommandLoop();
 
 	return NULL;

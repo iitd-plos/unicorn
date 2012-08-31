@@ -74,13 +74,17 @@ class pmDispatcherCUDA : public pmGraphicsBase
 		pmStatus InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr);
 
 #ifdef SUPPORT_CUDA
-		pmStatus InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, pmMemSection* pInputMemSection);
+		pmStatus InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber);
 
 		pmStatus FreeLastExecutionResources(size_t pBoundDeviceIndex);
 #endif
     
 	private:
 		pmStatus CountAndProbeProcessingElements();
+
+        void GetNonConsolidatedSubscriptionsForSubtask(uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, bool pIsInputMem, pmSubtaskInfo pSubtaskInfo, std::vector<std::pair<size_t, size_t> >& pSubscriptionVector);
+        
+        bool SubtasksHaveMatchingSubscriptions(uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem);
 
 		size_t mCountCUDA;
 		void* mCutilHandle;

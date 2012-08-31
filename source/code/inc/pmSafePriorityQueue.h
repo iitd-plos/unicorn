@@ -34,39 +34,39 @@ namespace pm
 
 /**
  * \brief An STL based thread safe priority queue implementation
- * Any number of priority levels can be set as long as ushort allows.
- * Higher the priority number lesser is the actual priority setting 0 to
+ * Any number of priority levels can be set as long as template argument P allows.
+ * Higher the priority number lesser is the actual priority, setting 0 to
  * be the highest priority. STL's priority queue can't be used as it does
- * not provide iterators and deleteion/inspection of random elements.
+ * not provide iterators and deletion/inspection of random elements.
  */
 
 using namespace std;
 
-template<typename T>
+template<typename T, typename P = ushort>
 class pmSafePQ : public pmBase
 {
 	public:
 		typedef bool (*matchFuncPtr)(T& pItem, void* pMatchCriterion);
 
-		pmSafePQ<T>();
-		virtual ~pmSafePQ<T>();
+		pmSafePQ<T, P>();
+		virtual ~pmSafePQ<T, P>();
 
-		pmStatus InsertItem(T& pItem, ushort pPriority);
+		pmStatus InsertItem(T& pItem, P pPriority);
 		pmStatus GetTopItem(T& pItem);
     
         pmStatus MarkProcessingFinished();
 
         pmStatus WaitIfMatchingItemBeingProcessed(T& pItem, matchFuncPtr pMatchFunc, void* pMatchCriterion);
-		pmStatus DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
-		pmStatus DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
+		pmStatus DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
+		pmStatus DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
 
-		bool IsHighPriorityElementPresent(ushort pPriority);
+		bool IsHighPriorityElementPresent(P pPriority);
 
 		bool IsEmpty();
 		uint GetSize();
 
 	private:
-		typedef map<ushort, typename std::vector<T> > priorityQueueType;
+		typedef map<P, typename std::vector<T> > priorityQueueType;
 		priorityQueueType mQueue;
         bool mIsProcessing;
 

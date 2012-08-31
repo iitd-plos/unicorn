@@ -53,9 +53,9 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
     mLazy = pIsLazy;
     
     if(mLazy)
-        mMem = lMemoryManager->AllocateLazyMemory(pLength, mVMPageCount);
+        mMem = lMemoryManager->AllocateLazyMemory(this, pLength, mVMPageCount);
     else
-        mMem = lMemoryManager->AllocateMemory(pLength, mVMPageCount);
+        mMem = lMemoryManager->AllocateMemory(this, pLength, mVMPageCount);
 #else
     mLazy = false;
 	mMem = lMemoryManager->AllocateMemory(pLength, mVMPageCount);
@@ -108,7 +108,7 @@ void pmMemSection::DisposeMemory()
         FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
         mMemSectionMap.erase(mMem);
         
-        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mMem);
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(this);
         mMem = NULL;
     }
 }

@@ -22,6 +22,9 @@
 #include "pmExecutionStub.h"
 #include "pmHardware.h"
 #include "pmMemSection.h"
+#include "pmDevicePool.h"
+#include "pmTaskManager.h"
+#include "pmSubscriptionManager.h"
 #include "pmLogger.h"
 #include "pmTask.h"
 
@@ -135,12 +138,41 @@ pmStatus pmDispatcherCUDA::InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pT
 	uint lOriginatingMachineIndex = (uint)(*(lTask->GetOriginatingHost()));
 	ulong lSequenceNumber = lTask->GetSequenceNumber();
 
-	pmMemSection* lInputMemSection = lTask->GetMemSectionRO();
-
-	return InvokeKernel(pBoundDeviceIndex, pTaskInfo, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, lOriginatingMachineIndex, lSequenceNumber, lInputMemSection);
+	return InvokeKernel(pBoundDeviceIndex, pTaskInfo, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, lOriginatingMachineIndex, lSequenceNumber);
 #else	
         return pmSuccess;
 #endif
+}
+
+void pmDispatcherCUDA::GetNonConsolidatedSubscriptionsForSubtask(uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, bool pIsInputMem, pmSubtaskInfo pSubtaskInfo, std::vector<std::pair<size_t, size_t> >& pSubscriptionVector)
+{
+    subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+
+    pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(pTaskOriginatingMachineIndex);
+    pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, pTaskSequenceNumber);
+
+    if(pIsInputMem)
+        lTask->GetSubscriptionManager().GetNonConsolidatedInputMemSubscriptionsForSubtask(pSubtaskInfo.subtaskId, lBegin, lEnd);
+    else
+        lTask->GetSubscriptionManager().GetNonConsolidatedOutputMemSubscriptionsForSubtask(pSubtaskInfo.subtaskId, lBegin, lEnd);
+    
+    if(lBegin == lEnd)
+    {
+        pSubscriptionVector.push_back(std::make_pair(0, pIsInputMem ? pSubtaskInfo.inputMemLength : pSubtaskInfo.outputMemLength));
+    }
+    else
+    {
+        for(lIter = lBegin; lIter != lEnd; ++lIter)
+            pSubscriptionVector.push_back(std::make_pair(lIter->first, lIter->second.first));
+    }
+}
+
+bool pmDispatcherCUDA::SubtasksHaveMatchingSubscriptions(uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem)
+{
+    pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(pTaskOriginatingMachineIndex);
+    pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, pTaskSequenceNumber);
+    
+    return lTask->GetSubscriptionManager().SubtasksHaveMatchingSubscriptions(pSubtaskId1, pSubtaskId2, pIsInputMem);
 }
 
 }

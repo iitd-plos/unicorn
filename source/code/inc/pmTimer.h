@@ -22,7 +22,6 @@
 #define __PM_TIMER__
 
 #include "pmBase.h"
-#include TIMER_IMPLEMENTATION_HEADER
 
 namespace pm
 {
@@ -77,8 +76,6 @@ class pmLinuxTimer : public pmTimer
 		virtual double GetElapsedTimeInSecs();
 
 	private:
-		double GetCurrentTimeInSecs();
-
 		double mStartTime;
 		double mUnpausedTime;
 };

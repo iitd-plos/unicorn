@@ -19,6 +19,8 @@
  */
 
 #include "pmSignalWait.h"
+#include TIMER_IMPLEMENTATION_HEADER
+#include STANDARD_ERROR_HEADER
 
 #ifdef TRACK_THREADS
 #include <pthread.h>
@@ -91,6 +93,45 @@ pmStatus pmPThreadSignalWait::Wait()
 	return pmSuccess;
 }
 
+bool pmPThreadSignalWait::WaitWithTimeOut(ulong pTriggerTime)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    bool lRetVal = false;
+    
+	if(mExiting)
+		return pmSuccess;
+    
+	++mWaitingThreadCount;
+    
+    THREAD_WAIT_ENTER
+    
+    struct timespec lTimespec;
+    lTimespec.tv_sec = pTriggerTime;
+    lTimespec.tv_nsec = 0;
+
+    while(!mCondEnforcer)
+    {
+		int lError = pthread_cond_timedwait(&mCondVariable, mResourceLock.GetMutex(), &lTimespec);
+        if(lError)
+        {
+            if(lError == ETIMEDOUT)
+                lRetVal = true;
+            else
+                PMTHROW(pmThreadFailureException(pmThreadFailureException::COND_VAR_WAIT_FAILURE, lError));
+        }
+    }
+    
+    THREAD_WAIT_EXIT
+    
+	--mWaitingThreadCount;
+    
+	if(mWaitingThreadCount == 0)
+		mCondEnforcer = false;
+    
+	return lRetVal;
+}
+
 pmStatus pmPThreadSignalWait::Signal()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
@@ -121,5 +162,5 @@ pmStatus pmPThreadSignalWait::WaitTillAllBlockedThreadsWakeup()
 
 	return pmSuccess;
 }
-
+    
 }

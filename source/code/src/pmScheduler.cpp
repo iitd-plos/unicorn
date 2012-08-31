@@ -1040,6 +1040,14 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 	// For now, omit steps 2 and 3 - These are anyway not required for PULL scheduling policy
 	 */
 
+    ulong lTriggerTime = pLocalTask->GetTaskTimeOutTriggerTime();
+    ulong lCurrentTime = GetIntegralCurrentTimeInSecs();
+
+    if(lCurrentTime >= lTriggerTime)
+        PMTHROW(pmFatalErrorException());   // Throw task TIMEDOUT from here
+    
+    pmTimedEventManager::GetTimedEventManager()->AddTaskTimeOutEvent(pLocalTask, lTriggerTime);
+    
 	std::set<pmProcessingElement*> lDevices;
 	pLocalTask->FindCandidateProcessingElements(lDevices);
     
@@ -1269,6 +1277,10 @@ pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskR
     
 pmStatus pmScheduler::ClearPendingTaskCommands(pmTask* pTask)
 {
+    pmLocalTask* lLocalTask = dynamic_cast<pmLocalTask*>(pTask);
+    if(lLocalTask)
+        pmTimedEventManager::GetTimedEventManager()->ClearTaskTimeOutEvent(lLocalTask, lLocalTask->GetTaskTimeOutTriggerTime());
+        
     return DeleteMatchingCommands(pTask->GetPriority(), taskClearMatchFunc, pTask);
 }
     

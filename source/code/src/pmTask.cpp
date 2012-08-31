@@ -417,12 +417,18 @@ bool pmTask::ShouldStartFaultTolerance()
     
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, 
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs,
 	pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
 	scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel)
 {
 	mSubtaskManager = NULL;
+    
+    ulong lCurrentTime = GetIntegralCurrentTimeInSecs();
+    ulong lTaskTimeOutTriggerTime = lCurrentTime + pTaskTimeOutInSecs;
+    if(pTaskTimeOutInSecs < 0 || lTaskTimeOutTriggerTime < lCurrentTime || lTaskTimeOutTriggerTime > (ulong)__MAX(int))
+        mTaskTimeOutTriggerTime = (ulong)__MAX(int);
+    
 	mTaskCommand = pmTaskCommand::CreateSharedPtr(pPriority, pmTaskCommand::BASIC_TASK);
     
 	FINALIZE_RESOURCE(dSequenceLock, mSequenceLock.Lock(), mSequenceLock.Unlock());    
@@ -479,6 +485,11 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
 	}
 
 	return pmSuccess;
+}
+    
+ulong pmLocalTask::GetTaskTimeOutTriggerTime()
+{
+    return mTaskTimeOutTriggerTime;
 }
 
 std::vector<pmProcessingElement*>& pmLocalTask::GetAssignedDevices()

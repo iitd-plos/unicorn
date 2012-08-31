@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0E29502015CAFE3A00F31801 /* pmTimedEventManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */; };
 		0EDC2EAA15B313C700937B7E /* pmTaskProfiler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EDC2EA915B313C700937B7E /* pmTaskProfiler.cpp */; };
 		0EDFDC4715A0D879003DE0D1 /* libmpi.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0EDFDC4615A0D879003DE0D1 /* libmpi.0.dylib */; };
 		0EDFDC4915A0D8AD003DE0D1 /* libmpi_cxx.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0EDFDC4815A0D8AD003DE0D1 /* libmpi_cxx.0.dylib */; };
@@ -76,6 +77,8 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTimedEventManager.cpp; sourceTree = "<group>"; };
+		0E29502115CAFE7300F31801 /* pmTimedEventManager.h */ = {isa = PBXFileReference; path = pmTimedEventManager.h; sourceTree = "<group>"; };
 		0EDC2E6A15B30FB900937B7E /* pmTaskProfiler.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmTaskProfiler.h; sourceTree = "<group>"; };
 		0EDC2EA915B313C700937B7E /* pmTaskProfiler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTaskProfiler.cpp; sourceTree = "<group>"; };
 		0EDFDC4615A0D879003DE0D1 /* libmpi.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi.0.dylib; path = "../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib/libmpi.0.dylib"; sourceTree = "<group>"; };
@@ -238,6 +241,7 @@
 				0EDC2E6A15B30FB900937B7E /* pmTaskProfiler.h */,
 				2BCCED4D151C7B07006AA45D /* pmThread.h */,
 				2BCCED4E151C7B07006AA45D /* pmTimer.h */,
+				0E29502115CAFE7300F31801 /* pmTimedEventManager.h */,
 			);
 			name = inc;
 			path = ../../../code/inc;
@@ -278,6 +282,7 @@
 				0EDC2EA915B313C700937B7E /* pmTaskProfiler.cpp */,
 				2BCCED6C151C7B07006AA45D /* pmThread.cpp */,
 				2BCCED6D151C7B07006AA45D /* pmTimer.cpp */,
+				0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */,
 			);
 			name = src;
 			path = ../../../code/src;
@@ -407,6 +412,7 @@
 				2BCCEDAA151C7B07006AA45D /* pmTimer.cpp in Sources */,
 				0EFF67BD1545CF9A00ED4E8F /* pmRedistributor.cpp in Sources */,
 				0EDC2EAA15B313C700937B7E /* pmTaskProfiler.cpp in Sources */,
+				0E29502015CAFE3A00F31801 /* pmTimedEventManager.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

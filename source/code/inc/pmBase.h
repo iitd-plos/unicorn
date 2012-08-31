@@ -53,6 +53,9 @@ class pmBase
 		void* GetExportedSymbol(void* pLibHandle, char* pSymbol);
 
 		uint GetRandomInt(uint pMaxLimit);
+    
+        ulong GetIntegralCurrentTimeInSecs();
+        double GetCurrentTimeInSecs();
 
 	private:
 		static void* AllocateMemory(size_t pSize);

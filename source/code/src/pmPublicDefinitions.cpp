@@ -260,7 +260,7 @@ pmTaskDetails::pmTaskDetails()
 	taskId = 0;
 	priority = DEFAULT_PRIORITY_LEVEL;
     policy = SLOW_START;
-    timeOutInSecs = __MAX(ulong);
+    timeOutInSecs = __MAX(int);
     autoFetchOutputMem = true;
 }
 

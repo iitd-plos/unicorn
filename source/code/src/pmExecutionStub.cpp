@@ -181,10 +181,10 @@ pmStatus pmExecutionStub::CancelSubtasks(pmTask* pTask)
 pmStatus pmExecutionStub::FreeGpuResources()
 {
 #ifdef SUPPORT_CUDA
-        stubEvent lEvent;
-        lEvent.eventId = FREE_GPU_RESOURCES;
+    stubEvent lEvent;
+    lEvent.eventId = FREE_GPU_RESOURCES;
 
-        SwitchThread(lEvent, RESERVED_PRIORITY);
+    SwitchThread(lEvent, RESERVED_PRIORITY);
 #endif
 
 	return pmSuccess;
@@ -196,10 +196,10 @@ pmStatus pmExecutionStub::ThreadSwitchCallback(stubEvent& pEvent)
 	{
 		return ProcessEvent(pEvent);
 	}
-        catch(pmException e)
-        {
-                pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from stub thread");
-        }
+    catch(pmException e)
+    {
+            pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from stub thread");
+    }
 
 	return pmSuccess;
 }

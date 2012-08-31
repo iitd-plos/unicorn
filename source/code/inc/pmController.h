@@ -32,6 +32,7 @@
 #include "pmMemoryManager.h"
 #include "pmTaskManager.h"
 #include "pmScheduler.h"
+#include "pmTimedEventManager.h"
 
 namespace pm
 {
@@ -104,6 +105,7 @@ class pmController : public pmBase
         MEMORY_MANAGER_IMPLEMENTATION_CLASS mMemoryManager;
         pmTaskManager mTaskManager;
         pmScheduler mScheduler;
+        pmTimedEventManager mTimedEventManager;
 };
 
 } // end namespace pm

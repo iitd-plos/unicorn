@@ -66,15 +66,6 @@ private:
     uint mRecursionCount[MAX_PROFILE_TYPES];
     double mAccumulatedTime[MAX_PROFILE_TYPES];
     double mActualTime[MAX_PROFILE_TYPES];
-    
-#if 0
-    void RecordProfileEvent(profileType pProfileType, size_t pStubIndex, bool pStart);
-    
-private:
-    finalize_ptr_array<TIMER_IMPLEMENTATION_CLASS> mTimer[MAX_PROFILE_TYPES];    
-    uint mRecursionCount[MAX_PROFILE_TYPES];
-    size_t mProfileCount;   // 1 plus stub count; 0th index has recursive timers for computing overlapping times
-#endif
 };
     
 } // end namespace pm

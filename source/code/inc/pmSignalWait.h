@@ -36,6 +36,7 @@ class pmSignalWait : public pmBase
 	public:
 		virtual pmStatus Wait() = 0;
 		virtual pmStatus Signal() = 0;
+        virtual bool WaitWithTimeOut(ulong pTriggerTime) = 0;    /* Returns true on timeout */
 
 	private:
 		virtual pmStatus WaitTillAllBlockedThreadsWakeup() = 0;
@@ -49,6 +50,7 @@ class pmPThreadSignalWait : public pmSignalWait
 
 		virtual pmStatus Wait();
 		virtual pmStatus Signal();
+        virtual bool WaitWithTimeOut(ulong pTriggerTime);
 
 	private:
 		virtual pmStatus WaitTillAllBlockedThreadsWakeup();

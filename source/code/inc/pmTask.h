@@ -161,7 +161,7 @@ class pmTask : public pmBase
 class pmLocalTask : public pmTask
 {
 	public:
-		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, 
+		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs,
 			pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL,
 			scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
 
@@ -184,11 +184,14 @@ class pmLocalTask : public pmTask
 
 		pmStatus InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel);
 		pmSubtaskManager* GetSubtaskManager();
+    
+        ulong GetTaskTimeOutTriggerTime();
 
 	private:
 		pmTaskCommandPtr mTaskCommand;
 		pmSubtaskManager* mSubtaskManager;
 		std::vector<pmProcessingElement*> mDevices;
+        ulong mTaskTimeOutTriggerTime;
 
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS mSequenceLock;
         static ulong mSequenceId;   // Task number at the originating host

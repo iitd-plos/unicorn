@@ -22,19 +22,19 @@ namespace pm
 {
 
 /* class pmSafePQ<T> */
-template<typename T>
-pmSafePQ<T>::pmSafePQ()
+template<typename T, typename P>
+pmSafePQ<T, P>::pmSafePQ()
 {
     mIsProcessing = false;
 }
 
-template<typename T>
-pmSafePQ<T>::~pmSafePQ()
+template<typename T, typename P>
+pmSafePQ<T, P>::~pmSafePQ()
 {
 }
 
-template<typename T>
-pmStatus pmSafePQ<T>::InsertItem(T& pItem, ushort pPriority)
+template<typename T, typename P>
+pmStatus pmSafePQ<T, P>::InsertItem(T& pItem, P pPriority)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -54,8 +54,8 @@ pmStatus pmSafePQ<T>::InsertItem(T& pItem, ushort pPriority)
 	return pmSuccess;
 }
 
-template<typename T>
-pmStatus pmSafePQ<T>::GetTopItem(T& pItem)
+template<typename T, typename P>
+pmStatus pmSafePQ<T, P>::GetTopItem(T& pItem)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -76,8 +76,8 @@ pmStatus pmSafePQ<T>::GetTopItem(T& pItem)
 	return pmSuccess;
 }
     
-template<typename T>
-pmStatus pmSafePQ<T>::MarkProcessingFinished()
+template<typename T, typename P>
+pmStatus pmSafePQ<T, P>::MarkProcessingFinished()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
     
@@ -89,8 +89,8 @@ pmStatus pmSafePQ<T>::MarkProcessingFinished()
     return pmSuccess;
 }
 
-template<typename T>
-bool pmSafePQ<T>::IsHighPriorityElementPresent(ushort pPriority)
+template<typename T, typename P>
+bool pmSafePQ<T, P>::IsHighPriorityElementPresent(P pPriority)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -102,24 +102,24 @@ bool pmSafePQ<T>::IsHighPriorityElementPresent(ushort pPriority)
 	return (lIter->first < pPriority);
 }
 
-template<typename T>
-bool pmSafePQ<T>::IsEmpty()
+template<typename T, typename P>
+bool pmSafePQ<T, P>::IsEmpty()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	return mQueue.empty();
 }
 
-template<typename T>
-uint pmSafePQ<T>::GetSize()
+template<typename T, typename P>
+uint pmSafePQ<T, P>::GetSize()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	return (uint)(mQueue.size());
 }
 
-template<typename T>
-pmStatus pmSafePQ<T>::WaitIfMatchingItemBeingProcessed(T& pItem, matchFuncPtr pMatchFunc, void* pMatchCriterion)
+template<typename T, typename P>
+pmStatus pmSafePQ<T, P>::WaitIfMatchingItemBeingProcessed(T& pItem, matchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
     while(1)
     {
@@ -136,8 +136,8 @@ pmStatus pmSafePQ<T>::WaitIfMatchingItemBeingProcessed(T& pItem, matchFuncPtr pM
     return pmSuccess;
 }
 
-template<typename T>
-pmStatus pmSafePQ<T>::DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
+template<typename T, typename P>
+pmStatus pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -159,8 +159,8 @@ pmStatus pmSafePQ<T>::DeleteMatchingItems(ushort pPriority, matchFuncPtr pMatchF
 	return pmSuccess;
 }
 
-template<typename T>
-pmStatus pmSafePQ<T>::DeleteAndGetFirstMatchingItem(ushort pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem)
+template<typename T, typename P>
+pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 

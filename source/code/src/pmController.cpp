@@ -41,7 +41,7 @@ namespace pm
 pmController* pmController::mController = NULL;
 
 pmController::pmController()
-    : mLogger(pmLogger::MINIMAL), 
+    : mLogger(pmLogger::MINIMAL),
     mDispatcherGPU(), 
     mStubManager(), 
     mNetwork(), 
@@ -49,7 +49,8 @@ pmController::pmController()
     mMachinePool(), 
     mMemoryManager(), 
     mTaskManager(), 
-    mScheduler()
+    mScheduler(),
+    mTimedEventManager()
 {    
 	mLastErrorCode = 0;
 	mFinalizedHosts = 0;
@@ -322,8 +323,8 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
         lModel = scheduler::STATIC_EQUAL;
     else if(pTaskDetails.policy == PROPORTIONAL_STATIC)
         lModel = scheduler::STATIC_PROPORTIONAL;
-    
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel);
+        
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel);
 
 	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 

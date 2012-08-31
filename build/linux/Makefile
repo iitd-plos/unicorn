@@ -86,7 +86,8 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmTaskExecStats.o \
 	$(OUTDIR)/pmTaskManager.o \
 	$(OUTDIR)/pmTaskProfiler.o \
-	$(OUTDIR)/pmTimer.o
+	$(OUTDIR)/pmTimer.o \
+	$(OUTDIR)/pmTimedEventManager.o
 
 
 CUDA_OBJECTS = $(OUTDIR)/pmDispatcherCUDA.o
