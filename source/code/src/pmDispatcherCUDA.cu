@@ -229,6 +229,9 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 	{
         if(pSubtaskInfo.outputMem && pSubtaskInfo.outputMemLength != 0)
         {
+            pmSubscriptionInfo lSubscriptionInfo;
+            GetOutputMemSubscriptionForSubtask(pStub, pOriginatingMachineIndex, pSequenceNumber, pSubtaskInfo, lSubscriptionInfo);
+
             std::vector<std::pair<size_t, size_t> > lSubscriptionVector;
             GetNonConsolidatedSubscriptionsForSubtask(pStub, pOriginatingMachineIndex, pSequenceNumber, false, pSubtaskInfo, lSubscriptionVector);
             
