@@ -223,7 +223,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 	dim3 blockConf(pCudaLaunchConf.threadsX, pCudaLaunchConf.threadsY, pCudaLaunchConf.threadsZ);
 
 	//pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem>>> (pTaskInfo, pDeviceInfo, lSubtaskInfo, lStatusPtr);
-	pKernelPtr <<<gridConf, blockConf>>> (lTaskInfo, lSubtaskInfo, lStatusPtr);
+	pKernelPtr <<<gridConf, blockConf>>> (lTaskInfo, pDeviceInfo, lSubtaskInfo, lStatusPtr);
 
 	if(cudaGetLastError() == cudaSuccess)
 	{
