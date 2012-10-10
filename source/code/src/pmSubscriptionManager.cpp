@@ -474,12 +474,14 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
     subscription::subscriptionRecordType::const_iterator lIter = pBeginIter;
     if(lMemSection->IsLazy())
     {
+    #ifdef SUPPORT_LAZY_MEMORY
         for(; lIter != pEndIter; ++lIter)
         {
             // This is wrong because the length and offset of shadow mem are not page size multiples and lazy protection is removed from entire page
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->RemoveLazyWriteProtection(lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
             memcpy(lMem + lIter->first, lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
         }
+    #endif
     }
     else
     {
