@@ -330,11 +330,10 @@ class pmCommunicatorCommand : public pmCommand
 			ulong length;
 			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
             ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host. If this flag is set, memoryTransferRequest flag is ignored
-            ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host. If this flag is set, registerOnly flag is ignored
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 8
+				FIELD_COUNT_VALUE = 7
 			} fieldCount;
 
 		} memoryTransferRequest;
