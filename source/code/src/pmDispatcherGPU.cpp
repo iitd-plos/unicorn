@@ -131,20 +131,32 @@ size_t pmDispatcherCUDA::GetCountCUDA()
 	return mCountCUDA;
 }
 
-pmStatus pmDispatcherCUDA::InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr)
+pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr)
 {
 #ifdef SUPPORT_CUDA
 	pmTask* lTask = (pmTask*)(pTaskInfo.taskHandle);
 	uint lOriginatingMachineIndex = (uint)(*(lTask->GetOriginatingHost()));
 	ulong lSequenceNumber = lTask->GetSequenceNumber();
 
-	return InvokeKernel(pBoundDeviceIndex, pTaskInfo, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, lOriginatingMachineIndex, lSequenceNumber);
+    pmDeviceInfo lDeviceInfo;
+    pStub->GetProcessingElement()->GetDeviceInfo(lDeviceInfo);
+    
+    pmMemSection* lMemSection = lTask->GetMemSectionRW();
+	return InvokeKernel(pStub, pBoundDeviceIndex, pTaskInfo, lDeviceInfo, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, lOriginatingMachineIndex, lSequenceNumber, (lMemSection ? lMemSection->GetMem() : NULL));
 #else	
         return pmSuccess;
 #endif
 }
+    
+void pmDispatcherCUDA::GetOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, pmSubtaskInfo& pSubtaskInfo, pmSubscriptionInfo& pSubscriptionInfo)
+{
+    pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(pTaskOriginatingMachineIndex);
+    pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, pTaskSequenceNumber);
 
-void pmDispatcherCUDA::GetNonConsolidatedSubscriptionsForSubtask(uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, bool pIsInputMem, pmSubtaskInfo pSubtaskInfo, std::vector<std::pair<size_t, size_t> >& pSubscriptionVector)
+    lTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pStub, pSubtaskInfo.subtaskId, pSubscriptionInfo);
+}
+
+void pmDispatcherCUDA::GetNonConsolidatedSubscriptionsForSubtask(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, bool pIsInputMem, pmSubtaskInfo& pSubtaskInfo, std::vector<std::pair<size_t, size_t> >& pSubscriptionVector)
 {
     subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
 
@@ -152,9 +164,9 @@ void pmDispatcherCUDA::GetNonConsolidatedSubscriptionsForSubtask(uint pTaskOrigi
     pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, pTaskSequenceNumber);
 
     if(pIsInputMem)
-        lTask->GetSubscriptionManager().GetNonConsolidatedInputMemSubscriptionsForSubtask(pSubtaskInfo.subtaskId, lBegin, lEnd);
+        lTask->GetSubscriptionManager().GetNonConsolidatedInputMemSubscriptionsForSubtask(pStub, pSubtaskInfo.subtaskId, lBegin, lEnd);
     else
-        lTask->GetSubscriptionManager().GetNonConsolidatedOutputMemSubscriptionsForSubtask(pSubtaskInfo.subtaskId, lBegin, lEnd);
+        lTask->GetSubscriptionManager().GetNonConsolidatedOutputMemSubscriptionsForSubtask(pStub, pSubtaskInfo.subtaskId, lBegin, lEnd);
     
     if(lBegin == lEnd)
     {
@@ -167,12 +179,12 @@ void pmDispatcherCUDA::GetNonConsolidatedSubscriptionsForSubtask(uint pTaskOrigi
     }
 }
 
-bool pmDispatcherCUDA::SubtasksHaveMatchingSubscriptions(uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem)
+bool pmDispatcherCUDA::SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem)
 {
     pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(pTaskOriginatingMachineIndex);
     pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, pTaskSequenceNumber);
     
-    return lTask->GetSubscriptionManager().SubtasksHaveMatchingSubscriptions(pSubtaskId1, pSubtaskId2, pIsInputMem);
+    return lTask->GetSubscriptionManager().SubtasksHaveMatchingSubscriptions(pStub, pSubtaskId1, pStub, pSubtaskId2, pIsInputMem);
 }
 
 }

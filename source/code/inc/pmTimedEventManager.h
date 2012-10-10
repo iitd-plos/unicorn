@@ -49,7 +49,7 @@ namespace timed
         SIGNAL_WAIT_IMPLEMENTATION_CLASS* mClearTimeOutSignalWait;
     };    
 
-    struct timedEvent
+    struct timedEvent : public pmBasicThreadEvent
     {
         eventIdentifier eventId;
         ulong triggerTime;

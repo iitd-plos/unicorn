@@ -61,8 +61,9 @@ class pmMemoryManager : public pmBase
     
 		virtual void* AllocateMemory(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount) = 0;
         virtual pmStatus DeallocateMemory(pmMemSection* pMemSection) = 0;
-    
-        virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength, bool pRegisterOnly) = 0;
+        virtual pmStatus DeallocateMemory(void* pMem) = 0;
+
+        virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength) = 0;
         virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
     
         virtual size_t GetVirtualMemoryPageSize() = 0;
@@ -100,9 +101,6 @@ namespace linuxMemManager
         
     typedef struct memSectionSpecifics
     {
-        pmInFlightRegions mInFlightLazyRegisterations;	// Lazy regions/pages being registered versus length of region and regionFetchData
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mInFlightLazyRegisterationLock;
-        
         pmInFlightRegions mInFlightMemoryMap;	// Map for regions being fetched; pair is length of region and regionFetchData
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mInFlightLock;
     } memSectionSpecifics;
@@ -117,8 +115,9 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
 		virtual void* AllocateMemory(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount);
         virtual pmStatus DeallocateMemory(pmMemSection* pMemSection);
+        virtual pmStatus DeallocateMemory(void* pMem);
 
-        virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength, bool pRegisterOnly);
+        virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength);
         virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
 
         virtual size_t GetVirtualMemoryPageSize();
@@ -133,7 +132,7 @@ class pmLinuxMemoryManager : public pmMemoryManager
         size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
         void* AllocatePageAlignedMemoryInternal(size_t& pLength, size_t& pPageCount);
 
-        pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, bool pRegisterOnly, linuxMemManager::pmInFlightRegions& pInFlightMap);
+        pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, linuxMemManager::pmInFlightRegions& pInFlightMap);
 
         void FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
         
@@ -147,7 +146,8 @@ class pmLinuxMemoryManager : public pmMemoryManager
     private:
         pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr);
         pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
-        
+        pmStatus CopyShadowMemPage(pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
+
 		pmStatus InstallSegFaultHandler();
 		pmStatus UninstallSegFaultHandler();
 

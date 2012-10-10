@@ -53,9 +53,11 @@ pmTaskManager* pmTaskManager::GetTaskManager()
 
 pmStatus pmTaskManager::SubmitTask(pmLocalTask* pLocalTask)
 {
-	mLocalTaskResourceLock.Lock();
-	mLocalTasks.insert(pLocalTask);
-	mLocalTaskResourceLock.Unlock();
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE(dResourceLock, mLocalTaskResourceLock.Lock(), mLocalTaskResourceLock.Unlock());
+        mLocalTasks.insert(pLocalTask);
+    }
 
 	pLocalTask->MarkTaskStart();
 	pmScheduler::GetScheduler()->SubmitTaskEvent(pLocalTask);
@@ -92,10 +94,7 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskA
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lInputMem, pmInputMemSection, (pRemoteTaskData->taskStruct.inputMemLength == 0) ? NULL : (new pmInputMemSection(pRemoteTaskData->taskStruct.inputMemLength, pRemoteTaskData->taskStruct.inputMemInfo == (ushort)INPUT_MEM_READ_ONLY_LAZY, lOriginatingHost, pRemoteTaskData->taskStruct.inputMemAddr)));
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lOutputMem, pmOutputMemSection, (pRemoteTaskData->taskStruct.outputMemLength == 0)? NULL : (new pmOutputMemSection(pRemoteTaskData->taskStruct.outputMemLength, 
 			((pRemoteTaskData->taskStruct.outputMemInfo == (ushort)OUTPUT_MEM_READ_WRITE || pRemoteTaskData->taskStruct.outputMemInfo == (ushort)OUTPUT_MEM_READ_WRITE_LAZY) ? pmOutputMemSection::READ_WRITE : pmOutputMemSection::WRITE_ONLY), pRemoteTaskData->taskStruct.outputMemInfo == (ushort)OUTPUT_MEM_READ_WRITE_LAZY, lOriginatingHost, pRemoteTaskData->taskStruct.outputMemAddr)));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lRemoteTask, pmRemoteTask, new pmRemoteTask(lTaskConf, pRemoteTaskData->taskStruct.taskConfLength, 
-			pRemoteTaskData->taskStruct.taskId, lInputMem, lOutputMem, pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount,
-			pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER,
-			pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)pRemoteTaskData->taskStruct.schedModel));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lRemoteTask, pmRemoteTask, new pmRemoteTask(lTaskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, lInputMem, lOutputMem, pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), (pRemoteTaskData->taskStruct.flags & TASK_MULTI_ASSIGN_FLAG_VAL)));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 
 	if(pRemoteTaskData->taskStruct.schedModel == scheduler::PULL || lRemoteTask->GetCallbackUnit()->GetDataReductionCB())
@@ -119,29 +118,26 @@ pmStatus pmTaskManager::SubmitTask(pmRemoteTask* pRemoteTask)
 	return pmSuccess;
 }
 
+// Do not derefernce pLocalTask in this method. It is already deleted from memory.
 pmStatus pmTaskManager::DeleteTask(pmLocalTask* pLocalTask)
 {
     FINALIZE_RESOURCE(dResourceLock, mLocalTaskResourceLock.Lock(), mLocalTaskResourceLock.Unlock());
     if(mLocalTasks.find(pLocalTask) == mLocalTasks.end())
-        return pmSuccess;   // Already deleted
+        return pmSuccess;
     
     mLocalTasks.erase(pLocalTask);
-
-    pLocalTask->TaskInternallyFinished();
 
     mTaskFinishSignalWait.Signal();
 
     return pmSuccess;
 }
 
+// Do not derefernce pRemoteTask in this method. It is already deleted from memory.
 pmStatus pmTaskManager::DeleteTask(pmRemoteTask* pRemoteTask)
 {
     FINALIZE_RESOURCE(dResourceLock, mRemoteTaskResourceLock.Lock(), mRemoteTaskResourceLock.Unlock());
-    SAFE_FREE(pRemoteTask->GetTaskConfiguration());
     mRemoteTasks.erase(pRemoteTask);
     
-    pRemoteTask->TaskInternallyFinished();
-
     mTaskFinishSignalWait.Signal();
     
     return pmSuccess;
@@ -267,11 +263,10 @@ pmTask* pmTaskManager::FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumb
     return lTask;
 }
 
-/** There could be unnecessary processing requests in flight when a task finishes. Depending upon, the presence of reduce or redistribution in the 
- *  task, it may get deleted at different stages which are all independent of in flight commands. So it is required to atomically check
+/** There could be unnecessary processing requests in flight when a task finishes. So it is required to atomically check
  *  the existence of task and it's subtask completion while processing commands in the scheduler thread.
 */
-bool pmTaskManager::IsTaskOpenToProcessing(pmMachine* pOriginatingHost, ulong pSequenceNumber)
+bool pmTaskManager::DoesTaskHavePendingSubtasks(pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
     bool lState = false;
     
@@ -294,7 +289,7 @@ bool pmTaskManager::IsTaskOpenToProcessing(pmMachine* pOriginatingHost, ulong pS
     return lState;
 }
     
-bool pmTaskManager::IsTaskOpenToProcessing(pmTask* pTask)
+bool pmTaskManager::DoesTaskHavePendingSubtasks(pmTask* pTask)
 {
     // Auto lock/release scope
     {

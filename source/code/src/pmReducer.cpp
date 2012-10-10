@@ -34,7 +34,6 @@ pmReducer::pmReducer(pmTask* pTask)
 {
 	mTask = pTask;
 	mReduceState = false;
-	mCurrentStubId = 0;
 	mReductionsDone = 0;
 	mExternalReductionsRequired = 0;
 	mSendToMachine = NULL;
@@ -125,7 +124,7 @@ ulong pmReducer::GetMaxPossibleExternalReductionReceives(uint pFollowingMachineC
 	return lMaxReceives;
 }
 
-pmStatus pmReducer::AddSubtask(ulong pSubtaskId)
+pmStatus pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 {
 #ifdef ENABLE_TASK_PROFILING
     mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDUCTION, true);
@@ -137,17 +136,13 @@ pmStatus pmReducer::AddSubtask(ulong pSubtaskId)
 	{
 		mReduceState = false;
 
-		pmStubManager::GetStubManager()->GetStub(mCurrentStubId)->ReduceSubtasks(mTask, mLastSubtaskId, pSubtaskId);
+		pStub->ReduceSubtasks(mTask, pSubtaskId, mLastSubtask.first, mLastSubtask.second);
 
 		++mReductionsDone;
-
-		++mCurrentStubId;
-		if(mCurrentStubId == pmStubManager::GetStubManager()->GetProcessingElementsCPU())
-			mCurrentStubId = 0;
 	}
 	else
 	{
-		mLastSubtaskId = pSubtaskId;
+		mLastSubtask = std::make_pair(pStub, pSubtaskId);
 		mReduceState = true;
 
 		CheckReductionFinishInternal();
@@ -174,15 +169,15 @@ pmStatus pmReducer::CheckReductionFinishInternal()
 	{
 		if(mSendToMachine)
 		{
-			if(mSendToMachine == PM_LOCAL_MACHINE)
+			if(mSendToMachine == PM_LOCAL_MACHINE || mLastSubtask.first == NULL)
 				PMTHROW(pmFatalErrorException());
 
 			// Send mLastSubtaskId to machine mSendToMachine for reduction
-			return pmScheduler::GetScheduler()->ReduceRequestEvent(mTask, mSendToMachine, mLastSubtaskId);
+			return pmScheduler::GetScheduler()->ReduceRequestEvent(mLastSubtask.first, mTask, mSendToMachine, mLastSubtask.second);
 		}
 		else
 		{
-			mTask->SaveFinalReducedOutput(mLastSubtaskId);
+			(static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.first, mLastSubtask.second);
 		}
 	}
 

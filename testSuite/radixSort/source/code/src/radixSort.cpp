@@ -77,7 +77,7 @@ void serialLsbRadixSort(DATA_TYPE* pInputArray, DATA_TYPE* pOutputArray, unsigne
    delete[] lTempArray;
 }
 
-pmStatus radixSortDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, unsigned long pSubtaskId, pmDeviceTypes pDeviceType)
+pmStatus radixSortDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	radixSortTaskConf* lTaskConf = (radixSortTaskConf*)(pTaskInfo.taskConf);
@@ -87,8 +87,8 @@ pmStatus radixSortDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputM
 		lSubscriptionInfo.offset = pSubtaskId * ELEMS_PER_SUBTASK * sizeof(DATA_TYPE);
 		lSubscriptionInfo.length = (lTaskConf->arrayLen < (pSubtaskId+1)*ELEMS_PER_SUBTASK) ? ((lTaskConf->arrayLen - (pSubtaskId * ELEMS_PER_SUBTASK)) * sizeof(DATA_TYPE))  : (ELEMS_PER_SUBTASK * sizeof(DATA_TYPE));
 
-		pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, true, lSubscriptionInfo);
-		pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, false, lSubscriptionInfo);
+		pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, true, lSubscriptionInfo);
+		pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, false, lSubscriptionInfo);
 	}
 	else
 	{
@@ -97,11 +97,11 @@ pmStatus radixSortDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputM
 	return pmSuccess;
 }
 
-pmStatus radixSort_cpu(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
+pmStatus radixSort_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	radixSortTaskConf* lTaskConf = (radixSortTaskConf*)(pTaskInfo.taskConf);
     
-    int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pSubtaskInfo.subtaskId, sizeof(int) * BINS_COUNT);
+    int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, sizeof(int) * BINS_COUNT);
 	
 	if(lTaskConf->sortFromMsb)
 		serialMsbRadixSortRound((DATA_TYPE*)(pSubtaskInfo.inputMem), (DATA_TYPE*)(pSubtaskInfo.outputMem), (pSubtaskInfo.inputMemLength)/sizeof(DATA_TYPE), lTaskConf->round, lBins);
@@ -111,14 +111,14 @@ pmStatus radixSort_cpu(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 	return pmSuccess;
 }
 
-pmStatus radixSortDataRedistribution(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
+pmStatus radixSortDataRedistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
-    int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pSubtaskInfo.subtaskId, 0);
+    int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, 0);
     
     size_t lOffset = 0;
 	for(int k=0; k<BINS_COUNT; ++k)
     {
-        pmRedistributeData(pTaskInfo.taskHandle, pSubtaskInfo.subtaskId, lOffset, lBins[k] * sizeof(DATA_TYPE), pTaskInfo.subtaskCount * k + pSubtaskInfo.subtaskId);
+        pmRedistributeData(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, lOffset, lBins[k] * sizeof(DATA_TYPE), pTaskInfo.subtaskCount * k + pSubtaskInfo.subtaskId);
         lOffset += lBins[k] * sizeof(DATA_TYPE);
     }
     

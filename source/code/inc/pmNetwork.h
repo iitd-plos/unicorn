@@ -39,7 +39,7 @@ class pmCluster;
 namespace network
 {
 
-typedef struct networkEvent
+typedef struct networkEvent : public pmBasicThreadEvent
 {
 } networkEvent;
 

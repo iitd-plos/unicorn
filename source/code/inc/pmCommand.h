@@ -35,6 +35,7 @@ class pmSignalWait;
 class pmLocalTask;
 class pmHardware;
 class pmMachine;
+class pmExecutionStub;
 
 class pmCommand;
 typedef std::tr1::shared_ptr<pmCommand> pmCommandPtr;
@@ -96,7 +97,7 @@ class pmCommand : public pmBase
 		size_t mDataLength;
 		pmCommandCompletionCallback mCallback;
 		pmStatus mStatus;
-		pmSignalWait* mSignalWait;
+		finalize_ptr<pmSignalWait> mSignalWait;
 		ushort mPriority;
 
 		TIMER_IMPLEMENTATION_CLASS mTimer;
@@ -150,13 +151,14 @@ class pmCommunicatorCommand : public pmCommand
 			ushort schedModel;
 			ulong inputMemAddr;		// Actual base addr of input memory
 			ulong outputMemAddr;	// Actual base addr of output memory
+            ushort flags;           // LSB - multiAssignEnabled
 
 			remoteTaskAssignStruct();
 			remoteTaskAssignStruct(pmLocalTask* pLocalTask);
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 15
+				FIELD_COUNT_VALUE = 16
 			} fieldCount;
 
 		} remoteTaskAssignStruct;
@@ -176,6 +178,13 @@ class pmCommunicatorCommand : public pmCommand
 			dataPtr taskConf;
 			dataPtr devices;
 		} remoteTaskAssignPacked;
+    
+        typedef enum subtaskAssignmentType
+        {
+            SUBTASK_ASSIGNMENT_REGULAR,
+            RANGE_NEGOTIATION,
+            SUBTASK_ASSIGNMENT_RANGE_NEGOTIATED
+        } subtaskAssignmentType;
 
 		typedef struct remoteSubtaskAssignStruct
 		{
@@ -184,13 +193,27 @@ class pmCommunicatorCommand : public pmCommand
 			ulong endSubtask;
 			uint originatingHost;
 			uint targetDeviceGlobalIndex;
+            uint originalAllotteeGlobalIndex;
+            ushort assignmentType;  // enum subtaskAssignmentType
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 5
+				FIELD_COUNT_VALUE = 7
 			} fieldCount;
 
 		} remoteSubtaskAssignStruct;
+    
+        typedef struct ownershipDataStruct
+        {
+            ulong offset;
+            ulong length;
+        
+            typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 2
+			} fieldCount;            
+
+        } ownershipDataStruct;
 
 		typedef struct sendAcknowledgementStruct
 		{
@@ -200,17 +223,31 @@ class pmCommunicatorCommand : public pmCommand
 			ulong startSubtask;
 			ulong endSubtask;
 			uint execStatus;
+            uint originalAllotteeGlobalIndex;
+            uint ownershipDataElements;
+            ulong ownerMemBaseAddr;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 6
+				FIELD_COUNT_VALUE = 9
 			} fieldCount;
 
 		} sendAcknowledgementStruct;
+    
+        typedef struct sendAcknowledgementPacked
+        {
+            sendAcknowledgementPacked();
+            sendAcknowledgementPacked(pmProcessingElement* pSourceDevice, pmSubtaskRange& pRange, ownershipDataStruct* pOwnershipData, uint pCount, pmStatus pExecStatus);
+            ~sendAcknowledgementPacked();
+        
+            sendAcknowledgementStruct ackStruct;
+            ownershipDataStruct* ownershipData;
+        } sendAcknowledgementPacked;
 
 		typedef enum taskEvents
 		{
 			TASK_FINISH_EVENT,
+            TASK_COMPLETE_EVENT,
 			TASK_CANCEL_EVENT
 		} taskEvents;
 
@@ -256,16 +293,35 @@ class pmCommunicatorCommand : public pmCommand
 			ulong sequenceNumber;	// sequence number of local task object (on originating host)
 			ushort success;			// enum stealResponseType
 			ulong startSubtask;
-			ulong endSubtask;			
+			ulong endSubtask;
+            uint originalAllotteeGlobalIndex;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 7
+				FIELD_COUNT_VALUE = 8
 			} fieldCount;
 
 		} stealResponseStruct;
 
-		typedef struct memorySubscriptionRequest
+        typedef struct ownershipTransferStruct
+        {
+            uint originatingHost;
+            ulong sequenceNumber;	// sequence number of local task object (on originating host)
+			ulong recepientBaseAddr;	// Actual base memory address on serving host
+            ulong recepientOffset;
+			ulong senderBaseAddr;	// Actual base memory address on receiving host (on destHost)
+			ulong senderOffset;
+			ulong length;
+			uint senderDeviceGlobalIndex;
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 8
+			} fieldCount;
+        
+        } ownershipTransferStruct;
+
+        typedef struct memoryTransferRequest
 		{
 			ulong ownerBaseAddr;	// Actual base memory address on serving host
 			ulong receiverBaseAddr;	// Actual base memory address on receiving host (on destHost)
@@ -273,7 +329,7 @@ class pmCommunicatorCommand : public pmCommand
 			ulong offset;
 			ulong length;
 			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
-            ushort registerOnly;    // Signifies only subscription information transfer; no data is sent back (used for lazy memory and WO memory)
+            ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host. If this flag is set, memoryTransferRequest flag is ignored
             ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host. If this flag is set, registerOnly flag is ignored
 
 			typedef enum fieldCount
@@ -281,8 +337,8 @@ class pmCommunicatorCommand : public pmCommand
 				FIELD_COUNT_VALUE = 8
 			} fieldCount;
 
-		} memorySubscriptionRequest;
-
+		} memoryTransferRequest;
+    
 		typedef struct subtaskReduceStruct
 		{
 			uint originatingHost;
@@ -301,7 +357,7 @@ class pmCommunicatorCommand : public pmCommand
 		typedef struct subtaskReducePacked
 		{
 			subtaskReducePacked();
-			subtaskReducePacked(pmTask* pTask, ulong pSubtaskId);
+			subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId);
 			~subtaskReducePacked();
 
 			subtaskReduceStruct reduceStruct;
@@ -380,6 +436,22 @@ class pmCommunicatorCommand : public pmCommand
             dataRedistributionStruct redistributionStruct;
             redistributionOrderStruct* redistributionData;
         } dataRedistributionPacked;
+    
+        typedef struct subtaskRangeCancelStruct
+        {
+			uint targetDeviceGlobalIndex;
+			uint originatingHost;
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
+			ulong startSubtask;
+			ulong endSubtask;
+            uint originalAllotteeGlobalIndex;
+
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 6
+			} fieldCount;
+
+        } subtaskRangeCancelStruct;
 
         typedef enum communicatorCommandTypes
 		{
@@ -400,12 +472,14 @@ class pmCommunicatorCommand : public pmCommand
 			TASK_EVENT_TAG,
 			STEAL_REQUEST_TAG,
 			STEAL_RESPONSE_TAG,
-			MEMORY_SUBSCRIPTION_TAG,
+            OWNERSHIP_TRANSFER_TAG,
+			MEMORY_TRANSFER_REQUEST_TAG,
 			MEMORY_RECEIVE_TAG,
 			SUBTASK_REDUCE_TAG,
 			UNKNOWN_LENGTH_TAG,
 			HOST_FINALIZATION_TAG,
             DATA_REDISTRIBUTION_TAG,
+            SUBTASK_RANGE_CANCEL_TAG,
 			MAX_COMMUNICATOR_COMMAND_TAGS
 		} communicatorCommandTags;
 
@@ -419,11 +493,14 @@ class pmCommunicatorCommand : public pmCommand
 			REMOTE_TASK_ASSIGN_STRUCT,
 			REMOTE_TASK_ASSIGN_PACKED,
 			REMOTE_SUBTASK_ASSIGN_STRUCT,
+            OWNERSHIP_DATA_STRUCT,
 			SEND_ACKNOWLEDGEMENT_STRUCT,
+            SEND_ACKNOWLEDGEMENT_PACKED,
 			TASK_EVENT_STRUCT,
 			STEAL_REQUEST_STRUCT,
 			STEAL_RESPONSE_STRUCT,
-			MEMORY_SUBSCRIPTION_STRUCT,
+            OWNERSHIP_TRANSFER_STRUCT,
+			MEMORY_TRANSFER_REQUEST_STRUCT,
 			SUBTASK_REDUCE_STRUCT,
 			SUBTASK_REDUCE_PACKED,
 			MEMORY_RECEIVE_STRUCT,
@@ -432,6 +509,7 @@ class pmCommunicatorCommand : public pmCommand
             REDISTRIBUTION_ORDER_STRUCT,
             DATA_REDISTRIBUTION_STRUCT,
             DATA_REDISTRIBUTION_PACKED,
+            SUBTASK_RANGE_CANCEL_STRUCT,
 			MAX_COMMUNICATOR_DATA_TYPES
 		} communicatorDataTypes;
 

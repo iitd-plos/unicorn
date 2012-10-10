@@ -55,7 +55,7 @@ pmMachine::operator uint()
 
 
 /* class pmProcessingElement */
-pmProcessingElement::pmProcessingElement(pmMachine* pMachine, pmDeviceTypes pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex) : mMachine(pMachine)
+pmProcessingElement::pmProcessingElement(pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex) : mMachine(pMachine)
 {
 	mDeviceIndexInMachine = pDeviceIndexInMachine;
 	mGlobalDeviceIndex = pGlobalDeviceIndex;
@@ -81,7 +81,7 @@ uint pmProcessingElement::GetGlobalDeviceIndex()
 	return mGlobalDeviceIndex;
 }
 
-pmDeviceTypes pmProcessingElement::GetType()
+pmDeviceType pmProcessingElement::GetType()
 {
 	return mDeviceType;
 }
@@ -94,28 +94,36 @@ pmExecutionStub* pmProcessingElement::GetLocalExecutionStub()
 	return pmStubManager::GetStubManager()->GetStub(mDeviceIndexInMachine);
 }
 
-pmDeviceInfo pmProcessingElement::GetDeviceInfo()
+pmDeviceInfo& pmProcessingElement::GetDeviceInfo()
 {
-	pmDeviceInfo lDeviceInfo;
+    if(!mDeviceInfo.get_ptr())
+    {
+        finalize_ptr<pmDeviceInfo> lLocalDeviceInfoAutoPtr(new pmDeviceInfo());
+        pmDeviceInfo* lDeviceInfo = lLocalDeviceInfoAutoPtr.get_ptr();
+        
+        pmDevicePool::pmDeviceData& lDeviceData = pmDevicePool::GetDevicePool()->GetDeviceData(this);
 
-	pmDevicePool::pmDeviceData& lDeviceData = pmDevicePool::GetDevicePool()->GetDeviceData(this);
+        const char* lName = lDeviceData.name.c_str();
+        const char* lDesc = lDeviceData.description.c_str();
 
-	const char* lName = lDeviceData.name.c_str();
-	const char* lDesc = lDeviceData.description.c_str();
+        size_t lNameLength = min(strlen(lName), (size_t)(MAX_NAME_STR_LEN-1));
+        size_t lDescLength = min(strlen(lDesc), (size_t)(MAX_DESC_STR_LEN-1));
+        
+        memcpy(lDeviceInfo->name, lName, lNameLength);
+        memcpy(lDeviceInfo->description, lDesc, lDescLength);
 
-	size_t lNameLength = min(strlen(lName), (size_t)(MAX_NAME_STR_LEN-1));
-	size_t lDescLength = min(strlen(lDesc), (size_t)(MAX_DESC_STR_LEN-1));
-	
-	memcpy(lDeviceInfo.name, lName, lNameLength);
-	memcpy(lDeviceInfo.description, lDesc, lDescLength);
+        lDeviceInfo->deviceHandle = static_cast<void*>(GetLocalExecutionStub());
+        lDeviceInfo->name[lNameLength] = '\0';
+        lDeviceInfo->description[lDescLength] = '\0';
 
-	lDeviceInfo.name[lNameLength] = '\0';
-	lDeviceInfo.description[lDescLength] = '\0';
-
-	lDeviceInfo.deviceTypeInfo = GetType();
-	lDeviceInfo.host = *(GetMachine());
-
-	return lDeviceInfo;
+        lDeviceInfo->deviceType = GetType();
+        lDeviceInfo->host = *(GetMachine());
+    
+        lLocalDeviceInfoAutoPtr.release();
+        mDeviceInfo.reset(lDeviceInfo);
+    }
+    
+    return *(mDeviceInfo.get_ptr());
 }
 
 pmStatus pmProcessingElement::GetMachines(std::set<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines)

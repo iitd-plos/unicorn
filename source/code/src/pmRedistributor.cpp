@@ -37,7 +37,7 @@ pmRedistributor::~pmRedistributor()
 {
 }
 
-pmStatus pmRedistributor::RedistributeData(ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder)
+pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder)
 {
     if(!pLength)
         return pmSuccess;
@@ -47,7 +47,7 @@ pmStatus pmRedistributor::RedistributeData(ulong pSubtaskId, ulong pOffset, ulon
 #endif
 
     pmSubscriptionInfo lOutputMemSubscriptionInfo;
-    if(!mTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pSubtaskId, lOutputMemSubscriptionInfo))
+    if(!mTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lOutputMemSubscriptionInfo))
         return pmInvalidOffset;
 
     ulong lGlobalOffset = lOutputMemSubscriptionInfo.offset + pOffset;
@@ -148,7 +148,7 @@ void pmRedistributor::SetRedistributedOwnership()
     lMemSection->GetUserMemHandle()->Reset(lRedistributedMemSection);
     lRedistributedMemSection->CreateLocalAssociation(lMemSection);
 
-    dynamic_cast<pmLocalTask*>(mTask)->CompleteTask();
+    dynamic_cast<pmLocalTask*>(mTask)->TaskRedistributionDone();
 }
     
 }

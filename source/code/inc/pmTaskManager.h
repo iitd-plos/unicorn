@@ -67,9 +67,9 @@ class pmTaskManager : public pmBase
         bool GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmProcessingElement* pTargetDevice, pmMachine* pOriginatingHost, ulong pSequenceNumber);
 		pmTask* FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumber);
 
-        bool IsTaskOpenToProcessing(pmTask* pTask);
-        bool IsTaskOpenToProcessing(pmMachine* pOriginatingHost, ulong pSequenceNumber);
-
+        bool DoesTaskHavePendingSubtasks(pmTask* pTask);
+        bool DoesTaskHavePendingSubtasks(pmMachine* pOriginatingHost, ulong pSequenceNumber);
+    
 	private:
 		pmTaskManager();
 

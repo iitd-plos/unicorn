@@ -74,22 +74,23 @@ class pmProcessingElement : public pmHardware
 		virtual pmMachine* GetMachine();
 		virtual uint GetDeviceIndexInMachine();
 		virtual uint GetGlobalDeviceIndex();
-		virtual pmDeviceTypes GetType();
+		virtual pmDeviceType GetType();
 
 		virtual pmExecutionStub* GetLocalExecutionStub();
-		virtual pmDeviceInfo GetDeviceInfo();
+		pmDeviceInfo& GetDeviceInfo();
 
 		static pmStatus GetMachines(std::set<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines);
 		static pmStatus GetMachines(std::vector<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines);
 		static pmStatus GetMachines(std::vector<pmProcessingElement*>& pDevices, std::vector<pmMachine*>& pMachines);
 
 	private:
-		pmProcessingElement(pmMachine* pMachine, pmDeviceTypes pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex);
+		pmProcessingElement(pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex);
 
+        finalize_ptr<pmDeviceInfo> mDeviceInfo;
 		pmMachine* mMachine;
 		uint mDeviceIndexInMachine;
 		uint mGlobalDeviceIndex;
-		pmDeviceTypes mDeviceType;
+		pmDeviceType mDeviceType;
 };
 
 } // end namespace pm

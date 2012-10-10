@@ -143,16 +143,19 @@ pmScheduler::pmScheduler()
     
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_DATA_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::TASK_EVENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::STEAL_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_TRANSFER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_STRUCT);
 
 	SetupPersistentCommunicationCommands();
 }
@@ -161,16 +164,18 @@ pmScheduler::~pmScheduler()
 {
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_DATA_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::TASK_EVENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::STEAL_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_TRANSFER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 
@@ -195,26 +200,29 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	pmCommunicatorCommand::tag, NULL, pmCommunicatorCommand::structType, recvDataPtr, 1, NULL, 0, gCommandCompletionCallback)
 
 	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT_TAG, REMOTE_SUBTASK_ASSIGN_STRUCT, &mSubtaskAssignRecvData);
-	mAcknowledgementRecvCommand = PERSISTENT_RECV_COMMAND(SEND_ACKNOWLEDGEMENT_TAG, SEND_ACKNOWLEDGEMENT_STRUCT, &mSendAckRecvData);
 	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, &mTaskEventRecvData);
 	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	&mStealRequestRecvData);
 	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, &mStealResponseRecvData);
-	mMemSubscriptionRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_SUBSCRIPTION_TAG, MEMORY_SUBSCRIPTION_STRUCT, &mMemSubscriptionRequestData);
+	mOwnershipTransferCommand = PERSISTENT_RECV_COMMAND(OWNERSHIP_TRANSFER_TAG, OWNERSHIP_TRANSFER_STRUCT, &mOwnershipTransferData);
+	mMemTransferRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_TRANSFER_REQUEST_TAG, MEMORY_TRANSFER_REQUEST_STRUCT, &mMemTransferRequestData);
+    mSubtaskRangeCancelCommand = PERSISTENT_RECV_COMMAND(SUBTASK_RANGE_CANCEL_TAG, SUBTASK_RANGE_CANCEL_STRUCT, &mSubtaskRangeCancelData);
     
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
     lNetwork->InitializePersistentCommand(mRemoteSubtaskRecvCommand.get());
-    lNetwork->InitializePersistentCommand(mAcknowledgementRecvCommand.get());
     lNetwork->InitializePersistentCommand(mTaskEventRecvCommand.get());
     lNetwork->InitializePersistentCommand(mStealRequestRecvCommand.get());
     lNetwork->InitializePersistentCommand(mStealResponseRecvCommand.get());
-    lNetwork->InitializePersistentCommand(mMemSubscriptionRequestCommand.get());
+    lNetwork->InitializePersistentCommand(mOwnershipTransferCommand.get());
+    lNetwork->InitializePersistentCommand(mMemTransferRequestCommand.get());
+    lNetwork->InitializePersistentCommand(mSubtaskRangeCancelCommand.get());
 
 	SetupNewRemoteSubtaskReception();
-	SetupNewAcknowledgementReception();
 	SetupNewTaskEventReception();
 	SetupNewStealRequestReception();
 	SetupNewStealResponseReception();
-	SetupNewMemSubscriptionRequestReception();
+	SetupNewOwnershipTransferReception();
+	SetupNewMemTransferRequestReception();
+    SetupNewSubtaskRangeCancelReception();
 	
 	// Only MPI master host receives finalization signal
 	if(pmMachinePool::GetMachinePool()->GetMachine(0) == PM_LOCAL_MACHINE)
@@ -233,11 +241,12 @@ pmStatus pmScheduler::DestroyPersistentCommunicationCommands()
 {
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
     lNetwork->TerminatePersistentCommand(mRemoteSubtaskRecvCommand.get());
-    lNetwork->TerminatePersistentCommand(mAcknowledgementRecvCommand.get());
     lNetwork->TerminatePersistentCommand(mTaskEventRecvCommand.get());
     lNetwork->TerminatePersistentCommand(mStealRequestRecvCommand.get());
     lNetwork->TerminatePersistentCommand(mStealResponseRecvCommand.get());
-    lNetwork->TerminatePersistentCommand(mMemSubscriptionRequestCommand.get());
+    lNetwork->TerminatePersistentCommand(mOwnershipTransferCommand.get());
+    lNetwork->TerminatePersistentCommand(mMemTransferRequestCommand.get());
+    lNetwork->TerminatePersistentCommand(mSubtaskRangeCancelCommand.get());
 
 	if(mHostFinalizationCommand.get())
         lNetwork->TerminatePersistentCommand(mHostFinalizationCommand.get());
@@ -248,11 +257,6 @@ pmStatus pmScheduler::DestroyPersistentCommunicationCommands()
 pmStatus pmScheduler::SetupNewRemoteSubtaskReception()
 {
 	return pmCommunicator::GetCommunicator()->Receive(mRemoteSubtaskRecvCommand, false);
-}
-
-pmStatus pmScheduler::SetupNewAcknowledgementReception()
-{
-	return pmCommunicator::GetCommunicator()->Receive(mAcknowledgementRecvCommand, false);
 }
 
 pmStatus pmScheduler::SetupNewTaskEventReception()
@@ -270,14 +274,24 @@ pmStatus pmScheduler::SetupNewStealResponseReception()
 	return pmCommunicator::GetCommunicator()->Receive(mStealResponseRecvCommand, false);
 }
 
-pmStatus pmScheduler::SetupNewMemSubscriptionRequestReception()
+pmStatus pmScheduler::SetupNewOwnershipTransferReception()
 {
-	return pmCommunicator::GetCommunicator()->Receive(mMemSubscriptionRequestCommand, false);
+	return pmCommunicator::GetCommunicator()->Receive(mOwnershipTransferCommand, false);
+}
+
+pmStatus pmScheduler::SetupNewMemTransferRequestReception()
+{
+	return pmCommunicator::GetCommunicator()->Receive(mMemTransferRequestCommand, false);
 }
 
 pmStatus pmScheduler::SetupNewHostFinalizationReception()
 {
 	return pmCommunicator::GetCommunicator()->Receive(mHostFinalizationCommand, false);
+}
+
+pmStatus pmScheduler::SetupNewSubtaskRangeCancelReception()
+{
+	return pmCommunicator::GetCommunicator()->Receive(mSubtaskRangeCancelCommand, false);
 }
 
 pmStatus pmScheduler::SubmitTaskEvent(pmLocalTask* pLocalTask)
@@ -306,7 +320,7 @@ pmStatus pmScheduler::PushEvent(pmProcessingElement* pDevice, pmSubtaskRange& pR
 
 pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate)
 {
-    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(pTask))
+    if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
         return pmSuccess;
 
 #ifdef ENABLE_TASK_PROFILING
@@ -324,7 +338,7 @@ pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pm
 
 pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate)
 {
-    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(pTask))
+    if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
         return pmSuccess;
     
 #ifdef ENABLE_TASK_PROFILING
@@ -341,9 +355,9 @@ pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pm
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::StealSuccessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange pRange)
+pmStatus pmScheduler::StealSuccessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
 {
-    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(pRange.task))
+    if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pRange.task))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -357,7 +371,7 @@ pmStatus pmScheduler::StealSuccessEvent(pmProcessingElement* pStealingDevice, pm
 
 pmStatus pmScheduler::StealFailedEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
-    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(pTask))
+    if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -369,9 +383,9 @@ pmStatus pmScheduler::StealFailedEvent(pmProcessingElement* pStealingDevice, pmP
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::StealSuccessReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange pRange)
+pmStatus pmScheduler::StealSuccessReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
 {
-    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(pRange.task))
+    if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pRange.task))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -385,7 +399,7 @@ pmStatus pmScheduler::StealSuccessReturnEvent(pmProcessingElement* pStealingDevi
 
 pmStatus pmScheduler::StealFailedReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
-    if(!pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(pTask))
+    if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
         return pmSuccess;
     
 	schedulerEvent lEvent;
@@ -397,12 +411,12 @@ pmStatus pmScheduler::StealFailedReturnEvent(pmProcessingElement* pStealingDevic
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus)
+pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap)
 {
 #ifdef TRACK_SUBTASK_EXECUTION
 	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
     mAcknowledgementsSent += (pRange.endSubtask - pRange.startSubtask + 1);
-    std::cout << "Device " << pDevice->GetGlobalDeviceIndex() << " Sent Acknowledgements " << (pRange.endSubtask - pRange.startSubtask + 1) << std::endl;
+    std::cout << "Device " << pDevice->GetGlobalDeviceIndex() << " sent " << (pRange.endSubtask - pRange.startSubtask + 1) << " acknowledgements for subtasks [" << pRange.startSubtask << " - " << pRange.endSubtask << "]" << std::endl;
 #endif
     
 	schedulerEvent lEvent;
@@ -410,17 +424,30 @@ pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, pmS
 	lEvent.ackSendDetails.device = pDevice;
 	lEvent.ackSendDetails.range = pRange;
 	lEvent.ackSendDetails.execStatus = pExecStatus;
+    lEvent.ackSendDetails.ownerMemBaseAddr = reinterpret_cast<ulong>(pRange.task->GetMemSectionRW()->GetMem());
+    lEvent.ackSendDetails.ownershipData = new pmCommunicatorCommand::ownershipDataStruct[pOwnershipMap.size()];
+    lEvent.ackSendDetails.dataElements = (uint)pOwnershipMap.size();
+    
+    std::map<size_t, size_t>::iterator lBeginIter = pOwnershipMap.begin(), lEndIter = pOwnershipMap.end();
+    for(size_t index = 0; lBeginIter != lEndIter; ++index, ++lBeginIter)
+    {
+        lEvent.ackSendDetails.ownershipData[index].offset = lBeginIter->first;
+        lEvent.ackSendDetails.ownershipData[index].length = lBeginIter->second;
+    }
 
 	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
 
-pmStatus pmScheduler::AcknowledgementReceiveEvent(pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus)
+pmStatus pmScheduler::AcknowledgementReceiveEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, ulong pRemoteMemBaseAddr, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = RECEIVE_ACKNOWLEDGEMENT;
 	lEvent.ackReceiveDetails.device = pDevice;
 	lEvent.ackReceiveDetails.range = pRange;
 	lEvent.ackReceiveDetails.execStatus = pExecStatus;
+    lEvent.ackSendDetails.ownerMemBaseAddr = pRemoteMemBaseAddr;
+	lEvent.ackReceiveDetails.ownershipData = pOwnershipData;
+    lEvent.ackSendDetails.dataElements = pDataElements;
 
 	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
@@ -443,18 +470,28 @@ pmStatus pmScheduler::TaskFinishEvent(pmTask* pTask)
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::ReduceRequestEvent(pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId)
+pmStatus pmScheduler::TaskCompleteEvent(pmLocalTask* pLocalTask)
+{
+	schedulerEvent lEvent;
+	lEvent.eventId = TASK_COMPLETE;
+	lEvent.taskCompleteDetails.localTask = pLocalTask;
+
+	return SwitchThread(lEvent, pLocalTask->GetPriority());
+}
+
+pmStatus pmScheduler::ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = SUBTASK_REDUCE;
 	lEvent.subtaskReduceDetails.task = pTask;
 	lEvent.subtaskReduceDetails.machine = pDestMachine;
+    lEvent.subtaskReduceDetails.reducingStub = pReducingStub;
 	lEvent.subtaskReduceDetails.subtaskId = pSubtaskId;
 
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, bool pRegisterOnly, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority)
+pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = MEMORY_TRANSFER;
@@ -465,7 +502,6 @@ pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffs
 	lEvent.memTransferDetails.destMemBaseAddr = pDestMemBaseAddr;
 	lEvent.memTransferDetails.receiverOffset = pReceiverOffset;
 	lEvent.memTransferDetails.priority = pPriority;
-    lEvent.memTransferDetails.registerOnly = pRegisterOnly;
     lEvent.memTransferDetails.isForwarded = pIsForwarded;
 
 	return SwitchThread(lEvent, pPriority);
@@ -480,6 +516,16 @@ pmStatus pmScheduler::CommandCompletionEvent(pmCommandPtr pCommand)
 	return SwitchThread(lEvent, pCommand->GetPriority());
 }
 
+pmStatus pmScheduler::RangeCancellationEvent(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
+{
+	schedulerEvent lEvent;
+	lEvent.eventId = SUBTASK_RANGE_CANCEL;
+    lEvent.subtaskRangeCancelDetails.targetDevice = pTargetDevice;
+	lEvent.subtaskRangeCancelDetails.range = pRange;
+    
+	return SwitchThread(lEvent, pRange.task->GetPriority());
+}
+    
 pmStatus pmScheduler::RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount)
 {
 	schedulerEvent lEvent;
@@ -491,15 +537,35 @@ pmStatus pmScheduler::RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmC
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
     
-pmStatus pmScheduler::FaultToleranceEvent(pmLocalTask* pLocalTask)
+pmStatus pmScheduler::RangeNegotiationEvent(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange)
 {
     schedulerEvent lEvent;
-    lEvent.eventId = FAULT_TOLERANCE_EVENT;
-    lEvent.faultToleranceDetails.localTask = pLocalTask;
-    
-	return SwitchThread(lEvent, pLocalTask->GetPriority());
-}
+    lEvent.eventId = RANGE_NEGOTIATION_EVENT;
+    lEvent.rangeNegotiationDetails.requestingDevice = pRequestingDevice;
+    lEvent.rangeNegotiationDetails.range = pRange;
 
+	return SwitchThread(lEvent, pRange.task->GetPriority());
+}
+    
+pmStatus pmScheduler::RangeNegotiationSuccessEvent(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pNegotiatedRange)
+{
+    schedulerEvent lEvent;
+    lEvent.eventId = RANGE_NEGOTIATION_SUCCESS_EVENT;
+    lEvent.rangeNegotiationSuccessDetails.requestingDevice = pRequestingDevice;
+    lEvent.rangeNegotiationSuccessDetails.negotiatedRange = pNegotiatedRange;
+    
+	return SwitchThread(lEvent, pNegotiatedRange.task->GetPriority());
+}
+    
+pmStatus pmScheduler::TerminateTaskEvent(pmTask* pTask)
+{
+    schedulerEvent lEvent;
+    lEvent.eventId = TERMINATE_TASK;
+    lEvent.taskTerminateDetails.task = pTask;
+
+	return SwitchThread(lEvent, pTask->GetPriority());
+}
+    
 pmStatus pmScheduler::SendFinalizationSignal()
 {
 	schedulerEvent lEvent;
@@ -544,14 +610,15 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
 		case SUBTASK_EXECUTION:	/* Comes from network thread or from scheduler thread for local submissions */
         {
-            return PushToStub(pEvent.execDetails.device, pEvent.execDetails.range);
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pEvent.execDetails.range.task))
+                return PushToStub(pEvent.execDetails.device, pEvent.execDetails.range);
         }
 
 		case STEAL_REQUEST_STEALER:	/* Comes from stub thread */
         {
             stealRequest& lRequest = pEvent.stealRequestDetails;
 
-            if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lRequest.task))
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lRequest.task))
                 return StealSubtasks(lRequest.stealingDevice, lRequest.task, lRequest.stealingDeviceExecutionRate);
             
             break;
@@ -561,7 +628,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
         {
             stealProcess& lEventDetails = pEvent.stealProcessDetails;
 
-            if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lEventDetails.task))
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.task))
                 return ServeStealRequest(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task, lEventDetails.stealingDeviceExecutionRate);
             
             break;
@@ -572,7 +639,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             pmStatus lStatus = pmSuccess;
             stealSuccessTarget& lEventDetails = pEvent.stealSuccessTargetDetails;
 
-            if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lEventDetails.range.task))
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.range.task))
                 lStatus = SendStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
             
 #ifdef ENABLE_TASK_PROFILING
@@ -586,7 +653,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             pmStatus lStatus = pmSuccess;
             stealFailTarget& lEventDetails = pEvent.stealFailTargetDetails;
 
-            if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lEventDetails.task))
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.task))
                 lStatus = SendFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
             
 #ifdef ENABLE_TASK_PROFILING
@@ -602,7 +669,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 #ifdef ENABLE_TASK_PROFILING
             lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, false);
 #endif            
-            if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lEventDetails.range.task))
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.range.task))
                 return ReceiveStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
             
             break;
@@ -615,7 +682,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 #ifdef ENABLE_TASK_PROFILING
             lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, false);
 #endif
-            if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lEventDetails.task))
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.task))
                 return ReceiveFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
             
             break;
@@ -626,29 +693,24 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             sendAcknowledgement& lEventDetails = pEvent.ackSendDetails;
 
             pmTask* lTask = lEventDetails.range.task;
-            pmMachine* lOriginatingHost = lTask->GetOriginatingHost();
+        
+            if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lTask))
+                break;
         
             lTask->IncrementSubtasksExecuted(lEventDetails.range.endSubtask - lEventDetails.range.startSubtask + 1);
 
+            pmMachine* lOriginatingHost = lTask->GetOriginatingHost();
             if(lOriginatingHost == PM_LOCAL_MACHINE)
             {
-                return AcknowledgementReceiveEvent(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus);
+                return AcknowledgementReceiveEvent(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, lEventDetails.ownerMemBaseAddr, lEventDetails.ownershipData, lEventDetails.dataElements);
             }
             else
             {
-                pmCommunicatorCommand::sendAcknowledgementStruct* lAckData = new pmCommunicatorCommand::sendAcknowledgementStruct();
-                lAckData->sourceDeviceGlobalIndex = lEventDetails.device->GetGlobalDeviceIndex();
-                lAckData->originatingHost = *(lOriginatingHost);
-                lAckData->sequenceNumber = lTask->GetSequenceNumber();
-                lAckData->startSubtask = lEventDetails.range.startSubtask;
-                lAckData->endSubtask = lEventDetails.range.endSubtask;
-                lAckData->execStatus = (uint)(lEventDetails.execStatus);
-
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG, 
-                        lOriginatingHost, pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT, (void*)lAckData, 
-                        1, NULL, 0, gCommandCompletionCallback);
-
-                pmCommunicator::GetCommunicator()->Send(lCommand, false);
+                pmCommunicatorCommand::sendAcknowledgementPacked* lPackedData = new pmCommunicatorCommand::sendAcknowledgementPacked(lEventDetails.device, lEventDetails.range, lEventDetails.ownershipData, lEventDetails.dataElements, lEventDetails.execStatus);
+                
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG, lOriginatingHost, pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+                
+                pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
             }
 
             break;
@@ -657,7 +719,9 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 		case RECEIVE_ACKNOWLEDGEMENT:
         {
             receiveAcknowledgement& lEventDetails = pEvent.ackReceiveDetails;
-            return ProcessAcknowledgement((pmLocalTask*)(lEventDetails.range.task), lEventDetails.device, lEventDetails.range, lEventDetails.execStatus);
+
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.range.task))
+                return ProcessAcknowledgement((pmLocalTask*)(lEventDetails.range.task), lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, lEventDetails.ownerMemBaseAddr, lEventDetails.ownershipData, lEventDetails.dataElements);
         }
 
 		case TASK_CANCEL:
@@ -665,22 +729,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             taskCancel& lEventDetails = pEvent.taskCancelDetails;
             pmTask* lTask = lEventDetails.task;
 
-            std::vector<pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(lTask) != NULL) ? (((pmLocalTask*)lTask)->GetAssignedDevices()) : (((pmRemoteTask*)lTask)->GetAssignedDevices());
-            size_t lCount = lDevices.size();
-            pmStubManager* lManager = pmStubManager::GetStubManager();
-            for(size_t i=0; i<lCount; ++i)
-            {
-                if(lDevices[i]->GetMachine() == PM_LOCAL_MACHINE)
-                {
-                    pmExecutionStub* lStub = lManager->GetStub(lDevices[i]);
-
-                    if(!lStub)
-                        PMTHROW(pmFatalErrorException());
-
-                    lStub->CancelSubtasks(lTask);
-                }
-            }
-
+            CancelAllSubtasksExecutingOnLocalStubs(lTask);
             break;
         }
 
@@ -689,8 +738,24 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             taskFinish& lEventDetails = pEvent.taskFinishDetails;
             pmTask* lTask = lEventDetails.task;
 
-            ClearPendingTaskCommands(lTask);
             lTask->MarkSubtaskExecutionFinished();
+            ClearPendingTaskCommands(lTask);
+            
+            if(lTask->IsMultiAssignEnabled())
+            {
+                lTask->PrepareForTaskCompletionMessage();
+                CancelAllSubtasksExecutingOnLocalStubs(lTask);
+            }
+
+            break;
+        }
+
+		case TASK_COMPLETE:
+        {
+            taskComplete& lEventDetails = pEvent.taskCompleteDetails;
+            pmLocalTask* lLocalTask = lEventDetails.localTask;
+
+            lLocalTask->RegisterInternalTaskCompletionMessage();
 
             break;
         }
@@ -699,16 +764,26 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
         {
             subtaskReduce& lEventDetails = pEvent.subtaskReduceDetails;
 
-            pmCommunicatorCommand::subtaskReducePacked* lPackedData = new pmCommunicatorCommand::subtaskReducePacked(lEventDetails.task, lEventDetails.subtaskId);
+            pmCommunicatorCommand::subtaskReducePacked* lPackedData = new pmCommunicatorCommand::subtaskReducePacked(lEventDetails.reducingStub, lEventDetails.task, lEventDetails.subtaskId);
 
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::SUBTASK_REDUCE_TAG, 
-                    lEventDetails.machine, pmCommunicatorCommand::SUBTASK_REDUCE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::SUBTASK_REDUCE_TAG, lEventDetails.machine, pmCommunicatorCommand::SUBTASK_REDUCE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
 
             pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
 
             break;
         }
 
+		case OWNERSHIP_TRANSFER:
+        {
+            ownershipTransfer& lEventDetails = pEvent.ownershipTransferDetails;
+            if(lEventDetails.senderDevice->GetMachine() == PM_LOCAL_MACHINE)
+                PMTHROW(pmFatalErrorException());
+        
+//            lEventDetails.memSection->TransferOwnershipPostTaskCompletion(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length);
+        
+            break;
+        }
+        
 		case MEMORY_TRANSFER:
         {
             memTransfer& lEventDetails = pEvent.memTransferDetails;
@@ -716,80 +791,52 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             if(lEventDetails.machine == PM_LOCAL_MACHINE && !lEventDetails.isForwarded)
                 PMTHROW(pmFatalErrorException());   // Cyclic reference
             
-            if(dynamic_cast<pmOutputMemSection*>(lEventDetails.memSection))
-            {
-                if(!lEventDetails.memSection->IsLazy() || lEventDetails.registerOnly)
-                    lEventDetails.memSection->TransferOwnershipPostTaskCompletion(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length);
-            }
-            
             pmCommunicatorCommand::memoryReceivePacked* lPackedData = NULL;
             
-            if(lEventDetails.registerOnly)
+            // Check if the memory is residing locally or forward the request to the owner machine
+            pmMemSection::pmMemOwnership lOwnerships;
+            lEventDetails.memSection->GetOwners(lEventDetails.offset, lEventDetails.length, false, lOwnerships);
+            
+            pmMemSection::pmMemOwnership::iterator lStartIter = lOwnerships.begin(), lEndIter = lOwnerships.end(), lIter;                    
+            for(lIter = lStartIter; lIter != lEndIter; ++lIter)
             {
-                if(lEventDetails.isForwarded)
-                    PMTHROW(pmFatalErrorException());
+                ulong lInternalOffset = lIter->first;
+                ulong lInternalLength = lIter->second.first;
+                pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
                 
-                // Send a 0 length buffer as an acknowledgement that the subscription information sent has been registered
-                lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, 0, (void*)((char*)(lEventDetails.memSection->GetMem()) + lEventDetails.offset));
-
-            #ifdef ENABLE_MEM_PROFILING
-                lEventDetails.memSection->RecordMemTransfer(0);
-            #endif
-
-                MEM_TRANSFER_ACK_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length, (uint)(*(lEventDetails.machine)))
-
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
-                
-                pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
-            }
-            else
-            {
-                // Check if the memory is residing locally or forward the request to the owner machine
-                pmMemSection::pmMemOwnership lOwnerships;
-                lEventDetails.memSection->GetOwners(lEventDetails.offset, lEventDetails.length, false, lOwnerships);
-                
-                pmMemSection::pmMemOwnership::iterator lStartIter = lOwnerships.begin(), lEndIter = lOwnerships.end(), lIter;                    
-                for(lIter = lStartIter; lIter != lEndIter; ++lIter)
+                if(lRangeOwner.host == PM_LOCAL_MACHINE)
                 {
-                    ulong lInternalOffset = lIter->first;
-                    ulong lInternalLength = lIter->second.first;
-                    pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
-                    
-                    if(lRangeOwner.host == PM_LOCAL_MACHINE)
-                    {
-                        lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lEventDetails.memSection->GetMem()) + lInternalOffset));
-                    
-                    #ifdef ENABLE_MEM_PROFILING
-                        lEventDetails.memSection->RecordMemTransfer(lInternalLength);
-                    #endif
-                    
-                        MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
+                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lEventDetails.memSection->GetMem()) + lInternalOffset));
+                
+                #ifdef ENABLE_MEM_PROFILING
+                    lEventDetails.memSection->RecordMemTransfer(lInternalLength);
+                #endif
+                
+                    MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
 
-                        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
-                        
-                        pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
-                    }
-                    else
-                    {
-                        if(lEventDetails.isForwarded)
-                            PMTHROW(pmFatalErrorException());
-                        
-                        pmCommunicatorCommand::memorySubscriptionRequest* lData = new pmCommunicatorCommand::memorySubscriptionRequest();
-                        lData->ownerBaseAddr = lRangeOwner.hostBaseAddr;    // page aligned
-                        lData->receiverBaseAddr = lEventDetails.destMemBaseAddr;    // page aligned
-                        lData->receiverOffset = lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset;
-                        lData->offset = lRangeOwner.hostOffset;
-                        lData->length = lInternalLength;
-                        lData->destHost = *(lEventDetails.machine);
-                        lData->registerOnly = 0;
-                        lData->isForwarded = 1;
-                        
-                        MEM_FORWARD_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.hostBaseAddr, lRangeOwner.hostOffset)
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+                    
+                    pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+                }
+                else
+                {
+                    if(lEventDetails.isForwarded)
+                        PMTHROW(pmFatalErrorException());
+                    
+                    pmCommunicatorCommand::memoryTransferRequest* lData = new pmCommunicatorCommand::memoryTransferRequest();
+                    lData->ownerBaseAddr = lRangeOwner.hostBaseAddr;    // page aligned
+                    lData->receiverBaseAddr = lEventDetails.destMemBaseAddr;    // page aligned
+                    lData->receiverOffset = lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset;
+                    lData->offset = lRangeOwner.hostOffset;
+                    lData->length = lInternalLength;
+                    lData->destHost = *(lEventDetails.machine);
+                    lData->isForwarded = 1;
+                    
+                    MEM_FORWARD_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.hostBaseAddr, lRangeOwner.hostOffset)
 
-                        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, lRangeOwner.host, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, 1, NULL, 0, gCommandCompletionCallback);
-                        
-                        pmCommunicator::GetCommunicator()->Send(lCommand);
-                    }
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, lRangeOwner.host, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0, gCommandCompletionCallback);
+                    
+                    pmCommunicator::GetCommunicator()->Send(lCommand);
                 }
             }
             
@@ -805,10 +852,22 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             break;
         }
             
+        case SUBTASK_RANGE_CANCEL:
+        {
+            subtaskRangeCancel& lEventDetails = pEvent.subtaskRangeCancelDetails;
+            
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.range.task))
+            {
+                pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetStub(lEventDetails.targetDevice);
+                lStub->CancelSubtaskRange(lEventDetails.range);
+            }
+        
+            break;
+        }
+        
         case REDISTRIBUTION_METADATA_EVENT:
         {
             redistributionMetaData& lEventDetails = pEvent.redistributionMetaDataDetails;
-
             SendRedistributionData(lEventDetails.task, lEventDetails.redistributionData, lEventDetails.count);
             
             break;
@@ -849,24 +908,175 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             break;
         }
         
-        case FAULT_TOLERANCE_EVENT:
+        case RANGE_NEGOTIATION_EVENT:
         {
-            faultTolerance& lEventDetails = pEvent.faultToleranceDetails;
-            if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lEventDetails.localTask))
-                lEventDetails.localTask->GetSubtaskManager()->DoFaultTolerance();
+            rangeNegotiation& lEventDetails = pEvent.rangeNegotiationDetails;
         
-            /**
-             *  1. User sets a timeout on a task
-             *  2. Add a timed event which will post a TASK_CANCEL message to scheduler queue after the timeout
-             *  3. If the task finishes before timeout, it cancels the timed event
-             *  4. Upon completion of all subtasks assigned (or stolen) to a device, it adds a fault tolerance event to the scheduler queue
-             */
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.range.task))
+            {
+                if(lEventDetails.range.originalAllottee == NULL || lEventDetails.range.originalAllottee->GetMachine() != PM_LOCAL_MACHINE)
+                    PMTHROW(pmFatalErrorException());
+            
+                pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetStub(lEventDetails.range.originalAllottee);
+                lStub->NegotiateRange(lEventDetails.requestingDevice, lEventDetails.range);
+            }
         
             break;
         }
-	}
+
+        case RANGE_NEGOTIATION_SUCCESS_EVENT:
+        {
+            rangeNegotiationSuccess& lEventDetails = pEvent.rangeNegotiationSuccessDetails;
+        
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.negotiatedRange.task))
+            {
+                if(lEventDetails.negotiatedRange.originalAllottee == NULL || lEventDetails.requestingDevice->GetMachine() != PM_LOCAL_MACHINE)
+                    PMTHROW(pmFatalErrorException());
+            
+                pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetStub(lEventDetails.requestingDevice);
+                lStub->ProcessNegotiatedRange(lEventDetails.negotiatedRange);
+            }
+        
+            break;
+        }
+        
+        case TERMINATE_TASK:
+        {
+            taskTerminate& lEventDetails = pEvent.taskTerminateDetails;
+        
+            if(dynamic_cast<pmLocalTask*>(lEventDetails.task) != NULL)
+            {
+                delete lEventDetails.task;
+                pmTaskManager::GetTaskManager()->DeleteTask(static_cast<pmLocalTask*>(lEventDetails.task));
+            }
+            else
+            {
+                delete lEventDetails.task;
+                pmTaskManager::GetTaskManager()->DeleteTask(static_cast<pmRemoteTask*>(lEventDetails.task));
+            }
+
+            break;
+        }
+    }
 
 	return pmSuccess;
+}
+
+void pmScheduler::CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask)
+{
+    pmStubManager* lManager = pmStubManager::GetStubManager();
+    uint lStubCount = (uint)(lManager->GetStubCount());
+    for(uint i = 0; i < lStubCount; ++i)
+        lManager->GetStub(i)->CancelAllSubtasks(pTask);
+}
+    
+pmStatus pmScheduler::NegotiateSubtaskRangeWithOriginalAllottee(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange)
+{
+    pmProcessingElement* lOriginalAllottee = pRange.originalAllottee;
+    if(lOriginalAllottee == NULL || lOriginalAllottee == pRequestingDevice)
+        PMTHROW(pmFatalErrorException());
+    
+	pmMachine* lMachine = lOriginalAllottee->GetMachine();
+
+	if(lMachine == PM_LOCAL_MACHINE)
+	{
+		return RangeNegotiationEvent(pRequestingDevice, pRange);
+	}
+	else
+	{
+		pmCommunicatorCommand::remoteSubtaskAssignStruct* lSubtaskData = new pmCommunicatorCommand::remoteSubtaskAssignStruct();
+		lSubtaskData->sequenceNumber = pRange.task->GetSequenceNumber();
+		lSubtaskData->startSubtask = pRange.startSubtask;
+		lSubtaskData->endSubtask = pRange.endSubtask;
+        lSubtaskData->originalAllotteeGlobalIndex = pRange.originalAllottee->GetGlobalDeviceIndex();
+		lSubtaskData->originatingHost = *(pRange.task->GetOriginatingHost());
+		lSubtaskData->targetDeviceGlobalIndex = pRequestingDevice->GetGlobalDeviceIndex();
+        lSubtaskData->assignmentType = pmCommunicatorCommand::RANGE_NEGOTIATION;
+
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, gCommandCompletionCallback);
+
+		pmCommunicator::GetCommunicator()->Send(lCommand, false);
+	}
+
+    return pmSuccess;
+}
+    
+pmStatus pmScheduler::SendRangeNegotiationSuccess(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pNegotiatedRange)
+{
+    pmProcessingElement* lOriginalAllottee = pNegotiatedRange.originalAllottee;
+    if(lOriginalAllottee == NULL || lOriginalAllottee == pRequestingDevice)
+        PMTHROW(pmFatalErrorException());
+    
+	pmMachine* lMachine = pRequestingDevice->GetMachine();
+
+	if(lMachine == PM_LOCAL_MACHINE)
+	{
+		return RangeNegotiationSuccessEvent(pRequestingDevice, pNegotiatedRange);
+	}
+	else
+	{
+		pmCommunicatorCommand::remoteSubtaskAssignStruct* lSubtaskData = new pmCommunicatorCommand::remoteSubtaskAssignStruct();
+		lSubtaskData->sequenceNumber = pNegotiatedRange.task->GetSequenceNumber();
+		lSubtaskData->startSubtask = pNegotiatedRange.startSubtask;
+		lSubtaskData->endSubtask = pNegotiatedRange.endSubtask;
+        lSubtaskData->originalAllotteeGlobalIndex = pNegotiatedRange.originalAllottee->GetGlobalDeviceIndex();
+		lSubtaskData->originatingHost = *(pNegotiatedRange.task->GetOriginatingHost());
+		lSubtaskData->targetDeviceGlobalIndex = pRequestingDevice->GetGlobalDeviceIndex();
+        lSubtaskData->assignmentType = pmCommunicatorCommand::SUBTASK_ASSIGNMENT_RANGE_NEGOTIATED;
+
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pNegotiatedRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, gCommandCompletionCallback);
+
+		pmCommunicator::GetCommunicator()->Send(lCommand, false);
+	}
+    
+    return pmSuccess;
+}
+    
+pmStatus pmScheduler::SendPostTaskOwnershipTransfer(pmMachine* pReceiverHost, pmTask* pTask, void* pReceiverBaseAddr, ulong pReceiverOffset, void* pSenderBaseAddr, ulong pSenderOffset, ulong pLength, pmProcessingElement* pSenderDevice)
+{
+    if(pReceiverHost != PM_LOCAL_MACHINE)
+    {
+        pmCommunicatorCommand::ownershipTransferStruct* lData = new pmCommunicatorCommand::ownershipTransferStruct();
+        lData->originatingHost = *(pTask->GetOriginatingHost());
+        lData->sequenceNumber = pTask->GetSequenceNumber();
+        lData->recepientBaseAddr = (ulong)pReceiverBaseAddr;
+        lData->recepientOffset = pReceiverOffset;
+        lData->senderBaseAddr = (ulong)pSenderBaseAddr;
+        lData->senderOffset = pSenderOffset;
+        lData->length = pLength;
+        lData->senderDeviceGlobalIndex = pSenderDevice->GetGlobalDeviceIndex();
+    
+        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG, pReceiverHost, pmCommunicatorCommand::OWNERSHIP_TRANSFER_STRUCT, lData, 1, NULL, 0, gCommandCompletionCallback);
+        
+        pmCommunicator::GetCommunicator()->Send(lCommand, false);
+    }
+    
+    return pmSuccess;
+}
+    
+pmStatus pmScheduler::SendSubtaskRangeCancellationMessage(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
+{
+ 	pmMachine* lMachine = pTargetDevice->GetMachine();
+    if(lMachine == PM_LOCAL_MACHINE)
+    {
+        return RangeCancellationEvent(pTargetDevice, pRange);
+    }
+    else
+    {
+		pmCommunicatorCommand::subtaskRangeCancelStruct* lRangeCancellationData = new pmCommunicatorCommand::subtaskRangeCancelStruct();
+        lRangeCancellationData->targetDeviceGlobalIndex = pTargetDevice->GetGlobalDeviceIndex();
+        lRangeCancellationData->originatingHost = *(pRange.task->GetOriginatingHost());
+		lRangeCancellationData->sequenceNumber = pRange.task->GetSequenceNumber();
+		lRangeCancellationData->startSubtask = pRange.startSubtask;
+		lRangeCancellationData->endSubtask = pRange.endSubtask;
+        lRangeCancellationData->originalAllotteeGlobalIndex = (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pTargetDevice->GetGlobalDeviceIndex());
+
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_TAG, lMachine, pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_STRUCT, (void*)lRangeCancellationData, 1, NULL, 0, gCommandCompletionCallback);
+
+		pmCommunicator::GetCommunicator()->Send(lCommand, false);
+    }
+    
+    return pmSuccess;
 }
     
 pmStatus pmScheduler::SendRedistributionData(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount)
@@ -894,15 +1104,11 @@ pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLoc
 	pmMachine* lMachine = pDevice->GetMachine();
 
 	ulong lStartingSubtask, lSubtaskCount;
-	pLocalTask->GetSubtaskManager()->AssignSubtasksToDevice(pDevice, lSubtaskCount, lStartingSubtask);
+    pmProcessingElement* lOriginalAllottee = NULL;
+	pLocalTask->GetSubtaskManager()->AssignSubtasksToDevice(pDevice, lSubtaskCount, lStartingSubtask, lOriginalAllottee);
     
 	if(lSubtaskCount == 0)
-    {
-        if(pLocalTask->GetSchedulingModel() == PUSH && pLocalTask->ShouldStartFaultTolerance())
-            FaultToleranceEvent(pLocalTask);
-            
 		return pmSuccess;
-    }
 
 	if(lMachine == PM_LOCAL_MACHINE)
 	{
@@ -910,6 +1116,7 @@ pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLoc
 		lRange.task = pLocalTask;
 		lRange.startSubtask = lStartingSubtask;
 		lRange.endSubtask = lStartingSubtask + lSubtaskCount - 1;
+        lRange.originalAllottee = lOriginalAllottee;
 
 		return PushEvent(pDevice, lRange);
 	}
@@ -919,8 +1126,10 @@ pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLoc
 		lSubtaskData->sequenceNumber = pLocalTask->GetSequenceNumber();
 		lSubtaskData->startSubtask = lStartingSubtask;
 		lSubtaskData->endSubtask = lStartingSubtask + lSubtaskCount - 1;
+        lSubtaskData->originalAllotteeGlobalIndex = (lOriginalAllottee ? lOriginalAllottee->GetGlobalDeviceIndex() : pDevice->GetGlobalDeviceIndex());
 		lSubtaskData->originatingHost = *(pLocalTask->GetOriginatingHost());
 		lSubtaskData->targetDeviceGlobalIndex = pDevice->GetGlobalDeviceIndex();
+        lSubtaskData->assignmentType = pmCommunicatorCommand::SUBTASK_ASSIGNMENT_REGULAR;
 
 		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, gCommandCompletionCallback);
 
@@ -996,6 +1205,29 @@ pmStatus pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 
 	return pmSuccess;
 }
+    
+pmStatus pmScheduler::SendTaskCompleteToTaskOwner(pmTask* pTask)
+{
+    pmMachine* lOriginatingHost = pTask->GetOriginatingHost();
+
+    if(lOriginatingHost == PM_LOCAL_MACHINE)
+    {
+        TaskCompleteEvent((pmLocalTask*)pTask);
+    }
+    else
+    {
+        pmCommunicatorCommand::taskEventStruct* lTaskEventData = new pmCommunicatorCommand::taskEventStruct();
+        lTaskEventData->taskEvent = (uint)(pmCommunicatorCommand::TASK_COMPLETE_EVENT);
+        lTaskEventData->originatingHost = *(pTask->GetOriginatingHost());
+        lTaskEventData->sequenceNumber = pTask->GetSequenceNumber();
+
+        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lOriginatingHost, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, gCommandCompletionCallback);
+
+        pmCommunicator::GetCommunicator()->Send(lCommand, false);
+    }
+
+	return pmSuccess;
+}
 
 pmStatus pmScheduler::CancelTask(pmLocalTask* pLocalTask)
 {
@@ -1053,7 +1285,7 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
     
     if(lDevices.empty())
     {
-        SendTaskFinishToMachines(pLocalTask);
+        pLocalTask->MarkUserSideTaskCompletion();
         return pmNoCompatibleDevice;
     }
 
@@ -1068,7 +1300,7 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 	return pmSuccess;
 }
 
-pmStatus pmScheduler::PushToStub(pmProcessingElement* pDevice, pmSubtaskRange pRange)
+pmStatus pmScheduler::PushToStub(pmProcessingElement* pDevice, pmSubtaskRange& pRange)
 {
 	pmStubManager* lManager = pmStubManager::GetStubManager();
 	pmExecutionStub* lStub = lManager->GetStub(pDevice);
@@ -1090,18 +1322,13 @@ pmProcessingElement* pmScheduler::RandomlySelectStealTarget(pmProcessingElement*
 	pmTaskExecStats& lTaskExecStats = pTask->GetTaskExecStats();
 
 	uint lAttempts = lTaskExecStats.GetStealAttempts(lStub);
-	if(lAttempts >= pTask->GetAssignedDeviceCount())
-    {
-        pmLocalTask* lLocalTask = dynamic_cast<pmLocalTask*>(pTask);
-        if(lLocalTask && lLocalTask->ShouldStartFaultTolerance())
-            FaultToleranceEvent(lLocalTask);
-    
+    uint lDevices = pTask->GetAssignedDeviceCount();
+	if((lAttempts >= lDevices * MAX_STEAL_CYCLES_PER_DEVICE) || (lTaskExecStats.GetFailedStealAttemptsSinceLastSuccessfulAttempt(lStub) >= lDevices))
 		return NULL;
-    }
 
 	lTaskExecStats.RecordStealAttempt(lStub);
 
-    return (pTask->GetStealListForDevice(pStealingDevice))[lAttempts];
+    return (pTask->GetStealListForDevice(pStealingDevice))[lAttempts % lDevices];
 }
 
 pmStatus pmScheduler::StealSubtasks(pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate)
@@ -1145,9 +1372,6 @@ pmStatus pmScheduler::StealSubtasks(pmProcessingElement* pStealingDevice, pmTask
 
 pmStatus pmScheduler::ServeStealRequest(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate)
 {
-	pmSubtaskRange lStolenRange;
-	lStolenRange.task = pTask;
-
 	return pTargetDevice->GetLocalExecutionStub()->StealSubtasks(pTask, pStealingDevice, pExecutionRate);
 }
 
@@ -1173,6 +1397,7 @@ pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pm
 		lStealResponseData->success = (ushort)(pmCommunicatorCommand::STEAL_SUCCESS_RESPONSE);
 		lStealResponseData->startSubtask = pRange.startSubtask;
 		lStealResponseData->endSubtask = pRange.endSubtask;
+        lStealResponseData->originalAllotteeGlobalIndex = (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pStealingDevice->GetGlobalDeviceIndex());
 
 		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_RESPONSE_TAG, lMachine, pmCommunicatorCommand::STEAL_RESPONSE_STRUCT, lStealResponseData, 1, NULL, 0, gCommandCompletionCallback);
 
@@ -1211,6 +1436,7 @@ pmStatus pmScheduler::SendFailedStealResponse(pmProcessingElement* pStealingDevi
 		lStealResponseData->success = (ushort)(pmCommunicatorCommand::STEAL_FAILURE_RESPONSE);
 		lStealResponseData->startSubtask = 0;	// dummy value
 		lStealResponseData->endSubtask = 0;		// dummy value
+        lStealResponseData->originalAllotteeGlobalIndex = 0;    // dummy value
 
 		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_RESPONSE_TAG, lMachine, pmCommunicatorCommand::STEAL_RESPONSE_STRUCT, lStealResponseData, 1, NULL, 0, gCommandCompletionCallback);
 
@@ -1236,8 +1462,14 @@ pmStatus pmScheduler::ReceiveFailedStealResponse(pmProcessingElement* pStealingD
 
 
 // This method is executed at master host for the task
-pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus)
+pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, ulong pRemoteMemBaseAddr, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements)
 {
+    pmMemSection* lMemSection = pRange.task->GetMemSectionRW();
+    for(size_t i=0; i<pDataElements; ++i)
+        lMemSection->TransferOwnershipPostTaskCompletion(pDevice->GetMachine(), pRemoteMemBaseAddr, pOwnershipData[i].offset, pOwnershipData[i].offset, pOwnershipData[i].length);
+    
+    delete[] pOwnershipData;
+    
 	pmSubtaskManager* lSubtaskManager = pLocalTask->GetSubtaskManager();
 	lSubtaskManager->RegisterSubtaskCompletion(pDevice, pRange.endSubtask - pRange.startSubtask + 1, pRange.startSubtask, pExecStatus);
 
@@ -1254,9 +1486,9 @@ pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessi
 	return pmSuccess;
 }
 
-pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange pRange, pmStatus pExecStatus)
+pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap)
 {
-	AcknowledgementSendEvent(pDevice, pRange, pExecStatus);
+	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, pOwnershipMap);
 
 	if(pRange.task->GetSchedulingModel() == PULL)
 	{
@@ -1267,8 +1499,6 @@ pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskR
 			PMTHROW(pmFatalErrorException());
 
 		pmTaskExecStats& lTaskExecStats = pRange.task->GetTaskExecStats();
-		lTaskExecStats.ClearStealAttempts(lStub);
-
 		return StealRequestEvent(pDevice, pRange.task, lTaskExecStats.GetStubExecutionRate(lStub));
 	}
 
@@ -1276,11 +1506,7 @@ pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskR
 }
     
 pmStatus pmScheduler::ClearPendingTaskCommands(pmTask* pTask)
-{
-    pmLocalTask* lLocalTask = dynamic_cast<pmLocalTask*>(pTask);
-    if(lLocalTask)
-        pmTimedEventManager::GetTimedEventManager()->ClearTaskTimeOutEvent(lLocalTask, lLocalTask->GetTaskTimeOutTriggerTime());
-        
+{        
     return DeleteMatchingCommands(pTask->GetPriority(), taskClearMatchFunc, pTask);
 }
     
@@ -1320,9 +1546,11 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->reduceStruct.originatingHost);
 				pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->reduceStruct.sequenceNumber);
 
-				lTask->DestroySubtaskShadowMem(lData->reduceStruct.subtaskId);
+                std::cout << "To Be Done: Pass Reducing Stub Here Or Comment these lines as shadow mem is an auto ptr" << std::endl;
+                pmExecutionStub* lReducingStub = NULL;
+				lTask->GetSubscriptionManager().DestroySubtaskShadowMem(lReducingStub, lData->reduceStruct.subtaskId);
 
-				delete lTask;
+                (static_cast<pmRemoteTask*>(lTask))->MarkReductionFinished();
 			}
 			else if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG)
 			{
@@ -1333,8 +1561,8 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                 
                 if(lOriginatingHost == PM_LOCAL_MACHINE)
                     PMTHROW(pmFatalErrorException());
-                                
-				delete lTask;
+
+                (static_cast<pmRemoteTask*>(lTask))->MarkRedistributionFinished();
 			}
 
 			switch(lCommunicatorCommand->GetTag())
@@ -1347,7 +1575,9 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					delete (pmCommunicatorCommand::remoteSubtaskAssignStruct*)(lCommunicatorCommand->GetData());
 					break;
 				case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG:
-					delete (pmCommunicatorCommand::sendAcknowledgementStruct*)(lCommunicatorCommand->GetData());
+                    delete[] (pmCommunicatorCommand::ownershipDataStruct*)(((pmCommunicatorCommand::sendAcknowledgementPacked*)(lCommunicatorCommand->GetData()))->ownershipData);
+					delete (pmCommunicatorCommand::sendAcknowledgementPacked*)(lCommunicatorCommand->GetData());
+                    delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
 				case pmCommunicatorCommand::TASK_EVENT_TAG:
 					delete (pmCommunicatorCommand::taskEventStruct*)(lCommunicatorCommand->GetData());
@@ -1358,8 +1588,11 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				case pmCommunicatorCommand::STEAL_RESPONSE_TAG:  // Steal Request Callback may be called after task deletion; do not de-reference task here
 					delete (pmCommunicatorCommand::stealResponseStruct*)(lCommunicatorCommand->GetData());
 					break;
-				case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG:
-					delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lCommunicatorCommand->GetData());
+				case pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG:
+					delete (pmCommunicatorCommand::ownershipTransferStruct*)(lCommunicatorCommand->GetData());
+					break;
+				case pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG:
+					delete (pmCommunicatorCommand::memoryTransferRequest*)(lCommunicatorCommand->GetData());
 					break;
 				case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
 					delete (pmCommunicatorCommand::memoryReceivePacked*)(lCommunicatorCommand->GetData());
@@ -1376,6 +1609,9 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				case pmCommunicatorCommand::HOST_FINALIZATION_TAG:
 					delete (pmCommunicatorCommand::hostFinalizationStruct*)(lCommunicatorCommand->GetData());
 					break;
+                case pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_TAG:
+                    delete (pmCommunicatorCommand::subtaskRangeCancelStruct*)(lCommunicatorCommand->GetData());
+                    break;
 				default:
 					PMTHROW(pmFatalErrorException());
 			}
@@ -1415,14 +1651,36 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
 					pmProcessingElement* lTargetDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->targetDeviceGlobalIndex);
 
-					pmSubtaskRange lRange;
-					lRange.task = NULL;     // Will be set inside GetRemoteTaskOrEnqueueSubtasks
-					lRange.startSubtask = lData->startSubtask;
-					lRange.endSubtask = lData->endSubtask;
+                    pmSubtaskRange lRange;
+                    lRange.startSubtask = lData->startSubtask;
+                    lRange.endSubtask = lData->endSubtask;
+                
+                    if(lData->assignmentType == pmCommunicatorCommand::SUBTASK_ASSIGNMENT_REGULAR)
+                    {
+                        lRange.task = NULL;     // Will be set inside GetRemoteTaskOrEnqueueSubtasks
+                        lRange.originalAllottee = ((lData->originalAllotteeGlobalIndex == lData->targetDeviceGlobalIndex) ? NULL : pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->originalAllotteeGlobalIndex));
 
-                    // Handling for out of order message receive (task received after subtask reception)
-                    if(pmTaskManager::GetTaskManager()->GetRemoteTaskOrEnqueueSubtasks(lRange, lTargetDevice, lOriginatingHost, lData->sequenceNumber))
-                        PushEvent(lTargetDevice, lRange);
+                        // Handling for out of order message receive (task received after subtask reception)
+                        if(pmTaskManager::GetTaskManager()->GetRemoteTaskOrEnqueueSubtasks(lRange, lTargetDevice, lOriginatingHost, lData->sequenceNumber))
+                            PushEvent(lTargetDevice, lRange);
+                    }
+                    else if(lData->assignmentType == pmCommunicatorCommand::RANGE_NEGOTIATION)
+                    {
+                        if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lOriginatingHost, lData->sequenceNumber))
+                        {
+                            lRange.task = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+                            lRange.originalAllottee = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->originalAllotteeGlobalIndex);
+                        
+                            RangeNegotiationEvent(lTargetDevice, lRange);
+                        }
+                    }
+                    else if(lData->assignmentType == pmCommunicatorCommand::SUBTASK_ASSIGNMENT_RANGE_NEGOTIATED)
+                    {
+                        lRange.task = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+                        lRange.originalAllottee = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->originalAllotteeGlobalIndex);
+                    
+                        RangeNegotiationSuccessEvent(lTargetDevice, lRange);
+                    }
                     
 					SetupNewRemoteSubtaskReception();
 
@@ -1431,19 +1689,27 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 				case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG:
 				{
-					pmCommunicatorCommand::sendAcknowledgementStruct* lData = (pmCommunicatorCommand::sendAcknowledgementStruct*)(lCommunicatorCommand->GetData());
+					pmCommunicatorCommand::sendAcknowledgementPacked* lData = (pmCommunicatorCommand::sendAcknowledgementPacked*)(lCommunicatorCommand->GetData());
+                    
+					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->ackStruct.originatingHost);
+					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->ackStruct.sequenceNumber);
+                    
+                    if(lOriginatingHost != PM_LOCAL_MACHINE)
+                        PMTHROW(pmFatalErrorException());
+                
+                    pmProcessingElement* lSourceDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->ackStruct.sourceDeviceGlobalIndex);
+                    pmSubtaskRange lRange;
+                    lRange.task = lTask;
+                    lRange.startSubtask = lData->ackStruct.startSubtask;
+                    lRange.endSubtask = lData->ackStruct.endSubtask;
+                    lRange.originalAllottee = ((lData->ackStruct.originalAllotteeGlobalIndex == lData->ackStruct.sourceDeviceGlobalIndex) ? NULL : pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->ackStruct.originalAllotteeGlobalIndex));
 
-					pmProcessingElement* lSourceDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->sourceDeviceGlobalIndex);
-                    pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
-
-					pmSubtaskRange lRange;
-					lRange.task = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost ,lData->sequenceNumber);
-					lRange.startSubtask = lData->startSubtask;
-					lRange.endSubtask = lData->endSubtask;
-
-					AcknowledgementReceiveEvent(lSourceDevice, lRange, (pmStatus)(lData->execStatus));
-					SetupNewAcknowledgementReception();
-
+                    AcknowledgementReceiveEvent(lSourceDevice, lRange, (pmStatus)(lData->ackStruct.execStatus), lData->ackStruct.ownerMemBaseAddr, lData->ownershipData, lData->ackStruct.ownershipDataElements);
+                
+					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
+					//delete[] (pmCommunicatorCommand::ownershipDataStruct*)(lData->ownershipData);
+					delete (pmCommunicatorCommand::sendAcknowledgementPacked*)(lData);
+                    
 					break;
 				}
 
@@ -1462,12 +1728,21 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 							break;
 						}
 
+						case pmCommunicatorCommand::TASK_COMPLETE_EVENT:
+						{
+                            if(dynamic_cast<pmLocalTask*>(lTask) == NULL)
+                                PMTHROW(pmFatalErrorException());
+                        
+							TaskCompleteEvent(static_cast<pmLocalTask*>(lTask));
+							break;
+						}
+
 						case pmCommunicatorCommand::TASK_CANCEL_EVENT:
 						{
 							TaskCancelEvent(lTask);
 							break;
 						}
-
+                        
 						default:
 							PMTHROW(pmFatalErrorException());
 					}
@@ -1483,13 +1758,17 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->reduceStruct.originatingHost);
 					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->reduceStruct.sequenceNumber);
+
+                    std::cout << "To Be Done: Handle non-contiguous subscriptions; find reducing stub (from reducer)" << std::endl;
 					pmSubscriptionInfo lSubscriptionInfo;
 					lSubscriptionInfo.offset = lData->reduceStruct.subscriptionOffset;
 					lSubscriptionInfo.length = lData->reduceStruct.subtaskMemLength;
-					lTask->GetSubscriptionManager().RegisterSubscription(lData->reduceStruct.subtaskId, false, lSubscriptionInfo);
+                
+                    pmExecutionStub* lReducingStub = NULL;
+					lTask->GetSubscriptionManager().RegisterSubscription(lReducingStub, lData->reduceStruct.subtaskId, false, lSubscriptionInfo);
 
-					lTask->CreateSubtaskShadowMem(lData->reduceStruct.subtaskId, (char*)(lData->subtaskMem.ptr), lData->subtaskMem.length);
-					lTask->GetReducer()->AddSubtask(lData->reduceStruct.subtaskId);
+					lTask->GetSubscriptionManager().CreateSubtaskShadowMem(lReducingStub, lData->reduceStruct.subtaskId, (char*)(lData->subtaskMem.ptr), lData->subtaskMem.length);
+					lTask->GetReducer()->AddSubtask(lReducingStub, lData->reduceStruct.subtaskId);
 
 					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
 					delete[] (char*)(lData->subtaskMem.ptr);
@@ -1516,6 +1795,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                     
 					break;
 				}
+                
 				case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
 				{
 					pmCommunicatorCommand::memoryReceivePacked* lData = (pmCommunicatorCommand::memoryReceivePacked*)(lCommunicatorCommand->GetData());
@@ -1542,7 +1822,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
                     
-                    if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lOriginatingHost, lData->sequenceNumber))
+                    if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lOriginatingHost, lData->sequenceNumber))
                     {
                         pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
                         StealProcessEvent(lStealingDevice, lTargetDevice, lTask, lData->stealingDeviceExecutionRate);
@@ -1562,7 +1842,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
 
-                    if(pmTaskManager::GetTaskManager()->IsTaskOpenToProcessing(lOriginatingHost, lData->sequenceNumber))
+                    if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lOriginatingHost, lData->sequenceNumber))
                     {
                         pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
 
@@ -1576,6 +1856,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                                 lRange.task = lTask;
                                 lRange.startSubtask = lData->startSubtask;
                                 lRange.endSubtask = lData->endSubtask;
+                                lRange.originalAllottee = ((lData->originalAllotteeGlobalIndex == lData->stealingDeviceGlobalIndex) ? NULL : pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->originalAllotteeGlobalIndex));
 
                                 StealSuccessReturnEvent(lStealingDevice, lTargetDevice, lRange);
                                 break;
@@ -1597,21 +1878,35 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					break;
 				}
 
-				case pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG:
+				case pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG:
 				{
-					pmCommunicatorCommand::memorySubscriptionRequest* lData = (pmCommunicatorCommand::memorySubscriptionRequest*)(lCommunicatorCommand->GetData());
+					pmCommunicatorCommand::ownershipTransferStruct* lData = (pmCommunicatorCommand::ownershipTransferStruct*)(lCommunicatorCommand->GetData());
+
+//					pmMemSection* lMemSection = pmMemSection::FindMemSection((void*)(lData->ownerBaseAddr));
+//					if(!lMemSection)
+//						PMTHROW(pmFatalErrorException());
+//
+//					MemTransferEvent(lMemSection, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
+
+					SetupNewOwnershipTransferReception();
+
+					break;
+				}
+                
+				case pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG:
+				{
+					pmCommunicatorCommand::memoryTransferRequest* lData = (pmCommunicatorCommand::memoryTransferRequest*)(lCommunicatorCommand->GetData());
 
 					pmMemSection* lMemSection = pmMemSection::FindMemSection((void*)(lData->ownerBaseAddr));
 					if(!lMemSection)
 						PMTHROW(pmFatalErrorException());
 
-					MemTransferEvent(lMemSection, lData->offset, lData->length, (lData->registerOnly==1)?true:false, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
+					MemTransferEvent(lMemSection, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
 
-					SetupNewMemSubscriptionRequestReception();
+					SetupNewMemTransferRequestReception();
 
 					break;
 				}
-
 
 				case pmCommunicatorCommand::HOST_FINALIZATION_TAG:
 				{
@@ -1635,6 +1930,29 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					break;
 				}
+                
+                case pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_TAG:
+                {
+                    pmCommunicatorCommand::subtaskRangeCancelStruct* lData = (pmCommunicatorCommand::subtaskRangeCancelStruct*)(lCommunicatorCommand->GetData());
+                
+					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+
+                    if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lOriginatingHost, lData->sequenceNumber))
+                    {
+                        pmSubtaskRange lRange;
+                        lRange.task = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+                        lRange.startSubtask = lData->startSubtask;
+                        lRange.endSubtask = lData->endSubtask;
+                        lRange.originalAllottee = ((lData->originalAllotteeGlobalIndex == lData->targetDeviceGlobalIndex) ? NULL : pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->originalAllotteeGlobalIndex));
+                        
+                        pmProcessingElement* lTargetDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->targetDeviceGlobalIndex);
+                        RangeCancellationEvent(lTargetDevice, lRange);
+                    }
+                    
+                    SetupNewSubtaskRangeCancelReception();
+                
+                    break;
+                }
 
 				default:
 					PMTHROW(pmFatalErrorException());
@@ -1654,6 +1972,14 @@ bool taskClearMatchFunc(schedulerEvent& pEvent, void* pCriterion)
 {
     switch(pEvent.eventId)
     {
+        case SUBTASK_EXECUTION:
+        {
+            if(pEvent.execDetails.range.task == (pmTask*)pCriterion)
+                return true;
+        
+            break;
+        }
+        
         case STEAL_REQUEST_STEALER:
         {
             if(pEvent.stealRequestDetails.task == (pmTask*)pCriterion)
@@ -1702,20 +2028,42 @@ bool taskClearMatchFunc(schedulerEvent& pEvent, void* pCriterion)
             break;
         }
         
-        case TASK_CANCEL:
+        case SEND_ACKNOWLEDGEMENT:
         {
-            if(pEvent.taskCancelDetails.task == (pmTask*)pCriterion)
-                return true;
-        
-            break;
+            if(pEvent.ackSendDetails.range.task == (pmTask*)pCriterion)
+                break;
         }
         
-        case FAULT_TOLERANCE_EVENT:
-        {
-            if(pEvent.faultToleranceDetails.localTask == (pmTask*)pCriterion)
-                return true;
+        case RECEIVE_ACKNOWLEDGEMENT:
+        {        
+            if(pEvent.ackReceiveDetails.range.task == (pmTask*)pCriterion)
+                break;
         }
+        
+        case SUBTASK_RANGE_CANCEL:
+        {
+            if(pEvent.subtaskRangeCancelDetails.range.task == (pmTask*)pCriterion)
+                return true;
             
+            break;        
+        }
+        
+        case RANGE_NEGOTIATION_EVENT:
+        {
+            if(pEvent.rangeNegotiationDetails.range.task == (pmTask*)pCriterion)
+                return true;
+            
+            break;        
+        }
+        
+        case RANGE_NEGOTIATION_SUCCESS_EVENT:
+        {
+            if(pEvent.rangeNegotiationSuccessDetails.negotiatedRange.task == (pmTask*)pCriterion)
+                return true;
+            
+            break;        
+        }
+        
         default:
             return false;
    }

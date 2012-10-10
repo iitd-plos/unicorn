@@ -126,14 +126,14 @@ pmStatus pmPThread<T, P>::SubmitCommand(typename pmThread<T, P>::internalType& p
 }
 
 template<typename T, typename P>
-pmStatus pmThread<T, P>::DeleteAndGetFirstMatchingCommand(P pPriority, typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem)
+pmStatus pmThread<T, P>::DeleteAndGetFirstMatchingCommand(P pPriority, typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem, bool pTemporarilyUnblockSecondaryCommands /* = false */)
 {
 	typename pmThread<T, P>::internalMatchCriterion lInternalMatchCriterion;
 	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
 	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
 
 	typename pmThread<T, P>::internalType lInternalItem;
-	pmStatus lStatus = this->mSafePQ.DeleteAndGetFirstMatchingItem(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion), lInternalItem);
+	pmStatus lStatus = this->mSafePQ.DeleteAndGetFirstMatchingItem(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion), lInternalItem, pTemporarilyUnblockSecondaryCommands);
 	pItem = lInternalItem.cmd;
 
 	return lStatus;
@@ -149,6 +149,12 @@ pmStatus pmThread<T, P>::DeleteMatchingCommands(P pPriority, typename pmThread<T
 	return this->mSafePQ.DeleteMatchingItems(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion));
 }
 
+template<typename T, typename P>
+pmStatus pmThread<T, P>::UnblockSecondaryCommands()
+{
+    return this->mSafePQ.UnblockSecondaryOperations();
+}
+    
 template<typename T, typename P>
 pmStatus pmPThread<T, P>::SetProcessorAffinity(int pProcessorId)
 {

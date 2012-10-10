@@ -272,7 +272,7 @@ pmStatus pmController::ReleaseMemory_Public(pmMemHandle pMem)
 	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
 
     delete (reinterpret_cast<pmUserMemHandle*>(pMem));
-	delete lMemSection;
+	lMemSection->UserDelete();
 
 	return pmSuccess;
 }
@@ -324,7 +324,7 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
     else if(pTaskDetails.policy == PROPORTIONAL_STATIC)
         lModel = scheduler::STATIC_PROPORTIONAL;
         
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel);
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, pTaskDetails.multiAssignEnabled);
 
 	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 
@@ -339,8 +339,7 @@ pmStatus pmController::WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle)
 pmStatus pmController::ReleaseTask_Public(pmTaskHandle pTaskHandle)
 {
 	pmStatus lStatus = WaitForTaskCompletion_Public(pTaskHandle);
-
-	delete static_cast<pmLocalTask*>(pTaskHandle);
+	static_cast<pmLocalTask*>(pTaskHandle)->UserDeleteTask();
 
 	return lStatus;
 }
@@ -352,22 +351,22 @@ pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandl
 	return pmSuccess;
 }
 
-pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo)
+pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo)
 {
-	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(pSubtaskId, pIsInputMemory, pSubscriptionInfo);
+	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pIsInputMemory, pSubscriptionInfo);
 }
 
-pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
+pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
 {
     pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
-    lTask->GetRedistributor()->RedistributeData(pSubtaskId, pOffset, pLength, pOrder);
+    lTask->GetRedistributor()->RedistributeData(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pOffset, pLength, pOrder);
     
     return pmSuccess;
 }
     
-pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
+pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
 {
-	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(pSubtaskId, pCudaLaunchConf);
+	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pCudaLaunchConf);
 }
 
 uint pmController::GetHostId_Public()
@@ -386,9 +385,9 @@ uint pmController::GetHostCount_Public()
 	return NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 }
     
-void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, ulong pSubtaskId, size_t pBufferSize)
+void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, size_t pBufferSize)
 {
-    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(pSubtaskId, pBufferSize);
+    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pBufferSize);
     
     return NULL;
 }

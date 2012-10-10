@@ -126,7 +126,7 @@ class pmDevicePool : public pmBase
 
 		pmStatus BroadcastDeviceData(pmMachine* pMachine, pmCommunicatorCommand::devicePool* pDeviceArray, uint pDeviceCount);
 
-		pmStatus GetAllDevicesOfTypeInCluster(pmDeviceTypes pType, pmCluster* pCluster, std::set<pmProcessingElement*>& pDevices);
+		pmStatus GetAllDevicesOfTypeInCluster(pmDeviceType pType, pmCluster* pCluster, std::set<pmProcessingElement*>& pDevices);
 		
 	private:
 		pmDevicePool();

@@ -30,6 +30,8 @@
 #include "pmReducer.h"
 #include "pmRedistributor.h"
 #include "pmMemSection.h"
+#include "pmTimedEventManager.h"
+#include "pmStubManager.h"
 
 #include <vector>
 #include <algorithm>
@@ -43,8 +45,8 @@ ulong pmLocalTask::mSequenceId = 0;
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
-pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount /* = 0 */, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
-	: mOriginatingHost(pOriginatingHost), mCluster(pCluster), mSubscriptionManager(this)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled)
+	: mOriginatingHost(pOriginatingHost), mCluster(pCluster), mSubscriptionManager(this), mMultiAssignEnabled(pMultiAssignEnabled), mOutstandingStubs(0)
 {
 	mTaskConf = pTaskConf;
 	mTaskConfLength = pTaskConfLength;
@@ -55,7 +57,6 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 	mSubtaskCount = pSubtaskCount;
 	mAssignedDeviceCount = pAssignedDeviceCount;
 	mSchedulingModel = pSchedulingModel;
-    mCanStartFaultTolerance = true;
 
 	if(pPriority < MAX_PRIORITY_LEVEL)
 		mPriority = MAX_PRIORITY_LEVEL;
@@ -64,8 +65,6 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 
 	mTaskInfo.taskHandle = NULL;
 	mSubtaskExecutionFinished = false;
-    mReducer = NULL;
-    mRedistributor = NULL;
 	mSubtasksExecuted = 0;
     
     pMemRO->Lock(this);
@@ -74,14 +73,9 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 
 pmTask::~pmTask()
 {
-    mMemRO->Unlock(this);
-    mMemRW->Unlock(this);
-
-    delete mReducer;
-    delete mRedistributor;
 }
-    
-pmStatus pmTask::TaskInternallyFinished()
+
+pmStatus pmTask::FlushMemoryOwnerships()
 {
     if(mMemRO && mMemRO->GetMem())
         mMemRO->FlushOwnerships();
@@ -90,6 +84,20 @@ pmStatus pmTask::TaskInternallyFinished()
         mMemRW->FlushOwnerships();
 
     return pmSuccess;
+}
+    
+void pmTask::UnlockMemories()
+{
+    if(mMemRO)
+        mMemRO->Unlock(this);
+    
+    if(mMemRW)
+        mMemRW->Unlock(this);
+}
+    
+bool pmTask::IsMultiAssignEnabled()
+{
+    return mMultiAssignEnabled;
 }
 
 void* pmTask::GetTaskConfiguration()
@@ -201,14 +209,14 @@ pmTaskInfo& pmTask::GetTaskInfo()
 	return mTaskInfo;
 }
 
-pmStatus pmTask::GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly)
+pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly)
 {
 	pmSubscriptionInfo lInputMemSubscriptionInfo, lOutputMemSubscriptionInfo;
 	void* lInputMem;
 	void* lOutputMem;
 
 	pSubtaskInfo.subtaskId = pSubtaskId;
-	if(mMemRO && (lInputMem = mMemRO->GetMem()) && mSubscriptionManager.GetInputMemSubscriptionForSubtask(pSubtaskId, lInputMemSubscriptionInfo))
+	if(mMemRO && (lInputMem = mMemRO->GetMem()) && mSubscriptionManager.GetInputMemSubscriptionForSubtask(pStub, pSubtaskId, lInputMemSubscriptionInfo))
 	{
 		pSubtaskInfo.inputMem = ((char*)lInputMem + lInputMemSubscriptionInfo.offset);
 		pSubtaskInfo.inputMemLength = lInputMemSubscriptionInfo.length;
@@ -219,10 +227,10 @@ pmStatus pmTask::GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, b
 		pSubtaskInfo.inputMemLength = 0;
 	}
     
-	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pSubtaskId, lOutputMemSubscriptionInfo))
+	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lOutputMemSubscriptionInfo))
 	{
 		if(DoSubtasksNeedShadowMemory())
-			pSubtaskInfo.outputMem = GetSubtaskShadowMem(pSubtaskId).addr;
+			pSubtaskInfo.outputMem = mSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
 		else
 			pSubtaskInfo.outputMem = ((char*)lOutputMem + lOutputMemSubscriptionInfo.offset);
 
@@ -248,20 +256,20 @@ pmReducer* pmTask::GetReducer()
 {
     FINALIZE_RESOURCE_PTR(dReducerLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mReducerLock, Lock(), Unlock());
 
-	if(!mReducer)
-		mReducer = new pmReducer(this);
+	if(!mReducer.get_ptr())
+		mReducer.reset(new pmReducer(this));
 
-	return mReducer;
+	return mReducer.get_ptr();
 }
 
 pmRedistributor* pmTask::GetRedistributor()
 {
     FINALIZE_RESOURCE_PTR(dRedistributorLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mRedistributorLock, Lock(), Unlock());
     
-    if(!mRedistributor)
-        mRedistributor = new pmRedistributor(this);
+    if(!mRedistributor.get_ptr())
+        mRedistributor.reset(new pmRedistributor(this));
     
-    return mRedistributor;
+    return mRedistributor.get_ptr();
 }
     
 #ifdef ENABLE_TASK_PROFILING
@@ -280,10 +288,10 @@ pmStatus pmTask::MarkSubtaskExecutionFinished()
 		mSubtaskExecutionFinished = true;
 	}
 
-	if(mReducer)
+	if(mReducer.get_ptr())
 		mReducer->CheckReductionFinish();
     
-    if(mRedistributor)
+    if(mRedistributor.get_ptr())
         mRedistributor->SendRedistributionInfo();
 
 	return pmSuccess;
@@ -312,82 +320,38 @@ ulong pmTask::GetSubtasksExecuted()
 	return mSubtasksExecuted;
 }
 
-pmStatus pmTask::SaveFinalReducedOutput(ulong pSubtaskId)
-{
-	pmSubscriptionInfo lSubscriptionInfo;
-	if(!mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pSubtaskId, lSubscriptionInfo))
-	{
-		DestroySubtaskShadowMem(pSubtaskId);
-		PMTHROW(pmFatalErrorException());
-	}
-std::cout << "Pending Implementation" << std::endl;
-	subtaskShadowMem& lShadowMem = GetSubtaskShadowMem(pSubtaskId);
-	(static_cast<pmOutputMemSection*>(mMemRW))->Update(lSubscriptionInfo.offset, lSubscriptionInfo.length, lShadowMem.addr);
-	return DestroySubtaskShadowMem(pSubtaskId);
-
-//    return CompleteTask();
-	//return (pmLocalTask*)this->MarkTaskEnd(GetSubtaskManager()->GetTaskExecutionStatus());
-}
-
 bool pmTask::DoSubtasksNeedShadowMemory()
 {
-	return (mCallbackUnit->GetDataReductionCB() != NULL);
+    return (mMemRW != NULL);
+//	return (mMemRW && (mMultiAssignEnabled || mMemRW->IsLazy() || (mCallbackUnit->GetDataReductionCB() != NULL)));
+}
+    
+void pmTask::TerminateTask()
+{
 }
 
-pmStatus pmTask::CreateSubtaskShadowMem(ulong pSubtaskId)
+void pmTask::PrepareForTaskCompletionMessage()
 {
-	FINALIZE_RESOURCE_PTR(dShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mShadowMemLock, Lock(), Unlock());
+	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
+    
+    mOutstandingStubs = (uint)(pmStubManager::GetStubManager()->GetStubCount());
 
-	pmSubscriptionInfo lSubscriptionInfo;
+    if(mOutstandingStubs == 0)
+        MarkLocalStubsFreeOfTask();
+}
+    
+void pmTask::RegisterStubFreeOfTask()
+{
+	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
 
-	if(mShadowMemMap.find(pSubtaskId) != mShadowMemMap.end() || !mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pSubtaskId, lSubscriptionInfo))
-		PMTHROW(pmFatalErrorException());
+    --mOutstandingStubs;
 
-	mShadowMemMap[pSubtaskId].addr = new char[lSubscriptionInfo.length];
-	mShadowMemMap[pSubtaskId].length = lSubscriptionInfo.length;
-
-	memcpy(mShadowMemMap[pSubtaskId].addr, (void*)((char*)(mMemRW->GetMem()) + lSubscriptionInfo.offset), lSubscriptionInfo.length);
-
-	return pmSuccess;
+    if(mOutstandingStubs == 0)
+        MarkLocalStubsFreeOfTask();
 }
 
-pmStatus pmTask::CreateSubtaskShadowMem(ulong pSubtaskId, char* pMem, size_t pMemLength)
+void pmTask::MarkLocalStubsFreeOfTask()
 {
-	FINALIZE_RESOURCE_PTR(dShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mShadowMemLock, Lock(), Unlock());
-
-	pmSubscriptionInfo lSubscriptionInfo;
-
-	if(mShadowMemMap.find(pSubtaskId) != mShadowMemMap.end() || !mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pSubtaskId, lSubscriptionInfo))
-		PMTHROW(pmFatalErrorException());
-
-	mShadowMemMap[pSubtaskId].addr = new char[pMemLength];
-	mShadowMemMap[pSubtaskId].length = pMemLength;
-
-	memcpy(mShadowMemMap[pSubtaskId].addr, pMem, pMemLength);
-
-	return pmSuccess;
-}
-
-pmTask::subtaskShadowMem& pmTask::GetSubtaskShadowMem(ulong pSubtaskId)
-{
-	FINALIZE_RESOURCE_PTR(dShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mShadowMemLock, Lock(), Unlock());
-
-	if(mShadowMemMap.find(pSubtaskId) == mShadowMemMap.end())
-		PMTHROW(pmFatalErrorException());
-	
-	return mShadowMemMap[pSubtaskId];
-}
-
-pmStatus pmTask::DestroySubtaskShadowMem(ulong pSubtaskId)
-{
-	FINALIZE_RESOURCE_PTR(dShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mShadowMemLock, Lock(), Unlock());
-
-	if(mShadowMemMap.find(pSubtaskId) == mShadowMemMap.end())
-		PMTHROW(pmFatalErrorException());
-
-	delete[] mShadowMemMap[pSubtaskId].addr;
-
-	return pmSuccess;
 }
 
 ulong pmTask::GetSequenceNumber()
@@ -401,29 +365,17 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
     
     return pmSuccess;
 }
-    
-bool pmTask::ShouldStartFaultTolerance()
-{
-	FINALIZE_RESOURCE_PTR(dFaultToleranceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mFaultToleranceLock, Lock(), Unlock());
 
-    if(mCanStartFaultTolerance)
-    {
-        mCanStartFaultTolerance = false;
-        return true;
-    }
-    
-    return false;
-}
-    
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs,
-	pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
-	scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled)
+    , mPendingCompletions(0)
+    , mUserSideTaskCompleted(false)
+    , mLocalStubsFreeOfTask(false)
+    , mUserSignalledDeletion(false)
+    , mTaskInternallyCompleted(false)
 {
-	mSubtaskManager = NULL;
-    
     ulong lCurrentTime = GetIntegralCurrentTimeInSecs();
     ulong lTaskTimeOutTriggerTime = lCurrentTime + pTaskTimeOutInSecs;
     if(pTaskTimeOutInSecs < 0 || lTaskTimeOutTriggerTime < lCurrentTime || lTaskTimeOutTriggerTime > (ulong)__MAX(int))
@@ -431,36 +383,123 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, p
     
 	mTaskCommand = pmTaskCommand::CreateSharedPtr(pPriority, pmTaskCommand::BASIC_TASK);
     
-	FINALIZE_RESOURCE(dSequenceLock, mSequenceLock.Lock(), mSequenceLock.Unlock());    
-    SetSequenceNumber(mSequenceId);
-    ++mSequenceId;
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE(dSequenceLock, mSequenceLock.Lock(), mSequenceLock.Unlock());    
+        SetSequenceNumber(mSequenceId);
+        ++mSequenceId;
+    }
 }
 
 pmLocalTask::~pmLocalTask()
 {
-    pmTaskManager::GetTaskManager()->DeleteTask(this);  // could have already been erased from task manager in MarkSubtaskExecutionFinished
+}
 
-	if(mSubtaskManager)
-		delete mSubtaskManager;
+void pmLocalTask::TerminateTask()
+{
+    UnlockMemories();
+
+    pmTimedEventManager::GetTimedEventManager()->ClearTaskTimeOutEvent(this, GetTaskTimeOutTriggerTime());    
+    pmScheduler::GetScheduler()->TerminateTaskEvent(this);
+}
+    
+void pmLocalTask::RegisterInternalTaskCompletionMessage()
+{
+    FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+    --mPendingCompletions;
+
+    if(mPendingCompletions == 0)
+        DoPostInternalCompletion();
 }
 
 pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
 {
-    pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
     pmTask::MarkSubtaskExecutionFinished();
-
+   
+    pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
     if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
-        CompleteTask();
+        MarkUserSideTaskCompletion();
 
     return pmSuccess;
 }
+
+// This method must be called with mCompletionLock acquired
+void pmLocalTask::DoPostInternalCompletion()
+{    
+    if(mUserSignalledDeletion)
+        TerminateTask();
+    else
+        mTaskInternallyCompleted = true;
+}
     
-pmStatus pmLocalTask::CompleteTask()
+void pmLocalTask::TaskRedistributionDone()
 {
-    pmTaskManager::GetTaskManager()->DeleteTask(this);  // Local task is only erased from task manager. It is actually deleted from memory by user
+    MarkUserSideTaskCompletion();
+}
+
+void pmLocalTask::MarkLocalStubsFreeOfTask()
+{
+#ifdef _DEBUG
+    if(!IsMultiAssignEnabled())
+        PMTHROW(pmFatalErrorException());
+#endif
     
-    pmSubtaskManager* lManager = GetSubtaskManager();
-    return MarkTaskEnd(lManager?lManager->GetTaskExecutionStatus():pmNoCompatibleDevice);    
+    FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+
+    if(mUserSideTaskCompleted)
+        pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
+    
+    mLocalStubsFreeOfTask = true;
+}
+    
+void pmLocalTask::MarkUserSideTaskCompletion()
+{
+    bool lIsMultiAssign = IsMultiAssignEnabled();
+    
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+
+        if(lIsMultiAssign && mLocalStubsFreeOfTask)
+            pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
+            
+        mUserSideTaskCompleted = true;
+    
+        if(mPendingCompletions == 0)
+            DoPostInternalCompletion();
+    }
+
+    FlushMemoryOwnerships();
+    MarkTaskEnd(mSubtaskManager.get_ptr() ? mSubtaskManager->GetTaskExecutionStatus() : pmNoCompatibleDevice);
+}
+
+void pmLocalTask::UserDeleteTask()
+{
+    FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+
+    if(mTaskInternallyCompleted)
+        TerminateTask();
+    else
+        mUserSignalledDeletion = true;
+}
+    
+pmStatus pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
+	pmSubscriptionInfo lSubscriptionInfo;
+	if(!lSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lSubscriptionInfo))
+	{
+		lSubscriptionManager.DestroySubtaskShadowMem(pStub, pSubtaskId);
+		PMTHROW(pmFatalErrorException());
+	}
+std::cout << "Pending Implementation" << std::endl;
+	void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
+	(static_cast<pmOutputMemSection*>(GetMemSectionRW()))->Update(lSubscriptionInfo.offset, lSubscriptionInfo.length, lShadowMem);
+	lSubscriptionManager.DestroySubtaskShadowMem(pStub, pSubtaskId);
+
+    ((pmLocalTask*)this)->MarkUserSideTaskCompletion();
+    
+    return pmSuccess;
 }
 
 pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel)
@@ -468,16 +507,16 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
 	switch(pSchedulingModel)
 	{
 		case scheduler::PUSH:
-			mSubtaskManager = new pmPushSchedulingManager(this);
+			mSubtaskManager.reset(new pmPushSchedulingManager(this));
 			break;
 
 		case scheduler::PULL:
 		case scheduler::STATIC_EQUAL:
-			mSubtaskManager = new pmPullSchedulingManager(this);
+			mSubtaskManager.reset(new pmPullSchedulingManager(this));
 			break;
 
 		case scheduler::STATIC_PROPORTIONAL:
-			mSubtaskManager = new pmProportionalSchedulingManager(this);
+			mSubtaskManager.reset(new pmProportionalSchedulingManager(this));
 			break;
 
 		default:
@@ -535,8 +574,8 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
 	{
 		for(uint i=0; i<MAX_DEVICE_TYPES; ++i)
 		{
-			if(lSubtaskCB->IsCallbackDefinedForDevice((pmDeviceTypes)i))
-				lDevicePool->GetAllDevicesOfTypeInCluster((pmDeviceTypes)i, GetCluster(), pDevices);
+			if(lSubtaskCB->IsCallbackDefinedForDevice((pmDeviceType)i))
+				lDevicePool->GetAllDevicesOfTypeInCluster((pmDeviceType)i, GetCluster(), pDevices);
 		}
 	}
 
@@ -577,43 +616,41 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
     
     pDevices.erase(lIter, pDevices.end());
 
+    if(!pDevices.empty())
+    {
+        std::set<pmMachine*> lMachines;
+        pmProcessingElement::GetMachines(mDevices, lMachines);
+        
+        if(IsMultiAssignEnabled())
+        {
+            FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+
+            mPendingCompletions = lMachines.size();
+            if(lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
+                ++mPendingCompletions;
+        }
+    }
+
 	return pmSuccess;
 }
 
 pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 {
-	return mSubtaskManager;
+	return mSubtaskManager.get_ptr();
 }
 
 
 /* class pmRemoteTask */
-pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit,
-	uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = MAX_PRIORITY_LEVEL */,
-	scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel)
+pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled)
+    , mUserSideTaskCompleted(false)
+    , mLocalStubsFreeOfTask(false)
 {
     SetSequenceNumber(pSequenceNumber);
 }
 
 pmRemoteTask::~pmRemoteTask()
 {
-	pmTaskManager::GetTaskManager()->DeleteTask(this);
-}
-
-pmStatus pmRemoteTask::MarkSubtaskExecutionFinished()
-{
-	pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
-	if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
-	{
-		pmTask::MarkSubtaskExecutionFinished();
-		delete this;
-	}
-	else
-	{
-		pmTask::MarkSubtaskExecutionFinished();
-	}
-
-	return pmSuccess;
 }
 
 pmStatus pmRemoteTask::AddAssignedDevice(pmProcessingElement* pDevice)
@@ -632,6 +669,75 @@ std::vector<pmProcessingElement*>& pmRemoteTask::GetAssignedDevices()
 {
 	return mDevices;
 }
+    
+void pmRemoteTask::TerminateTask()
+{
+    UnlockMemories();
+
+    SAFE_FREE(GetTaskConfiguration());
+    pmScheduler::GetScheduler()->TerminateTaskEvent(this);
+}
+
+void pmRemoteTask::MarkLocalStubsFreeOfTask()
+{
+#ifdef _DEBUG
+    if(!IsMultiAssignEnabled())
+        PMTHROW(pmFatalErrorException());
+#endif
+
+    FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+
+    if(mUserSideTaskCompleted)
+    {
+        pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
+        TerminateTask();
+    }
+    else
+    {
+        mLocalStubsFreeOfTask = true;
+    }
+}
+
+void pmRemoteTask::MarkUserSideTaskCompletion()
+{
+    bool lIsMultiAssign = IsMultiAssignEnabled();
+    
+    FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+
+    if(lIsMultiAssign && mLocalStubsFreeOfTask)
+    {
+        pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
+        TerminateTask();
+    }
+    else
+    {
+        if(!lIsMultiAssign)
+            TerminateTask();
+    
+        mUserSideTaskCompleted = true;
+    }
+}
+
+void pmRemoteTask::MarkReductionFinished()
+{
+    MarkUserSideTaskCompletion();
+}
+    
+void pmRemoteTask::MarkRedistributionFinished()
+{
+    MarkUserSideTaskCompletion();
+}
+    
+pmStatus pmRemoteTask::MarkSubtaskExecutionFinished()
+{
+    pmTask::MarkSubtaskExecutionFinished();
+    
+    pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
+    if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
+        MarkUserSideTaskCompletion();
+
+    return pmSuccess;
+}   
 
 };
 

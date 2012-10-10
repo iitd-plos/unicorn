@@ -24,6 +24,7 @@
 #include "pmTask.h"
 #include "pmHardware.h"
 #include "pmMemSection.h"
+#include "pmExecutionStub.h"
 
 namespace pm
 {
@@ -47,7 +48,7 @@ pmDataDistributionCB::~pmDataDistributionCB()
 {
 }
 
-pmStatus pmDataDistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId, pmDeviceTypes pDeviceType)
+pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId)
 {
 	if(!mCallback)
 		return pmSuccess;
@@ -58,7 +59,7 @@ pmStatus pmDataDistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId, pmDeviceT
     void* lInputMem = (lInputMemSection && lInputMemSection->IsLazy()) ? (lInputMemSection->GetMem()) : NULL;
     void* lOutputMem = (lOutputMemSection && lOutputMemSection->IsLazy()) ? (lOutputMemSection->GetMem()) : NULL;
 
-	return mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pSubtaskId, pDeviceType);
+	return mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId);
 }
 
 
@@ -73,7 +74,7 @@ pmSubtaskCB::~pmSubtaskCB()
 {
 }
 
-bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
+bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 {
 	switch(pDeviceType)
 	{
@@ -102,20 +103,21 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType)
 	return false;
 }
 
-pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex)
+pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex)
 {
     bool lOutputMemWriteOnly = false;
+    
+    pmSubtaskInfo lSubtaskInfo;
+    pTask->GetSubtaskInfo(pStub, pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);    
 
-	switch(pDeviceType)
+	switch(pStub->GetType())
 	{
 		case CPU:
 		{
 			if(!mCallback_CPU)
 				return pmSuccess;
 
-			pmSubtaskInfo lSubtaskInfo;
-			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
-			return mCallback_CPU(pTask->GetTaskInfo(), lSubtaskInfo);
+			return mCallback_CPU(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
 
 			break;
 		}
@@ -126,11 +128,8 @@ pmStatus pmSubtaskCB::Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSu
 			if(!mCallback_GPU_CUDA)
 				return pmSuccess;
             
-			pmSubtaskInfo lSubtaskInfo;
-			pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
-            
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pSubtaskId);
-			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pBoundHardwareDeviceIndex, pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA);
+			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pBoundHardwareDeviceIndex, pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA);
 
 			break;
 		}
@@ -154,7 +153,7 @@ pmDataReductionCB::~pmDataReductionCB()
 {
 }
 
-pmStatus pmDataReductionCB::Invoke(pmTask* pTask, ulong pSubtaskId1, ulong pSubtaskId2)
+pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2)
 {
 	if(!mCallback)
 		return pmSuccess;
@@ -162,10 +161,10 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, ulong pSubtaskId1, ulong pSubt
     bool lOutputMemWriteOnly = false;
 
 	pmSubtaskInfo lSubtaskInfo1, lSubtaskInfo2;
-	pTask->GetSubtaskInfo(pSubtaskId1, lSubtaskInfo1, lOutputMemWriteOnly);
-	pTask->GetSubtaskInfo(pSubtaskId2, lSubtaskInfo2, lOutputMemWriteOnly);
-
-	return mCallback(pTask->GetTaskInfo(), lSubtaskInfo1, lSubtaskInfo2);
+	pTask->GetSubtaskInfo(pStub1, pSubtaskId1, lSubtaskInfo1, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pStub2, pSubtaskId2, lSubtaskInfo2, lOutputMemWriteOnly);
+    
+	return mCallback(pTask->GetTaskInfo(), pStub1->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo1, pStub2->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo2);
 }
 
 
@@ -179,7 +178,7 @@ pmDataRedistributionCB::~pmDataRedistributionCB()
 {
 }
 
-pmStatus pmDataRedistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId)
+pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId)
 {
 	if(!mCallback)
 		return pmSuccess;
@@ -187,9 +186,9 @@ pmStatus pmDataRedistributionCB::Invoke(pmTask* pTask, ulong pSubtaskId)
     bool lOutputMemWriteOnly = false;
 
 	pmSubtaskInfo lSubtaskInfo;
-	pTask->GetSubtaskInfo(pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pStub, pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
 
-	return mCallback(pTask->GetTaskInfo(), lSubtaskInfo);
+	return mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
 }
 
 

@@ -31,38 +31,83 @@ namespace pm
 	typedef unsigned long ulong;
 
 	class pmTask;
+    class pmProcessingElement;
 
     typedef struct pmSubtaskRange
     {
         pmTask* task;
+        pmProcessingElement* originalAllottee;
         ulong startSubtask;
         ulong endSubtask;
     } pmSubtaskRange;
 
-	template<typename T>
+    template<typename T>
+    class deleteDeallocator
+    {
+        public:
+            void operator()(T* pMem)
+            {
+                delete pMem;
+            }
+    };
+    
+    template<typename T>
+    class deleteArrayDeallocator
+    {
+        public:
+            void operator()(T* pMem)
+            {
+                delete[] pMem;
+            }
+    };
+    
+	template<typename T, typename D = deleteDeallocator<T> >
 	class finalize_ptr
 	{
 		public:
-			finalize_ptr<T>(T* pMem = NULL) : mMem(pMem)
+			finalize_ptr(T* pMem = NULL) : mMem(pMem)
 			{
 			}
 
 			~finalize_ptr()
 			{
-				delete (T*)(mMem);
+				D()(mMem);
 			}
 
-			T* get_ptr()
+			T* get_ptr() const
 			{
 				return mMem;
 			}
 
+            void release()
+            {
+                mMem = NULL;
+            }
+
             void reset(T* pMem)
             {
-                delete (T*)(mMem);
+                D()(mMem);
                 mMem = pMem;
             }        
 
+            finalize_ptr(const finalize_ptr& pPtr)
+            : mMem(NULL)
+            {
+                reset(pPtr.get_ptr());
+                (const_cast<finalize_ptr&>(pPtr)).release();
+            }
+            
+            const finalize_ptr& operator=(const finalize_ptr& pPtr)
+            {
+                reset(pPtr.get_ptr());
+                (const_cast<finalize_ptr&>(pPtr)).release();                
+            }
+    
+            T* operator->()
+            {
+                return mMem;
+            }
+    
         private:
 			T* mMem;
 	};
@@ -71,7 +116,7 @@ namespace pm
 	class finalize_ptr_array
 	{
 		public:
-			finalize_ptr_array<T>(T* pMem = NULL) : mMem(pMem)
+			finalize_ptr_array(T* pMem = NULL) : mMem(pMem)
 			{
 			}
 
@@ -80,18 +125,37 @@ namespace pm
 				delete[] (T*)(mMem);
 			}
 
-			T* get_ptr()
+			T* get_ptr() const
 			{
 				return mMem;
 			}
         
+            void release()
+            {
+                mMem = NULL;
+            }
+
             void reset(T* pMem)
             {
                 delete[] (T*)(mMem);
                 mMem = pMem;
             }
 
+            finalize_ptr_array(const finalize_ptr_array& pPtr)
+            : mMem(NULL)
+            {
+                reset(pPtr.get_ptr());
+                (const_cast<finalize_ptr_array&>(pPtr)).release();
+            }
+    
+            const finalize_ptr_array& operator=(const finalize_ptr_array& pPtr)
+            {
+                reset(pPtr.get_ptr());
+                (const_cast<finalize_ptr_array&>(pPtr)).release();                
+            }
+    
 		private:
+    
 			T* mMem;
 	};
 
@@ -133,6 +197,40 @@ namespace pm
 		private: \
 			ptrType* mPtr; \
 	} name##_obj(ptr);
+    
+    template<typename G, typename D, typename T>
+	class guarded_scoped_ptr
+	{
+        public:
+            guarded_scoped_ptr(G* pGuard, D* pTerminus, T** pPtr, T* pMem = NULL) : mGuard(pGuard), mTerminus(pTerminus), mPtr(pPtr)
+            {
+                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+                
+                if(mPtr)
+                    *mPtr = pMem;
+            }
+            
+            ~guarded_scoped_ptr()
+            {
+                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+                            
+                if(mPtr)
+                {
+                    mTerminus->Terminating(*mPtr);
+                    delete (T*)(*mPtr);
+                
+                    *mPtr = NULL;
+                }
+            }
+            
+        private:
+            guarded_scoped_ptr(const guarded_scoped_ptr& pPtr);
+            const guarded_scoped_ptr& operator=(const guarded_scoped_ptr& pPtr);
+    
+            G* mGuard;
+            D* mTerminus;
+            T** mPtr;
+	};
 
 	class selective_finalize_base
 	{
@@ -165,6 +263,9 @@ namespace pm
             }
 
         private:
+            selective_finalize_ptr(const selective_finalize_ptr& pPtr);
+            const selective_finalize_ptr& operator=(const selective_finalize_ptr& pPtr);
+
             T* mMem;
             bool mDeleteMem;
     };
@@ -194,6 +295,9 @@ namespace pm
             }
 
         private:
+            selective_finalize_ptr_array(const selective_finalize_ptr_array& pPtr);
+            const selective_finalize_ptr_array& operator=(const selective_finalize_ptr_array& pPtr);
+    
             T* mMem;
             bool mDeleteMem;
     };
@@ -230,6 +334,9 @@ namespace pm
 			bool shouldDelete() {return mDestroy;}
 
 		private:
+            pmDestroyOnException(const pmDestroyOnException& pPtr);
+            const pmDestroyOnException& operator=(const pmDestroyOnException& pPtr);
+    
 			bool mDestroy;
 			std::vector<selective_finalize_base*> mDeletePtrs;
 			std::vector<void*> mFreePtrs;

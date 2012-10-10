@@ -40,6 +40,7 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
     , mUserMemHandle(NULL)
     , mRequestedLength(pLength)
     , mLockingTask(NULL)
+    , mUserDelete(false)
 #ifdef ENABLE_MEM_PROFILING
     , mMemReceived(0)
     , mMemTransferred(0)
@@ -58,7 +59,7 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
         mMem = lMemoryManager->AllocateMemory(this, pLength, mVMPageCount);
 #else
     mLazy = false;
-	mMem = lMemoryManager->AllocateMemory(pLength, mVMPageCount);
+	mMem = lMemoryManager->AllocateMemory(this, pLength, mVMPageCount);
 #endif
 
 	mAllocatedLength = pLength;
@@ -78,6 +79,7 @@ pmMemSection::pmMemSection(const pmMemSection& pMemSection)
     , mMemTransferred(0)
     , mMemReceiveEvents(0)
     , mMemTransferEvents(0)
+    , mUserDelete(false)
 #endif
 {
     mOwner = pMemSection.mOwner;
@@ -89,16 +91,41 @@ pmMemSection::pmMemSection(const pmMemSection& pMemSection)
     mMem = NULL;
     mLockingTask = pMemSection.mLockingTask;
 }
-		
+
 pmMemSection::~pmMemSection()
 {
-    if(mLockingTask)
-        PMTHROW(pmFatalErrorException());
+#ifdef _DEBUG
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
+        if(mLockingTask)
+            PMTHROW(pmFatalErrorException());
+    }
+#endif
     
     DisposeMemory();
     
     if(mOwner == PM_LOCAL_MACHINE)
         DeleteAssociations();
+}
+    
+void pmMemSection::UserDelete()
+{
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dDeleteLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDeleteLock, Lock(), Unlock());
+        mUserDelete = true;
+    }
+    
+    pmTask* lTask = NULL;    
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
+        lTask = mLockingTask;
+    }
+
+    if(!lTask)
+        delete this;
 }
     
 void pmMemSection::DisposeMemory()
@@ -244,15 +271,15 @@ pmMemSection* pmMemSection::FindMemSectionContainingAddress(void* pPtr)
     
     typedef std::map<void*, pmMemSection*> mapType;
     mapType::iterator lStartIter;
-    mapType::iterator *lStartIterAddr = &lStartIter;
+    mapType::iterator* lStartIterAddr = &lStartIter;
     
     char* lAddress = static_cast<char*>(pPtr);
     FIND_FLOOR_ELEM(mapType, mMemSectionMap, lAddress, lStartIterAddr);
     
     if(lStartIterAddr)
     {
-        char* lMemAddress = static_cast<char*>((void*)(lStartIter->first));
-        pmMemSection* lMemSection = static_cast<pmMemSection*>(lStartIter->second);
+        char* lMemAddress = static_cast<char*>(lStartIter->first);
+        pmMemSection* lMemSection = lStartIter->second;
 
         size_t lLength = lMemSection->GetLength();
         
@@ -275,12 +302,25 @@ void pmMemSection::Lock(pmTask* pTask)
     
 void pmMemSection::Unlock(pmTask* pTask)
 {
-	FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
 
-    if(mLockingTask != pTask)
-        PMTHROW(pmFatalErrorException());
-    
-    mLockingTask = NULL;
+        if(mLockingTask != pTask)
+            PMTHROW(pmFatalErrorException());
+        
+        mLockingTask = NULL;
+    }
+
+    bool lUserDelete = false;
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dDeleteLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDeleteLock, Lock(), Unlock());
+        lUserDelete = mUserDelete;
+    }
+
+    if(lUserDelete)
+        delete this;
 }
     
 pmTask* pmMemSection::GetLockingTask()
@@ -524,7 +564,7 @@ pmStatus pmMemSection::TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ul
     lRangeOwner.host = pOwner;
     lRangeOwner.hostBaseAddr = pOwnerBaseMemAddr;
     lRangeOwner.hostOffset = pOwnerOffset;
-    
+
     pmMemTransferData lTransferData;
     lTransferData.rangeOwner = lRangeOwner;
     lTransferData.offset = pOffset;
@@ -576,8 +616,8 @@ pmStatus pmMemSection::FlushOwnerships()
     {
         pmMemTransferData& lTransferData = *lIter;
 
-        if(lTransferData.rangeOwner.host == PM_LOCAL_MACHINE)
-            PMTHROW(pmFatalErrorException());
+//        if(lTransferData.rangeOwner.host == PM_LOCAL_MACHINE)
+//            PMTHROW(pmFatalErrorException());
 
         SetRangeOwner(lTransferData.rangeOwner.host, lTransferData.rangeOwner.hostBaseAddr, lTransferData.rangeOwner.hostOffset, lTransferData.offset, lTransferData.length, false);
 
@@ -602,7 +642,7 @@ pmStatus pmMemSection::Fetch(ushort pPriority)
     lTimer.Start();
 #endif
     
-    const std::vector<pmCommunicatorCommandPtr>& lVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(mMem, pPriority, 0, GetLength(), false);
+    const std::vector<pmCommunicatorCommandPtr>& lVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(this, pPriority, 0, GetLength());
     
     std::vector<pmCommunicatorCommandPtr>::const_iterator lIter = lVector.begin();
     std::vector<pmCommunicatorCommandPtr>::const_iterator lEndIter = lVector.end();
@@ -642,10 +682,7 @@ pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegis
 	FIND_FLOOR_ELEM(pmMemOwnership, lMap, lLastAddr, lEndIterAddr);
 
 	if(!lStartIterAddr || !lEndIterAddr)
-    {
-        std::cout << pOffset << " " << pLength << " " << lStartIterAddr << " " << lEndIterAddr << " " << lMap.size() << " " << lMap.begin()->first << " " << lMap.begin()->second.first << std::endl;
 		PMTHROW(pmFatalErrorException());
-    }
 
     size_t lSpan = lStartIter->first + lStartIter->second.first - 1;
     if(lLastAddr < lSpan)

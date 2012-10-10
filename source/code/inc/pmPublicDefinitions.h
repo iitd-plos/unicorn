@@ -91,6 +91,7 @@ namespace pm
 	typedef void* pmMemHandle;
 	typedef void* pmRawMemPtr;
 	typedef void* pmTaskHandle;
+    typedef void* pmDeviceHandle;
 	typedef void* pmCallbackHandle;
 	typedef void* pmClusterHandle;
 
@@ -143,20 +144,21 @@ namespace pm
 		unsigned int destHost;
 	} pmDataTransferInfo;
 
-	typedef enum pmDeviceTypes
+	typedef enum pmDeviceType
 	{
 		CPU = 0,
 	#ifdef SUPPORT_CUDA
 		GPU_CUDA,
 	#endif
 		MAX_DEVICE_TYPES
-	} pmDeviceTypes;
+	} pmDeviceType;
 
 	typedef struct pmDeviceInfo
 	{
+        pmDeviceHandle deviceHandle;
 		char name[MAX_NAME_STR_LEN];
 		char description[MAX_DESC_STR_LEN];
-		pmDeviceTypes deviceTypeInfo;
+		pmDeviceType deviceType;
 		unsigned int host;
 	} pmDeviceInfo;
     
@@ -170,11 +172,11 @@ namespace pm
 
 
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
-	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, unsigned long pSubtaskId, pmDeviceTypes pDeviceType);
-	typedef pmStatus (*pmSubtaskCallback_CPU)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
-	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
-	typedef pmStatus (*pmDataReductionCallback)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtask1Info, pmSubtaskInfo pSubtask2Info);
-	typedef pmStatus (*pmDataRedistributionCallback)(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
+	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId);
+	typedef pmStatus (*pmSubtaskCallback_CPU)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
+	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
+	typedef pmStatus (*pmDataReductionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
+	typedef pmStatus (*pmDataRedistributionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef bool     (*pmDeviceSelectionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
 	typedef pmStatus (*pmPreDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
 	typedef pmStatus (*pmPostDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
@@ -230,7 +232,7 @@ namespace pm
      *  This function can only be called from DataDistribution callback. The effect
      *  of calling this function otherwise is undefined.
      */
-	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo);
+	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo);
     
 	/** The memory redistribution API. It establishes memory ordering for the
 	 *	output section computed by a subtask in the final task memory. Order 0 is assumed
@@ -239,7 +241,7 @@ namespace pm
      *  produce data for that order. This function can only be called from DataRedistribution
      *  callback. The effect of calling this function otherwise is undefined.
      */
-    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder);
+    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder);
 
     /** The CUDA launch configuration structure */
     typedef struct pmCudaLaunchConf
@@ -260,7 +262,7 @@ namespace pm
      *  This function can only be called from DataDistribution callback. The effect
      *  of calling this function otherwise is undefined.
      */
-    pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf);
+    pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf);
 	
 	/** The task details structure used for task submission */
 	typedef struct pmTaskDetails
@@ -275,6 +277,7 @@ namespace pm
 		unsigned short priority;	/* By default, this is set to max priority level (0) */
         pmSchedulingPolicy policy;  /* By default, this is SLOW_START */
         int timeOutInSecs;          /* By default, this is max possible value in signed int, negative values mean no timeout */
+        bool multiAssignEnabled;    /* By default, this is true */
         bool autoFetchOutputMem;    /* By default, this is true */        
 		pmClusterHandle cluster;	/* Unused */
 
@@ -309,7 +312,7 @@ namespace pm
     /** This function returns a writable buffer accessible to subtask, reduction and data redistribution callbacks. Size parameter
      is only honored for the first invocation of this function for a particular subtask. Successive invocations return the buffer
      allocated at initial request size. This buffer is only used to pass information generated in one callback to other callbacks */
-    void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pBufferSize);
+    void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pBufferSize);
     
 } // end namespace pm
 

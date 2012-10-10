@@ -40,7 +40,7 @@ class pmRedistributor : public pmBase
 		pmRedistributor(pmTask* pTask);
 		virtual ~pmRedistributor();
 
-        pmStatus RedistributeData(ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder);
+        pmStatus RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder);
         pmStatus PerformRedistribution(pmMachine* pHost, ulong pBaseMemAddr, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector);
     
         pmStatus SendRedistributionInfo();

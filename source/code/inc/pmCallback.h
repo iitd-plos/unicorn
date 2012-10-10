@@ -32,6 +32,7 @@ namespace pm
 
 class pmTask;
 class pmProcessingElement;
+class pmExecutionStub;
 
 class pmCallback : public pmBase
 {
@@ -50,7 +51,7 @@ class pmDataDistributionCB : public pmCallback
 		pmDataDistributionCB(pmDataDistributionCallback pCallback);
 		virtual ~pmDataDistributionCB();
 
-		virtual pmStatus Invoke(pmTask* pTask, ulong pSubtaskId, pmDeviceTypes pDeviceType);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId);
 
 	private:
 		pmDataDistributionCallback mCallback;
@@ -62,9 +63,9 @@ class pmSubtaskCB : public pmCallback
 		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA);
 		virtual ~pmSubtaskCB();
 
-		virtual pmStatus Invoke(pmDeviceTypes pDeviceType, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex);
 
-		virtual bool IsCallbackDefinedForDevice(pmDeviceTypes pDeviceType);
+		virtual bool IsCallbackDefinedForDevice(pmDeviceType pDeviceType);
 
 	private:
 		pmSubtaskCallback_CPU mCallback_CPU;
@@ -77,7 +78,7 @@ class pmDataReductionCB : public pmCallback
 		pmDataReductionCB(pmDataReductionCallback pCallback);
 		virtual ~pmDataReductionCB();
 
-		virtual pmStatus Invoke(pmTask* pTask, ulong pSubtaskId1, ulong pSubtaskId2);
+		virtual pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2);
 
 	private:
 		pmDataReductionCallback mCallback;
@@ -89,7 +90,7 @@ class pmDataRedistributionCB : public pmCallback
 		pmDataRedistributionCB(pmDataRedistributionCallback pCallback);
 		virtual ~pmDataRedistributionCB();
 
-		virtual pmStatus Invoke(pmTask* pTask, ulong pSubtaskId);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId);
 
 	private:
 		pmDataRedistributionCallback mCallback;

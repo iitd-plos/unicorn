@@ -138,7 +138,9 @@ void* pmLinuxMemoryManager::AllocateMemory(pmMemSection* pMemSection, size_t& pL
 	++mTotalAllocations;
 #endif
 
-    CreateMemSectionSpecifics(pMemSection);
+    if(pMemSection)
+        CreateMemSectionSpecifics(pMemSection);
+    
 	return lPtr;
 }
 
@@ -166,9 +168,12 @@ void* pmLinuxMemoryManager::AllocateLazyMemory(pmMemSection* pMemSection, size_t
 #ifdef TRACK_MEMORY_ALLOCATIONS
 	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
 	mTotalLazyMemory += pLength;
+	++mTotalAllocations;
 #endif
 
-    CreateMemSectionSpecifics(pMemSection);
+    if(pMemSection)
+        CreateMemSectionSpecifics(pMemSection);
+    
 	return lPtr;
 }
 #endif
@@ -188,6 +193,18 @@ pmStatus pmLinuxMemoryManager::DeallocateMemory(pmMemSection* pMemSection)
 	return pmSuccess;
 }
 
+pmStatus pmLinuxMemoryManager::DeallocateMemory(void* pMem)
+{
+	::free(pMem);
+
+#ifdef TRACK_MEMORY_ALLOCATIONS
+	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+	++mTotalDeallocations;
+#endif
+
+	return pmSuccess;
+}
+    
 size_t pmLinuxMemoryManager::FindAllocationSize(size_t pLength, size_t& pPageCount)
 {
 	size_t lPageSize = GetVirtualMemoryPageSize();
@@ -295,43 +312,36 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
     }
 }
 
-std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(void* pMem, ushort pPriority, size_t pOffset, size_t pLength, bool pRegisterOnly)
+std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength)
 {
     using namespace linuxMemManager;
-    
-	pmMemSection* lMemSection = pmMemSection::FindMemSection(pMem);
-	if(!lMemSection)
-		PMTHROW(pmFatalErrorException());
+    void* lMem = pMemSection->GetMem();
     
 	std::vector<std::pair<ulong, ulong> > lRegionsToBeFetched;	// Each pair is start address and last address of sub ranges to be fetched
 	std::vector<pmCommunicatorCommandPtr> lCommandVector;
     
-    memSectionSpecifics& lSpecifics = GetMemSectionSpecifics(lMemSection);
-    bool lIsLazyRegisteration = (lMemSection->IsLazy() && pRegisterOnly);
-    pmInFlightRegions& lMap = lIsLazyRegisteration ? lSpecifics.mInFlightLazyRegisterations : lSpecifics.mInFlightMemoryMap;
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lIsLazyRegisteration ? lSpecifics.mInFlightLazyRegisterationLock : lSpecifics.mInFlightLock;
+    memSectionSpecifics& lSpecifics = GetMemSectionSpecifics(pMemSection);
+    pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
 
 	FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
 
-    FindRegionsNotInFlight(lMap, pMem, pOffset, pLength, lRegionsToBeFetched, lCommandVector);
+    FindRegionsNotInFlight(lMap, lMem, pOffset, pLength, lRegionsToBeFetched, lCommandVector);
 
 	size_t lRegionCount = lRegionsToBeFetched.size();
 
 	for(size_t i=0; i<lRegionCount; ++i)
 	{
-		ulong lOffset = lRegionsToBeFetched[i].first - (ulong)pMem;
+		ulong lOffset = lRegionsToBeFetched[i].first - (ulong)lMem;
 		ulong lLength = lRegionsToBeFetched[i].second - lRegionsToBeFetched[i].first + 1;
         
         if(lLength)
         {
             pmMemSection::pmMemOwnership lOwnerships;
-            lMemSection->GetOwners(lOffset, lLength, lIsLazyRegisteration, lOwnerships);
+            pMemSection->GetOwners(lOffset, lLength, false, lOwnerships);
 
-            pmMemSection::pmMemOwnership::iterator lStartIter, lEndIter, lIter;
-            lStartIter = lOwnerships.begin();
-            lEndIter = lOwnerships.end();
-
-            for(lIter = lStartIter; lIter != lEndIter; ++lIter)
+            pmMemSection::pmMemOwnership::iterator lIter = lOwnerships.begin(), lEndIter = lOwnerships.end();            
+            for(; lIter != lEndIter; ++lIter)
             {
                 ulong lInternalOffset = lIter->first;
                 ulong lInternalLength = lIter->second.first;
@@ -339,7 +349,7 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 
                 if(lRangeOwner.host != PM_LOCAL_MACHINE)
                 {
-                    pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, lMemSection, pMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr, lRangeOwner.hostOffset, pRegisterOnly, lMap);
+                    pmCommunicatorCommandPtr lCommand = FetchNonOverlappingMemoryRegion(pPriority, pMemSection, lMem, lInternalOffset, lInternalLength, lRangeOwner.host, lRangeOwner.hostBaseAddr, lRangeOwner.hostOffset, lMap);
 
                     if(lCommand.get())
                         lCommandVector.push_back(lCommand);
@@ -351,30 +361,29 @@ std::vector<pmCommunicatorCommandPtr> pmLinuxMemoryManager::FetchMemoryRegion(vo
 	return lCommandVector;
 }
 
-pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, bool pRegisterOnly, linuxMemManager::pmInFlightRegions& pInFlightMap)
+pmCommunicatorCommandPtr pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, linuxMemManager::pmInFlightRegions& pInFlightMap)
 {	
     using namespace linuxMemManager;
     
 	regionFetchData lFetchData;
 
-	pmCommunicatorCommand::memorySubscriptionRequest* lData = new pmCommunicatorCommand::memorySubscriptionRequest();
+	pmCommunicatorCommand::memoryTransferRequest* lData = new pmCommunicatorCommand::memoryTransferRequest();
 	lData->ownerBaseAddr = pOwnerBaseMemAddr;	// page aligned
 	lData->receiverBaseAddr = (ulong)pMem;		// page aligned
     lData->receiverOffset = pOffset;
 	lData->offset = pOwnerOffset;
 	lData->length = pLength;
 	lData->destHost = *PM_LOCAL_MACHINE;
-    lData->registerOnly = pRegisterOnly?1:0;
     lData->isForwarded = 0;
     
-	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine,	pmCommunicatorCommand::MEMORY_SUBSCRIPTION_STRUCT, (void*)lData, 1, NULL, 0);
+	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, pOwnerMachine,	pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0);
 
 	pmCommunicator::GetCommunicator()->Send(lFetchData.sendCommand);
 
     MEM_REQ_DUMP(pMemSection, pMem, pOffset, pOwnerOffset, pLength, (uint)(*pOwnerMachine));
         
     // For write only memory, a zero length buffer will be received back as an acknowledgement of subscription registration
-	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_SUBSCRIPTION_TAG, pOwnerMachine, pmCommunicatorCommand::BYTE, NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
+	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, pOwnerMachine, pmCommunicatorCommand::BYTE, NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
     
 	char* lAddr = (char*)pMem + lData->receiverOffset;
     pInFlightMap[lAddr] = std::make_pair(lData->length, lFetchData);
@@ -392,45 +401,37 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
 {
     using namespace linuxMemManager;
     
-    memSectionSpecifics& lSpecifics = GetMemSectionSpecifics(pMemSection);
-    bool lIsLazyRegisteration = (pMemSection->IsLazy() && !pLength);
-    pmInFlightRegions& lMap = lIsLazyRegisteration ? lSpecifics.mInFlightLazyRegisterations : lSpecifics.mInFlightMemoryMap;
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lIsLazyRegisteration ? lSpecifics.mInFlightLazyRegisterationLock : lSpecifics.mInFlightLock;
+    if(!pLength)
+        PMTHROW(pmFatalErrorException());
     
+    memSectionSpecifics& lSpecifics = GetMemSectionSpecifics(pMemSection);
+    pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
+
     FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
     
     char* lAddr = (char*)pDestMem + pOffset;
     
     pmInFlightRegions::iterator lIter = lMap.find(lAddr);
-    if((lIter != lMap.end()) && (!pLength || lIter->second.first == pLength))
+    if((lIter != lMap.end()) && (lIter->second.first == pLength))
     {
         std::pair<size_t, regionFetchData>& lPair = lIter->second;
         
-        // Zero length is sent as an acknowledgement when registerOnly request is sent
-        if(pLength)
+        if(pMemSection->IsLazy())
         {
-            if(pMemSection->IsLazy())
-            {
-    #ifdef SUPPORT_LAZY_MEMORY
-                RemoveLazyWriteProtection((void*)lAddr, (size_t)pLength);
-                memcpy((void*)lAddr, pSrcMem, pLength);
-                RemoveLazyProtection((void*)lAddr, (size_t)pLength);
-    #endif
-            }
-            else
-            {
-                memcpy((void*)lAddr, pSrcMem, pLength);
-            }
+        #ifdef SUPPORT_LAZY_MEMORY
+            RemoveLazyWriteProtection((void*)lAddr, (size_t)pLength);
+            memcpy((void*)lAddr, pSrcMem, pLength);
+            RemoveLazyProtection((void*)lAddr, (size_t)pLength);
+        #endif
+        }
+        else
+        {
+            memcpy((void*)lAddr, pSrcMem, pLength);
         }
         
-        regionFetchData& lData = lPair.second;     
-        
-    #ifdef SUPPORT_LAZY_MEMORY
-        if(lIsLazyRegisteration)
-            pMemSection->AcquireOwnershipLazy(pOffset, lPair.first);
-        else
-    #endif
-            pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
+        regionFetchData& lData = lPair.second;
+        pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
 
 #ifdef ENABLE_TASK_PROFILING
         pmTask* lLockingTask = pMemSection->GetLockingTask();
@@ -443,16 +444,13 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
             pMemSection->RecordMemReceive(pLength);
 #endif
     
-        delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
+        delete (pmCommunicatorCommand::memoryTransferRequest*)(lData.sendCommand->GetData());
         lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
 
         lMap.erase(lIter);
     }
     else
-    {
-        if(!pLength)
-            PMTHROW(pmFatalErrorException());
-        
+    {        
         pmInFlightRegions::iterator lBaseIter;
         pmInFlightRegions::iterator* lBaseIterAddr = &lBaseIter;
         FIND_FLOOR_ELEM(pmInFlightRegions, lSpecifics.mInFlightMemoryMap, lAddr, lBaseIterAddr);
@@ -522,7 +520,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(void* pDestMem, pmMemSection* 
                 pMemSection->RecordMemReceive(pLength);
 #endif
 
-            delete (pmCommunicatorCommand::memorySubscriptionRequest*)(lData.sendCommand->GetData());
+            delete (pmCommunicatorCommand::memoryTransferRequest*)(lData.sendCommand->GetData());
             lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
 
             lSpecifics.mInFlightMemoryMap.erase(lBaseIter);
@@ -646,9 +644,9 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmMemSection* pMemSection, voi
     // lazy memory page and prefetch pages and second with lazy memory page only. The in-flight memory system will piggy back second
     // request onto the first one. The current thread only waits on commands returned by second Fetch statement.
     if(pForwardPrefetchPageCount)
-        FetchMemoryRegion(pMemSection->GetMem(), MAX_CONTROL_PRIORITY, lOffset, lLeftoverLength, false);
+        FetchMemoryRegion(pMemSection, MAX_CONTROL_PRIORITY, lOffset, lLeftoverLength);
 
-	const std::vector<pmCommunicatorCommandPtr>& lCommandVector = FetchMemoryRegion(pMemSection->GetMem(), MAX_CONTROL_PRIORITY, lOffset, ((lLeftoverLength > lPageSize) ? lPageSize : lLeftoverLength), false);
+	const std::vector<pmCommunicatorCommandPtr>& lCommandVector = FetchMemoryRegion(pMemSection, MAX_CONTROL_PRIORITY, lOffset, ((lLeftoverLength > lPageSize) ? lPageSize : lLeftoverLength));
     
     std::vector<pmCommunicatorCommandPtr>::const_iterator lStartIter = lCommandVector.begin();
     std::vector<pmCommunicatorCommandPtr>::const_iterator lEndIter = lCommandVector.end();
@@ -671,6 +669,27 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmMemSection* pMemSection, voi
     return LoadLazyMemoryPage(pMemSection, pLazyMemAddr, pMemSection->GetLazyForwardPrefetchPageCount());
 }
 
+pmStatus pmLinuxMemoryManager::CopyShadowMemPage(pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr)
+{
+#ifdef TRACK_MEMORY_ALLOCATIONS
+	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+	++mTotalLazySegFaults;
+#endif
+    
+	size_t lPageSize = GetVirtualMemoryPageSize();
+	size_t lMemAddr = reinterpret_cast<size_t>(pFaultAddr);
+	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
+    size_t lOffset = pShadowMemOffset + (lPageAddr - reinterpret_cast<size_t>(pShadowMemBaseAddr));
+    
+    void* lDestAddr = reinterpret_cast<void*>(lPageAddr);
+    void* lSrcAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pMemSection->GetMem()) + lOffset);
+    
+    RemoveLazyProtection(lDestAddr, lPageSize);
+    ::memcpy(lDestAddr, lSrcAddr, lPageSize);
+    
+    return pmSuccess;
+}
+    
 pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
 {    
 	struct sigaction lSigAction;
@@ -711,14 +730,30 @@ pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
 
 void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
 {
-    pmMemSection* lMemSection = pmMemSection::FindMemSectionContainingAddress((void*)(pSigInfo->si_addr));
-    if(!lMemSection || !lMemSection->IsLazy())
-        abort();
+    size_t lShadowMemOffset = 0;
+    void* lShadowMemBaseAddr = NULL;
     
     pmLinuxMemoryManager* lMemoryManager = dynamic_cast<pmLinuxMemoryManager*>(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager());
-
-	if(lMemoryManager->LoadLazyMemoryPage(lMemSection, (void*)(pSigInfo->si_addr)) != pmSuccess)
-		abort();
+    
+    pmMemSection* lMemSection = pmSubscriptionManager::FindMemSectionContainingShadowAddr((void*)(pSigInfo->si_addr), lShadowMemOffset, lShadowMemBaseAddr);
+    if(lMemSection)
+    {
+        if(!lMemSection->IsLazy() || !lShadowMemBaseAddr)
+            abort();
+    
+        if(lMemoryManager->CopyShadowMemPage(lMemSection, lShadowMemOffset, lShadowMemBaseAddr, (void*)(pSigInfo->si_addr)) != pmSuccess)
+            abort();
+    }
+    else
+    {
+        lMemSection = pmMemSection::FindMemSectionContainingAddress((void*)(pSigInfo->si_addr));
+    
+        if(!lMemSection || !lMemSection->IsLazy())
+            abort();
+    
+        if(lMemoryManager->LoadLazyMemoryPage(lMemSection, (void*)(pSigInfo->si_addr)) != pmSuccess)
+            abort();
+    }
 }
 #endif
 

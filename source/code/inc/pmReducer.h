@@ -31,6 +31,7 @@ namespace pm
 
 class pmTask;
 class pmMachine;
+class pmExecutionStub;
 
 class pmReducer : public pmBase
 {
@@ -39,15 +40,14 @@ class pmReducer : public pmBase
 		virtual ~pmReducer();
 
 		pmStatus CheckReductionFinish();
-		pmStatus AddSubtask(ulong pSubtaskId);
+		pmStatus AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
 	
 	private:
 		pmStatus PopulateExternalMachineList();
 		ulong GetMaxPossibleExternalReductionReceives(uint pFollowingMachineCount);
         pmStatus CheckReductionFinishInternal();
 
-		ulong mLastSubtaskId;
-		uint mCurrentStubId;
+		std::pair<pmExecutionStub*, ulong> mLastSubtask;
 
 		ulong mReductionsDone;
 		ulong mExternalReductionsRequired;

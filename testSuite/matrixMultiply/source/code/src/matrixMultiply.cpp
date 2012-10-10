@@ -39,7 +39,7 @@ pmCudaLaunchConf GetCudaLaunchConf(int pMatrixDim)
 }
 #endif
 
-pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, unsigned long pSubtaskId, pmDeviceTypes pDeviceType)
+pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
@@ -49,18 +49,18 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyI
 	// Subscribe to one row of the output matrix
 	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
 	lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pSubtaskId, false, lSubscriptionInfo);
+	pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, false, lSubscriptionInfo);
 
 #ifdef BUILD_CUDA
 	// Set CUDA Launch Configuration
-	if(pDeviceType == pm::GPU_CUDA)
-		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pSubtaskId, lTaskConf->cudaLaunchConf);
+	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
+		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, lTaskConf->cudaLaunchConf);
 #endif
 
 	return pmSuccess;
 }
 
-pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
+pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
 

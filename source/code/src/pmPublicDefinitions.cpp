@@ -188,7 +188,7 @@ unsigned int pmGetHostCount()
 	return 0;
 }
     
-void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, ulong pSubtaskId, size_t pBufferSize)
+void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, size_t pBufferSize)
 {
     try
     {
@@ -196,7 +196,7 @@ void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, ulong pSubtaskId, size_t pBuf
 		if(!lController)
 			return NULL;
         
-        return lController->GetScratchBuffer_Public(pTaskHandle, pSubtaskId, pBufferSize);
+        return lController->GetScratchBuffer_Public(pTaskHandle, pDeviceHandle, pSubtaskId, pBufferSize);
     }
     catch(pmException& e)
     {
@@ -261,6 +261,7 @@ pmTaskDetails::pmTaskDetails()
 	priority = DEFAULT_PRIORITY_LEVEL;
     policy = SLOW_START;
     timeOutInSecs = __MAX(int);
+    multiAssignEnabled = true;
     autoFetchOutputMem = true;
 }
 
@@ -304,9 +305,9 @@ pmCudaLaunchConf::pmCudaLaunchConf()
 	sharedMem = 0;
 }
     
-pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf)
+pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf)
 {
-	SAFE_EXECUTE_ON_CONTROLLER(SetCudaLaunchConf_Public, pTaskHandle, pSubtaskId, pCudaLaunchConf);
+	SAFE_EXECUTE_ON_CONTROLLER(SetCudaLaunchConf_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pCudaLaunchConf);
 }
 
 pmSubscriptionInfo::pmSubscriptionInfo()
@@ -318,14 +319,14 @@ pmSubscriptionInfo::pmSubscriptionInfo()
 	//blockCount = 1;
 }
 
-pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo)
+pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo)
 {
-	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pSubtaskId, pIsInputMemory, pSubscriptionInfo);
+	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pIsInputMemory, pSubscriptionInfo);
 }
     
-pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
+pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
 {
-    SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pSubtaskId, pOffset, pLength, pOrder);
+    SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pOffset, pLength, pOrder);
 }
 
 } // end namespace pm

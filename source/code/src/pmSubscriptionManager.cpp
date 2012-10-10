@@ -24,11 +24,17 @@
 #include "pmMemoryManager.h"
 #include "pmMemSection.h"
 #include "pmTask.h"
+#include "pmExecutionStub.h"
+#include "pmCallbackUnit.h"
+#include "pmCallback.h"
 
 namespace pm
 {
 
 using namespace subscription;
+
+std::map<void*, subscription::shadowMemDetails> pmSubscriptionManager::mShadowMemMap;
+RESOURCE_LOCK_IMPLEMENTATION_CLASS pmSubscriptionManager::mShadowMemLock;
 
 pmSubscriptionManager::pmSubscriptionManager(pmTask* pTask)
 {
@@ -39,30 +45,32 @@ pmSubscriptionManager::~pmSubscriptionManager()
 {
 }
 
-pmStatus pmSubscriptionManager::InitializeSubtaskDefaults(ulong pSubtaskId)
+pmStatus pmSubscriptionManager::InitializeSubtaskDefaults(pmExecutionStub* pStub, ulong pSubtaskId)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	if(mSubtaskMap.find(pSubtaskId) != mSubtaskMap.end())
-		PMTHROW(pmFatalErrorException());
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) != mSubtaskMap.end())
+        PMTHROW(pmFatalErrorException());
 
-	mSubtaskMap[pSubtaskId].Initialize(mTask);
+	mSubtaskMap[lPair].Initialize(mTask);
 
 	return pmSuccess;
 }
 
-pmStatus pmSubscriptionManager::RegisterSubscription(ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo)
+pmStatus pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-
-	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+    
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
 
 	if((pIsInputMem && !mTask->GetMemSectionRO()) || (!pIsInputMem && !mTask->GetMemSectionRW()))
         PMTHROW(pmFatalErrorException());
 
-    subscriptionRecordType& lMap = pIsInputMem ? mSubtaskMap[pSubtaskId].mInputMemSubscriptions : mSubtaskMap[pSubtaskId].mOutputMemSubscriptions;
-    pmSubscriptionInfo& lConsolidatedSubscription = pIsInputMem ? mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription : mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription;
+    subscriptionRecordType& lMap = pIsInputMem ? mSubtaskMap[lPair].mInputMemSubscriptions : mSubtaskMap[lPair].mOutputMemSubscriptions;
+    pmSubscriptionInfo& lConsolidatedSubscription = pIsInputMem ? mSubtaskMap[lPair].mConsolidatedInputMemSubscription : mSubtaskMap[lPair].mConsolidatedOutputMemSubscription;
     
     if(lMap.empty())
     {
@@ -185,63 +193,76 @@ pmStatus pmSubscriptionManager::RegisterSubscription(ulong pSubtaskId, bool pIsI
 	return pmSuccess;
 }
 
-pmStatus pmSubscriptionManager::SetCudaLaunchConf(ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
+pmStatus pmSubscriptionManager::SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
+    
+#ifdef SUPPORT_CUDA
+    if(pStub->GetType() != GPU_CUDA)
+		PMTHROW(pmFatalErrorException());
+#else
+        PMTHROW(pmFatalErrorException());
+#endif
 
-	mSubtaskMap[pSubtaskId].mCudaLaunchConf = pCudaLaunchConf;
+	mSubtaskMap[lPair].mCudaLaunchConf = pCudaLaunchConf;
 
 	return pmSuccess;
 }
 
-pmCudaLaunchConf& pmSubscriptionManager::GetCudaLaunchConf(ulong pSubtaskId)
+pmCudaLaunchConf& pmSubscriptionManager::GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
 
-	return mSubtaskMap[pSubtaskId].mCudaLaunchConf;
+	return mSubtaskMap[lPair].mCudaLaunchConf;
 }
     
-void* pmSubscriptionManager::GetScratchBuffer(ulong pSubtaskId, size_t pBufferSize)
+void* pmSubscriptionManager::GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, size_t pBufferSize)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
     
-	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
     
-	char* lScratchBuffer = mSubtaskMap[pSubtaskId].mScratchBuffer.get_ptr();
+	char* lScratchBuffer = mSubtaskMap[lPair].mScratchBuffer.get_ptr();
     if(!lScratchBuffer)
     {
         lScratchBuffer = new char[pBufferSize];
-        mSubtaskMap[pSubtaskId].mScratchBuffer.reset(lScratchBuffer);
+        mSubtaskMap[lPair].mScratchBuffer.reset(lScratchBuffer);
     }
     
     return lScratchBuffer;
 }
     
-bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptions(ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem)
+bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, bool pIsInputMem)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-    if(mSubtaskMap.find(pSubtaskId1) == mSubtaskMap.end() || mSubtaskMap.find(pSubtaskId2) == mSubtaskMap.end())
+    std::pair<pmExecutionStub*, ulong> lPair1(pStub1, pSubtaskId1);
+    std::pair<pmExecutionStub*, ulong> lPair2(pStub2, pSubtaskId2);
+    
+    if(mSubtaskMap.find(lPair1) == mSubtaskMap.end() || mSubtaskMap.find(lPair2) == mSubtaskMap.end())
         PMTHROW(pmFatalErrorException());
 
 	if((pIsInputMem && !mTask->GetMemSectionRO()) || (!pIsInputMem && !mTask->GetMemSectionRW()))
 		PMTHROW(pmFatalErrorException());
     
-	pmSubscriptionInfo& lConsolidatedSubscription1 = pIsInputMem ? mSubtaskMap[pSubtaskId1].mConsolidatedInputMemSubscription : mSubtaskMap[pSubtaskId1].mConsolidatedOutputMemSubscription;
-	pmSubscriptionInfo& lConsolidatedSubscription2 = pIsInputMem ? mSubtaskMap[pSubtaskId2].mConsolidatedInputMemSubscription : mSubtaskMap[pSubtaskId2].mConsolidatedOutputMemSubscription;
+	pmSubscriptionInfo& lConsolidatedSubscription1 = pIsInputMem ? mSubtaskMap[lPair1].mConsolidatedInputMemSubscription : mSubtaskMap[lPair1].mConsolidatedOutputMemSubscription;
+	pmSubscriptionInfo& lConsolidatedSubscription2 = pIsInputMem ? mSubtaskMap[lPair2].mConsolidatedInputMemSubscription : mSubtaskMap[lPair2].mConsolidatedOutputMemSubscription;
     
     if(lConsolidatedSubscription1 != lConsolidatedSubscription2)
         return false;
 
-    subscriptionRecordType& lSubscriptions1 = pIsInputMem ? mSubtaskMap[pSubtaskId1].mInputMemSubscriptions : mSubtaskMap[pSubtaskId1].mOutputMemSubscriptions;
-    subscriptionRecordType& lSubscriptions2 = pIsInputMem ? mSubtaskMap[pSubtaskId2].mInputMemSubscriptions : mSubtaskMap[pSubtaskId2].mOutputMemSubscriptions;
+    subscriptionRecordType& lSubscriptions1 = pIsInputMem ? mSubtaskMap[lPair1].mInputMemSubscriptions : mSubtaskMap[lPair1].mOutputMemSubscriptions;
+    subscriptionRecordType& lSubscriptions2 = pIsInputMem ? mSubtaskMap[lPair2].mInputMemSubscriptions : mSubtaskMap[lPair2].mOutputMemSubscriptions;
     
     if(lSubscriptions1.size() != lSubscriptions2.size())
         return false;
@@ -258,70 +279,248 @@ bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptions(ulong pSubtaskId1,
     return true;
 }
     
-bool pmSubscriptionManager::GetNonConsolidatedInputMemSubscriptionsForSubtask(ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd)
+bool pmSubscriptionManager::GetNonConsolidatedInputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
     
-	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
     
 	if(!mTask->GetMemSectionRO())
 		return false;
     
-	pBegin = mSubtaskMap[pSubtaskId].mInputMemSubscriptions.begin();
-	pEnd = mSubtaskMap[pSubtaskId].mInputMemSubscriptions.end();
+	pBegin = mSubtaskMap[lPair].mInputMemSubscriptions.begin();
+	pEnd = mSubtaskMap[lPair].mInputMemSubscriptions.end();
     
 	return true;    
 }
     
-bool pmSubscriptionManager::GetNonConsolidatedOutputMemSubscriptionsForSubtask(ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd)
+bool pmSubscriptionManager::GetNonConsolidatedOutputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
     
-	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
     
 	if(!mTask->GetMemSectionRW())
 		return false;
     
-	pBegin = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.begin();
-	pEnd = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions.end();
+	pBegin = mSubtaskMap[lPair].mOutputMemSubscriptions.begin();
+	pEnd = mSubtaskMap[lPair].mOutputMemSubscriptions.end();
     
 	return true;    
 }
 
-bool pmSubscriptionManager::GetInputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo)
+bool pmSubscriptionManager::GetInputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
 
 	if(!mTask->GetMemSectionRO())
 		return false;
 
-	pSubscriptionInfo = mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription;
+	pSubscriptionInfo = mSubtaskMap[lPair].mConsolidatedInputMemSubscription;
 
 	return true;
 }
 
-bool pmSubscriptionManager::GetOutputMemSubscriptionForSubtask(ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo)
+bool pmSubscriptionManager::GetOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	if(mSubtaskMap.find(pSubtaskId) == mSubtaskMap.end())
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
 
 	if(!mTask->GetMemSectionRW())
 		return false;
 
-	pSubscriptionInfo = mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription;
+	pSubscriptionInfo = mSubtaskMap[lPair].mConsolidatedOutputMemSubscription;
 
 	return true;
 }
-
-pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId, pmDeviceTypes pDeviceType)
+    
+pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, char* pMem /* = NULL */, size_t pMemLength /* = 0 */)
 {
+    pmSubscriptionInfo lSubscriptionInfo;
+    if(!GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lSubscriptionInfo))
+        PMTHROW(pmFatalErrorException());
+    
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+
+#ifdef _DEBUG
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+        if(mSubtaskMap[lPair].mShadowMem.get_ptr() != NULL)
+            PMTHROW(pmFatalErrorException());
+    }
+#endif
+    
+    pmMemSection* lMemSection = mTask->GetMemSectionRW();
+    bool lIsLazyMem = (lMemSection->IsLazy() && pStub->GetType() == CPU && !pMem);
+    char* lShadowMem = NULL;
+    size_t lPageCount;
+
+#ifdef SUPPORT_LAZY_MEMORY
+    if(lIsLazyMem)
+        lShadowMem = (char*)(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->AllocateLazyMemory(NULL, lSubscriptionInfo.length, lPageCount));
+    else
+#endif
+        lShadowMem = (char*)(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->AllocateMemory(NULL, lSubscriptionInfo.length, lPageCount));
+        
+    if(!lShadowMem)
+        PMTHROW(pmFatalErrorException());
+    
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    #ifdef DUMP_SHADOW_MEM
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem " << (void*)lShadowMem << " allocated for device/subtask " << pStub << "/" << pSubtaskId << " " << std::endl;
+    #endif
+    
+        mSubtaskMap[lPair].mShadowMem.reset(lShadowMem);
+    }
+    
+    if(pMem)
+    {
+        std::cout << "To be done: reduction non-consolidated shadow mem" << std::endl;
+        if(pMemLength <= lSubscriptionInfo.length)
+            memcpy(lShadowMem, pMem, pMemLength);
+    }
+    else if(!lIsLazyMem && pStub->GetType() == CPU)     // no need to copy for GPU; it will be copied to GPU memory directly and after kernel executes results will be put inside shadow memory
+    {
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        GetNonConsolidatedOutputMemSubscriptionsForSubtask(pStub, pSubtaskId, lBeginIter, lEndIter);
+    
+        char* lMem = (char*)(lMemSection->GetMem());
+        for(; lBeginIter != lEndIter; ++lBeginIter)
+            memcpy(lShadowMem + (lBeginIter->first - lSubscriptionInfo.offset), lMem + lBeginIter->first, lBeginIter->second.first);
+    }
+    
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE(dShadowMemLock, mShadowMemLock.Lock(), mShadowMemLock.Unlock());
+
+        mShadowMemMap[(void*)lShadowMem].subscriptionInfo = lSubscriptionInfo;
+        mShadowMemMap[(void*)lShadowMem].memSection = lMemSection;
+    }
+    
+	return pmSuccess;
+}
+
+void* pmSubscriptionManager::GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
+		PMTHROW(pmFatalErrorException());
+    
+    #ifdef DUMP_SHADOW_MEM
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem accessed for device/subtask " << pStub << "/" << pSubtaskId << " " << (void*)(mSubtaskMap[lPair].mShadowMem.get_ptr)() << std::endl;
+    #endif
+
+	return (void*)(mSubtaskMap[lPair].mShadowMem.get_ptr());
+}
+
+pmStatus pmSubscriptionManager::DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
+		PMTHROW(pmFatalErrorException());
+
+    #ifdef DUMP_SHADOW_MEM
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem destroyed for device/subtask " << pStub << "/" << pSubtaskId << " " << (void*)(mSubtaskMap[lPair].mShadowMem.get_ptr()) << std::endl;
+    #endif
+
+	mSubtaskMap[lPair].mShadowMem.reset(NULL);
+
+	return pmSuccess;
+}
+
+void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBeginIter, subscription::subscriptionRecordType::const_iterator& pEndIter, ulong pShadowMemOffset)
+{
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+    char* lShadowMem = NULL;
+    
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    #ifdef DUMP_SHADOW_MEM
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem committed for device/subtask " << pStub << "/" << pSubtaskId << " " << (void*)(mSubtaskMap[lPair].mShadowMem.get_ptr()) << std::endl;
+    #endif
+    
+        lShadowMem = (char*)(mSubtaskMap[lPair].mShadowMem.get_ptr());
+    }
+    
+    if(!lShadowMem)
+        PMTHROW(pmFatalErrorException());
+    
+    pmMemSection* lMemSection = mTask->GetMemSectionRW();
+    char* lMem = (char*)(lMemSection->GetMem());
+    
+    subscription::subscriptionRecordType::const_iterator lIter = pBeginIter;
+    if(lMemSection->IsLazy())
+    {
+        for(; lIter != pEndIter; ++lIter)
+        {
+            // This is wrong because the length and offset of shadow mem are not page size multiples and lazy protection is removed from entire page
+            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->RemoveLazyWriteProtection(lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
+            memcpy(lMem + lIter->first, lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
+        }
+    }
+    else
+    {
+        for(; lIter != pEndIter; ++lIter)
+            memcpy(lMem + lIter->first, lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
+    }
+    
+    DestroySubtaskShadowMem(pStub, pSubtaskId);
+}
+    
+pmMemSection* pmSubscriptionManager::FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr)
+{
+	FINALIZE_RESOURCE(dShadowMemLock, mShadowMemLock.Lock(), mShadowMemLock.Unlock());
+    
+    typedef std::map<void*, subscription::shadowMemDetails> mapType;
+    mapType::iterator lStartIter;
+    mapType::iterator* lStartIterAddr = &lStartIter;
+    
+    char* lAddress = static_cast<char*>(pAddr);
+    FIND_FLOOR_ELEM(mapType, mShadowMemMap, lAddress, lStartIterAddr);
+    
+    if(lStartIterAddr)
+    {
+        char* lMemAddress = static_cast<char*>(lStartIter->first);
+        subscription::shadowMemDetails& lShadowMemDetails = lStartIter->second;
+
+        size_t lLength = lShadowMemDetails.subscriptionInfo.length;
+        
+        if(lMemAddress <= lAddress && lAddress < lMemAddress + lLength)
+        {
+            pShadowMemOffset = lShadowMemDetails.subscriptionInfo.offset;
+            pShadowMemBaseAddr = lStartIter->first;
+            return lShadowMemDetails.memSection;
+        }
+    }
+    
+    return NULL;
+}
+
+pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType)
+{
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+    
 	if(mTask->GetMemSectionRO())
     {
         subscriptionRecordType::iterator lIter, lEndIter;
@@ -329,11 +528,11 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId, pmDe
         // Auto lock/unlock scope
         {        
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-            subscriptionRecordType& lMap = mSubtaskMap[pSubtaskId].mInputMemSubscriptions;
+            subscriptionRecordType& lMap = mSubtaskMap[lPair].mInputMemSubscriptions;
             if(lMap.empty())
             {
-                size_t lOffset = mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription.offset;
-                lMap[lOffset].first = mSubtaskMap[pSubtaskId].mConsolidatedInputMemSubscription.length;
+                size_t lOffset = mSubtaskMap[lPair].mConsolidatedInputMemSubscription.offset;
+                lMap[lOffset].first = mSubtaskMap[lPair].mConsolidatedInputMemSubscription.length;
             }
             
             lIter = lMap.begin();
@@ -346,7 +545,7 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId, pmDe
             lSubscription.offset = lIter->first;
             lSubscription.length = lIter->second.first;
             
-            FetchSubscription(pSubtaskId, true, pDeviceType, lSubscription, lIter->second.second);
+            FetchInputMemSubscription(pStub, pSubtaskId, pDeviceType, lSubscription, lIter->second.second);
         }
     }
 
@@ -357,11 +556,11 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId, pmDe
         // Auto lock/unlock scope
         {        
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-            subscriptionRecordType& lMap = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions;
+            subscriptionRecordType& lMap = mSubtaskMap[lPair].mOutputMemSubscriptions;
             if(lMap.empty())
             {
-                size_t lOffset = mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription.offset;
-                lMap[lOffset].first = mSubtaskMap[pSubtaskId].mConsolidatedOutputMemSubscription.length;
+                size_t lOffset = mSubtaskMap[lPair].mConsolidatedOutputMemSubscription.offset;
+                lMap[lOffset].first = mSubtaskMap[lPair].mConsolidatedOutputMemSubscription.length;
             }
 
             lIter = lMap.begin();
@@ -374,50 +573,65 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(ulong pSubtaskId, pmDe
             lSubscription.offset = lIter->first;
             lSubscription.length = lIter->second.first;
             
-            FetchSubscription(pSubtaskId, false, pDeviceType, lSubscription, lIter->second.second);
+            FetchOutputMemSubscription(pStub, pSubtaskId, pDeviceType, lSubscription, lIter->second.second);
         }
     }
 
-	return WaitForSubscriptions(pSubtaskId);
+	return WaitForSubscriptions(pStub, pSubtaskId);
 }
 
-pmStatus pmSubscriptionManager::FetchSubscription(ulong pSubtaskId, bool pIsInputMem, pmDeviceTypes pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
+pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
 {
-	pmMemSection* lMemSection = NULL;
-    bool lIsWriteOnly = false;
+    std::vector<pmCommunicatorCommandPtr> lReceiveVector;
+	pmMemSection* lMemSection = mTask->GetMemSectionRO();
+    bool lIsLazy = lMemSection->IsLazy();
 
-	if(pIsInputMem)
-    {
-		lMemSection = mTask->GetMemSectionRO();
+    if(!lMemSection->IsLazy() || pDeviceType != CPU)
+    {   
+        size_t lOffset = pSubscriptionInfo.offset;
+        size_t lLength = pSubscriptionInfo.length;
+
+    #ifdef SUPPORT_LAZY_MEMORY
+        if(lIsLazy)
+            lMemSection->GetPageAlignedAddresses(lOffset, lLength);
+    #endif
+        
+        lReceiveVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength);
     }
-	else
-    {
-		lMemSection = mTask->GetMemSectionRW();
-        lIsWriteOnly = (((pmOutputMemSection*)lMemSection)->GetAccessType() == pmOutputMemSection::WRITE_ONLY);
-    }
+
+    pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
     
-	pData.receiveCommandVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection->GetMem(), mTask->GetPriority(), pSubscriptionInfo.offset, pSubscriptionInfo.length, (lMemSection->IsLazy() || lIsWriteOnly));
+	return pmSuccess;
+}
+
+pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
+{
+    std::vector<pmCommunicatorCommandPtr> lReceiveVector;
+	pmMemSection* lMemSection = mTask->GetMemSectionRW();
+    bool lIsWriteOnly = (((pmOutputMemSection*)lMemSection)->GetAccessType() == pmOutputMemSection::WRITE_ONLY);
+    bool lIsLazy = lMemSection->IsLazy();
     
-#ifdef SUPPORT_LAZY_MEMORY
-    if(lMemSection->IsLazy() && pDeviceType != CPU)
-    {
-        std::vector<pmCommunicatorCommandPtr> lReceiveVector;
+    if(!lIsWriteOnly && (!lIsLazy || pDeviceType != CPU))
+    {   
         size_t lOffset = pSubscriptionInfo.offset;
         size_t lLength = pSubscriptionInfo.length;
         
-        lMemSection->GetPageAlignedAddresses(lOffset, lLength);
-
-        lReceiveVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection->GetMem(), mTask->GetPriority(), lOffset, lLength, false);
+    #ifdef SUPPORT_LAZY_MEMORY
+        if(lIsLazy)
+            lMemSection->GetPageAlignedAddresses(lOffset, lLength);
+    #endif
         
-        pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
+        lReceiveVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength);
     }
-#endif
+    
+    pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
 
 	return pmSuccess;
 }
 
-pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
+pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId)
 {
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
 	if(mTask->GetMemSectionRO())
 	{
         subscriptionRecordType::iterator lIter, lEndIter;
@@ -425,7 +639,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
         // Auto lock/unlock scope
         {        
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-            subscriptionRecordType& lMap = mSubtaskMap[pSubtaskId].mInputMemSubscriptions;
+            subscriptionRecordType& lMap = mSubtaskMap[lPair].mInputMemSubscriptions;
             lIter = lMap.begin();
             lEndIter = lMap.end();
         }
@@ -453,7 +667,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
         // Auto lock/unlock scope
         {        
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-            subscriptionRecordType& lMap = mSubtaskMap[pSubtaskId].mOutputMemSubscriptions;
+            subscriptionRecordType& lMap = mSubtaskMap[lPair].mOutputMemSubscriptions;
             lIter = lMap.begin();
             lEndIter = lMap.end();
         }
@@ -477,6 +691,27 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(ulong pSubtaskId)
 	return pmSuccess;
 }
     
+void pmSubscriptionManager::RegisterPostTaskOwnershipTransfer(pmMemSection* pMemSection, pmExecutionStub* pStub, ulong pOffset, ulong pLength, std::vector<pmCommunicatorCommandPtr>& pVector)
+{
+    pmProcessingElement* lDevice = pStub->GetProcessingElement();
+    
+    pmMemSection::pmMemOwnership lOwnerships;
+    pMemSection->GetOwners(pOffset, pLength, false, lOwnerships);
+
+    pmMemSection::pmMemOwnership::iterator lIter = lOwnerships.begin(), lEndIter = lOwnerships.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        ulong lInternalOffset = lIter->first;
+        ulong lInternalLength = lIter->second.first;
+        pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
+
+        if(lRangeOwner.host != PM_LOCAL_MACHINE)
+            pmScheduler::GetScheduler()->SendPostTaskOwnershipTransfer(mTask->GetOriginatingHost(), mTask, reinterpret_cast<void*>(lRangeOwner.hostBaseAddr), lRangeOwner.hostOffset, pMemSection->GetMem(), lInternalOffset, lInternalLength, lDevice);
+    }
+}
+    
+
+/* struct pmSubtask */    
 pmStatus pmSubtask::Initialize(pmTask* pTask)
 {
 	pmMemSection* lInputMemSection = pTask->GetMemSectionRO();
@@ -494,8 +729,6 @@ pmStatus pmSubtask::Initialize(pmTask* pTask)
 		mConsolidatedOutputMemSubscription.length = lOutputMemSection->GetLength();
 	}
     
-    mScratchBuffer = NULL;
-
 	return pmSuccess;
 }
 
@@ -509,5 +742,32 @@ bool operator!=(pmSubscriptionInfo& pSubscription1, pmSubscriptionInfo& pSubscri
     return !(pSubscription1 == pSubscription2);
 }
 
+
+/* shadowMemDeallocator */
+void shadowMemDeallocator::operator()(void* pMem)
+{
+    if(pMem)
+    {
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(pMem);
+
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE(dShadowMemLock, pmSubscriptionManager::mShadowMemLock.Lock(), pmSubscriptionManager::mShadowMemLock.Unlock());
+
+        #ifdef _DEBUG
+            if(pmSubscriptionManager::mShadowMemMap.find(pMem) == pmSubscriptionManager::mShadowMemMap.end())
+                PMTHROW(pmFatalErrorException());
+        #endif
+
+        #ifdef DUMP_SHADOW_MEM
+            std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem deallocated " << (void*)pMem << std::endl;
+        #endif
+       
+            pmSubscriptionManager::mShadowMemMap.erase(pMem);
+        }
+    }
+}
+
+    
 }
 

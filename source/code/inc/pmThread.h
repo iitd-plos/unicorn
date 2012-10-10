@@ -46,7 +46,7 @@ void* ThreadLoop(void* pThreadData);
  * specific. pmThread executes only one command at a time. The subsequent commands wait until
  * the first one returns.
 */
-
+    
 // T must be default constructible
 
 template<typename T, typename P = ushort>
@@ -61,7 +61,7 @@ class pmThread : public pmBase
 			void* clientMatchCriterion;
 		} internalMatchCriterion;
 
-		virtual ~pmThread<T, P>() {}
+		virtual ~pmThread() {}
 		virtual pmStatus SwitchThread(T& pCommand, P pPriority) = 0;
 
 		virtual pmStatus SetProcessorAffinity(int pProcesorId) = 0;
@@ -73,7 +73,8 @@ class pmThread : public pmBase
     
         virtual pmStatus WaitIfCurrentCommandMatches(internalMatchFuncPtr pMatchFunc, void* pMatchCriterion) = 0;
 
-		virtual pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
+        virtual pmStatus UnblockSecondaryCommands();
+		virtual pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem, bool pTemporarilyUnblockSecondaryCommands = false);
         virtual pmStatus DeleteMatchingCommands(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
 
 		enum internalMessage
@@ -87,6 +88,11 @@ class pmThread : public pmBase
 			internalMessage msg;
 			T cmd;
 			typedef pmThread<T, P> outerType;
+        
+            virtual bool BlocksSecondaryOperations()
+            {
+                return cmd.BlocksSecondaryCommands();
+            }
 		} internalType;
 		
 		pmSafePQ<typename pmThread<T, P>::internalType>& GetPriorityQueue() {return this->mSafePQ;}
@@ -102,8 +108,8 @@ template<typename T, typename P = ushort>
 class pmPThread : public pmThread<T, P>
 {
 	public:
-		pmPThread<T, P>();
-		virtual ~pmPThread<T, P>();
+		pmPThread();
+		virtual ~pmPThread();
 
 		virtual pmStatus SwitchThread(T& pCommand, P pPriority);
 
@@ -135,6 +141,14 @@ template<typename T>
 bool internalMatchFunc(T& pInternalCommand, void* pCriterion);
 
 } // end namespace pm
+
+typedef struct pmBasicThreadEvent
+{
+    virtual bool BlocksSecondaryCommands()
+    {
+        return false;
+    }
+} pmBasicThreadEvent;
 
 #include "../src/pmThread.cpp"
 

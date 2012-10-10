@@ -90,34 +90,18 @@ class pmMemSection : public pmBase
 
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
-		virtual ~pmMemSection();
 		void* GetMem();
 		size_t GetLength();
-    
-		static pmMemSection* FindMemSection(void* pMem);
-        static pmMemSection* FindMemSectionContainingAddress(void* pPtr);
-    
+        
         void DeleteAssociations();
         void DeleteLocalAssociations();
         void DeleteRemoteAssociations();
     
         void CreateLocalAssociation(pmMemSection* pMemSection);
         void DisposeMemory();
-    
-        static void SwapMemoryAndOwnerships(pmMemSection* pMemSection1, pmMemSection* pMemSection2);
-        static pmInputMemSection* ConvertOutputMemSectionToInputMemSection(pmOutputMemSection* pOutputMemSection);
-        static pmOutputMemSection* ConvertInputMemSectionToOutputMemSection(pmInputMemSection* pInputMemSection);
-	
+    	
         pmStatus AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
-
-#ifdef SUPPORT_LAZY_MEMORY
-        uint GetLazyForwardPrefetchPageCount();
-        pmStatus AcquireOwnershipLazy(ulong pOffset, ulong pLength);
-        void GetPageAlignedAddresses(size_t& pOffset, size_t& pLength);
-#endif
-    
         pmStatus TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength);
-    
 		pmStatus FlushOwnerships();
 		pmStatus GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegisteration, pmMemSection::pmMemOwnership& pOwnerships);
 
@@ -127,18 +111,33 @@ class pmMemSection : public pmBase
         void SetUserMemHandle(pmUserMemHandle* pUserMemHandle);
         pmUserMemHandle* GetUserMemHandle();
     
-        static void DeleteAllLocalMemSections();
+        void Lock(pmTask* pTask);
+        void Unlock(pmTask* pTask);
+        pmTask* GetLockingTask();
     
+        void UserDelete();
+    
+#ifdef SUPPORT_LAZY_MEMORY
+        uint GetLazyForwardPrefetchPageCount();
+        pmStatus AcquireOwnershipLazy(ulong pOffset, ulong pLength);
+        void GetPageAlignedAddresses(size_t& pOffset, size_t& pLength);
+#endif
+            
 #ifdef ENABLE_MEM_PROFILING
         void RecordMemReceive(size_t pReceiveSize);
         void RecordMemTransfer(size_t pTransferSize);
 #endif
     
-        void Lock(pmTask* pTask);
-        void Unlock(pmTask* pTask);
-        pmTask* GetLockingTask();
+        static pmMemSection* FindMemSection(void* pMem);
+        static pmMemSection* FindMemSectionContainingAddress(void* pPtr);
+        static void SwapMemoryAndOwnerships(pmMemSection* pMemSection1, pmMemSection* pMemSection2);
+        static pmInputMemSection* ConvertOutputMemSectionToInputMemSection(pmOutputMemSection* pOutputMemSection);
+        static pmOutputMemSection* ConvertInputMemSectionToOutputMemSection(pmInputMemSection* pInputMemSection);
+        static void DeleteAllLocalMemSections();
 
     protected:
+        virtual ~pmMemSection();
+    
 		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy);
         pmMemSection(const pmMemSection& pMemSection);
     
@@ -179,13 +178,16 @@ class pmMemSection : public pmBase
         pmTask* mLockingTask;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mTaskLock;
     
+        bool mUserDelete;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeleteLock;
+    
     protected:
 #ifdef ENABLE_MEM_PROFILING
-    size_t mMemReceived;
-    size_t mMemTransferred;
-    ulong mMemReceiveEvents;
-    ulong mMemTransferEvents;
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS mMemProfileLock;
+        size_t mMemReceived;
+        size_t mMemTransferred;
+        ulong mMemReceiveEvents;
+        ulong mMemTransferEvents;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mMemProfileLock;
 #endif
 };
 
@@ -195,9 +197,8 @@ class pmInputMemSection : public pmMemSection
 		pmInputMemSection(size_t pLength, bool pIsLazy, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
         pmInputMemSection(const pmOutputMemSection& pOutputMemSection);
     
-		~pmInputMemSection();
-
 	private:
+		~pmInputMemSection();
 };
 
 class pmOutputMemSection : public pmMemSection
@@ -211,12 +212,13 @@ class pmOutputMemSection : public pmMemSection
 
         pmOutputMemSection(size_t pLength, accessType pAccess, bool pIsLazy, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
         pmOutputMemSection(const pmInputMemSection& pInputMemSection);
-		~pmOutputMemSection();
 
 		pmStatus Update(size_t pOffset, size_t pLength, void* pSrcAddr);
 		accessType GetAccessType();
 
 	private:
+		~pmOutputMemSection();
+    
 		accessType mAccess;
 };
 

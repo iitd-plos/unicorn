@@ -32,13 +32,14 @@ namespace pm
 
 /* class pmSubtaskManager */
 pmSubtaskManager::pmSubtaskManager(pmLocalTask* pLocalTask)
-{
-	mLocalTask= pLocalTask;
-	mTaskStatus = pmStatusUnavailable;
-
-#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
-    mExecutionProfilePrinted = false;
+    : mLocalTask(pLocalTask)
+	, mTaskStatus(pmStatusUnavailable)
+#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
+    , mExecutionProfilePrinted(false)
 #endif
+    , mExecCountSorter(mDeviceExecutionProfile)
+    , mOrderedDevices(mExecCountSorter)
+{
 }
 
 pmSubtaskManager::~pmSubtaskManager()
@@ -56,16 +57,43 @@ pmStatus pmSubtaskManager::GetTaskExecutionStatus()
 
 
 /* struct pmUnfinishedPartition */
-pmSubtaskManager::pmUnfinishedPartition::pmUnfinishedPartition(ulong pFirstSubtaskIndex, ulong pLastSubtaskIndex)
-{
-	firstSubtaskIndex = pFirstSubtaskIndex;
-	lastSubtaskIndex = pLastSubtaskIndex;
-    
+pmSubtaskManager::pmUnfinishedPartition::pmUnfinishedPartition(ulong pFirstSubtaskIndex, ulong pLastSubtaskIndex, pmProcessingElement* pOriginalAllottee /* = NULL */)
+	: firstSubtaskIndex(pFirstSubtaskIndex)
+	, lastSubtaskIndex(pLastSubtaskIndex)
+    , originalAllottee(pOriginalAllottee)
+{    
 	if(lastSubtaskIndex < firstSubtaskIndex)
 		PMTHROW(pmFatalErrorException());
 }
+    
+/* struct partitionSorter */
+bool pmSubtaskManager::partitionSorter::operator() (const pmSubtaskManager::pmUnfinishedPartitionPtr& pPartition1Ptr, const pmSubtaskManager::pmUnfinishedPartitionPtr& pPartition2Ptr) const
+{
+	ulong lCount1 = pPartition1Ptr->lastSubtaskIndex - pPartition1Ptr->firstSubtaskIndex;
+	ulong lCount2 = pPartition2Ptr->lastSubtaskIndex - pPartition2Ptr->firstSubtaskIndex;
+    
+    if(lCount1 == lCount2)
+        return pPartition1Ptr->firstSubtaskIndex < pPartition2Ptr->firstSubtaskIndex;
+    
+    return lCount1 < lCount2;
+}
+    
+pmSubtaskManager::execCountSorter::execCountSorter(std::map<uint, ulong>& pDeviceExecutionProfile)
+    : mDeviceExecutionProfile(pDeviceExecutionProfile)
+{
+}
 
-#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+bool pmSubtaskManager::execCountSorter::operator() (pmProcessingElement* pDevice1, pmProcessingElement* pDevice2) const
+{
+    uint lIndex1 = pDevice1->GetGlobalDeviceIndex();
+    uint lIndex2 = pDevice2->GetGlobalDeviceIndex();
+    
+    if(mDeviceExecutionProfile[lIndex1] == mDeviceExecutionProfile[lIndex2])
+        return pDevice1 < pDevice2;
+    
+    return mDeviceExecutionProfile[lIndex1] < mDeviceExecutionProfile[lIndex2];
+}
+
 // This method must only be called from RegisterSubtaskCompletion method of the subclasses as that acquires the lock and ensures synchronization
 pmStatus pmSubtaskManager::UpdateExecutionProfile(pmProcessingElement* pDevice, ulong pSubtaskCount)
 {
@@ -77,13 +105,17 @@ pmStatus pmSubtaskManager::UpdateExecutionProfile(pmProcessingElement* pDevice, 
     
     if(mMachineExecutionProfile.find(lMachineIndex) == mMachineExecutionProfile.end())
         mMachineExecutionProfile[lMachineIndex] = 0;
-
+    
     mDeviceExecutionProfile[lDeviceIndex] += pSubtaskCount;
     mMachineExecutionProfile[lMachineIndex] += pSubtaskCount;
+    
+    mOrderedDevices.erase(pDevice);
+    mOrderedDevices.insert(pDevice);    
     
     return pmSuccess;
 }
     
+#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
 pmStatus pmSubtaskManager::PrintExecutionProfile()
 {
     if(mExecutionProfilePrinted)
@@ -145,8 +177,7 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 	ulong lLastSubtask = 0;
 	
 	std::vector<pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
-	std::vector<pmProcessingElement*>::iterator lIter = lDevices.begin();
-	std::vector<pmProcessingElement*>::iterator lEndIter = lDevices.end();
+	std::vector<pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
 
     for(ulong i=0; i<lPartitionCount; ++i, ++lIter)
     {
@@ -158,7 +189,6 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
         pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
 
         mSortedUnassignedPartitions[lUnfinishedPartitionPtr] = *lIter;
-        mUnassignedPartitions.insert(lUnfinishedPartitionPtr);
         mAllottedUnassignedPartition[*lIter] = std::make_pair(lUnfinishedPartitionPtr, (ulong)0);
 
         mExecTimeStats[*lIter] = std::pair<double, ulong>(0, 0);
@@ -172,7 +202,6 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 pmPushSchedulingManager::~pmPushSchedulingManager()
 {
     mSortedUnassignedPartitions.clear();
-    mUnassignedPartitions.clear();
     mAllottedUnassignedPartition.clear();
     mAssignedPartitions.clear();
     mExecTimeStats.clear();
@@ -182,9 +211,9 @@ bool pmPushSchedulingManager::HasTaskFinished()
 {
 	FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	if(mUnassignedPartitions.empty() && mAssignedPartitions.empty())
+	if(mSortedUnassignedPartitions.empty() && mAssignedPartitions.empty())
     {
-#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
         PrintExecutionProfile();
 #endif
 
@@ -199,44 +228,121 @@ pmStatus pmPushSchedulingManager::AssignPartition(pmProcessingElement* pDevice, 
 	ulong lAvailableSubtasks = pUnfinishedPartitionPtr->lastSubtaskIndex - pUnfinishedPartitionPtr->firstSubtaskIndex + 1;
     ulong lCount = mAllottedUnassignedPartition[pDevice].second;
 
-#ifdef _DEBUG
-    if(mUnassignedPartitions.find(pUnfinishedPartitionPtr) == mUnassignedPartitions.end())
-        PMTHROW(pmFatalErrorException());
-#endif
-    
-    mAllottedUnassignedPartition.erase(pDevice);
-	mUnassignedPartitions.erase(pUnfinishedPartitionPtr);
-	mSortedUnassignedPartitions.erase(pUnfinishedPartitionPtr);
-
-	if(lAvailableSubtasks == pSubtaskCount)
-	{
-		mAllottedUnassignedPartition[pDevice] = std::make_pair(pmSubtaskManager::pmUnfinishedPartitionPtr(), lCount);
-	}
-	else
-	{
-        if(lAvailableSubtasks < pSubtaskCount)
+    if(!pUnfinishedPartitionPtr->originalAllottee)
+    {
+    #ifdef _DEBUG
+        if(mSortedUnassignedPartitions.find(pUnfinishedPartitionPtr) == mSortedUnassignedPartitions.end())
             PMTHROW(pmFatalErrorException());
+    #endif
         
-		pmUnfinishedPartitionPtr lSubPartitionPtr(new pmUnfinishedPartition(pUnfinishedPartitionPtr->firstSubtaskIndex + pSubtaskCount, pUnfinishedPartitionPtr->lastSubtaskIndex));
-        
-		mAllottedUnassignedPartition[pDevice] = std::make_pair(lSubPartitionPtr, lCount);
-		mUnassignedPartitions.insert(lSubPartitionPtr);
-        mSortedUnassignedPartitions[lSubPartitionPtr] = pDevice;
-	}
+        mAllottedUnassignedPartition.erase(pDevice);
+        mSortedUnassignedPartitions.erase(pUnfinishedPartitionPtr);
+
+        if(lAvailableSubtasks == pSubtaskCount)
+        {
+            mAllottedUnassignedPartition[pDevice] = std::make_pair(pmSubtaskManager::pmUnfinishedPartitionPtr(), lCount);
+        }
+        else
+        {
+            if(lAvailableSubtasks < pSubtaskCount)
+                PMTHROW(pmFatalErrorException());
+            
+            pmUnfinishedPartitionPtr lSubPartitionPtr(new pmUnfinishedPartition(pUnfinishedPartitionPtr->firstSubtaskIndex + pSubtaskCount, pUnfinishedPartitionPtr->lastSubtaskIndex));
+            
+            mAllottedUnassignedPartition[pDevice] = std::make_pair(lSubPartitionPtr, lCount);
+            mSortedUnassignedPartitions[lSubPartitionPtr] = pDevice;
+        }
+    }
 
 	pmSubtaskRangeCommandPtr lCommand = pmSubtaskRangeCommand::CreateSharedPtr(mLocalTask->GetPriority(), pmSubtaskRangeCommand::BASIC_SUBTASK_RANGE);
-	pmUnfinishedPartitionPtr lPartitionPtr(new pmUnfinishedPartition(pUnfinishedPartitionPtr->firstSubtaskIndex, pUnfinishedPartitionPtr->firstSubtaskIndex + pSubtaskCount - 1));
+	pmUnfinishedPartitionPtr lPartitionPtr(new pmUnfinishedPartition(pUnfinishedPartitionPtr->firstSubtaskIndex, pUnfinishedPartitionPtr->firstSubtaskIndex + pSubtaskCount - 1, pUnfinishedPartitionPtr->originalAllottee));
 
 	mAssignedPartitions[pDevice] = std::make_pair(lPartitionPtr, lCommand);
 	lCommand->MarkExecutionStart();
 
 	return pmSuccess;
 }
+    
+pmProcessingElement* pmPushSchedulingManager::SelectMultiAssignAllottee(pmProcessingElement* pDevice)
+{
+    pmProcessingElement* lPossibleAllottee = NULL;
+    size_t lSecondaryAllotteeCountOfPossibleAllottee = 0;
 
+    // Traverse from slowest to fastest device
+    std::set<pmProcessingElement*, execCountSorter>::iterator lIter = mOrderedDevices.begin(), lEndIter = mOrderedDevices.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        if(*lIter == pDevice)
+            continue;
+    
+        if(mAssignedPartitions.find(*lIter) == mAssignedPartitions.end())
+            continue;
+    
+        if(mAssignedPartitions[*lIter].first->originalAllottee != NULL)   // Assign only from original allottees
+            continue;
+    
+        size_t lSize = mAssignedPartitions[*lIter].first->secondaryAllottees.size();
+        if(lSize == MAX_SUBTASK_MULTI_ASSIGN_COUNT - 1)
+            continue;
+    
+        if(lSize == 0)
+            return *lIter;
+
+        /* The following code prevents reassignment of partition to a device multiple times. This may happen when a secondary allottee gets a partial negotiation from original allottee and wants a new partition to be assigned to it after acknowledging the partial negotiated one. */
+        bool lAlreadyAssigned = false;
+        std::vector<pmProcessingElement*>::iterator lInnerIter = mAssignedPartitions[*lIter].first->secondaryAllottees.begin(), lInnerEndIter = mAssignedPartitions[*lIter].first->secondaryAllottees.end();
+        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
+        {
+            if(*lInnerIter == pDevice)
+            {
+                lAlreadyAssigned = true;
+                break;
+            }
+        }
+        
+        if(lAlreadyAssigned)
+            continue;
+    
+        if(lSize < lSecondaryAllotteeCountOfPossibleAllottee || lSecondaryAllotteeCountOfPossibleAllottee == 0)
+        {
+            lPossibleAllottee = *lIter;
+            lSecondaryAllotteeCountOfPossibleAllottee = lSize;
+        }
+    }
+    
+    return lPossibleAllottee;
+}
+    
 pmSubtaskManager::pmUnfinishedPartitionPtr pmPushSchedulingManager::FetchNewSubPartition(pmProcessingElement* pDevice, ulong pSubtaskCount)
 {
 	if(mSortedUnassignedPartitions.empty())
+    {
+        if(mLocalTask->IsMultiAssignEnabled() && !mAssignedPartitions.empty())     // multi assign
+        {
+            pmProcessingElement* lAllottee = SelectMultiAssignAllottee(pDevice);
+            if(lAllottee)
+            {            
+            #ifdef _DEBUG
+                if(mAssignedPartitions[lAllottee].first->originalAllottee != NULL)
+                    PMTHROW(pmFatalErrorException());
+            #endif
+        
+                std::pair<pmUnfinishedPartitionPtr, pmSubtaskRangeCommandPtr> lPair = mAssignedPartitions[lAllottee];
+                mAssignedPartitions.erase(lAllottee);
+            
+                lPair.first->secondaryAllottees.push_back(pDevice);
+                mAssignedPartitions[lAllottee] = lPair;
+                
+            #ifdef TRACK_MULTI_ASSIGN
+                std::cout << "Multiassign of subtasks [" << lPair.first->firstSubtaskIndex << " - " << lPair.first->lastSubtaskIndex << "] - Device " << pDevice->GetGlobalDeviceIndex() << ", Original Allottee - Device " << lAllottee->GetGlobalDeviceIndex() << ", Secondary allottment count - " << mAssignedPartitions[lAllottee].first->secondaryAllottees.size() << std::endl;
+            #endif
+            
+                return pmUnfinishedPartitionPtr(new pmUnfinishedPartition(lPair.first->firstSubtaskIndex, lPair.first->lastSubtaskIndex, lAllottee));
+            }
+        }
+    
 	   return pmUnfinishedPartitionPtr();
+    }
 
     // Heaviest partition is at the end
 	std::map<pmUnfinishedPartitionPtr, pmProcessingElement*, partitionSorter>::reverse_iterator lIter = mSortedUnassignedPartitions.rbegin();
@@ -253,12 +359,11 @@ pmSubtaskManager::pmUnfinishedPartitionPtr pmPushSchedulingManager::FetchNewSubP
     ulong lSlowestDeviceCount = mAllottedUnassignedPartition[lSlowestDevice].second;
 
 #ifdef _DEBUG
-    if(mUnassignedPartitions.find(lMaxPendingPartitionPtr) == mUnassignedPartitions.end())
+    if(mSortedUnassignedPartitions.find(lMaxPendingPartitionPtr) == mSortedUnassignedPartitions.end())
         PMTHROW(pmFatalErrorException());
 #endif
 
     mAllottedUnassignedPartition.erase(lSlowestDevice);
-    mUnassignedPartitions.erase(lMaxPendingPartitionPtr);
     mSortedUnassignedPartitions.erase(lMaxPendingPartitionPtr);
 
 	if(lMaxAvailableSubtasks <= pSubtaskCount)
@@ -274,7 +379,6 @@ pmSubtaskManager::pmUnfinishedPartitionPtr pmPushSchedulingManager::FetchNewSubP
 
         mSortedUnassignedPartitions[lSubPartitionPtr] = lSlowestDevice;
         mAllottedUnassignedPartition[lSlowestDevice] = std::make_pair(lSubPartitionPtr, lSlowestDeviceCount);
-        mUnassignedPartitions.insert(lSubPartitionPtr);
 
         lStartSubtask = lMaxPendingPartitionPtr->lastSubtaskIndex - pSubtaskCount + 1;
         lEndSubtask = lMaxPendingPartitionPtr->lastSubtaskIndex;
@@ -284,7 +388,6 @@ pmSubtaskManager::pmUnfinishedPartitionPtr pmPushSchedulingManager::FetchNewSubP
     
     mSortedUnassignedPartitions[lNewPartitionPtr] = pDevice;
     mAllottedUnassignedPartition[pDevice] = std::make_pair(lNewPartitionPtr, pSubtaskCount);
-    mUnassignedPartitions.insert(lNewPartitionPtr);
     
     return lNewPartitionPtr;
 }
@@ -372,17 +475,21 @@ ulong pmPushSchedulingManager::GetNextAssignmentSize(pmProcessingElement* pDevic
 	return SLOW_START_SCHEDULING_INITIAL_SUBTASK_COUNT;
 }
 
-pmStatus pmPushSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask)
+pmStatus pmPushSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, pmProcessingElement*& pOriginalAllottee)
 {
 	FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	std::map<pmProcessingElement*, std::pair<pmUnfinishedPartitionPtr, ulong> >::iterator lIter1 = mAllottedUnassignedPartition.find(pDevice);
-	if(lIter1 == mAllottedUnassignedPartition.end())
+	if(mAllottedUnassignedPartition.find(pDevice) == mAllottedUnassignedPartition.end())
 		PMTHROW(pmFatalErrorException());
 
-	std::map<pmProcessingElement*, std::pair<pmUnfinishedPartitionPtr, pmSubtaskRangeCommandPtr> >::iterator lIter2 = mAssignedPartitions.find(pDevice);
-	if(lIter2 != mAssignedPartitions.end())	// This device already has a partition waiting to be acknowledged
-		PMTHROW(pmFatalErrorException());
+	if(mAssignedPartitions.find(pDevice) != mAssignedPartitions.end())	// This device already has a partition waiting to be acknowledged
+    {
+        if(mAssignedPartitions[pDevice].first->originalAllottee != NULL)
+            PMTHROW(pmFatalErrorException());
+    
+        pSubtaskCount = 0;
+        return pmSuccess;
+    }
 
 	mAllottedUnassignedPartition[pDevice].second = GetNextAssignmentSize(pDevice);
 
@@ -402,12 +509,74 @@ pmStatus pmPushSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 	ulong lAvailableSubtasks = lUnfinishedPartitionPtr->lastSubtaskIndex - lUnfinishedPartitionPtr->firstSubtaskIndex + 1;
 	
 	if(lAvailableSubtasks > mAllottedUnassignedPartition[pDevice].second)
-		lAvailableSubtasks = mAllottedUnassignedPartition[pDevice].second;
+    {
+        if(lUnfinishedPartitionPtr->originalAllottee == NULL)
+            lAvailableSubtasks = mAllottedUnassignedPartition[pDevice].second;
+    }
 	
-	pStartingSubtask = mAllottedUnassignedPartition[pDevice].first->firstSubtaskIndex;
+	pStartingSubtask = lUnfinishedPartitionPtr->firstSubtaskIndex;
 	pSubtaskCount = lAvailableSubtasks;
+    pOriginalAllottee = lUnfinishedPartitionPtr->originalAllottee;
 
 	return AssignPartition(pDevice, lUnfinishedPartitionPtr, pSubtaskCount);
+}
+
+void pmPushSchedulingManager::UpdateAssignedPartition(pmProcessingElement* pDevice, ulong pStartingSubtask, ulong pLastSubtask)
+{
+    bool lStartMatches = (pStartingSubtask == mAssignedPartitions[pDevice].first->firstSubtaskIndex);
+    bool lEndMatches = (pLastSubtask == mAssignedPartitions[pDevice].first->lastSubtaskIndex);
+
+    if(lStartMatches && lEndMatches)
+        mAssignedPartitions.erase(pDevice);
+    else if(lStartMatches)
+        mAssignedPartitions[pDevice].first->firstSubtaskIndex = pLastSubtask + 1;
+    else if(lEndMatches)
+        mAssignedPartitions[pDevice].first->lastSubtaskIndex = pStartingSubtask - 1;        
+    else
+        PMTHROW(pmFatalErrorException());
+}
+
+void pmPushSchedulingManager::CancelOriginalAllottee(pmProcessingElement* pOriginalAllottee, ulong pSubtaskCount, ulong pStartingSubtask)
+{
+#ifdef _DEBUG
+    if(mAssignedPartitions.find(pOriginalAllottee) == mAssignedPartitions.end() || mAssignedPartitions[pOriginalAllottee].first->originalAllottee != NULL
+       || mAssignedPartitions[pOriginalAllottee].first->firstSubtaskIndex > pStartingSubtask || mAssignedPartitions[pOriginalAllottee].first->lastSubtaskIndex < pStartingSubtask + pSubtaskCount - 1)
+        PMTHROW(pmFatalErrorException());
+#endif
+
+    pmSubtaskRange lRange;
+    lRange.task = mLocalTask;
+    lRange.startSubtask = pStartingSubtask;
+    lRange.endSubtask = pStartingSubtask + pSubtaskCount - 1;
+    lRange.originalAllottee = NULL;
+    
+    pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(pOriginalAllottee, lRange);
+
+    UpdateAssignedPartition(pOriginalAllottee, lRange.startSubtask, lRange.endSubtask);
+}
+    
+void pmPushSchedulingManager::CancelAllButOneSecondaryAllottee(pmProcessingElement* pOriginalAllottee, pmProcessingElement* pPreserveSecondaryAllottee, ulong pSubtaskCount, ulong pStartingSubtask)
+{
+    pmSubtaskRange lRange;
+    lRange.task = mLocalTask;
+    lRange.startSubtask = pStartingSubtask;
+    lRange.endSubtask = pStartingSubtask + pSubtaskCount - 1;
+    lRange.originalAllottee = pOriginalAllottee;
+    
+    std::vector<pmProcessingElement*>::iterator lIter = mAssignedPartitions[pOriginalAllottee].first->secondaryAllottees.begin();
+    std::vector<pmProcessingElement*>::iterator lEndIter = mAssignedPartitions[pOriginalAllottee].first->secondaryAllottees.end();
+    for(; lIter < lEndIter; ++lIter)
+    {
+        if(*lIter == pPreserveSecondaryAllottee)
+            continue;
+    
+        /* Check if secondary allottee is still executing the same range (a secondary allottee might win partially over a range negotiation with original allottee. In this case, it will send acknowledgement for the partial range only but the original allottee will still keep the secondary allottee maintained on it's list (so as to not create unnecessarily more secondary allottess) and when the original allottee sends acknowledgement for it's part of the partial range it will ask all secondary allottees to cancel their executions. But, in the meanwhile, the one secondary allottee which finished earlier might get some other altogether different range assigned. */
+        if(mAssignedPartitions.find(*lIter) != mAssignedPartitions.end() && mAssignedPartitions[*lIter].first->firstSubtaskIndex <= lRange.startSubtask && mAssignedPartitions[*lIter].first->lastSubtaskIndex >= lRange.endSubtask)
+        {
+            pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(*lIter, lRange);
+            UpdateAssignedPartition(*lIter, lRange.startSubtask, lRange.endSubtask);
+        }
+    }
 }
 
 pmStatus pmPushSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus)
@@ -416,44 +585,52 @@ pmStatus pmPushSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement*
 
 	std::map<pmProcessingElement*, std::pair<pmUnfinishedPartitionPtr, pmSubtaskRangeCommandPtr> >::iterator lIter = mAssignedPartitions.find(pDevice);
 	if(lIter == mAssignedPartitions.end())
-		PMTHROW(pmFatalErrorException());
+        PMTHROW(pmFatalErrorException());
 
 	pmUnfinishedPartitionPtr lPartitionPtr = mAssignedPartitions[pDevice].first;
+
 	if(lPartitionPtr->firstSubtaskIndex != pStartingSubtask && (lPartitionPtr->lastSubtaskIndex - lPartitionPtr->firstSubtaskIndex + 1) != pSubtaskCount)
-		PMTHROW(pmFatalErrorException());
-    
-#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+    {
+        if(!mLocalTask->IsMultiAssignEnabled() || lPartitionPtr->firstSubtaskIndex > pStartingSubtask || lPartitionPtr->lastSubtaskIndex < pStartingSubtask + pSubtaskCount - 1)
+            PMTHROW(pmFatalErrorException());
+    }
+
     UpdateExecutionProfile(pDevice, pSubtaskCount);
-#endif
 
-	pmSubtaskRangeCommandPtr lCommand = mAssignedPartitions[pDevice].second;
-	lCommand->MarkExecutionEnd(pExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
+    pmSubtaskRangeCommandPtr lCommand = mAssignedPartitions[pDevice].second;
+    lCommand->MarkExecutionEnd(pExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
 
-	SetLastAllocationExecTimeInSecs(pDevice, lCommand->GetExecutionTimeInSecs());
+    SetLastAllocationExecTimeInSecs(pDevice, lCommand->GetExecutionTimeInSecs());
+    
+    if(mAssignedPartitions[pDevice].first->originalAllottee == NULL)    // acknowledgement from original allottee
+    {
+        if(!mAssignedPartitions[pDevice].first->secondaryAllottees.empty())
+        {
+        #ifdef TRACK_MULTI_ASSIGN
+            std::cout << "Multi assign partition [" << pStartingSubtask << " - " << (pStartingSubtask + pSubtaskCount - 1) << "] completed by original allottee - Device " << pDevice->GetGlobalDeviceIndex() << std::endl;
+        #endif
+        
+            CancelAllButOneSecondaryAllottee(pDevice, NULL, pSubtaskCount, pStartingSubtask);
+        }
 
-	mAssignedPartitions.erase(pDevice);
+        UpdateAssignedPartition(pDevice, pStartingSubtask, (pStartingSubtask + pSubtaskCount - 1));
+    }
+    else    // acknowledgement from secondary allottee
+    {
+    #ifdef TRACK_MULTI_ASSIGN
+        std::cout << "Multi assign partition [" << pStartingSubtask << " - " << (pStartingSubtask + pSubtaskCount - 1) << "] completed by secondary allottee - Device " << pDevice->GetGlobalDeviceIndex() << ", Original Allottee: Device " << mAssignedPartitions[pDevice].first->originalAllottee->GetGlobalDeviceIndex() << std::endl;
+    #endif
 
+        CancelAllButOneSecondaryAllottee(mAssignedPartitions[pDevice].first->originalAllottee, pDevice, pSubtaskCount, pStartingSubtask);
+        CancelOriginalAllottee(mAssignedPartitions[pDevice].first->originalAllottee, pSubtaskCount, pStartingSubtask);
+
+        mAssignedPartitions.erase(pDevice);
+    }
+    
 	if(pExecStatus != pmSuccess)
 		mTaskStatus = pExecStatus;
 
 	return pmSuccess;
-}
-    
-pmStatus pmPushSchedulingManager::DoFaultTolerance()
-{
-    return pmScheduler::GetScheduler()->FaultToleranceEvent(mLocalTask);
-}
-
-/* struct partitionSorter */
-bool pmPushSchedulingManager::partitionSorter::operator() (const pmSubtaskManager::pmUnfinishedPartitionPtr& pPartition1Ptr, const pmSubtaskManager::pmUnfinishedPartitionPtr& pPartition2Ptr) const
-{
-	ulong lCount1 = pPartition1Ptr->lastSubtaskIndex - pPartition1Ptr->firstSubtaskIndex;
-	ulong lCount2 = pPartition2Ptr->lastSubtaskIndex - pPartition2Ptr->firstSubtaskIndex;
-
-    if(lCount1 == lCount2)
-        return pPartition1Ptr->firstSubtaskIndex < pPartition2Ptr->firstSubtaskIndex;
-    
-    return lCount1 < lCount2;
 }
 
 
@@ -480,7 +657,7 @@ bool pmSingleAssignmentSchedulingManager::HasTaskFinished()
 
     if(HasTaskFinished_Internal())
     {
-#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
+#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
         PrintExecutionProfile();
 #endif
         
@@ -527,18 +704,11 @@ pmStatus pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(pmProces
     if(lTargetPartitionPtr->lastSubtaskIndex > pStartingSubtask + pSubtaskCount - 1)
         mUnacknowledgedPartitions.insert(pmUnfinishedPartitionPtr(new pmUnfinishedPartition(pStartingSubtask + pSubtaskCount, lTargetPartitionPtr->lastSubtaskIndex)));
     
-#ifdef BUILD_SUBTASK_EXECUTION_PROFILE
     UpdateExecutionProfile(pDevice, pSubtaskCount);
-#endif
     
     return pmSuccess;
 }
     
-pmStatus pmSingleAssignmentSchedulingManager::DoFaultTolerance()
-{
-    return pmScheduler::GetScheduler()->FaultToleranceEvent(mLocalTask);
-}
-
 
 /* class pmPullSchedulingManager */
 pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
@@ -577,7 +747,7 @@ pmPullSchedulingManager::~pmPullSchedulingManager()
     mSubtaskPartitions.clear();
 }
 
-pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask)
+pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, pmProcessingElement*& pOriginalAllottee)
 {
 	FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
 
@@ -587,6 +757,7 @@ pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 
 	pStartingSubtask = lPartition->firstSubtaskIndex;
 	pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
+    pOriginalAllottee = NULL;
 
 	++mIter;
 
@@ -633,7 +804,7 @@ pmProportionalSchedulingManager::~pmProportionalSchedulingManager()
     mDevicePartitionMap.clear();
 }
 
-pmStatus pmProportionalSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask)
+pmStatus pmProportionalSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, pmProcessingElement*& pOriginalAllottee)
 {
 	FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
 
@@ -643,6 +814,7 @@ pmStatus pmProportionalSchedulingManager::AssignSubtasksToDevice(pmProcessingEle
     
 	pStartingSubtask = lPartition->firstSubtaskIndex;
 	pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
+    pOriginalAllottee = NULL;
 
     return pmSuccess;
 }
@@ -697,7 +869,7 @@ pmStatus pmProportionalSchedulingManager::ReadConfigurationFile(std::vector<pmPr
     
 uint pmProportionalSchedulingManager::GetDevicePower(pmProcessingElement* pDevice)
 {
-    pmDeviceTypes lDeviceType = pDevice->GetType();
+    pmDeviceType lDeviceType = pDevice->GetType();
     bool lIsLocalDevice = (pDevice->GetMachine() == PM_LOCAL_MACHINE);
 
     if(lDeviceType == CPU)

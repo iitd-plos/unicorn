@@ -50,21 +50,12 @@ pmTaskExecStats::~pmTaskExecStats()
 #endif
 }
 
-pmStatus pmTaskExecStats::RecordSubtaskExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs)
+pmStatus pmTaskExecStats::RecordStubExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
-	if(lIter != mStats.end())
-	{
-        mStats[pStub].subtasksExecuted += pSubtasksExecuted;
-        mStats[pStub].executionTime += pExecutionTimeInSecs;
-	}
-    else
-    {
-        mStats[pStub].subtasksExecuted = pSubtasksExecuted;
-        mStats[pStub].executionTime = pExecutionTimeInSecs;
-    }
+    mStats[pStub].subtasksExecuted += pSubtasksExecuted;
+    mStats[pStub].executionTime += pExecutionTimeInSecs;
 
 	return pmSuccess;
 }
@@ -84,10 +75,6 @@ uint pmTaskExecStats::GetStealAttempts(pmExecutionStub* pStub)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
-	if(lIter == mStats.end())
-		return 0;
-
 	return mStats[pStub].stealAttempts;
 }
 
@@ -95,22 +82,7 @@ pmStatus pmTaskExecStats::RecordStealAttempt(pmExecutionStub* pStub)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
-	if(lIter == mStats.end())
-		mStats[pStub].stealAttempts = 1;
-    else
-        ++(mStats[pStub].stealAttempts);
-
-	return pmSuccess;
-}
-
-pmStatus pmTaskExecStats::ClearStealAttempts(pmExecutionStub* pStub)
-{
-	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-
-	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
-	if(lIter == mStats.end())
-        mStats[pStub].stealAttempts = 0;
+    ++(mStats[pStub].stealAttempts);
 
 	return pmSuccess;
 }
@@ -119,10 +91,6 @@ uint pmTaskExecStats::GetSuccessfulStealAttempts(pmExecutionStub* pStub)
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-    std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
-    if(lIter == mStats.end())
-        return 0;
-
     return mStats[pStub].successfulSteals;
 }
 
@@ -130,33 +98,30 @@ uint pmTaskExecStats::GetFailedStealAttempts(pmExecutionStub* pStub)
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-    std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
-    if(lIter == mStats.end())
-        return 0;
-
     return mStats[pStub].failedSteals;
+}
+    
+uint pmTaskExecStats::GetFailedStealAttemptsSinceLastSuccessfulAttempt(pmExecutionStub* pStub)
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    return mStats[pStub].consecutiveFailedSteals;
 }
 
 void pmTaskExecStats::RecordSuccessfulStealAttempt(pmExecutionStub* pStub)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-    
-	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
-	if(lIter == mStats.end())
-		mStats[pStub].successfulSteals = 1;
-    else
-        ++(mStats[pStub].successfulSteals);
+
+    mStats[pStub].consecutiveFailedSteals = 0;
+    ++(mStats[pStub].successfulSteals);
 }
     
 void pmTaskExecStats::RecordFailedStealAttempt(pmExecutionStub* pStub)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-    
-	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
-	if(lIter == mStats.end())
-		mStats[pStub].failedSteals = 1;
-    else
-        ++(mStats[pStub].failedSteals);
+
+    ++(mStats[pStub].consecutiveFailedSteals);
+    ++(mStats[pStub].failedSteals);
 }
 
 
@@ -167,6 +132,7 @@ pmTaskExecStats::stubStats::stubStats()
 	, stealAttempts(0)
     , successfulSteals(0)
     , failedSteals(0)
+    , consecutiveFailedSteals(0)
 {
 }
 

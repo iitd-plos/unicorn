@@ -48,16 +48,17 @@ class pmSafePQ : public pmBase
 	public:
 		typedef bool (*matchFuncPtr)(T& pItem, void* pMatchCriterion);
 
-		pmSafePQ<T, P>();
-		virtual ~pmSafePQ<T, P>();
+		pmSafePQ();
+		virtual ~pmSafePQ();
 
 		pmStatus InsertItem(T& pItem, P pPriority);
 		pmStatus GetTopItem(T& pItem);
     
         pmStatus MarkProcessingFinished();
+        pmStatus UnblockSecondaryOperations();
 
         pmStatus WaitIfMatchingItemBeingProcessed(T& pItem, matchFuncPtr pMatchFunc, void* pMatchCriterion);
-		pmStatus DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem);
+		pmStatus DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem, bool pTemporarilyUnblockSecondaryOperations);
 		pmStatus DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
 
 		bool IsHighPriorityElementPresent(P pPriority);
@@ -69,9 +70,11 @@ class pmSafePQ : public pmBase
 		typedef map<P, typename std::vector<T> > priorityQueueType;
 		priorityQueueType mQueue;
         bool mIsProcessing;
-
+        bool mSecondaryOperationsBlocked;
+    
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mCommandSignalWait;
+        SIGNAL_WAIT_IMPLEMENTATION_CLASS mSecondaryOperationsWait;
 };
 
 } // end namespace pm

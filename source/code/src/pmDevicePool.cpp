@@ -251,7 +251,7 @@ pmStatus pmDevicePool::CreateMachineDevices(pmMachine* pMachine, uint pCpuDevice
 {
 	for(uint i=0; i<pDeviceCount; ++i)
 	{
-		pmDeviceTypes lDeviceType = CPU;
+		pmDeviceType lDeviceType = CPU;
 #ifdef SUPPORT_CUDA
 		if(i >= pCpuDeviceCount)
 			lDeviceType = GPU_CUDA;
@@ -333,7 +333,7 @@ pmProcessingElement* pmDevicePool::GetDeviceAtGlobalIndex(uint pGlobalDeviceInde
 	return mDevicesVector[pGlobalDeviceIndex];
 }
 
-pmStatus pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceTypes pType, pmCluster* pCluster, std::set<pmProcessingElement*>& pDevices)
+pmStatus pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceType pType, pmCluster* pCluster, std::set<pmProcessingElement*>& pDevices)
 {
 	size_t lSize = mDevicesVector.size();
 	for(size_t i=0; i<lSize; ++i)

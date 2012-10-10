@@ -30,6 +30,7 @@ namespace pm
 {
 
 class pmExecutionStub;
+class pmProcessingElement;
 
 class pmTaskExecStats : public pmBase
 {
@@ -41,22 +42,23 @@ class pmTaskExecStats : public pmBase
 			uint stealAttempts;
             uint successfulSteals;
             uint failedSteals;
+            uint consecutiveFailedSteals;   // number of failed steals after the last successful one
 
 			stubStats();
 		} stubStats;
-
+    
 		pmTaskExecStats();
 		virtual ~pmTaskExecStats();
 
-		pmStatus RecordSubtaskExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs);
+		pmStatus RecordStubExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs);
 		double GetStubExecutionRate(pmExecutionStub* pStub);
 
 		uint GetStealAttempts(pmExecutionStub* pStub);
-		pmStatus RecordStealAttempt(pmExecutionStub* pStub);
-		pmStatus ClearStealAttempts(pmExecutionStub* pStub);
-    
         uint GetSuccessfulStealAttempts(pmExecutionStub* pStub);
         uint GetFailedStealAttempts(pmExecutionStub* pStub);
+        uint GetFailedStealAttemptsSinceLastSuccessfulAttempt(pmExecutionStub* pStub);
+        
+        pmStatus RecordStealAttempt(pmExecutionStub* pStub);    
         void RecordSuccessfulStealAttempt(pmExecutionStub* pStub);
         void RecordFailedStealAttempt(pmExecutionStub* pStub);
     

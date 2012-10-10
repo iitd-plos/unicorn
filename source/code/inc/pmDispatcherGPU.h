@@ -71,10 +71,10 @@ class pmDispatcherCUDA : public pmGraphicsBase
 
 		std::string GetDeviceName(size_t pDeviceIndex);
 		std::string GetDeviceDescription(size_t pDeviceIndex);
-		pmStatus InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr);
+		pmStatus InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr);
 
 #ifdef SUPPORT_CUDA
-		pmStatus InvokeKernel(size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber);
+		pmStatus InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem);
 
 		pmStatus FreeLastExecutionResources(size_t pBoundDeviceIndex);
 #endif
@@ -82,9 +82,10 @@ class pmDispatcherCUDA : public pmGraphicsBase
 	private:
 		pmStatus CountAndProbeProcessingElements();
 
-        void GetNonConsolidatedSubscriptionsForSubtask(uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, bool pIsInputMem, pmSubtaskInfo pSubtaskInfo, std::vector<std::pair<size_t, size_t> >& pSubscriptionVector);
+        void GetOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, pmSubtaskInfo& pSubtaskInfo, pmSubscriptionInfo& pSubscriptionInfo);
+        void GetNonConsolidatedSubscriptionsForSubtask(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, bool pIsInputMem, pmSubtaskInfo& pSubtaskInfo, std::vector<std::pair<size_t, size_t> >& pSubscriptionVector);
         
-        bool SubtasksHaveMatchingSubscriptions(uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem);
+        bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem);
 
 		size_t mCountCUDA;
 		void* mCutilHandle;

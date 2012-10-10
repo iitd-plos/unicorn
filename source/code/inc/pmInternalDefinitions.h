@@ -89,11 +89,16 @@ const unsigned short MAX_PRIORITY_LEVEL = MAX_CONTROL_PRIORITY+1;	// 0 is used f
 const unsigned short MIN_PRIORITY_LEVEL = __MAX(unsigned short);
 const unsigned short DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 
+const unsigned short TASK_MULTI_ASSIGN_FLAG_VAL = 0x0001;   // LSB
+
 #define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
 
 #define SLOW_START_SCHEDULING_INITIAL_SUBTASK_COUNT 1	 // must be a power of 2
 #define SLOW_START_SCHEDULING_UPPER_LIMIT_EXEC_TIME_PER_ALLOCATION 15	// in seconds
 #define SLOW_START_SCHEDULING_LOWER_LIMIT_EXEC_TIME_PER_ALLOCATION 8	// in seconds
+
+#define MAX_SUBTASK_MULTI_ASSIGN_COUNT 3    // Max no. of devices to which a subtask may be assigned at any given time
+#define MAX_STEAL_CYCLES_PER_DEVICE 5   // Max no. of steal attempts from a device to any other device
 
 #define PROPAGATE_FAILURE_RET_STATUS(x) {pmStatus dRetStatus = x; if(dRetStatus != pmSuccess) return dRetStatus;}
 
@@ -120,12 +125,16 @@ const unsigned short DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 //#define TRACK_MEMORY_ALLOCATIONS
 //#define TRACK_MEMORY_REQUESTS
 //#define TRACK_SUBTASK_EXECUTION
+//#define TRACK_SUBTASK_EXECUTION_VERBOSE
 //#define TRACK_SUBTASK_STEALS
-#define DUMP_NETWORK_STATS
+//#define DUMP_SHADOW_MEM
+//#define TRACK_MULTI_ASSIGN
+//#define DUMP_NETWORK_STATS
 #define DUMP_TASK_EXEC_STATS
-#define ENABLE_TASK_PROFILING
+//#define ENABLE_TASK_PROFILING
 //#define ENABLE_MEM_PROFILING
-#define BUILD_SUBTASK_EXECUTION_PROFILE
+#define DUMP_SUBTASK_EXECUTION_PROFILE
+//#define DUMP_MPI_CALLS
 
 #endif
 

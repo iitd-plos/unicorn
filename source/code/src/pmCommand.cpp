@@ -38,12 +38,10 @@ pmCommand::pmCommand(ushort pPriority, ushort pCommandType, void* pCommandData /
 	mDataLength = pDataLength;
 	mCallback = pCallback;
 	mStatus = pmStatusUnavailable;
-	mSignalWait = NULL;
 }
 
 pmCommand::~pmCommand()
 {
-	delete mSignalWait;
 }
 
 ushort pmCommand::GetType()
@@ -118,23 +116,32 @@ pmStatus pmCommand::SetCommandCompletionCallback(pmCommandCompletionCallback pCa
 
 pmStatus pmCommand::WaitForFinish()
 {
-	mResourceLock.Lock();
+    pmSignalWait* lSignalWait = NULL;
+    pmStatus lStatus = pmStatusUnavailable;
 
-	if(mStatus == pmStatusUnavailable)
-	{
-		if(!mSignalWait)
-			mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
-		
-		mResourceLock.Unlock();
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-		mSignalWait->Wait();
+        if((lStatus = mStatus) == pmStatusUnavailable)
+        {
+            if((lSignalWait = mSignalWait.get_ptr()) == NULL)
+            {
+                lSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
+                mSignalWait.reset(lSignalWait);
+            }
+        }
+    }
 
-		return mStatus;
-	}
-
-	mResourceLock.Unlock();
-
-	return mStatus;
+    if(lSignalWait)
+    {
+        lSignalWait->Wait();
+        
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+        return mStatus;
+    }
+    
+	return lStatus;
 }
 
 pmStatus pmCommand::MarkExecutionStart()
@@ -150,7 +157,7 @@ pmStatus pmCommand::MarkExecutionEnd(pmStatus pStatus, pmCommandPtr pSharedPtr)
 {
 	assert(pSharedPtr.get() == this);
 
-	// Auto Lock/Release Scope
+	// Auto Lock/Unlock Scope
 	{
 		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -158,7 +165,7 @@ pmStatus pmCommand::MarkExecutionEnd(pmStatus pStatus, pmCommandPtr pSharedPtr)
 
 		mStatus = pStatus;
 
-		if(mSignalWait)
+		if(mSignalWait.get_ptr())
 			mSignalWait->Signal();
 	}
 
@@ -340,6 +347,10 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
 	inputMemAddr = lInputSection?((ulong)(lInputSection->GetMem())):0x0;
 	outputMemAddr = lOutputSection?((ulong)(lOutputSection->GetMem())):0x0;
 
+    flags = 0;
+    if(pLocalTask->IsMultiAssignEnabled())
+        flags |= TASK_MULTI_ASSIGN_FLAG_VAL;
+
 	strncpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN-1);
 	callbackKey[MAX_CB_KEY_LEN-1] = '\0';
 }
@@ -392,24 +403,29 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked()
 	memset(this, 0, sizeof(*this));
 }
 
-pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmTask* pTask, ulong pSubtaskId)
+pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId)
 {
 	pmMachine* lOriginatingHost = pTask->GetOriginatingHost();
 	this->reduceStruct.sequenceNumber = pTask->GetSequenceNumber();
-
-	pmTask::subtaskShadowMem& lShadowMem = pTask->GetSubtaskShadowMem(pSubtaskId);
 
 	pmSubscriptionInfo lSubscriptionInfo;
 
 	this->reduceStruct.originatingHost = *(lOriginatingHost);
 	this->reduceStruct.subtaskId = pSubtaskId;
-	this->subtaskMem.length = (uint)lShadowMem.length;
-	this->subtaskMem.ptr = lShadowMem.addr;
 
-	if(pTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pSubtaskId, lSubscriptionInfo))
+	if(pTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pReducingStub, pSubtaskId, lSubscriptionInfo))
+    {
+        void* lShadowMem = pTask->GetSubscriptionManager().GetSubtaskShadowMem(pReducingStub, pSubtaskId);
+        this->subtaskMem.length = (uint)lSubscriptionInfo.length;
+        this->subtaskMem.ptr = lShadowMem;
 		this->reduceStruct.subscriptionOffset = lSubscriptionInfo.offset;
+    }
 	else
+    {
+        this->subtaskMem.length = 0;
+        this->subtaskMem.ptr = NULL;
 		this->reduceStruct.subscriptionOffset = 0;
+    }
 }
 
 pmCommunicatorCommand::subtaskReducePacked::~subtaskReducePacked()
@@ -435,6 +451,33 @@ pmCommunicatorCommand::memoryReceivePacked::~memoryReceivePacked()
 {
 }
 
+    
+/* struct pmCommunicatorCommand::sendAcknowledgementPacked */    
+pmCommunicatorCommand::sendAcknowledgementPacked::sendAcknowledgementPacked()
+{
+	memset(this, 0, sizeof(*this));
+}
+    
+pmCommunicatorCommand::sendAcknowledgementPacked::sendAcknowledgementPacked(pmProcessingElement* pSourceDevice, pmSubtaskRange& pRange, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pCount, pmStatus pExecStatus)
+{
+    pmMemSection* lMemSection = pRange.task->GetMemSectionRW();
+    this->ackStruct.sourceDeviceGlobalIndex = pSourceDevice->GetGlobalDeviceIndex();
+    this->ackStruct.originatingHost = *(pRange.task->GetOriginatingHost());
+    this->ackStruct.sequenceNumber = pRange.task->GetSequenceNumber();
+    this->ackStruct.startSubtask = pRange.startSubtask;
+    this->ackStruct.endSubtask = pRange.endSubtask;
+    this->ackStruct.execStatus = (uint)pExecStatus;
+    this->ackStruct.originalAllotteeGlobalIndex = (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pSourceDevice->GetGlobalDeviceIndex());
+    this->ackStruct.ownershipDataElements = pCount;
+    this->ackStruct.ownerMemBaseAddr = lMemSection ? (ulong)(lMemSection->GetMem()) : 0;
+    this->ownershipData = pOwnershipData;
+}
+
+pmCommunicatorCommand::sendAcknowledgementPacked::~sendAcknowledgementPacked()
+{
+}
+
+    
 /* struct pmCommunicatorCommand::dataRedistributionPacked */
 pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked()
 {

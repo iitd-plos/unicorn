@@ -44,8 +44,11 @@ typedef enum eventIdentifier
     THREAD_BIND,
     SUBTASK_EXEC,
     SUBTASK_REDUCE,
-    SUBTASK_CANCEL,
-	FREE_GPU_RESOURCES
+    SUBTASK_CANCEL_ALL,
+    SUBTASK_CANCEL_RANGE,
+    NEGOTIATED_RANGE,
+	FREE_GPU_RESOURCES,
+    POST_HANDLE_EXEC_COMPLETION
 } eventIdentifier;
 
 typedef struct threadBind
@@ -63,16 +66,33 @@ typedef struct subtaskReduce
 {
     pmTask* task;
     ulong subtaskId1;
+    pmExecutionStub* stub2;
     ulong subtaskId2;
 } subtaskReduce;
 
-typedef struct subtaskCancel
+typedef struct subtaskCancelAll
 {
     pmTask* task;   /* not to be dereferenced */
     ushort priority;
-} subtaskCancel;
+} subtaskCancelAll;
+    
+typedef struct subtaskCancelRange
+{
+    pmSubtaskRange range;
+} subtaskCancelRange;
+    
+typedef struct negotiatedRange
+{
+    pmSubtaskRange range;
+} negotiatedRange;
+    
+typedef struct execCompletion
+{
+    pmSubtaskRange range;
+    pmStatus execStatus;
+} execCompletion;
 
-typedef struct stubEvent
+typedef struct stubEvent : public pmBasicThreadEvent
 {
     eventIdentifier eventId;
     union
@@ -80,8 +100,13 @@ typedef struct stubEvent
         threadBind bindDetails;
         subtaskExec execDetails;
         subtaskReduce reduceDetails;
-        subtaskCancel cancelDetails;
+        subtaskCancelAll cancelAllDetails;
+        subtaskCancelRange cancelRangeDetails;
+        negotiatedRange negotiatedRangeDetails;
+        execCompletion execCompletionDetails;
     };
+
+    virtual bool BlocksSecondaryCommands();
 } stubEvent;
 
 }
@@ -94,20 +119,24 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 		virtual pmStatus BindToProcessingElement() = 0;
 
-		virtual pmStatus Push(pmSubtaskRange pRange);
+		virtual pmStatus Push(pmSubtaskRange& pRange);
 		virtual pmStatus ThreadSwitchCallback(execStub::stubEvent& pEvent);
 
 		virtual std::string GetDeviceName() = 0;
 		virtual std::string GetDeviceDescription() = 0;
 
-		virtual pmDeviceTypes GetType() = 0;
+		virtual pmDeviceType GetType() = 0;
 
 		pmProcessingElement* GetProcessingElement();
 
-		pmStatus ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, ulong pSubtaskId2);
-		pmStatus StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pExecutionRate);
-		pmStatus CancelSubtasks(pmTask* pTask);
+		pmStatus ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2);
+		pmStatus StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate);
+		pmStatus CancelAllSubtasks(pmTask* pTask);
+        pmStatus CancelSubtaskRange(pmSubtaskRange& pRange);
+        pmStatus ProcessNegotiatedRange(pmSubtaskRange& pRange);
 
+        pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
+    
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
 		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId);
@@ -115,15 +144,50 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 		pmStatus FreeGpuResources();
 
-		virtual pmStatus DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, ulong pSubtaskId2);
+		virtual pmStatus DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2);
 
 	private:
+        typedef struct currentSubtaskStats
+        {
+            pmTask* task;
+            ulong subtaskId;
+            ulong parentRangeStartSubtask;
+            bool originalAllottee;
+            double startTime;
+            bool reassigned;    // the current subtask has been negotiated
+            bool forceAckFlag;  // the entire parent range after current subtask is stolen/negotiated
+        
+            currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, double pStartTime);
+        } currentSubtaskStats;
+    
+        typedef class currentSubtaskTerminus
+        {
+            public:
+                currentSubtaskTerminus(bool& pReassigned, bool& pForceAckFlag, pmExecutionStub* pStub);
+                void Terminating(currentSubtaskStats* pStats);
+        
+            private:
+                bool& mReassigned;
+                bool& mForceAckFlag;
+                pmExecutionStub* mStub;
+        } currentSubtaskTerminus;
+    
 		pmStatus ProcessEvent(execStub::stubEvent& pEvent);
-//		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId) = 0;
         virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
-
+        pmStatus ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag);
+        pmStatus ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus);
+        void PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
+        void HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
+        pmStatus CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId);
+        void CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus);
+        void CancelCurrentlyExecutingSubtask();
+    
 		uint mDeviceIndexOnMachine;
 		size_t mCoreId;
+        
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mCurrentSubtaskLock;
+        currentSubtaskStats* mCurrentSubtaskStats;  // Subtask currently being executed
+        std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> > mSecondaryAllotteeMap;  // PULL model: secondary allottees of a subtask
 };
 
 class pmStubGPU : public pmExecutionStub
@@ -137,12 +201,11 @@ class pmStubGPU : public pmExecutionStub
 		virtual std::string GetDeviceName() = 0;
 		virtual std::string GetDeviceDescription() = 0;
 
-		virtual pmDeviceTypes GetType() = 0;
+		virtual pmDeviceType GetType() = 0;
 
 		virtual pmStatus FreeResources() = 0;
 		virtual pmStatus FreeLastExecutionResources() = 0;
 
-//		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId) = 0;
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
 
 	private:
@@ -160,9 +223,8 @@ class pmStubCPU : public pmExecutionStub
 		virtual std::string GetDeviceName();
 		virtual std::string GetDeviceDescription();
 
-		virtual pmDeviceTypes GetType();
+		virtual pmDeviceType GetType();
 
-//		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId);
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId);
 
 	private:
@@ -180,12 +242,11 @@ class pmStubCUDA : public pmStubGPU
 		virtual std::string GetDeviceName();
 		virtual std::string GetDeviceDescription();
 
-		virtual pmDeviceTypes GetType();
+		virtual pmDeviceType GetType();
 
 		virtual pmStatus FreeResources();
 		virtual pmStatus FreeLastExecutionResources();
 
-//		virtual pmStatus Execute(pmSubtaskRange pRange, ulong& pLastExecutedSubtaskId);
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId);
 
 	private:

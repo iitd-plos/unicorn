@@ -4,7 +4,7 @@
 
 using namespace pm;
 
-void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
+void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
 
 typedef struct matrixMultiplyTaskConf
 {

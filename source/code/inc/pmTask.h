@@ -56,16 +56,10 @@ extern pmCluster* PM_GLOBAL_CLUSTER;
 class pmTask : public pmBase
 {
 	protected:
-		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE, pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
+		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled);
 
 	public:		
 		virtual ~pmTask();
-
-		typedef struct subtaskShadowMem
-		{
-			char* addr;
-			size_t length;
-		} subtaskShadowMem;
 
 		ulong GetTaskId();
 		pmMemSection* GetMemSectionRO();
@@ -81,29 +75,31 @@ class pmTask : public pmBase
 		scheduler::schedulingModel GetSchedulingModel();
 		pmTaskExecStats& GetTaskExecStats();
 		pmTaskInfo& GetTaskInfo();
-		pmStatus GetSubtaskInfo(ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly);
+		pmStatus GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly);
 		pmSubscriptionManager& GetSubscriptionManager();
         pmReducer* GetReducer();
         pmRedistributor* GetRedistributor();
-		virtual pmStatus MarkSubtaskExecutionFinished();
 		bool HasSubtaskExecutionFinished();
 		pmStatus IncrementSubtasksExecuted(ulong pSubtaskCount);
 		ulong GetSubtasksExecuted();
-		pmStatus SaveFinalReducedOutput(ulong pSubtaskId);
-
 		bool DoSubtasksNeedShadowMemory();
-		pmStatus CreateSubtaskShadowMem(ulong pSubtaskId);
-		pmStatus CreateSubtaskShadowMem(ulong pSubtaskId, char* pMem, size_t pMemLength);
-		subtaskShadowMem& GetSubtaskShadowMem(ulong pSubtaskId);
-		pmStatus DestroySubtaskShadowMem(ulong pSubtaskId);
+    
+        virtual pmStatus MarkSubtaskExecutionFinished();
+        virtual void TerminateTask();
+        virtual void MarkLocalStubsFreeOfTask();
+    
+        void PrepareForTaskCompletionMessage();
+        void RegisterStubFreeOfTask();
+    
+        void UnlockMemories();
     
         std::vector<pmProcessingElement*>& GetStealListForDevice(pmProcessingElement* pDevice);
     
         ulong GetSequenceNumber();
         pmStatus SetSequenceNumber(ulong pSequenceNumber);
     
-        bool ShouldStartFaultTolerance();
-        pmStatus TaskInternallyFinished();
+        pmStatus FlushMemoryOwnerships();
+        bool IsMultiAssignEnabled();
 
 #ifdef ENABLE_TASK_PROFILING
         pmTaskProfiler* GetTaskProfiler();
@@ -129,6 +125,7 @@ class pmTask : public pmBase
 		pmSubscriptionManager mSubscriptionManager;
 		pmTaskExecStats mTaskExecStats;
         ulong mSequenceNumber;  // Sequence Id of task on originating host (This along with originating machine is the global unique identifier for a task)
+        bool mMultiAssignEnabled;
     
 #ifdef ENABLE_TASK_PROFILING
         pmTaskProfiler mTaskProfiler;
@@ -139,21 +136,18 @@ class pmTask : public pmBase
 		bool mSubtaskExecutionFinished;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mExecLock;
 
-		std::map<ulong, subtaskShadowMem> mShadowMemMap;
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mShadowMemLock;
-
-        pmReducer* mReducer;
+        finalize_ptr<pmReducer> mReducer;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mReducerLock;
     
-        pmRedistributor* mRedistributor;
+        finalize_ptr<pmRedistributor> mRedistributor;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mRedistributorLock;
     
+        ulong mOutstandingStubs;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mTaskCompletionLock;
+
         std::map<pmProcessingElement*, std::vector<pmProcessingElement*> > mStealListForDevice;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mStealListLock;
     
-        bool mCanStartFaultTolerance;
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mFaultToleranceLock;    
-
     protected:
 		uint mAssignedDeviceCount;
 };
@@ -161,11 +155,7 @@ class pmTask : public pmBase
 class pmLocalTask : public pmTask
 {
 	public:
-		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs,
-			pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL,
-			scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
-
-		virtual ~pmLocalTask();
+		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true);
 
 		pmStatus FindCandidateProcessingElements(std::set<pmProcessingElement*>& pDevices);
 
@@ -175,9 +165,19 @@ class pmLocalTask : public pmTask
 		pmStatus MarkTaskStart();
 		pmStatus MarkTaskEnd(pmStatus pStatus);
 
-		virtual pmStatus MarkSubtaskExecutionFinished();
-        pmStatus CompleteTask();
-
+        void DoPostInternalCompletion();
+        void MarkUserSideTaskCompletion();
+    
+        void TaskRedistributionDone();
+        pmStatus SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId);
+    
+        virtual pmStatus MarkSubtaskExecutionFinished();
+        virtual void TerminateTask();
+        virtual void MarkLocalStubsFreeOfTask();
+    
+        void RegisterInternalTaskCompletionMessage();
+        void UserDeleteTask();
+    
 		pmStatus GetStatus();
 
 		std::vector<pmProcessingElement*>& GetAssignedDevices();
@@ -188,32 +188,48 @@ class pmLocalTask : public pmTask
         ulong GetTaskTimeOutTriggerTime();
 
 	private:
+        virtual ~pmLocalTask();
+    
 		pmTaskCommandPtr mTaskCommand;
-		pmSubtaskManager* mSubtaskManager;
+		finalize_ptr<pmSubtaskManager> mSubtaskManager;
 		std::vector<pmProcessingElement*> mDevices;
         ulong mTaskTimeOutTriggerTime;
 
-        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mSequenceLock;
+        ulong mPendingCompletions;
+        bool mUserSideTaskCompleted;
+        bool mLocalStubsFreeOfTask;
+        bool mUserSignalledDeletion;
+        bool mTaskInternallyCompleted;
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
+    
         static ulong mSequenceId;   // Task number at the originating host
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mSequenceLock;
 };
 
 class pmRemoteTask : public pmTask
 {
 	public:
-		pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, 
-			pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber,
-			pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL,
-			scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL);
-
-		virtual ~pmRemoteTask();
+		pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true);
 
 		pmStatus AddAssignedDevice(pmProcessingElement* pDevice);
 		std::vector<pmProcessingElement*>& GetAssignedDevices();
 
-		virtual pmStatus MarkSubtaskExecutionFinished();
+        virtual pmStatus MarkSubtaskExecutionFinished();
+        virtual void TerminateTask();
+        virtual void MarkLocalStubsFreeOfTask();
+    
+        void MarkUserSideTaskCompletion();
+        void MarkReductionFinished();
+        void MarkRedistributionFinished();
 
 	private:
-		std::vector<pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined
+        virtual ~pmRemoteTask();
+    
+        bool mUserSideTaskCompleted;
+        bool mLocalStubsFreeOfTask;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
+
+        std::vector<pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined
 };
 
 } // end namespace pm
