@@ -28,6 +28,8 @@
 #include "pmCallbackUnit.h"
 #include "pmCallback.h"
 
+#include <string.h>
+
 namespace pm
 {
 
@@ -586,7 +588,7 @@ pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmExecutionStub* pStub
 	pmMemSection* lMemSection = mTask->GetMemSectionRO();
     bool lIsLazy = lMemSection->IsLazy();
 
-    if(!lMemSection->IsLazy() || pDeviceType != CPU)
+    if(!lIsLazy || pDeviceType != CPU)
     {   
         size_t lOffset = pSubscriptionInfo.offset;
         size_t lLength = pSubscriptionInfo.length;

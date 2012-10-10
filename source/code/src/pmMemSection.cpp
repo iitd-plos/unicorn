@@ -74,12 +74,12 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMe
 }
     
 pmMemSection::pmMemSection(const pmMemSection& pMemSection)
+    : mUserDelete(false)
 #ifdef ENABLE_MEM_PROFILING
-    : mMemReceived(0)
+    , mMemReceived(0)
     , mMemTransferred(0)
     , mMemReceiveEvents(0)
     , mMemTransferEvents(0)
-    , mUserDelete(false)
 #endif
 {
     mOwner = pMemSection.mOwner;
