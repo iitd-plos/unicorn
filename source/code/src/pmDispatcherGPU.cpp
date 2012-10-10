@@ -138,11 +138,8 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 	uint lOriginatingMachineIndex = (uint)(*(lTask->GetOriginatingHost()));
 	ulong lSequenceNumber = lTask->GetSequenceNumber();
 
-    pmDeviceInfo lDeviceInfo;
-    pStub->GetProcessingElement()->GetDeviceInfo(lDeviceInfo);
-    
     pmMemSection* lMemSection = lTask->GetMemSectionRW();
-	return InvokeKernel(pStub, pBoundDeviceIndex, pTaskInfo, lDeviceInfo, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, lOriginatingMachineIndex, lSequenceNumber, (lMemSection ? lMemSection->GetMem() : NULL));
+	return InvokeKernel(pStub, pBoundDeviceIndex, pTaskInfo, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, lOriginatingMachineIndex, lSequenceNumber, (lMemSection ? lMemSection->GetMem() : NULL));
 #else	
         return pmSuccess;
 #endif
