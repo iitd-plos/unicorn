@@ -673,10 +673,8 @@ pmStatus pmMemSection::TransferOwnershipPostTaskCompletion(vmRangeOwner& pRangeO
 
 pmStatus pmMemSection::FlushOwnerships()
 {
-    pmTask* lTask = GetLockingTask();
-
 #ifdef _DEBUG
-    if(!lTask || !IsOutput())
+    if(!GetLockingTask() || !IsOutput())
        PMTHROW(pmFatalErrorException());
 #endif
     

@@ -86,6 +86,10 @@ class pmDispatcherCUDA : public pmGraphicsBase
         void GetNonConsolidatedSubscriptionsForSubtask(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, bool pIsInputMem, pmSubtaskInfo& pSubtaskInfo, std::vector<std::pair<size_t, size_t> >& pSubscriptionVector);
         
         bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId1, ulong pSubtaskId2, bool pIsInputMem);
+    
+        void MarkInsideUserCode(pmExecutionStub* pStub, ulong pSubtaskId);
+        void MarkInsideLibraryCode(pmExecutionStub* pStub, ulong pSubtaskId);
+        bool RequiresPrematureExit(pmExecutionStub* pStub, ulong pSubtaskId);
 
 		size_t mCountCUDA;
 		void* mCutilHandle;

@@ -795,7 +795,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                     lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset));
                 
                 #ifdef ENABLE_MEM_PROFILING
-                    lEventDetails.memSection->RecordMemTransfer(lInternalLength);
+                    lEventDetails.srcMemSection->RecordMemTransfer(lInternalLength);
                 #endif
                 
                     MEM_TRANSFER_DUMP(lEventDetails.memSection, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))

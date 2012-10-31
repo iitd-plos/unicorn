@@ -28,6 +28,10 @@
 
 #include THREADING_IMPLEMENTATION_HEADER
 
+#ifdef VM_IMPLEMENTATION_HEADER2
+#include VM_IMPLEMENTATION_HEADER2
+#endif
+
 #include <map>
 
 namespace pm

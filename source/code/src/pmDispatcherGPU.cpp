@@ -183,5 +183,20 @@ bool pmDispatcherCUDA::SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub,
     
     return lTask->GetSubscriptionManager().SubtasksHaveMatchingSubscriptions(pStub, pSubtaskId1, pStub, pSubtaskId2, pIsInputMem);
 }
+    
+void pmDispatcherCUDA::MarkInsideUserCode(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    pStub->MarkInsideUserCode(pSubtaskId);
+}
+
+void pmDispatcherCUDA::MarkInsideLibraryCode(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    pStub->MarkInsideLibraryCode(pSubtaskId);
+}
+    
+bool pmDispatcherCUDA::RequiresPrematureExit(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    return pStub->RequiresPrematureExit(pSubtaskId);
+}
 
 }
