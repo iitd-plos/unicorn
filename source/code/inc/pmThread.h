@@ -26,6 +26,10 @@
 #include "pmSignalWait.h"
 #include "pmSafePriorityQueue.h"
 
+#include THREADING_IMPLEMENTATION_HEADER
+
+#include <map>
+
 namespace pm
 {
 
@@ -64,19 +68,19 @@ class pmThread : public pmBase
 		virtual ~pmThread() {}
 		virtual pmStatus SwitchThread(T& pCommand, P pPriority) = 0;
 
+        virtual void InterruptThread() = 0;
 		virtual pmStatus SetProcessorAffinity(int pProcesorId) = 0;
 		
-		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
-    
         virtual pmStatus WaitForQueuedCommands() = 0;
-    
         virtual pmStatus WaitIfCurrentCommandMatches(internalMatchFuncPtr pMatchFunc, void* pMatchCriterion) = 0;
 
         virtual pmStatus UnblockSecondaryCommands();
 		virtual pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem, bool pTemporarilyUnblockSecondaryCommands = false);
         virtual pmStatus DeleteMatchingCommands(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
-
+    
+		/* To be implemented by client */
+		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
+    
 		enum internalMessage
 		{
 			TERMINATE,
@@ -117,11 +121,11 @@ class pmPThread : public pmThread<T, P>
 
 		/* To be implemented by client */
 		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
-		
+
+        virtual void InterruptThread();
         virtual pmStatus WaitForQueuedCommands();
-
         virtual pmStatus WaitIfCurrentCommandMatches(typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
-
+    
         friend void* ThreadLoop <T, P> (void* pThreadData);
 
 	private:
@@ -133,7 +137,6 @@ class pmPThread : public pmThread<T, P>
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mReverseSignalWait;
 
 		pthread_t mThread;
-
         typename pmThread<T, P>::internalType mCurrentCommand;
 };
 

@@ -86,14 +86,13 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskA
 	pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost);
 
 	pmRemoteTask* lRemoteTask;
-	pmInputMemSection* lInputMem = NULL;
-	pmOutputMemSection* lOutputMem = NULL;
+	pmMemSection* lInputMem = NULL;
+	pmMemSection* lOutputMem = NULL;
 	
 	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
 		FREE_PTR_ON_EXCEPTION(lDestructionBlock, lTaskConf, lTaskConf);
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lInputMem, pmInputMemSection, (pRemoteTaskData->taskStruct.inputMemLength == 0) ? NULL : (new pmInputMemSection(pRemoteTaskData->taskStruct.inputMemLength, pRemoteTaskData->taskStruct.inputMemInfo == (ushort)INPUT_MEM_READ_ONLY_LAZY, lOriginatingHost, pRemoteTaskData->taskStruct.inputMemAddr)));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lOutputMem, pmOutputMemSection, (pRemoteTaskData->taskStruct.outputMemLength == 0)? NULL : (new pmOutputMemSection(pRemoteTaskData->taskStruct.outputMemLength, 
-			((pRemoteTaskData->taskStruct.outputMemInfo == (ushort)OUTPUT_MEM_READ_WRITE || pRemoteTaskData->taskStruct.outputMemInfo == (ushort)OUTPUT_MEM_READ_WRITE_LAZY) ? pmOutputMemSection::READ_WRITE : pmOutputMemSection::WRITE_ONLY), pRemoteTaskData->taskStruct.outputMemInfo == (ushort)OUTPUT_MEM_READ_WRITE_LAZY, lOriginatingHost, pRemoteTaskData->taskStruct.outputMemAddr)));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lInputMem, pmMemSection, (pRemoteTaskData->taskStruct.inputMemLength == 0) ? NULL : (pmMemSection::CheckAndCreateMemSection(pRemoteTaskData->taskStruct.inputMemLength, lOriginatingHost, (pmMemInfo)(pRemoteTaskData->taskStruct.inputMemInfo), pRemoteTaskData->taskStruct.inputMemGenerationNumber, true)));
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lOutputMem, pmMemSection, (pRemoteTaskData->taskStruct.outputMemLength == 0) ? NULL : (pmMemSection::CheckAndCreateMemSection(pRemoteTaskData->taskStruct.outputMemLength, lOriginatingHost, (pmMemInfo)(pRemoteTaskData->taskStruct.outputMemInfo), pRemoteTaskData->taskStruct.outputMemGenerationNumber, false)));
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lRemoteTask, pmRemoteTask, new pmRemoteTask(lTaskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, lInputMem, lOutputMem, pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), (pRemoteTaskData->taskStruct.flags & TASK_MULTI_ASSIGN_FLAG_VAL)));
 	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
 

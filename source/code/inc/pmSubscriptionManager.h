@@ -36,6 +36,19 @@ class pmMemSection;
 
 namespace subscription
 {
+    typedef class pmSubtaskTerminationCheckPointAutoPtr
+    {
+        public:
+            pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId);
+            ~pmSubtaskTerminationCheckPointAutoPtr();
+    
+        private:
+            pmExecutionStub* mStub;
+            ulong mSubtaskId;
+            bool mIsPastCancellationStage;
+            bool mExecutingLibraryCode;
+    } pmSubtaskTerminationCheckPointAutoPtr;
+    
 	typedef struct subscriptionData
 	{
 		std::vector<pmCommunicatorCommandPtr> receiveCommandVector;
@@ -106,7 +119,6 @@ class pmSubscriptionManager : public pmBase
 		pmStatus WaitForSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId);
         pmStatus FetchInputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
         pmStatus FetchOutputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
-        void RegisterPostTaskOwnershipTransfer(pmMemSection* pMemSection, pmExecutionStub* pStub, ulong pOffset, ulong pLength, std::vector<pmCommunicatorCommandPtr>& pVector);
 
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 		std::map<std::pair<pmExecutionStub*, ulong>, subscription::pmSubtask> mSubtaskMap;

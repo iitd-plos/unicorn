@@ -222,10 +222,12 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 	dim3 gridConf(pCudaLaunchConf.blocksX, pCudaLaunchConf.blocksY, pCudaLaunchConf.blocksZ);
 	dim3 blockConf(pCudaLaunchConf.threadsX, pCudaLaunchConf.threadsY, pCudaLaunchConf.threadsZ);
 
+    pStub->MarkInsideUserCode(pSubtaskInfo.subtaskId);
 	//pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem>>> (pTaskInfo, pDeviceInfo, lSubtaskInfo, lStatusPtr);
 	pKernelPtr <<<gridConf, blockConf>>> (lTaskInfo, pDeviceInfo, lSubtaskInfo, lStatusPtr);
+    pStub->MarkInsideLibraryCode(pSubtaskInfo.subtaskId);
 
-	if(cudaGetLastError() == cudaSuccess)
+	if(cudaGetLastError() == cudaSuccess && !pStub->RequiresPrematureExit(pSubtaskInfo.subtaskId))
 	{
         if(pSubtaskInfo.outputMem && pSubtaskInfo.outputMemLength != 0)
         {

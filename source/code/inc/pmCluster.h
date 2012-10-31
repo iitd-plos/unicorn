@@ -23,7 +23,6 @@
 
 #include "pmBase.h"
 #include "pmHardware.h"
-#include "pmNetwork.h"
 #include "mpi.h"
 
 #include <set>

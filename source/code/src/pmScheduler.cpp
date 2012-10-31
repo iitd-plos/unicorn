@@ -34,6 +34,7 @@
 #include "pmReducer.h"
 #include "pmRedistributor.h"
 #include "pmController.h"
+#include "pmCallbackUnit.h"
 
 namespace pm
 {
@@ -49,7 +50,7 @@ void __dump_mem_forward(const pmMemSection* memSection, ulong addr, size_t recei
 {
     char lStr[512];
     
-    if(dynamic_cast<const pmInputMemSection*>(memSection))
+    if(memSection->IsInput())
         sprintf(lStr, "Forwarding input mem section %p (Dest Addr %p; Remote Addr %p) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", memSection, (void*)(addr), (void*)newAddr, offset, receiverOffset, newOffset, length, newHost, host);
     else
         sprintf(lStr, "Forwarding out mem section %p (Dest Addr %p; Remote Addr %p) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", memSection, (void*)(addr), (void*)newAddr, offset, receiverOffset, newOffset, length, newHost, host);
@@ -61,7 +62,7 @@ void __dump_mem_transfer(const pmMemSection* memSection, ulong addr, size_t rece
 {
     char lStr[512];
     
-    if(dynamic_cast<const pmInputMemSection*>(memSection))
+    if(memSection->IsInput())
         sprintf(lStr, "Transferring input mem section %p (Remote Addr %p) from offset %ld (Remote offset %ld) for length %ld to host %d", memSection, (void*)(addr), offset, receiverOffset, length, host);
     else
         sprintf(lStr, "Transferring out mem section %p (Remote Addr %p) from offset %ld (Remote Offset %ld) for length %ld to host %d", memSection, (void*)(addr), offset, receiverOffset, length, host);
@@ -73,7 +74,7 @@ void __dump_mem_ack_transfer(const pmMemSection* memSection, ulong addr, size_t 
 {
     char lStr[512];
     
-    if(dynamic_cast<const pmInputMemSection*>(memSection))
+    if(memSection->IsInput())
         sprintf(lStr, "Acknowledging input mem section %p (Remote Addr %p) from offset %ld for length %ld to host %d", memSection, (void*)(addr), offset, length, host);
     else
         sprintf(lStr, "Acknowledging out mem section %p (Remote Addr %p) from offset %ld for length %ld to host %d", memSection, (void*)(addr), offset, length, host);
@@ -144,12 +145,13 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_DATA_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_CHANGE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::TASK_EVENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::STEAL_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_TRANSFER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_IDENTIFIER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
@@ -165,12 +167,13 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_DATA_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_CHANGE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::TASK_EVENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::STEAL_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_TRANSFER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_IDENTIFIER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
@@ -203,7 +206,6 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, &mTaskEventRecvData);
 	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	&mStealRequestRecvData);
 	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, &mStealResponseRecvData);
-	mOwnershipTransferCommand = PERSISTENT_RECV_COMMAND(OWNERSHIP_TRANSFER_TAG, OWNERSHIP_TRANSFER_STRUCT, &mOwnershipTransferData);
 	mMemTransferRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_TRANSFER_REQUEST_TAG, MEMORY_TRANSFER_REQUEST_STRUCT, &mMemTransferRequestData);
     mSubtaskRangeCancelCommand = PERSISTENT_RECV_COMMAND(SUBTASK_RANGE_CANCEL_TAG, SUBTASK_RANGE_CANCEL_STRUCT, &mSubtaskRangeCancelData);
     
@@ -212,7 +214,6 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
     lNetwork->InitializePersistentCommand(mTaskEventRecvCommand.get());
     lNetwork->InitializePersistentCommand(mStealRequestRecvCommand.get());
     lNetwork->InitializePersistentCommand(mStealResponseRecvCommand.get());
-    lNetwork->InitializePersistentCommand(mOwnershipTransferCommand.get());
     lNetwork->InitializePersistentCommand(mMemTransferRequestCommand.get());
     lNetwork->InitializePersistentCommand(mSubtaskRangeCancelCommand.get());
 
@@ -220,7 +221,6 @@ pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 	SetupNewTaskEventReception();
 	SetupNewStealRequestReception();
 	SetupNewStealResponseReception();
-	SetupNewOwnershipTransferReception();
 	SetupNewMemTransferRequestReception();
     SetupNewSubtaskRangeCancelReception();
 	
@@ -244,7 +244,6 @@ pmStatus pmScheduler::DestroyPersistentCommunicationCommands()
     lNetwork->TerminatePersistentCommand(mTaskEventRecvCommand.get());
     lNetwork->TerminatePersistentCommand(mStealRequestRecvCommand.get());
     lNetwork->TerminatePersistentCommand(mStealResponseRecvCommand.get());
-    lNetwork->TerminatePersistentCommand(mOwnershipTransferCommand.get());
     lNetwork->TerminatePersistentCommand(mMemTransferRequestCommand.get());
     lNetwork->TerminatePersistentCommand(mSubtaskRangeCancelCommand.get());
 
@@ -272,11 +271,6 @@ pmStatus pmScheduler::SetupNewStealRequestReception()
 pmStatus pmScheduler::SetupNewStealResponseReception()
 {
 	return pmCommunicator::GetCommunicator()->Receive(mStealResponseRecvCommand, false);
-}
-
-pmStatus pmScheduler::SetupNewOwnershipTransferReception()
-{
-	return pmCommunicator::GetCommunicator()->Receive(mOwnershipTransferCommand, false);
 }
 
 pmStatus pmScheduler::SetupNewMemTransferRequestReception()
@@ -418,13 +412,12 @@ pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, pmS
     mAcknowledgementsSent += (pRange.endSubtask - pRange.startSubtask + 1);
     std::cout << "Device " << pDevice->GetGlobalDeviceIndex() << " sent " << (pRange.endSubtask - pRange.startSubtask + 1) << " acknowledgements for subtasks [" << pRange.startSubtask << " - " << pRange.endSubtask << "]" << std::endl;
 #endif
-    
+
 	schedulerEvent lEvent;
 	lEvent.eventId = SEND_ACKNOWLEDGEMENT;
 	lEvent.ackSendDetails.device = pDevice;
 	lEvent.ackSendDetails.range = pRange;
 	lEvent.ackSendDetails.execStatus = pExecStatus;
-    lEvent.ackSendDetails.ownerMemBaseAddr = reinterpret_cast<ulong>(pRange.task->GetMemSectionRW()->GetMem());
     lEvent.ackSendDetails.ownershipData = new pmCommunicatorCommand::ownershipDataStruct[pOwnershipMap.size()];
     lEvent.ackSendDetails.dataElements = (uint)pOwnershipMap.size();
     
@@ -438,14 +431,13 @@ pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, pmS
 	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
 
-pmStatus pmScheduler::AcknowledgementReceiveEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, ulong pRemoteMemBaseAddr, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements)
+pmStatus pmScheduler::AcknowledgementReceiveEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = RECEIVE_ACKNOWLEDGEMENT;
 	lEvent.ackReceiveDetails.device = pDevice;
 	lEvent.ackReceiveDetails.range = pRange;
 	lEvent.ackReceiveDetails.execStatus = pExecStatus;
-    lEvent.ackSendDetails.ownerMemBaseAddr = pRemoteMemBaseAddr;
 	lEvent.ackReceiveDetails.ownershipData = pOwnershipData;
     lEvent.ackSendDetails.dataElements = pDataElements;
 
@@ -491,15 +483,15 @@ pmStatus pmScheduler::ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask*
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
 
-pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority)
+pmStatus pmScheduler::MemTransferEvent(pmMemSection* pSrcMemSection, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = MEMORY_TRANSFER;
-	lEvent.memTransferDetails.memSection = pSrcMemSection;
+	lEvent.memTransferDetails.srcMemSection = pSrcMemSection;
+    lEvent.memTransferDetails.destMemIdentifier = pDestMemIdentifier;
 	lEvent.memTransferDetails.offset = pOffset;
 	lEvent.memTransferDetails.length = pLength;
 	lEvent.memTransferDetails.machine = pDestMachine;
-	lEvent.memTransferDetails.destMemBaseAddr = pDestMemBaseAddr;
 	lEvent.memTransferDetails.receiverOffset = pReceiverOffset;
 	lEvent.memTransferDetails.priority = pPriority;
     lEvent.memTransferDetails.isForwarded = pIsForwarded;
@@ -702,7 +694,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             pmMachine* lOriginatingHost = lTask->GetOriginatingHost();
             if(lOriginatingHost == PM_LOCAL_MACHINE)
             {
-                return AcknowledgementReceiveEvent(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, lEventDetails.ownerMemBaseAddr, lEventDetails.ownershipData, lEventDetails.dataElements);
+                return AcknowledgementReceiveEvent(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, lEventDetails.ownershipData, lEventDetails.dataElements);
             }
             else
             {
@@ -721,7 +713,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             receiveAcknowledgement& lEventDetails = pEvent.ackReceiveDetails;
 
             if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.range.task))
-                return ProcessAcknowledgement((pmLocalTask*)(lEventDetails.range.task), lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, lEventDetails.ownerMemBaseAddr, lEventDetails.ownershipData, lEventDetails.dataElements);
+                return ProcessAcknowledgement((pmLocalTask*)(lEventDetails.range.task), lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, lEventDetails.ownershipData, lEventDetails.dataElements);
         }
 
 		case TASK_CANCEL:
@@ -729,7 +721,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             taskCancel& lEventDetails = pEvent.taskCancelDetails;
             pmTask* lTask = lEventDetails.task;
 
-            CancelAllSubtasksExecutingOnLocalStubs(lTask);
+            CancelAllSubtasksExecutingOnLocalStubs(lTask, false);
             break;
         }
 
@@ -743,8 +735,8 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             
             if(lTask->IsMultiAssignEnabled())
             {
-                lTask->PrepareForTaskCompletionMessage();
-                CancelAllSubtasksExecutingOnLocalStubs(lTask);
+                CancelAllSubtasksExecutingOnLocalStubs(lTask, true);
+                lTask->MarkAllStubsScannedForCancellationMessages();
             }
 
             break;
@@ -773,17 +765,6 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             break;
         }
 
-		case OWNERSHIP_TRANSFER:
-        {
-            ownershipTransfer& lEventDetails = pEvent.ownershipTransferDetails;
-            if(lEventDetails.senderDevice->GetMachine() == PM_LOCAL_MACHINE)
-                PMTHROW(pmFatalErrorException());
-        
-//            lEventDetails.memSection->TransferOwnershipPostTaskCompletion(lEventDetails.machine, lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset, lEventDetails.offset, lEventDetails.length);
-        
-            break;
-        }
-        
 		case MEMORY_TRANSFER:
         {
             memTransfer& lEventDetails = pEvent.memTransferDetails;
@@ -795,7 +776,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             
             // Check if the memory is residing locally or forward the request to the owner machine
             pmMemSection::pmMemOwnership lOwnerships;
-            lEventDetails.memSection->GetOwners(lEventDetails.offset, lEventDetails.length, false, lOwnerships);
+            lEventDetails.srcMemSection->GetOwners(lEventDetails.offset, lEventDetails.length, lOwnerships);
             
             pmMemSection::pmMemOwnership::iterator lStartIter = lOwnerships.begin(), lEndIter = lOwnerships.end(), lIter;                    
             for(lIter = lStartIter; lIter != lEndIter; ++lIter)
@@ -806,7 +787,12 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 
                 if(lRangeOwner.host == PM_LOCAL_MACHINE)
                 {
-                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemBaseAddr, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lEventDetails.memSection->GetMem()) + lInternalOffset));
+					pmMemSection* lOwnerMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
+                
+					if(!lOwnerMemSection)
+                        PMTHROW(pmFatalErrorException());
+                
+                    lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset));
                 
                 #ifdef ENABLE_MEM_PROFILING
                     lEventDetails.memSection->RecordMemTransfer(lInternalLength);
@@ -824,8 +810,10 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                         PMTHROW(pmFatalErrorException());
                     
                     pmCommunicatorCommand::memoryTransferRequest* lData = new pmCommunicatorCommand::memoryTransferRequest();
-                    lData->ownerBaseAddr = lRangeOwner.hostBaseAddr;    // page aligned
-                    lData->receiverBaseAddr = lEventDetails.destMemBaseAddr;    // page aligned
+                    lData->sourceMemIdentifier.memOwnerHost = lRangeOwner.memIdentifier.memOwnerHost;
+                    lData->sourceMemIdentifier.generationNumber = lRangeOwner.memIdentifier.generationNumber;
+                    lData->destMemIdentifier.memOwnerHost = lEventDetails.destMemIdentifier.memOwnerHost;
+                    lData->destMemIdentifier.generationNumber = lEventDetails.destMemIdentifier.generationNumber;
                     lData->receiverOffset = lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset;
                     lData->offset = lRangeOwner.hostOffset;
                     lData->length = lInternalLength;
@@ -962,12 +950,12 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 	return pmSuccess;
 }
 
-void pmScheduler::CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask)
+void pmScheduler::CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask, bool pTaskListeningOnCancellation)
 {
     pmStubManager* lManager = pmStubManager::GetStubManager();
     uint lStubCount = (uint)(lManager->GetStubCount());
     for(uint i = 0; i < lStubCount; ++i)
-        lManager->GetStub(i)->CancelAllSubtasks(pTask);
+        lManager->GetStub(i)->CancelAllSubtasks(pTask, pTaskListeningOnCancellation);
 }
     
 pmStatus pmScheduler::NegotiateSubtaskRangeWithOriginalAllottee(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange)
@@ -1032,26 +1020,16 @@ pmStatus pmScheduler::SendRangeNegotiationSuccess(pmProcessingElement* pRequesti
     return pmSuccess;
 }
     
-pmStatus pmScheduler::SendPostTaskOwnershipTransfer(pmMachine* pReceiverHost, pmTask* pTask, void* pReceiverBaseAddr, ulong pReceiverOffset, void* pSenderBaseAddr, ulong pSenderOffset, ulong pLength, pmProcessingElement* pSenderDevice)
+pmStatus pmScheduler::SendPostTaskOwnershipTransfer(pmMemSection* pMemSection, pmMachine* pReceiverHost, std::tr1::shared_ptr<std::vector<pmCommunicatorCommand::ownershipChangeStruct> >& pChangeData)
 {
-    if(pReceiverHost != PM_LOCAL_MACHINE)
-    {
-        pmCommunicatorCommand::ownershipTransferStruct* lData = new pmCommunicatorCommand::ownershipTransferStruct();
-        lData->originatingHost = *(pTask->GetOriginatingHost());
-        lData->sequenceNumber = pTask->GetSequenceNumber();
-        lData->recepientBaseAddr = (ulong)pReceiverBaseAddr;
-        lData->recepientOffset = pReceiverOffset;
-        lData->senderBaseAddr = (ulong)pSenderBaseAddr;
-        lData->senderOffset = pSenderOffset;
-        lData->length = pLength;
-        lData->senderDeviceGlobalIndex = pSenderDevice->GetGlobalDeviceIndex();
+    if(pReceiverHost == PM_LOCAL_MACHINE)
+        PMTHROW(pmFatalErrorException());
     
-        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG, pReceiverHost, pmCommunicatorCommand::OWNERSHIP_TRANSFER_STRUCT, lData, 1, NULL, 0, gCommandCompletionCallback);
+    pmCommunicatorCommand::ownershipTransferPacked* lPackedData = new pmCommunicatorCommand::ownershipTransferPacked(pMemSection, pChangeData);
         
-        pmCommunicator::GetCommunicator()->Send(lCommand, false);
-    }
+    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG, pReceiverHost, pmCommunicatorCommand::OWNERSHIP_TRANSFER_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
     
-    return pmSuccess;
+    return pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
 }
     
 pmStatus pmScheduler::SendSubtaskRangeCancellationMessage(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange)
@@ -1084,7 +1062,7 @@ pmStatus pmScheduler::SendRedistributionData(pmTask* pTask, std::vector<pmCommun
     pmMachine* lMachine = pTask->GetOriginatingHost();
     if(lMachine == PM_LOCAL_MACHINE)
     {
-        return pTask->GetRedistributor()->PerformRedistribution(lMachine, reinterpret_cast<ulong>(pTask->GetMemSectionRW()->GetMem()), pTask->GetSubtasksExecuted(), *pRedistributionData);
+        return pTask->GetRedistributor()->PerformRedistribution(lMachine, pTask->GetSubtasksExecuted(), *pRedistributionData);
     }
     else
     {
@@ -1462,11 +1440,22 @@ pmStatus pmScheduler::ReceiveFailedStealResponse(pmProcessingElement* pStealingD
 
 
 // This method is executed at master host for the task
-pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, ulong pRemoteMemBaseAddr, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements)
+pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements)
 {
     pmMemSection* lMemSection = pRange.task->GetMemSectionRW();
-    for(size_t i=0; i<pDataElements; ++i)
-        lMemSection->TransferOwnershipPostTaskCompletion(pDevice->GetMachine(), pRemoteMemBaseAddr, pOwnershipData[i].offset, pOwnershipData[i].offset, pOwnershipData[i].length);
+    if(lMemSection)
+    {
+        pmMemSection::vmRangeOwner lRangeOwner;
+        lRangeOwner.memIdentifier.memOwnerHost = *(lMemSection->GetMemOwnerHost());
+        lRangeOwner.memIdentifier.generationNumber = lMemSection->GetGenerationNumber();
+        
+        for(size_t i=0; i<pDataElements; ++i)
+        {
+            lRangeOwner.host = pDevice->GetMachine();
+            lRangeOwner.hostOffset = pOwnershipData[i].offset;
+            lMemSection->TransferOwnershipPostTaskCompletion(lRangeOwner, pOwnershipData[i].offset, pOwnershipData[i].length);
+        }
+    }
     
     delete[] pOwnershipData;
     
@@ -1488,7 +1477,28 @@ pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessi
 
 pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap)
 {
-	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, pOwnershipMap);
+    std::map<size_t, size_t> lEmptyMap;
+	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, (pRange.task->GetCallbackUnit()->GetDataRedistributionCB()) ? lEmptyMap : pOwnershipMap);
+    
+    if(pRange.task->GetOriginatingHost() != PM_LOCAL_MACHINE)
+    {
+        pmMemSection* lMemSection = pRange.task->GetMemSectionRW();
+    
+        if(lMemSection)
+        {
+            pmMemSection::vmRangeOwner lRangeOwner;
+            lRangeOwner.host = PM_LOCAL_MACHINE;
+            lRangeOwner.memIdentifier.memOwnerHost = *(lMemSection->GetMemOwnerHost());
+            lRangeOwner.memIdentifier.generationNumber = lMemSection->GetGenerationNumber();
+        
+            std::map<size_t, size_t>::iterator lIter = pOwnershipMap.begin(), lEndIter = pOwnershipMap.end();
+            for(; lIter != lEndIter; ++lIter)
+            {
+                lRangeOwner.hostOffset = lIter->first;
+                lMemSection->TransferOwnershipPostTaskCompletion(lRangeOwner, lIter->first, lIter->second);
+            }
+        }
+    }
 
 	if(pRange.task->GetSchedulingModel() == PULL)
 	{
@@ -1589,7 +1599,8 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					delete (pmCommunicatorCommand::stealResponseStruct*)(lCommunicatorCommand->GetData());
 					break;
 				case pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG:
-					delete (pmCommunicatorCommand::ownershipTransferStruct*)(lCommunicatorCommand->GetData());
+					delete (pmCommunicatorCommand::ownershipTransferPacked*)(lCommunicatorCommand->GetData());
+                    delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
 				case pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG:
 					delete (pmCommunicatorCommand::memoryTransferRequest*)(lCommunicatorCommand->GetData());
@@ -1704,7 +1715,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                     lRange.endSubtask = lData->ackStruct.endSubtask;
                     lRange.originalAllottee = ((lData->ackStruct.originalAllotteeGlobalIndex == lData->ackStruct.sourceDeviceGlobalIndex) ? NULL : pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->ackStruct.originalAllotteeGlobalIndex));
 
-                    AcknowledgementReceiveEvent(lSourceDevice, lRange, (pmStatus)(lData->ackStruct.execStatus), lData->ackStruct.ownerMemBaseAddr, lData->ownershipData, lData->ackStruct.ownershipDataElements);
+                    AcknowledgementReceiveEvent(lSourceDevice, lRange, (pmStatus)(lData->ackStruct.execStatus), lData->ownershipData, lData->ackStruct.ownershipDataElements);
                 
 					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
 					//delete[] (pmCommunicatorCommand::ownershipDataStruct*)(lData->ownershipData);
@@ -1787,7 +1798,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                     if(lOriginatingHost != PM_LOCAL_MACHINE)
                         PMTHROW(pmFatalErrorException());
 
-                    lTask->GetRedistributor()->PerformRedistribution(pmMachinePool::GetMachinePool()->GetMachine(lData->redistributionStruct.remoteHost), lData->redistributionStruct.remoteHostMemBaseAddr, lData->redistributionStruct.subtasksAccounted, std::vector<pmCommunicatorCommand::redistributionOrderStruct>(lData->redistributionData, lData->redistributionData + lData->redistributionStruct.orderDataCount));
+                    lTask->GetRedistributor()->PerformRedistribution(pmMachinePool::GetMachinePool()->GetMachine(lData->redistributionStruct.remoteHost), lData->redistributionStruct.subtasksAccounted, std::vector<pmCommunicatorCommand::redistributionOrderStruct>(lData->redistributionData, lData->redistributionData + lData->redistributionStruct.orderDataCount));
                     
 					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
 					delete[] (pmCommunicatorCommand::redistributionOrderStruct*)(lData->redistributionData);
@@ -1799,12 +1810,10 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
 				{
 					pmCommunicatorCommand::memoryReceivePacked* lData = (pmCommunicatorCommand::memoryReceivePacked*)(lCommunicatorCommand->GetData());
-
-					void* lMem = (void*)(lData->receiveStruct.receivingMemBaseAddr);
-					pmMemSection* lMemSection = pmMemSection::FindMemSection(lMem);
-
+					pmMemSection* lMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lData->receiveStruct.memOwnerHost), lData->receiveStruct.generationNumber);
+                
 					if(lMemSection)		// If memory still exists
-						MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lMem, lMemSection, lData->receiveStruct.offset, lData->receiveStruct.length, lData->mem.ptr);
+						MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lMemSection, lData->receiveStruct.offset, lData->receiveStruct.length, lData->mem.ptr);
 
 					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
 					delete[] (char*)(lData->mem.ptr);
@@ -1880,15 +1889,19 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 				case pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG:
 				{
-					pmCommunicatorCommand::ownershipTransferStruct* lData = (pmCommunicatorCommand::ownershipTransferStruct*)(lCommunicatorCommand->GetData());
+					pmCommunicatorCommand::ownershipTransferPacked* lData = (pmCommunicatorCommand::ownershipTransferPacked*)(lCommunicatorCommand->GetData());
+					pmMemSection* lMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lData->memIdentifier.memOwnerHost), lData->memIdentifier.generationNumber);
+                
+					if(!lMemSection)
+                        PMTHROW(pmFatalErrorException());
+                
+                    std::vector<pmCommunicatorCommand::ownershipChangeStruct>* lChangeVector = lData->transferData.get();
+                    std::vector<pmCommunicatorCommand::ownershipChangeStruct>::iterator lIter = lChangeVector->begin(), lEndIter = lChangeVector->end();
+                    for(; lIter != lEndIter; ++lIter)
+                        lMemSection->TransferOwnershipImmediate((*lIter).offset, (*lIter).length, pmMachinePool::GetMachinePool()->GetMachine((*lIter).newOwnerHost));
 
-//					pmMemSection* lMemSection = pmMemSection::FindMemSection((void*)(lData->ownerBaseAddr));
-//					if(!lMemSection)
-//						PMTHROW(pmFatalErrorException());
-//
-//					MemTransferEvent(lMemSection, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
-
-					SetupNewOwnershipTransferReception();
+					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */
+					delete (pmCommunicatorCommand::ownershipTransferPacked*)(lData);
 
 					break;
 				}
@@ -1897,11 +1910,11 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 				{
 					pmCommunicatorCommand::memoryTransferRequest* lData = (pmCommunicatorCommand::memoryTransferRequest*)(lCommunicatorCommand->GetData());
 
-					pmMemSection* lMemSection = pmMemSection::FindMemSection((void*)(lData->ownerBaseAddr));
+					pmMemSection* lMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lData->sourceMemIdentifier.memOwnerHost), lData->sourceMemIdentifier.generationNumber);
 					if(!lMemSection)
 						PMTHROW(pmFatalErrorException());
 
-					MemTransferEvent(lMemSection, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverBaseAddr, lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
+					MemTransferEvent(lMemSection, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
 
 					SetupNewMemTransferRequestReception();
 

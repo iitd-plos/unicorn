@@ -79,7 +79,7 @@ pmStatus pmRedistributor::SendRedistributionInfo()
     return pmSuccess;
 }
 
-pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pBaseMemAddr, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector)
+pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector)
 {    
     if(mTask->GetOriginatingHost() != PM_LOCAL_MACHINE)
         PMTHROW(pmFatalErrorException());
@@ -97,7 +97,6 @@ pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pBaseMem
         
         orderData lOrderData;
         lOrderData.host = pHost;
-        lOrderData.hostMemBaseAddr = pBaseMemAddr;
         lOrderData.offset = lData.offset;
         lOrderData.length = lData.length;
         
@@ -119,36 +118,46 @@ pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pBaseMem
 // This method must be called with mGlobalRedistributionLock acquired
 void pmRedistributor::SetRedistributedOwnership()
 {
-    pmOutputMemSection* lMemSection = static_cast<pmOutputMemSection*>(mTask->GetMemSectionRW());
+    pmMemSection* lMemSection = mTask->GetMemSectionRW();
     char* lMemAddr = reinterpret_cast<char*>(lMemSection->GetMem());
 
-    pmOutputMemSection* lRedistributedMemSection = new pmOutputMemSection(lMemSection->GetLength(), lMemSection->GetAccessType(), lMemSection->IsLazy());
+    pmMemSection::vmRangeOwner lRangeOwner;
+    lRangeOwner.memIdentifier.memOwnerHost = *(lMemSection->GetMemOwnerHost());
+    lRangeOwner.memIdentifier.generationNumber = lMemSection->GetGenerationNumber();
+
+    pmMemSection* lRedistributedMemSection = pmMemSection::CreateMemSection(lMemSection->GetLength(), PM_LOCAL_MACHINE, lMemSection->GetMemInfo());
+    lRedistributedMemSection->Lock(mTask);
 
     ulong lCurrentOffset = 0;
-    std::map<uint, std::vector<orderData> >::iterator lStartIter = mGlobalRedistributionMap.begin(), lEndIter = mGlobalRedistributionMap.end();
-    for(; lStartIter != lEndIter; ++lStartIter)
+    std::map<uint, std::vector<orderData> >::iterator lIter = mGlobalRedistributionMap.begin(), lEndIter = mGlobalRedistributionMap.end();
+    for(; lIter != lEndIter; ++lIter)
     {
-        std::vector<orderData>& lVector = lStartIter->second;
+        std::vector<orderData>& lVector = lIter->second;
         
-        std::vector<orderData>::iterator lInnerStartIter = lVector.begin(), lInnerEndIter = lVector.end();
-        for(; lInnerStartIter != lInnerEndIter; ++lInnerStartIter)
+        std::vector<orderData>::iterator lInnerIter = lVector.begin(), lInnerEndIter = lVector.end();
+        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
         {
-            orderData& lData = *lInnerStartIter;
+            orderData& lData = *lInnerIter;
             if(lData.host == PM_LOCAL_MACHINE)
+            {
                 lRedistributedMemSection->Update(lCurrentOffset, lData.length, lMemAddr + lData.offset);
+            }
             else
-                lRedistributedMemSection->TransferOwnershipPostTaskCompletion(lData.host, lData.hostMemBaseAddr, lData.offset, lCurrentOffset, lData.length);
+            {
+                lRangeOwner.host = lData.host;
+                lRangeOwner.hostOffset = lData.offset;
+                lRedistributedMemSection->TransferOwnershipPostTaskCompletion(lRangeOwner, lCurrentOffset, lData.length);
+            }
             
             lCurrentOffset += lData.length;
         }
     }
 
-    lRedistributedMemSection->FlushOwnerships();
-    lMemSection->DisposeMemory();
     lMemSection->GetUserMemHandle()->Reset(lRedistributedMemSection);
-    lRedistributedMemSection->CreateLocalAssociation(lMemSection);
 
-    dynamic_cast<pmLocalTask*>(mTask)->TaskRedistributionDone();
+    lMemSection->Unlock(mTask);
+    lMemSection->UserDelete();
+    dynamic_cast<pmLocalTask*>(mTask)->TaskRedistributionDone(lRedistributedMemSection);
 }
     
 }

@@ -105,6 +105,8 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 
 pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex)
 {
+    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(pStub, pSubtaskId);
+    
     bool lOutputMemWriteOnly = false;
     
     pmSubtaskInfo lSubtaskInfo;
@@ -117,7 +119,14 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			if(!mCallback_CPU)
 				return pmSuccess;
 
-			return mCallback_CPU(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
+            pmTaskInfo& lTaskInfo = pTask->GetTaskInfo();
+            pmDeviceInfo& lDeviceInfo = pStub->GetProcessingElement()->GetDeviceInfo();
+
+            pStub->MarkInsideUserCode(pSubtaskId);
+			pmStatus lStatus = mCallback_CPU(lTaskInfo, lDeviceInfo, lSubtaskInfo);
+            pStub->MarkInsideLibraryCode(pSubtaskId);
+        
+            return lStatus;
 
 			break;
 		}

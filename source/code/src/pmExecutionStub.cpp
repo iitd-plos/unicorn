@@ -30,6 +30,7 @@
 #include "pmScheduler.h"
 #include "pmMemSection.h"
 #include "pmTaskManager.h"
+#include "pmTls.h"
 
 #include SYSTEM_CONFIGURATION_HEADER // for sched_setaffinity
 
@@ -98,7 +99,7 @@ pmStatus pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmExe
 
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
-    
+
 pmStatus pmExecutionStub::ProcessNegotiatedRange(pmSubtaskRange& pRange)
 {
     stubEvent lEvent;
@@ -107,44 +108,54 @@ pmStatus pmExecutionStub::ProcessNegotiatedRange(pmSubtaskRange& pRange)
     
 	return SwitchThread(lEvent, pRange.task->GetPriority());
 }
-    
-pmStatus pmExecutionStub::CancelAllSubtasks(pmTask* pTask)
+
+/* This is an asynchronous call. Current subtask is not cancelled immediately. */
+pmStatus pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation)
 {
-	stubEvent lEvent;
-	lEvent.cancelAllDetails.task = pTask;
-	lEvent.cancelAllDetails.priority = pTask->GetPriority();
-	lEvent.eventId = SUBTASK_CANCEL_ALL;
+    ushort lPriority = pTask->GetPriority();
 
-	pmStatus lStatus = SwitchThread(lEvent, pTask->GetPriority() - 1);
+    // There is atmost one range per task at a time
+    stubEvent lTaskEvent;
+    DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pTask, lTaskEvent);
 
-    // Auto lock/unlock scope
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+    if(mCurrentSubtaskStats && mCurrentSubtaskStats->task == pTask)
+        CancelCurrentlyExecutingSubtask(pTaskListeningOnCancellation);
+    
+#ifdef _DEBUG
+    if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
     {
-        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
-        
-        if(mCurrentSubtaskStats && mCurrentSubtaskStats->task == pTask)
-            CancelCurrentlyExecutingSubtask();
+        std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.begin(), lEndIter = mSecondaryAllotteeMap.end();
+    
+        for(; lIter != lEndIter; ++lIter)
+        {
+            if(lIter->first.first == pTask)
+                PMTHROW(pmFatalErrorException());
+        }
     }
-
-    return lStatus;
+#endif
+    
+    return pmSuccess;
 }
     
+/* This is an asynchronous call. Current subtask is not cancelled immediately. */
 pmStatus pmExecutionStub::CancelSubtaskRange(pmSubtaskRange& pRange)
 {
-	stubEvent lEvent;
-	lEvent.cancelRangeDetails.range = pRange;
-	lEvent.eventId = SUBTASK_CANCEL_RANGE;
-
-	pmStatus lStatus = SwitchThread(lEvent, pRange.task->GetPriority() - 1);
+    ushort lPriority = pRange.task->GetPriority();
     
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
-        
-        if(mCurrentSubtaskStats && mCurrentSubtaskStats->task == pRange.task && pRange.startSubtask <= mCurrentSubtaskStats->subtaskId && mCurrentSubtaskStats->subtaskId <= pRange.endSubtask)
-            CancelCurrentlyExecutingSubtask();
-    }
+    stubEvent lTaskEvent;
+    bool lFound = (DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pRange.task, lTaskEvent) == pmSuccess);
 
-    return lStatus;
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+    if(mCurrentSubtaskStats && mCurrentSubtaskStats->task == pRange.task && mCurrentSubtaskStats->subtaskId >= pRange.startSubtask && mCurrentSubtaskStats->subtaskId <= pRange.endSubtask)
+        CancelCurrentlyExecutingSubtask(false);
+    
+    if(lFound && (pRange.endSubtask < lTaskEvent.execDetails.range.startSubtask || pRange.startSubtask > lTaskEvent.execDetails.range.endSubtask))
+        SwitchThread(lTaskEvent, lPriority);
+
+    return pmSuccess;
 }
 
 pmStatus pmExecutionStub::FreeGpuResources()
@@ -213,7 +224,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                 
                     pmScheduler::GetScheduler()->SendRangeNegotiationSuccess(pRequestingDevice, pRange);
                     mCurrentSubtaskStats->reassigned = true;
-                    CancelCurrentlyExecutingSubtask();
+                    CancelCurrentlyExecutingSubtask(false);
                             
                     if(mCurrentSubtaskStats->parentRangeStartSubtask != mCurrentSubtaskStats->subtaskId)
                     {
@@ -222,7 +233,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                         lCompletedRange.startSubtask = mCurrentSubtaskStats->parentRangeStartSubtask;
                         lCompletedRange.endSubtask = mCurrentSubtaskStats->subtaskId - 1;
                         lCompletedRange.originalAllottee = NULL;
-
+std::cout << "Added post range exec completion for range [" << lCompletedRange.startSubtask << ", " << lCompletedRange.endSubtask << "]" << std::endl;
                         PostHandleRangeExecutionCompletion(lCompletedRange, pmSuccess);
                     }
                 
@@ -362,7 +373,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
             if(lCurrentTransferred)
             {
                 mCurrentSubtaskStats->reassigned = true;
-                CancelCurrentlyExecutingSubtask();
+                CancelCurrentlyExecutingSubtask(false);
             }
         }
     }
@@ -450,7 +461,6 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
                     if(lTaskEvent.execDetails.lastExecutedSubtaskId != mCurrentSubtaskStats->subtaskId)
                         PMTHROW(pmFatalErrorException());
                 #endif
-                
                     mCurrentSubtaskStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask finishes
                 }
                 else
@@ -536,9 +546,11 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 		case THREAD_BIND:
 		{
 			BindToProcessingElement();
+            TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_EXEC_STUB, this);
+
 			break;
 		}
-	
+        
 		case SUBTASK_EXEC:	/* Comes from scheduler thread */
 		{
             ulong lCompletedCount, lLastExecutedSubtaskId;
@@ -574,36 +586,57 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             if(lLastExecutedSubtaskId != lRange.endSubtask)
                 SwitchThread(pEvent, lRange.task->GetPriority());
         
+            bool lPrematureTermination = false;
             bool lReassigned = false;
             bool lForceAckFlag = false;
             lCommand->MarkExecutionStart();
-            pmStatus lExecStatus = pmExecutionStub::ExecuteWrapper(lCurrentRange.task, lLastExecutedSubtaskId, lIsMultiAssignRange, lRange.startSubtask, lReassigned, lForceAckFlag);
+            pmStatus lExecStatus = pmExecutionStub::ExecuteWrapper(lCurrentRange.task, lLastExecutedSubtaskId, lIsMultiAssignRange, lRange.startSubtask, lReassigned, lForceAckFlag, lPrematureTermination);
             lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
         
-            if(lReassigned) // A secondary allottee has finished and negotiated this subtask and added a POST_HANDLE_EXEC_COMPLETION for the rest of the range
+            if(lPrematureTermination)
             {
-            #ifdef _DEBUG
-                if(!lRange.task->IsMultiAssignEnabled() || lRange.originalAllottee != NULL)
-                {
-                std::cout << "[Device " << GetProcessingElement()->GetGlobalDeviceIndex() << "]: Range - [" << lRange.startSubtask << " - " << lRange.endSubtask << "] Original Allottee: " << lRange.originalAllottee->GetGlobalDeviceIndex() << std::endl;
-                    PMTHROW(pmFatalErrorException());
-                }
+            #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
+                std::cout << "[Host " << pmGetHostId() << "]: Prematurely terminated subtask " << lLastExecutedSubtaskId << std::endl;
             #endif
-                   
-                break;
+            
+                if(lForceAckFlag && lLastExecutedSubtaskId != 0)
+                {
+                    lRange.endSubtask = lLastExecutedSubtaskId - 1;
+                
+                    if(lRange.endSubtask >= lRange.startSubtask)
+                        HandleRangeExecutionCompletion(lRange, pmSuccess);
+                }
             }
-        
-        #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
-            std::cout << "[Host " << pmGetHostId() << "]: Executed subtask " << lLastExecutedSubtaskId << std::endl;
-        #endif
+            else
+            {
+                if(lReassigned) // A secondary allottee has finished and negotiated this subtask and added a POST_HANDLE_EXEC_COMPLETION for the rest of the range
+                {
+                #ifdef _DEBUG
+                    if(!lRange.task->IsMultiAssignEnabled() || lRange.originalAllottee != NULL)
+                    {
+                    std::cout << "[Device " << GetProcessingElement()->GetGlobalDeviceIndex() << "]: Range - [" << lRange.startSubtask << " - " << lRange.endSubtask << "] Original Allottee: " << lRange.originalAllottee->GetGlobalDeviceIndex() << std::endl;
+                        PMTHROW(pmFatalErrorException());
+                    }
+                #endif
+                       
+                    break;
+                }
+            
+            #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
+                std::cout << "[Host " << pmGetHostId() << "]: Executed subtask " << lLastExecutedSubtaskId << std::endl;
+            #endif
 
-            lRange.task->GetTaskExecStats().RecordStubExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
+                lRange.task->GetTaskExecStats().RecordStubExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
 
-            if(lForceAckFlag)
-                lRange.endSubtask = lLastExecutedSubtaskId;
-        
-            if(lLastExecutedSubtaskId == lRange.endSubtask)
-                HandleRangeExecutionCompletion(lRange, lExecStatus);
+                if(!lReassigned && lRange.originalAllottee == NULL)
+                    CommonPostNegotiationOnCPU(lRange.task, lLastExecutedSubtaskId);
+            
+                if(lForceAckFlag)
+                    lRange.endSubtask = lLastExecutedSubtaskId;
+            
+                if(lLastExecutedSubtaskId == lRange.endSubtask)
+                    HandleRangeExecutionCompletion(lRange, lExecStatus);
+            }
         
 			break;
 		}
@@ -615,80 +648,6 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			break;
 		}
 
-		case SUBTASK_CANCEL_ALL:	/* Comes from scheduler thread */
-		{
-			/* Do not dereference lTask as it could already have been purged */
-			pmTask* lTask = pEvent.cancelAllDetails.task;
-			ushort lPriority = pEvent.cancelAllDetails.priority;
-
-			DeleteMatchingCommands(lPriority, execEventMatchFunc, lTask);
-
-            if(lTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lTask))
-            {
-            #ifdef _DEBUG
-                // Auto lock/unlock scope
-                {
-                    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
-                
-                    std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.begin(), lEndIter = mSecondaryAllotteeMap.end();
-                
-                    for(; lIter != lEndIter; ++lIter)
-                    {
-                        if(lIter->first.first == lTask)
-                            PMTHROW(pmFatalErrorException());
-                    }
-                }
-            #endif
-            
-                lTask->RegisterStubFreeOfTask();
-            }
-        
-			break;
-		}
-        
-		case SUBTASK_CANCEL_RANGE:	/* Comes from scheduler thread */
-		{
-			pmSubtaskRange& lRange = pEvent.cancelRangeDetails.range;
-            ushort lPriority = lRange.task->GetPriority();
-
-            stubEvent lTaskEvent;
-            if(DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, lRange.task, lTaskEvent, true) == pmSuccess)
-            {
-                ulong lLastPendingSubtask = lTaskEvent.execDetails.range.endSubtask;
-            
-                if(lRange.endSubtask < lTaskEvent.execDetails.range.startSubtask || lRange.startSubtask > lTaskEvent.execDetails.range.endSubtask)
-                {
-                    SwitchThread(lTaskEvent, lPriority);
-                }
-                else
-                {                
-                    if(lRange.startSubtask > lTaskEvent.execDetails.range.startSubtask)
-                    {
-                        if(lTaskEvent.execDetails.rangeExecutedOnce && lTaskEvent.execDetails.lastExecutedSubtaskId >= lRange.startSubtask - 1)
-                        {
-                            lTaskEvent.execDetails.range.endSubtask = lTaskEvent.execDetails.lastExecutedSubtaskId;
-                            HandleRangeExecutionCompletion(lTaskEvent.execDetails.range, pmSuccess);
-                        }
-                        else
-                        {
-                            lTaskEvent.execDetails.range.endSubtask = lRange.startSubtask - 1;
-                            SwitchThread(lTaskEvent, lPriority);
-                        }
-                    }
-                
-                    if(lRange.endSubtask < lLastPendingSubtask)
-                    {
-                        lTaskEvent.execDetails.range.startSubtask = lRange.endSubtask + 1;
-                        lTaskEvent.execDetails.range.endSubtask = lLastPendingSubtask;
-                        lTaskEvent.execDetails.rangeExecutedOnce = false;
-                        SwitchThread(lTaskEvent, lPriority);
-                    }
-                }
-            }
-                
-			break;
-		}
-        
         case NEGOTIATED_RANGE:
         {
         #ifdef _DEBUG
@@ -788,7 +747,7 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
                 PMTHROW(pmFatalErrorException());
             
             lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, subtaskId, lBeginIter, lEndIter);
-        
+
             for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
                 lOwnershipMap[lIter->first] = lIter->second.first;
         
@@ -801,8 +760,100 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
 }
 
 // This method must be called with mCurrentSubtaskLock acquired
-void pmExecutionStub::CancelCurrentlyExecutingSubtask()
+void pmExecutionStub::CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCancellation)
 {
+#ifdef _DEBUG
+    if(!mCurrentSubtaskStats)
+        PMTHROW(pmFatalErrorException());
+#endif
+    
+    if(!mCurrentSubtaskStats->taskListeningOnCancellation && pTaskListeningOnCancellation)
+        mCurrentSubtaskStats->task->RecordStubWillSendCancellationMessage();
+
+    mCurrentSubtaskStats->taskListeningOnCancellation |= pTaskListeningOnCancellation;
+    
+    if(!mCurrentSubtaskStats->prematureTermination)
+    {
+        mCurrentSubtaskStats->prematureTermination = true;
+        
+        if(!mCurrentSubtaskStats->executingLibraryCode)
+            RaiseCurrentSubtaskTerminationSignalInThread();
+    }
+}
+
+bool pmExecutionStub::IsInsideLibraryCode(bool& pPastCancellationStage)
+{
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+    pPastCancellationStage = (mCurrentSubtaskStats == NULL);
+    return (!mCurrentSubtaskStats || mCurrentSubtaskStats->executingLibraryCode);
+}
+    
+void pmExecutionStub::MarkInsideLibraryCode(ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+#ifdef _DEBUG
+    if(!mCurrentSubtaskStats || mCurrentSubtaskStats->subtaskId != pSubtaskId || mCurrentSubtaskStats->executingLibraryCode)
+        PMTHROW(pmFatalErrorException());
+#endif
+    
+    mCurrentSubtaskStats->executingLibraryCode = true;
+}
+
+void pmExecutionStub::MarkInsideUserCode(ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+#ifdef _DEBUG
+    if(!mCurrentSubtaskStats || mCurrentSubtaskStats->subtaskId != pSubtaskId || !mCurrentSubtaskStats->executingLibraryCode)
+        PMTHROW(pmFatalErrorException());
+#endif
+    
+    mCurrentSubtaskStats->executingLibraryCode = false;
+}
+    
+void pmExecutionStub::TerminateCurrentSubtask()
+{
+    longjmp(*(mCurrentSubtaskStats->jmpBuf), 1);
+}
+
+// This method must be called with mCurrentSubtaskLock acquired
+void pmExecutionStub::RaiseCurrentSubtaskTerminationSignalInThread()
+{
+    InterruptThread();
+}
+
+// Must be called on stub thread
+void pmExecutionStub::CheckForSubtaskTermination(ulong pSubtaskId)
+{
+    bool lPrematureTermination = false;
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+        lPrematureTermination = mCurrentSubtaskStats->prematureTermination;
+    
+    #ifdef _DEBUG
+        if(mCurrentSubtaskStats->subtaskId != pSubtaskId)
+            PMTHROW(pmFatalErrorException());
+    #endif
+    }
+    
+    if(lPrematureTermination)
+        TerminateCurrentSubtask();
+}
+
+bool pmExecutionStub::RequiresPrematureExit(ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+#ifdef _DEBUG
+    if(!mCurrentSubtaskStats || mCurrentSubtaskStats->subtaskId != pSubtaskId)
+        PMTHROW(pmFatalErrorException());
+#endif
+
+    return mCurrentSubtaskStats->prematureTermination;
 }
 
 bool pmExecutionStub::IsHighPriorityEventWaiting(ushort pPriority)
@@ -810,44 +861,65 @@ bool pmExecutionStub::IsHighPriorityEventWaiting(ushort pPriority)
 	return GetPriorityQueue().IsHighPriorityElementPresent(pPriority);
 }
 
-pmStatus pmExecutionStub::ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag)
+pmStatus pmExecutionStub::ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination)
 {
-    currentSubtaskTerminus lTerminus(pReassigned, pForceAckFlag, this);
-    return ExecuteWrapperInternal(pTask, pSubtaskId, pIsMultiAssign, pParentRangeStartSubtask, lTerminus);
+    currentSubtaskTerminus lTerminus(pReassigned, pForceAckFlag, pPrematureTermination, this);
+
+    TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &pSubtaskId);
+    pmStatus lStatus = ExecuteWrapperInternal(pTask, pSubtaskId, pIsMultiAssign, pParentRangeStartSubtask, lTerminus);
+    TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
+    
+    return lStatus;
 }
     
 pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus)
 {
-    guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskTerminus, currentSubtaskStats> lScopedPtr(&mCurrentSubtaskLock, &pTerminus, &mCurrentSubtaskStats, new currentSubtaskStats(pTask, pSubtaskId, !pIsMultiAssign, pParentRangeStartSubtask, pmBase::GetCurrentTimeInSecs()));
-
-    UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
-    return Execute(pTask, pSubtaskId);
+    pmStatus lStatus = pmStatusUnavailable;
+    jmp_buf lJmpBuf;
+    
+    guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskTerminus, currentSubtaskStats> lScopedPtr(&mCurrentSubtaskLock, &pTerminus, &mCurrentSubtaskStats, new currentSubtaskStats(pTask, pSubtaskId, !pIsMultiAssign, pParentRangeStartSubtask, &lJmpBuf, pmBase::GetCurrentTimeInSecs()));
+    
+    if(!setjmp(lJmpBuf))
+    {
+        UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
+        lStatus = Execute(pTask, pSubtaskId);
+    }
+    
+    return lStatus;
 }
     
 pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
-#ifdef ENABLE_TASK_PROFILING
-    pmTaskProfiler* lTaskProfiler = pTask->GetTaskProfiler();
-
-    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, true);
-	pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
-    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, false);
-
-	pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
+    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(this, pSubtaskId);
     
-	if(pTask->DoSubtasksNeedShadowMemory())
-		pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
+    try
+    {
+    #ifdef ENABLE_TASK_PROFILING
+        pmTaskProfiler* lTaskProfiler = pTask->GetTaskProfiler();
 
-    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::SUBTASK_EXECUTION, true);
-#else
-	pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
-	pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
+        lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, true);
+        pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
+        INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
+        lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, false);
 
-	if(pTask->DoSubtasksNeedShadowMemory())
-		pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
-#endif
+        pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
+        
+        if(pTask->DoSubtasksNeedShadowMemory())
+            pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
+
+        lTaskProfiler->RecordProfileEvent(pmTaskProfiler::SUBTASK_EXECUTION, true);
+    #else
+        pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
+        INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
+        pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
+
+        if(pTask->DoSubtasksNeedShadowMemory())
+            pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
+    #endif
+    }
+    catch(pmPrematureExitException&)
+    {
+    }
 	
 	return pmSuccess;
 }
@@ -901,7 +973,7 @@ pmStatus pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, p
 
 
 /* struct currentSubtaskStats */
-pmExecutionStub::currentSubtaskStats::currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, double pStartTime)
+pmExecutionStub::currentSubtaskStats::currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, jmp_buf* pJmpBuf, double pStartTime)
     : task(pTask)
     , subtaskId(pSubtaskId)
     , parentRangeStartSubtask(pParentRangeStartSubtask)
@@ -909,6 +981,10 @@ pmExecutionStub::currentSubtaskStats::currentSubtaskStats(pmTask* pTask, ulong p
     , startTime(pStartTime)
     , reassigned(false)
     , forceAckFlag(false)
+    , executingLibraryCode(true)
+    , prematureTermination(false)
+    , taskListeningOnCancellation(false)
+    , jmpBuf(pJmpBuf)
 {
 }
 
@@ -953,7 +1029,6 @@ pmDeviceType pmStubCPU::GetType()
 
 pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId)
 {
-    
 	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId));
 	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, mCoreId);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
@@ -1058,25 +1133,31 @@ bool execEventMatchFunc(stubEvent& pEvent, void* pCriterion)
 
 
 /* struct currentSubtaskTerminus */
-pmExecutionStub::currentSubtaskTerminus::currentSubtaskTerminus(bool& pReassigned, bool& pForceAckFlag, pmExecutionStub* pStub)
+pmExecutionStub::currentSubtaskTerminus::currentSubtaskTerminus(bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmExecutionStub* pStub)
     : mReassigned(pReassigned)
     , mForceAckFlag(pForceAckFlag)
+    , mPrematureTermination(pPrematureTermination)
     , mStub(pStub)
 {
 }
-    
+
 void pmExecutionStub::currentSubtaskTerminus::Terminating(currentSubtaskStats* pStats)
 {
+    mPrematureTermination = pStats->prematureTermination;
     mReassigned = pStats->reassigned;
     mForceAckFlag = pStats->forceAckFlag;
-    if(!mReassigned && pStats->originalAllottee)
-        mStub->CommonPostNegotiationOnCPU(pStats->task, pStats->subtaskId);
+
+    if(pStats->prematureTermination)
+    {
+        if(pStats->taskListeningOnCancellation)
+            pStats->task->RegisterStubFreeOfTask();
+    }
 }
 
 /* struct stubEvent */
 bool execStub::stubEvent::BlocksSecondaryCommands()
 {
-    return (eventId == SUBTASK_EXEC || eventId == SUBTASK_CANCEL_RANGE);
+    return (eventId == SUBTASK_EXEC);
 }
     
 };

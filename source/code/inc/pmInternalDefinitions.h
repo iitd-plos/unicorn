@@ -47,6 +47,7 @@
 #define MEMORY_MANAGER_IMPLEMENTATION_CLASS pmLinuxMemoryManager
 
 #define THREADING_IMPLEMENTATION_CLASS pmPThread	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
+#define TLS_IMPLEMENTATION_CLASS pmPThreadTls	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
 #define SIGNAL_WAIT_IMPLEMENTATION_CLASS pmPThreadSignalWait	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
 #define RESOURCE_LOCK_IMPLEMENTATION_CLASS pmPThreadResourceLock	// Define the implementation header in THREADING_IMPLEMENTATION_HEADER
 #define THREADING_IMPLEMENTATION_HEADER <pthread.h>	// Used alongwith THREADING_IMPLEMENTATION_CLASS, SIGNAL_WAIT_IMPLEMENTATION_CLASS & RESOURCE_LOCK_IMPLEMENTATION_CLASS
@@ -90,6 +91,7 @@ const unsigned short MIN_PRIORITY_LEVEL = __MAX(unsigned short);
 const unsigned short DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 
 const unsigned short TASK_MULTI_ASSIGN_FLAG_VAL = 0x0001;   // LSB
+const unsigned long MEMORY_TRANSFER_TIMEOUT = 3;    // in secs
 
 #define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
 
@@ -130,7 +132,7 @@ const unsigned short TASK_MULTI_ASSIGN_FLAG_VAL = 0x0001;   // LSB
 //#define DUMP_SHADOW_MEM
 //#define TRACK_MULTI_ASSIGN
 //#define DUMP_NETWORK_STATS
-#define DUMP_TASK_EXEC_STATS
+//#define DUMP_TASK_EXEC_STATS
 //#define ENABLE_TASK_PROFILING
 //#define ENABLE_MEM_PROFILING
 #define DUMP_SUBTASK_EXECUTION_PROFILE

@@ -40,7 +40,7 @@ namespace pm
         ulong startSubtask;
         ulong endSubtask;
     } pmSubtaskRange;
-
+    
     template<typename T>
     class deleteDeallocator
     {
@@ -100,7 +100,9 @@ namespace pm
             const finalize_ptr& operator=(const finalize_ptr& pPtr)
             {
                 reset(pPtr.get_ptr());
-                (const_cast<finalize_ptr&>(pPtr)).release();                
+                (const_cast<finalize_ptr&>(pPtr)).release();
+            
+                return *this;
             }
     
             T* operator->()
@@ -152,6 +154,8 @@ namespace pm
             {
                 reset(pPtr.get_ptr());
                 (const_cast<finalize_ptr_array&>(pPtr)).release();                
+                
+                return *this;
             }
     
 		private:
@@ -216,9 +220,10 @@ namespace pm
                             
                 if(mPtr)
                 {
-                    mTerminus->Terminating(*mPtr);
+                    if(mTerminus)
+                        mTerminus->Terminating(*mPtr);
+                        
                     delete (T*)(*mPtr);
-                
                     *mPtr = NULL;
                 }
             }

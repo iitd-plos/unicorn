@@ -24,6 +24,7 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 #include "pmCommand.h"
+#include "pmMemSection.h"
 
 #include <map>
 #include <stdlib.h>
@@ -40,8 +41,6 @@
 
 namespace pm
 {
-
-class pmMemSection;
 
 class pmMachine;
 extern pmMachine* PM_LOCAL_MACHINE;
@@ -63,16 +62,14 @@ class pmMemoryManager : public pmBase
         virtual pmStatus DeallocateMemory(pmMemSection* pMemSection) = 0;
         virtual pmStatus DeallocateMemory(void* pMem) = 0;
 
-        virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength) = 0;
-        virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
+        virtual void FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector) = 0;
+        virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
     
         virtual size_t GetVirtualMemoryPageSize() = 0;
     
 #ifdef SUPPORT_LAZY_MEMORY
 		virtual void* AllocateLazyMemory(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount) = 0;
-        virtual pmStatus ApplyLazyProtection(void* pAddr, size_t pLength) = 0;
-        virtual pmStatus RemoveLazyProtection(void* pAddr, size_t pLength) = 0;
-        virtual pmStatus RemoveLazyWriteProtection(void* pAddr, size_t pLength) = 0;
+        virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed) = 0;
 #endif
 
 	protected:
@@ -117,8 +114,8 @@ class pmLinuxMemoryManager : public pmMemoryManager
         virtual pmStatus DeallocateMemory(pmMemSection* pMemSection);
         virtual pmStatus DeallocateMemory(void* pMem);
 
-        virtual std::vector<pmCommunicatorCommandPtr> FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength);
-        virtual pmStatus CopyReceivedMemory(void* pDestMem, pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
+        virtual void FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
+        virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
 
         virtual size_t GetVirtualMemoryPageSize();
     
@@ -132,21 +129,19 @@ class pmLinuxMemoryManager : public pmMemoryManager
         size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
         void* AllocatePageAlignedMemoryInternal(size_t& pLength, size_t& pPageCount);
 
-        pmCommunicatorCommandPtr FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMachine* pOwnerMachine, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, linuxMemManager::pmInFlightRegions& pInFlightMap);
+        void FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMemSection::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand);
 
         void FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
         
 #ifdef SUPPORT_LAZY_MEMORY
     public:
         virtual void* AllocateLazyMemory(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount);
-        virtual pmStatus ApplyLazyProtection(void* pAddr, size_t pLength);
-        virtual pmStatus RemoveLazyProtection(void* pAddr, size_t pLength);
-        virtual pmStatus RemoveLazyWriteProtection(void* pAddr, size_t pLength);
+        virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
 
     private:
-        pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr);
-        pmStatus LoadLazyMemoryPage(pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
-        pmStatus CopyShadowMemPage(pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
+        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr);
+        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
+        pmStatus CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
 
 		pmStatus InstallSegFaultHandler();
 		pmStatus UninstallSegFaultHandler();

@@ -144,6 +144,30 @@ pmStatus pmCommand::WaitForFinish()
 	return lStatus;
 }
 
+bool pmCommand::WaitWithTimeOut(ulong pTriggerTime)
+{
+    pmSignalWait* lSignalWait = NULL;
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+        if(mStatus == pmStatusUnavailable)
+        {
+            if((lSignalWait = mSignalWait.get_ptr()) == NULL)
+            {
+                lSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
+                mSignalWait.reset(lSignalWait);
+            }
+        }
+    }
+
+    if(lSignalWait)
+        return lSignalWait->WaitWithTimeOut(pTriggerTime);
+    
+	return false;
+}
+
 pmStatus pmCommand::MarkExecutionStart()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
@@ -273,22 +297,6 @@ pmPersistentCommunicatorCommandPtr pmPersistentCommunicatorCommand::CreateShared
 }
 
 
-/* class pmThreadCommand */
-bool pmThreadCommand::IsValid()
-{
-	if(mCommandType >= MAX_THREAD_COMMAND_TYPES)
-		return false;
-
-	return true;
-}
-
-pmThreadCommandPtr pmThreadCommand::CreateSharedPtr(ushort pPriority, ushort pCommandType, void* pCommandData /* = NULL */, ulong pDataLength /* = 0 */)
-{
-	pmThreadCommandPtr lSharedPtr(new pmThreadCommand(pPriority, pCommandType, pCommandData, pDataLength));
-	return lSharedPtr;
-}
-
-
 /* class pmTaskCommand */
 bool pmTaskCommand::IsValid()
 {
@@ -335,8 +343,8 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
 	inputMemLength = lInputSection?((ulong)(lInputSection->GetLength())):0;
 	outputMemLength = lOutputSection?((ulong)(lOutputSection->GetLength())):0;
     
-    inputMemInfo = (ushort)((lInputSection->IsLazy()) ? INPUT_MEM_READ_ONLY_LAZY : INPUT_MEM_READ_ONLY);
-    outputMemInfo = (ushort)((((pmOutputMemSection*)lOutputSection)->GetAccessType() == pmOutputMemSection::READ_WRITE) ? ((lOutputSection->IsLazy()) ? OUTPUT_MEM_READ_WRITE_LAZY : OUTPUT_MEM_READ_WRITE) : OUTPUT_MEM_WRITE_ONLY);
+    inputMemInfo = lInputSection->GetMemInfo();
+    outputMemInfo = lOutputSection->GetMemInfo();
     
 	subtaskCount = pLocalTask->GetSubtaskCount();
 	assignedDeviceCount = pLocalTask->GetAssignedDeviceCount();
@@ -344,8 +352,8 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
     sequenceNumber = pLocalTask->GetSequenceNumber();
 	priority = pLocalTask->GetPriority();
 	schedModel = (ushort)(pLocalTask->GetSchedulingModel());
-	inputMemAddr = lInputSection?((ulong)(lInputSection->GetMem())):0x0;
-	outputMemAddr = lOutputSection?((ulong)(lOutputSection->GetMem())):0x0;
+	inputMemGenerationNumber = lInputSection?lInputSection->GetGenerationNumber():0;
+	outputMemGenerationNumber = lOutputSection?lOutputSection->GetGenerationNumber():0;
 
     flags = 0;
     if(pLocalTask->IsMultiAssignEnabled())
@@ -432,15 +440,35 @@ pmCommunicatorCommand::subtaskReducePacked::~subtaskReducePacked()
 {
 }
 
+
+/* struct pmCommunicatorCommand::ownershipTransferPacked */
+pmCommunicatorCommand::ownershipTransferPacked::ownershipTransferPacked()
+{
+	memset(this, 0, sizeof(*this));
+}
+    
+pmCommunicatorCommand::ownershipTransferPacked::ownershipTransferPacked(pmMemSection* pMemSection, std::tr1::shared_ptr<std::vector<pmCommunicatorCommand::ownershipChangeStruct> >& pChangeData)
+{
+    this->memIdentifier.memOwnerHost = *(pMemSection->GetMemOwnerHost());
+    this->memIdentifier.generationNumber = pMemSection->GetGenerationNumber();
+    this->transferData = pChangeData;
+}
+
+pmCommunicatorCommand::ownershipTransferPacked::~ownershipTransferPacked()
+{
+}
+ 
+    
 /* struct pmCommunicatorCommand::memoryReceivePacked */
 pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked()
 {
 	memset(this, 0, sizeof(*this));
 }
 
-pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked(ulong pReceivingMemBaseAddr, ulong pOffset, ulong pLength, void* pMemPtr)
+pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr)
 {
-	this->receiveStruct.receivingMemBaseAddr = pReceivingMemBaseAddr;
+	this->receiveStruct.memOwnerHost = pMemOwnerHost;
+	this->receiveStruct.generationNumber = pGenerationNumber;
 	this->receiveStruct.offset = pOffset;
 	this->receiveStruct.length = pLength;
 	this->mem.ptr = pMemPtr;
@@ -460,7 +488,6 @@ pmCommunicatorCommand::sendAcknowledgementPacked::sendAcknowledgementPacked()
     
 pmCommunicatorCommand::sendAcknowledgementPacked::sendAcknowledgementPacked(pmProcessingElement* pSourceDevice, pmSubtaskRange& pRange, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pCount, pmStatus pExecStatus)
 {
-    pmMemSection* lMemSection = pRange.task->GetMemSectionRW();
     this->ackStruct.sourceDeviceGlobalIndex = pSourceDevice->GetGlobalDeviceIndex();
     this->ackStruct.originatingHost = *(pRange.task->GetOriginatingHost());
     this->ackStruct.sequenceNumber = pRange.task->GetSequenceNumber();
@@ -469,7 +496,6 @@ pmCommunicatorCommand::sendAcknowledgementPacked::sendAcknowledgementPacked(pmPr
     this->ackStruct.execStatus = (uint)pExecStatus;
     this->ackStruct.originalAllotteeGlobalIndex = (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pSourceDevice->GetGlobalDeviceIndex());
     this->ackStruct.ownershipDataElements = pCount;
-    this->ackStruct.ownerMemBaseAddr = lMemSection ? (ulong)(lMemSection->GetMem()) : 0;
     this->ownershipData = pOwnershipData;
 }
 
@@ -489,7 +515,6 @@ pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked(pmTask
     this->redistributionStruct.originatingHost = *(pTask->GetOriginatingHost());
     this->redistributionStruct.sequenceNumber = pTask->GetSequenceNumber();
     this->redistributionStruct.remoteHost = *PM_LOCAL_MACHINE;
-    this->redistributionStruct.remoteHostMemBaseAddr = reinterpret_cast<ulong>(pTask->GetMemSectionRW()->GetMem());    
     this->redistributionStruct.subtasksAccounted = pTask->GetSubtasksExecuted();
     this->redistributionStruct.orderDataCount = pCount;
     this->redistributionData = pRedistributionData;
@@ -497,6 +522,13 @@ pmCommunicatorCommand::dataRedistributionPacked::dataRedistributionPacked(pmTask
     
 pmCommunicatorCommand::dataRedistributionPacked::~dataRedistributionPacked()
 {
+}
+
+    
+/* struct memoryIdebtifierStruct */
+bool operator==(pmCommunicatorCommand::memoryIdentifierStruct& pIdentifier1, pmCommunicatorCommand::memoryIdentifierStruct& pIdentifier2)
+{
+    return (pIdentifier1.memOwnerHost == pIdentifier2.memOwnerHost && pIdentifier1.generationNumber == pIdentifier2.generationNumber);
 }
     
 } // end namespace pm

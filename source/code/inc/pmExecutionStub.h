@@ -24,6 +24,8 @@
 #include "pmBase.h"
 #include "pmThread.h"
 
+#include <setjmp.h>
+
 namespace pm
 {
 
@@ -44,8 +46,6 @@ typedef enum eventIdentifier
     THREAD_BIND,
     SUBTASK_EXEC,
     SUBTASK_REDUCE,
-    SUBTASK_CANCEL_ALL,
-    SUBTASK_CANCEL_RANGE,
     NEGOTIATED_RANGE,
 	FREE_GPU_RESOURCES,
     POST_HANDLE_EXEC_COMPLETION
@@ -70,17 +70,6 @@ typedef struct subtaskReduce
     ulong subtaskId2;
 } subtaskReduce;
 
-typedef struct subtaskCancelAll
-{
-    pmTask* task;   /* not to be dereferenced */
-    ushort priority;
-} subtaskCancelAll;
-    
-typedef struct subtaskCancelRange
-{
-    pmSubtaskRange range;
-} subtaskCancelRange;
-    
 typedef struct negotiatedRange
 {
     pmSubtaskRange range;
@@ -91,7 +80,7 @@ typedef struct execCompletion
     pmSubtaskRange range;
     pmStatus execStatus;
 } execCompletion;
-
+    
 typedef struct stubEvent : public pmBasicThreadEvent
 {
     eventIdentifier eventId;
@@ -100,8 +89,6 @@ typedef struct stubEvent : public pmBasicThreadEvent
         threadBind bindDetails;
         subtaskExec execDetails;
         subtaskReduce reduceDetails;
-        subtaskCancelAll cancelAllDetails;
-        subtaskCancelRange cancelRangeDetails;
         negotiatedRange negotiatedRangeDetails;
         execCompletion execCompletionDetails;
     };
@@ -131,11 +118,19 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 		pmStatus ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2);
 		pmStatus StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate);
-		pmStatus CancelAllSubtasks(pmTask* pTask);
+		pmStatus CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation);
         pmStatus CancelSubtaskRange(pmSubtaskRange& pRange);
         pmStatus ProcessNegotiatedRange(pmSubtaskRange& pRange);
 
         pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
+
+        void CheckForSubtaskTermination(ulong pSubtaskId);
+    
+        bool RequiresPrematureExit(ulong pSubtaskId);
+
+        bool IsInsideLibraryCode(bool& pPastCancellationStage);
+        void MarkInsideLibraryCode(ulong pSubtaskId);
+        void MarkInsideUserCode(ulong pSubtaskId);
     
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
@@ -155,32 +150,39 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
             bool originalAllottee;
             double startTime;
             bool reassigned;    // the current subtask has been negotiated
-            bool forceAckFlag;  // the entire parent range after current subtask is stolen/negotiated
+            bool forceAckFlag;  // send acknowledgement for the entire parent range after current subtask is stolen/negotiated
+            bool executingLibraryCode;
+            bool prematureTermination;
+            bool taskListeningOnCancellation;
+            jmp_buf* jmpBuf;
         
-            currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, double pStartTime);
+            currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, jmp_buf* pJmpBuf, double pStartTime);
         } currentSubtaskStats;
     
         typedef class currentSubtaskTerminus
         {
             public:
-                currentSubtaskTerminus(bool& pReassigned, bool& pForceAckFlag, pmExecutionStub* pStub);
+                currentSubtaskTerminus(bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmExecutionStub* pStub);
                 void Terminating(currentSubtaskStats* pStats);
         
             private:
                 bool& mReassigned;
                 bool& mForceAckFlag;
+                bool& mPrematureTermination;
                 pmExecutionStub* mStub;
         } currentSubtaskTerminus;
     
 		pmStatus ProcessEvent(execStub::stubEvent& pEvent);
         virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
-        pmStatus ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag);
+        pmStatus ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination);
         pmStatus ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus);
         void PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         pmStatus CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId);
         void CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus);
-        void CancelCurrentlyExecutingSubtask();
+        void CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCancellation);
+        void TerminateCurrentSubtask();
+        void RaiseCurrentSubtaskTerminationSignalInThread();
     
 		uint mDeviceIndexOnMachine;
 		size_t mCoreId;

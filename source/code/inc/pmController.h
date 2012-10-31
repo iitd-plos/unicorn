@@ -33,6 +33,7 @@
 #include "pmTaskManager.h"
 #include "pmScheduler.h"
 #include "pmTimedEventManager.h"
+#include "pmTls.h"
 
 namespace pm
 {
@@ -97,6 +98,7 @@ class pmController : public pmBase
 		pmSignalWait* mSignalWait;
 
         pmLogger mLogger;
+        TLS_IMPLEMENTATION_CLASS mTls;
         pmDispatcherGPU mDispatcherGPU;
         pmStubManager mStubManager;
         NETWORK_IMPLEMENTATION_CLASS mNetwork;

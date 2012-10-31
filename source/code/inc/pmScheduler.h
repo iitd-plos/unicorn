@@ -82,7 +82,6 @@ typedef enum eventIdentifier
 	TASK_FINISH,
     TASK_COMPLETE,
 	SUBTASK_REDUCE,
-	OWNERSHIP_TRANSFER,
 	MEMORY_TRANSFER,
 	COMMAND_COMPLETION,
     HOST_FINALIZATION,
@@ -152,7 +151,6 @@ typedef struct sendAcknowledgement
 	pmProcessingElement* device;
 	pmSubtaskRange range;
 	pmStatus execStatus;
-    ulong ownerMemBaseAddr;
     pmCommunicatorCommand::ownershipDataStruct* ownershipData;    // Alternating offsets and lengths
     uint dataElements;
 } sendAcknowledgement;
@@ -162,7 +160,6 @@ typedef struct receiveAcknowledgement
 	pmProcessingElement* device;
 	pmSubtaskRange range;
 	pmStatus execStatus;
-    ulong ownerMemBaseAddr;
     pmCommunicatorCommand::ownershipDataStruct* ownershipData;    // Alternating offsets and lengths
     uint dataElements;
 } receiveAcknowledgement;
@@ -195,24 +192,13 @@ typedef struct subtaskReduce
 	ulong subtaskId;
 } subtaskReduce;
 
-typedef struct ownershipTransfer
-{
-    pmTask* task;
-    pmProcessingElement* senderDevice;
-    void* senderBaseMemAddr;
-    ulong senderOffset;
-    void* receiverBaseMemAddr;
-    ulong receiverOffset;
-    ulong length;
-} ownershipTransfer;
-    
 typedef struct memTransfer
 {
-	pmMemSection* memSection;
+	pmMemSection* srcMemSection;
+    pmCommunicatorCommand::memoryIdentifierStruct destMemIdentifier;
 	ulong offset;
 	ulong length;
 	pmMachine* machine;
-	ulong destMemBaseAddr;
     ulong receiverOffset;
 	ushort priority;
     bool isForwarded;
@@ -273,7 +259,6 @@ typedef struct schedulerEvent : public pmBasicThreadEvent
         taskComplete taskCompleteDetails;
         taskTerminate taskTerminateDetails;
 		subtaskReduce subtaskReduceDetails;
-        ownershipTransfer ownershipTransferDetails;
 		memTransfer memTransferDetails;
         hostFinalization hostFinalizationDetails;
         subtaskRangeCancel subtaskRangeCancelDetails;
@@ -304,7 +289,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		static pmScheduler* GetScheduler();
 
 		pmStatus SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap);
-		pmStatus ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, ulong pRemoteMemBaseAddr, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements);
+		pmStatus ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements);
 
 		virtual pmStatus ThreadSwitchCallback(scheduler::schedulerEvent& pEvent);
 
@@ -320,12 +305,12 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus StealSuccessReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
 		pmStatus StealFailedReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask);
 		pmStatus AcknowledgementSendEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap);
-		pmStatus AcknowledgementReceiveEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, ulong pRemoteMemBaseAddr, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements);
+		pmStatus AcknowledgementReceiveEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements);
 		pmStatus TaskCancelEvent(pmTask* pTask);
         pmStatus TaskFinishEvent(pmTask* pTask);
         pmStatus TaskCompleteEvent(pmLocalTask* pLocalTask);
 		pmStatus ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId);
-		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pDestMemBaseAddr, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
+		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
         pmStatus RangeCancellationEvent(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
         pmStatus RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
@@ -333,12 +318,12 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         pmStatus RangeNegotiationSuccessEvent(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pNegotiatedRange);
         pmStatus TerminateTaskEvent(pmTask* pTask);
 
-        pmStatus SendPostTaskOwnershipTransfer(pmMachine* pReceiverHost, pmTask* pTask, void* pReceiverBaseAddr, ulong pReceiverOffset, void* pSenderBaseAddr, ulong pSenderOffset, ulong pLength, pmProcessingElement* pSenderDevice);
+        pmStatus SendPostTaskOwnershipTransfer(pmMemSection* pMemSection, pmMachine* pReceiverHost, std::tr1::shared_ptr<std::vector<pmCommunicatorCommand::ownershipChangeStruct> >& pChangeData);
         pmStatus SendSubtaskRangeCancellationMessage(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
     
 		pmStatus HandleCommandCompletion(pmCommandPtr pCommand);
 
-        void CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask);
+        void CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask, bool pTaskListeningOnCancellation);
 		pmStatus CancelTask(pmLocalTask* pLocalTask);
 
 		pmCommandCompletionCallback GetUnknownLengthCommandCompletionCallback();
@@ -364,7 +349,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus SetupNewTaskEventReception();
 		pmStatus SetupNewStealRequestReception();
 		pmStatus SetupNewStealResponseReception();
-        pmStatus SetupNewOwnershipTransferReception();
         pmStatus SetupNewMemTransferRequestReception();
         pmStatus SetupNewHostFinalizationReception();
         pmStatus SetupNewSubtaskRangeCancelReception();
@@ -397,7 +381,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmPersistentCommunicatorCommandPtr mTaskEventRecvCommand;
 		pmPersistentCommunicatorCommandPtr mStealRequestRecvCommand;
 		pmPersistentCommunicatorCommandPtr mStealResponseRecvCommand;
-        pmPersistentCommunicatorCommandPtr mOwnershipTransferCommand;
         pmPersistentCommunicatorCommandPtr mMemTransferRequestCommand;
         pmPersistentCommunicatorCommandPtr mHostFinalizationCommand;
         pmPersistentCommunicatorCommandPtr mSubtaskRangeCancelCommand;
@@ -406,7 +389,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         pmCommunicatorCommand::taskEventStruct mTaskEventRecvData;
         pmCommunicatorCommand::stealRequestStruct mStealRequestRecvData;
         pmCommunicatorCommand::stealResponseStruct mStealResponseRecvData;
-        pmCommunicatorCommand::memoryTransferRequest mOwnershipTransferData;
         pmCommunicatorCommand::memoryTransferRequest mMemTransferRequestData;
         pmCommunicatorCommand::hostFinalizationStruct mHostFinalizationData;
         pmCommunicatorCommand::subtaskRangeCancelStruct mSubtaskRangeCancelData;

@@ -144,6 +144,10 @@ public:
 
     virtual pmStatus RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
     
+#ifdef _DEBUG
+    void DumpUnacknowledgedPartitions();
+#endif
+    
 private:
     bool HasTaskFinished_Internal();
 

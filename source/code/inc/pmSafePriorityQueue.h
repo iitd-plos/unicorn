@@ -27,8 +27,6 @@
 #include <vector>
 #include <map>
 
-#include THREADING_IMPLEMENTATION_HEADER
-
 namespace pm
 {
 

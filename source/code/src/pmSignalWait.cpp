@@ -115,10 +115,11 @@ bool pmPThreadSignalWait::WaitWithTimeOut(ulong pTriggerTime)
 		int lError = pthread_cond_timedwait(&mCondVariable, mResourceLock.GetMutex(), &lTimespec);
         if(lError)
         {
-            if(lError == ETIMEDOUT)
-                lRetVal = true;
-            else
+            if(lError != ETIMEDOUT)
                 PMTHROW(pmThreadFailureException(pmThreadFailureException::COND_VAR_WAIT_FAILURE, lError));
+
+            lRetVal = true;
+            break;
         }
     }
     

@@ -27,6 +27,7 @@
 #include "pmExecutionStub.h"
 #include "pmCallbackUnit.h"
 #include "pmCallback.h"
+#include "pmHardware.h"
 
 #include <string.h>
 
@@ -198,7 +199,7 @@ pmStatus pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulo
 pmStatus pmSubscriptionManager::SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-
+    
     std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
 	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
 		PMTHROW(pmFatalErrorException());
@@ -375,7 +376,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
     else
 #endif
         lShadowMem = (char*)(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->AllocateMemory(NULL, lSubscriptionInfo.length, lPageCount));
-        
+
     if(!lShadowMem)
         PMTHROW(pmFatalErrorException());
     
@@ -472,22 +473,8 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
     char* lMem = (char*)(lMemSection->GetMem());
     
     subscription::subscriptionRecordType::const_iterator lIter = pBeginIter;
-    if(lMemSection->IsLazy())
-    {
-    #ifdef SUPPORT_LAZY_MEMORY
-        for(; lIter != pEndIter; ++lIter)
-        {
-            // This is wrong because the length and offset of shadow mem are not page size multiples and lazy protection is removed from entire page
-            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->RemoveLazyWriteProtection(lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
-            memcpy(lMem + lIter->first, lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
-        }
-    #endif
-    }
-    else
-    {
-        for(; lIter != pEndIter; ++lIter)
-            memcpy(lMem + lIter->first, lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
-    }
+    for(; lIter != pEndIter; ++lIter)
+        memcpy(lMem + lIter->first, lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
     
     DestroySubtaskShadowMem(pStub, pSubtaskId);
 }
@@ -600,7 +587,7 @@ pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmExecutionStub* pStub
             lMemSection->GetPageAlignedAddresses(lOffset, lLength);
     #endif
         
-        lReceiveVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength);
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength, lReceiveVector);
     }
 
     pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
@@ -612,7 +599,7 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmExecutionStub* pStu
 {
     std::vector<pmCommunicatorCommandPtr> lReceiveVector;
 	pmMemSection* lMemSection = mTask->GetMemSectionRW();
-    bool lIsWriteOnly = (((pmOutputMemSection*)lMemSection)->GetAccessType() == pmOutputMemSection::WRITE_ONLY);
+    bool lIsWriteOnly = (lMemSection->GetMemInfo() == OUTPUT_MEM_WRITE_ONLY);
     bool lIsLazy = lMemSection->IsLazy();
     
     if(!lIsWriteOnly && (!lIsLazy || pDeviceType != CPU))
@@ -625,7 +612,7 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmExecutionStub* pStu
             lMemSection->GetPageAlignedAddresses(lOffset, lLength);
     #endif
         
-        lReceiveVector = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength);
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength, lReceiveVector);
     }
     
     pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
@@ -635,6 +622,8 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmExecutionStub* pStu
 
 pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId)
 {
+    pmStatus lStatus;
+    
     std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
 	if(mTask->GetMemSectionRO())
 	{
@@ -657,7 +646,16 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulo
 			{
 				if((*lInnerIter).get())
 				{
-					if((*lInnerIter)->WaitForFinish() != pmSuccess)
+                    while((lStatus = (*lInnerIter)->GetStatus()) == pmStatusUnavailable)
+                    {
+                        if((*lInnerIter)->WaitWithTimeOut(GetIntegralCurrentTimeInSecs() + MEMORY_TRANSFER_TIMEOUT))
+                        {
+                            if(pStub->RequiresPrematureExit(pSubtaskId))
+                                PMTHROW_NODUMP(pmPrematureExitException());
+                        }
+                    }
+                
+                    if(lStatus != pmSuccess)
 						PMTHROW(pmMemoryFetchException());
 				}
 			}
@@ -685,7 +683,16 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulo
 			{
 				if((*lInnerIter).get())
 				{
-					if((*lInnerIter)->WaitForFinish() != pmSuccess)
+                    while((lStatus = (*lInnerIter)->GetStatus()) == pmStatusUnavailable)
+                    {
+                        if((*lInnerIter)->WaitWithTimeOut(GetIntegralCurrentTimeInSecs() + MEMORY_TRANSFER_TIMEOUT))
+                        {
+                            if(pStub->RequiresPrematureExit(pSubtaskId))
+                                PMTHROW_NODUMP(pmPrematureExitException());
+                        }
+                    }
+                
+                    if(lStatus != pmSuccess)
 						PMTHROW(pmMemoryFetchException());
 				}
 			}
@@ -694,26 +701,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulo
 
 	return pmSuccess;
 }
-    
-void pmSubscriptionManager::RegisterPostTaskOwnershipTransfer(pmMemSection* pMemSection, pmExecutionStub* pStub, ulong pOffset, ulong pLength, std::vector<pmCommunicatorCommandPtr>& pVector)
-{
-    pmProcessingElement* lDevice = pStub->GetProcessingElement();
-    
-    pmMemSection::pmMemOwnership lOwnerships;
-    pMemSection->GetOwners(pOffset, pLength, false, lOwnerships);
 
-    pmMemSection::pmMemOwnership::iterator lIter = lOwnerships.begin(), lEndIter = lOwnerships.end();
-    for(; lIter != lEndIter; ++lIter)
-    {
-        ulong lInternalOffset = lIter->first;
-        ulong lInternalLength = lIter->second.first;
-        pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
-
-        if(lRangeOwner.host != PM_LOCAL_MACHINE)
-            pmScheduler::GetScheduler()->SendPostTaskOwnershipTransfer(mTask->GetOriginatingHost(), mTask, reinterpret_cast<void*>(lRangeOwner.hostBaseAddr), lRangeOwner.hostOffset, pMemSection->GetMem(), lInternalOffset, lInternalLength, lDevice);
-    }
-}
-    
 
 /* struct pmSubtask */    
 pmStatus pmSubtask::Initialize(pmTask* pTask)
@@ -772,6 +760,32 @@ void shadowMemDeallocator::operator()(void* pMem)
     }
 }
 
+
+/* class pmUserLibraryCodeAutoPtr */
+pmSubtaskTerminationCheckPointAutoPtr::pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId)
+    : mStub(pStub)
+    , mSubtaskId(pSubtaskId)
+    , mExecutingLibraryCode(mStub->IsInsideLibraryCode(mIsPastCancellationStage))
+{
+    if(!mIsPastCancellationStage)
+    {
+        if(!mExecutingLibraryCode)
+            mStub->MarkInsideLibraryCode(pSubtaskId);
+        
+        mStub->CheckForSubtaskTermination(mSubtaskId);
+    }
+}
+    
+pmSubtaskTerminationCheckPointAutoPtr::~pmSubtaskTerminationCheckPointAutoPtr()
+{
+    if(!mIsPastCancellationStage)
+    {
+        mStub->CheckForSubtaskTermination(mSubtaskId);
+
+        if(!mExecutingLibraryCode)
+            mStub->MarkInsideUserCode(mSubtaskId);
+    }
+}
     
 }
 

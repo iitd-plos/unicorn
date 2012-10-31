@@ -98,6 +98,16 @@ pmStatus pmPThread<T, P>::ThreadCommandLoop()
 }
 
 template<typename T, typename P>
+void pmPThread<T, P>::InterruptThread()
+{
+#ifdef MACOS
+    pthread_kill(mThread, SIGBUS);
+#else
+    pthread_kill(mThread, SIGSEGV);
+#endif
+}
+
+template<typename T, typename P>
 pmStatus pmPThread<T, P>::WaitIfCurrentCommandMatches(typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
 	typename pmThread<T, P>::internalMatchCriterion lInternalMatchCriterion;

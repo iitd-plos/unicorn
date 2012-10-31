@@ -22,10 +22,12 @@
 #define __PM_MEM_SECTION__
 
 #include "pmBase.h"
+#include "pmCommand.h"
 #include "pmResourceLock.h"
 
 #include <vector>
 #include <map>
+#include <tr1/memory>
 
 #define FIND_FLOOR_ELEM(mapType, mapVar, searchKey, iterAddr) \
 { \
@@ -49,8 +51,6 @@ namespace pm
 {
 
 class pmMachine;
-class pmInputMemSection;
-class pmOutputMemSection;
 class pmMemSection;
 
 typedef class pmUserMemHandle
@@ -66,6 +66,8 @@ public:
 private:
     pmMemSection* mMemSection;
 } pmUserMemHandle;
+    
+typedef std::map<pmMachine*, std::tr1::shared_ptr<std::vector<pmCommunicatorCommand::ownershipChangeStruct> > > pmOwnershipTransferMap;
 
 /**
  * \brief Encapsulation of task memory
@@ -77,8 +79,8 @@ class pmMemSection : public pmBase
 		typedef struct vmRangeOwner
 		{
 			pmMachine* host;		// Host where memory page lives
-			ulong hostBaseAddr;		// Actual base addr on host
             ulong hostOffset;       // Offset on host (in case of data redistribution offsets at source and destination hosts are different)
+            pmCommunicatorCommand::memoryIdentifierStruct memIdentifier;    // a different memory might be holding the required data (e.g. redistribution)
 		} vmRangeOwner;
     
         typedef struct pmMemTransferData
@@ -90,36 +92,45 @@ class pmMemSection : public pmBase
 
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
+        static pmMemSection* CreateMemSection(size_t pLength, pmMachine* pOwner, pmMemInfo pMemInfo, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
+        static pmMemSection* CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, pmMemInfo pMemInfo, ulong pGenerationNumberOnOwner, bool pIsInput);
+    
+        virtual ~pmMemSection();
+    
 		void* GetMem();
 		size_t GetLength();
         
-        void DeleteAssociations();
-        void DeleteLocalAssociations();
-        void DeleteRemoteAssociations();
-    
-        void CreateLocalAssociation(pmMemSection* pMemSection);
         void DisposeMemory();
-    	
+    
+        pmStatus TransferOwnershipImmediate(ulong pOffset, ulong pLength, pmMachine* pNewOwnerHost);
         pmStatus AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
-        pmStatus TransferOwnershipPostTaskCompletion(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength);
+        pmStatus TransferOwnershipPostTaskCompletion(vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
 		pmStatus FlushOwnerships();
-		pmStatus GetOwners(ulong pOffset, ulong pLength, bool pIsLazyRegisteration, pmMemSection::pmMemOwnership& pOwnerships);
+		pmStatus GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
+        pmStatus GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
 
-        bool IsLazy();
         pmStatus Fetch(ushort pPriority);
-    
-        void SetUserMemHandle(pmUserMemHandle* pUserMemHandle);
-        pmUserMemHandle* GetUserMemHandle();
-    
+        
         void Lock(pmTask* pTask);
         void Unlock(pmTask* pTask);
         pmTask* GetLockingTask();
     
         void UserDelete();
+        void SetUserMemHandle(pmUserMemHandle* pUserMemHandle);
+        pmUserMemHandle* GetUserMemHandle();
+
+        pmStatus Update(size_t pOffset, size_t pLength, void* pSrcAddr);
+    
+        pmMemInfo GetMemInfo();
+        bool IsInput() const;
+        bool IsOutput() const;
+        bool IsLazy();
+    
+        void ConvertOutputMemSectionToInputMemSection();
+        void ConvertInputMemSectionToOutputMemSection();
     
 #ifdef SUPPORT_LAZY_MEMORY
         uint GetLazyForwardPrefetchPageCount();
-        pmStatus AcquireOwnershipLazy(ulong pOffset, ulong pLength);
         void GetPageAlignedAddresses(size_t& pOffset, size_t& pLength);
 #endif
             
@@ -127,49 +138,49 @@ class pmMemSection : public pmBase
         void RecordMemReceive(size_t pReceiveSize);
         void RecordMemTransfer(size_t pTransferSize);
 #endif
-    
-        static pmMemSection* FindMemSection(void* pMem);
+            
+        static pmMemSection* FindMemSection(pmMachine* pOwner, ulong pGenerationNumber);
         static pmMemSection* FindMemSectionContainingAddress(void* pPtr);
-        static void SwapMemoryAndOwnerships(pmMemSection* pMemSection1, pmMemSection* pMemSection2);
-        static pmInputMemSection* ConvertOutputMemSectionToInputMemSection(pmOutputMemSection* pOutputMemSection);
-        static pmOutputMemSection* ConvertInputMemSectionToOutputMemSection(pmInputMemSection* pInputMemSection);
         static void DeleteAllLocalMemSections();
 
-    protected:
-        virtual ~pmMemSection();
+        void SwapGenerationNumbers(pmMemSection* pMemSection);
+        ulong GetGenerationNumber();
+        pmMachine* GetMemOwnerHost();
+
+    private:    
+		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner, pmMemInfo pMemInfo);
     
-		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pOwnerBaseMemAddr, bool pIsLazy);
-        pmMemSection(const pmMemSection& pMemSection);
+        static ulong GetNextGenerationNumber();
     
-    private:
-        pmStatus SetRangeOwner(pmMachine* pOwner, ulong pOwnerBaseMemAddr, ulong pOwnerOffset, ulong pOffset, ulong pLength, bool pIsLazyAcquisition);
+        void Init(pmMachine* pOwner);
+        pmStatus SetRangeOwner(vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
+        pmStatus SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength, pmMemOwnership& pMap);
+        void SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap);
     
 #ifdef _DEBUG
         void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
         void SanitizeOwnerships();
         void PrintOwnerships();
 #endif
-
+    
         pmMachine* mOwner;
+        ulong mGenerationNumberOnOwner;
         pmUserMemHandle* mUserMemHandle;
 		size_t mRequestedLength;
 		size_t mAllocatedLength;
 		size_t mVMPageCount;
         bool mLazy;
         void* mMem;
+        
+        static ulong mGenerationId;
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mGenerationLock;
     
-        void ResetOwnerships(pmMachine* pOwner, ulong pBaseAddr);
-        void ClearOwnerships();
-    
-        std::vector<pmMemSection*> mLocalAssociations;
-
-        static std::map<void*, pmMemSection*> mMemSectionMap;	// Maps actual allocated memory regions to pmMemSection objects
+        static std::map<std::pair<pmMachine*, ulong>, pmMemSection*> mMemSectionMap;
+        static std::map<void*, pmMemSection*> mAugmentaryMemSectionMap; // Maps actual allocated memory regions to pmMemSection objects
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
-        
-        pmMemOwnership mLazyOwnershipMap;   // offset versus pair (of length of region and vmRangeOwner) - updated to mOwnershipMap at task end
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mLazyOwnershipLock;
-        
+                
         pmMemOwnership mOwnershipMap;       // offset versus pair (of length of region and vmRangeOwner) - dynamic
+        pmMemOwnership mOriginalOwnershipMap;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
         
         std::vector<pmMemTransferData> mOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
@@ -181,6 +192,8 @@ class pmMemSection : public pmBase
         bool mUserDelete;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeleteLock;
     
+        pmMemInfo mMemInfo;
+    
     protected:
 #ifdef ENABLE_MEM_PROFILING
         size_t mMemReceived;
@@ -189,37 +202,6 @@ class pmMemSection : public pmBase
         ulong mMemTransferEvents;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mMemProfileLock;
 #endif
-};
-
-class pmInputMemSection : public pmMemSection
-{
-	public:
-		pmInputMemSection(size_t pLength, bool pIsLazy, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
-        pmInputMemSection(const pmOutputMemSection& pOutputMemSection);
-    
-	private:
-		~pmInputMemSection();
-};
-
-class pmOutputMemSection : public pmMemSection
-{
-	public:
-		typedef enum accessType
-		{
-			READ_WRITE,
-			WRITE_ONLY
-		} accessType;
-
-        pmOutputMemSection(size_t pLength, accessType pAccess, bool pIsLazy, pmMachine* pOwner = NULL, ulong pOwnerMemSectionAddr = 0);
-        pmOutputMemSection(const pmInputMemSection& pInputMemSection);
-
-		pmStatus Update(size_t pOffset, size_t pLength, void* pSrcAddr);
-		accessType GetAccessType();
-
-	private:
-		~pmOutputMemSection();
-    
-		accessType mAccess;
 };
 
 } // end namespace pm

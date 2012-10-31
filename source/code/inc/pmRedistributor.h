@@ -41,7 +41,7 @@ class pmRedistributor : public pmBase
 		virtual ~pmRedistributor();
 
         pmStatus RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder);
-        pmStatus PerformRedistribution(pmMachine* pHost, ulong pBaseMemAddr, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector);
+        pmStatus PerformRedistribution(pmMachine* pHost, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector);
     
         pmStatus SendRedistributionInfo();
 	
@@ -49,7 +49,6 @@ class pmRedistributor : public pmBase
         typedef struct orderData
         {
             pmMachine* host;
-            ulong hostMemBaseAddr;
             ulong offset;
             ulong length;
         } orderData;

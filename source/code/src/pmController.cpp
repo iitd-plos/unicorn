@@ -34,6 +34,7 @@
 #include "pmTask.h"
 #include "pmSignalWait.h"
 #include "pmRedistributor.h"
+#include "pmSubscriptionManager.h"
 
 namespace pm
 {
@@ -42,8 +43,9 @@ pmController* pmController::mController = NULL;
 
 pmController::pmController()
     : mLogger(pmLogger::MINIMAL),
-    mDispatcherGPU(), 
-    mStubManager(), 
+    mTls(),
+    mDispatcherGPU(),
+    mStubManager(),
     mNetwork(), 
     mCommunicator(), 
     mMachinePool(), 
@@ -51,7 +53,7 @@ pmController::pmController()
     mTaskManager(), 
     mScheduler(),
     mTimedEventManager()
-{    
+{
 	mLastErrorCode = 0;
 	mFinalizedHosts = 0;
 	mSignalWait = NULL;
@@ -226,43 +228,8 @@ pmStatus pmController::CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, p
 {
 	*pMem = NULL;
 
-    switch(pMemInfo)
-    {
-        case INPUT_MEM_READ_ONLY:
-        {
-            pmMemSection* lInputMem = new pmInputMemSection(pLength, false);
-            *pMem = new pmUserMemHandle(lInputMem);
-            break;
-        }
-            
-        case INPUT_MEM_READ_ONLY_LAZY:
-        {
-            pmMemSection* lInputMem = new pmInputMemSection(pLength, true);
-            *pMem = new pmUserMemHandle(lInputMem);
-            break;
-        }
-            
-        case OUTPUT_MEM_WRITE_ONLY:
-        {
-            pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::WRITE_ONLY, false);
-            *pMem = new pmUserMemHandle(lOutputMem);
-            break;
-        }
-
-        case OUTPUT_MEM_READ_WRITE:
-        {
-            pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::READ_WRITE, false);
-            *pMem = new pmUserMemHandle(lOutputMem);
-            break;
-        }
-
-        case OUTPUT_MEM_READ_WRITE_LAZY:
-        {
-            pmMemSection* lOutputMem = new pmOutputMemSection(pLength, pmOutputMemSection::READ_WRITE, true);
-            *pMem = new pmUserMemHandle(lOutputMem);
-            break;
-        }
-    }
+    pmMemSection* lMemSection = pmMemSection::CreateMemSection(pLength, PM_LOCAL_MACHINE, pMemInfo);
+    *pMem = new pmUserMemHandle(lMemSection);
     
 	return pmSuccess;
 }
@@ -301,14 +268,14 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 
     if(lInputMem)
     {
-        if(dynamic_cast<pmOutputMemSection*>(lInputMem))
-            lInputMem = pmMemSection::ConvertOutputMemSectionToInputMemSection(static_cast<pmOutputMemSection*>(lInputMem));
+        if(lInputMem->IsOutput())
+            lInputMem->ConvertOutputMemSectionToInputMemSection();
     }
     
 	if(lOutputMem)
     {
-        if(dynamic_cast<pmInputMemSection*>(lOutputMem))
-            lOutputMem = pmMemSection::ConvertInputMemSectionToOutputMemSection(static_cast<pmInputMemSection*>(lOutputMem));
+        if(lOutputMem->IsInput())
+            lOutputMem->ConvertInputMemSectionToOutputMemSection();
     }
 
 	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(pTaskDetails.callbackHandle);
@@ -353,6 +320,8 @@ pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandl
 
 pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo)
 {
+    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
+    
 	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pIsInputMemory, pSubscriptionInfo);
 }
 
@@ -366,6 +335,8 @@ pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDevic
     
 pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
 {
+    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
+
 	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pCudaLaunchConf);
 }
 
@@ -387,6 +358,8 @@ uint pmController::GetHostCount_Public()
     
 void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, size_t pBufferSize)
 {
+    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
+    
     return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pBufferSize);
     
     return NULL;

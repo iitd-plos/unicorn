@@ -672,6 +672,17 @@ bool pmSingleAssignmentSchedulingManager::HasTaskFinished_Internal()
 {
     return mUnacknowledgedPartitions.empty();
 }
+    
+#ifdef _DEBUG
+void pmSingleAssignmentSchedulingManager::DumpUnacknowledgedPartitions()
+{
+    FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    std::set<pmUnfinishedPartitionPtr>::iterator lIter = mUnacknowledgedPartitions.begin(), lEndIter = mUnacknowledgedPartitions.end();
+    for(; lIter != lEndIter; ++lIter)
+        std::cout << "Unacknowledged partition [" << (*lIter)->firstSubtaskIndex << ", " << (*lIter)->lastSubtaskIndex << "]" << std::endl;
+}
+#endif
 
 pmStatus pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus)
 {
@@ -680,10 +691,8 @@ pmStatus pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(pmProces
     if(HasTaskFinished_Internal())
         PMTHROW(pmFatalErrorException());
     
-    std::set<pmUnfinishedPartitionPtr>::iterator lIter = mUnacknowledgedPartitions.begin();
-    std::set<pmUnfinishedPartitionPtr>::iterator lEndIter = mUnacknowledgedPartitions.end();
-    
     pmUnfinishedPartitionPtr lTargetPartitionPtr;
+    std::set<pmUnfinishedPartitionPtr>::iterator lIter = mUnacknowledgedPartitions.begin(), lEndIter = mUnacknowledgedPartitions.end();
     for(; lIter != lEndIter; ++lIter)
     {
         pmUnfinishedPartitionPtr lPartitionPtr = *lIter;

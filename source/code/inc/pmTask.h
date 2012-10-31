@@ -88,7 +88,8 @@ class pmTask : public pmBase
         virtual void TerminateTask();
         virtual void MarkLocalStubsFreeOfTask();
     
-        void PrepareForTaskCompletionMessage();
+        void RecordStubWillSendCancellationMessage();
+        void MarkAllStubsScannedForCancellationMessages();
         void RegisterStubFreeOfTask();
     
         void UnlockMemories();
@@ -105,6 +106,9 @@ class pmTask : public pmBase
         pmTaskProfiler* GetTaskProfiler();
 #endif
     
+    protected:
+		pmMemSection* mMemRW;
+    
 	private:
 		pmStatus BuildTaskInfo();
         pmStatus RandomizeDevices(std::vector<pmProcessingElement*>& pDevices);
@@ -112,7 +116,6 @@ class pmTask : public pmBase
 		/* Constant properties -- no updates, locking not required */
 		ulong mTaskId;
 		pmMemSection* mMemRO;
-		pmMemSection* mMemRW;
 		pmCallbackUnit* mCallbackUnit;
 		ulong mSubtaskCount;
 		pmMachine* mOriginatingHost;
@@ -141,7 +144,8 @@ class pmTask : public pmBase
     
         finalize_ptr<pmRedistributor> mRedistributor;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mRedistributorLock;
-    
+
+        bool mAllStubsScanned;
         ulong mOutstandingStubs;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mTaskCompletionLock;
 
@@ -168,7 +172,7 @@ class pmLocalTask : public pmTask
         void DoPostInternalCompletion();
         void MarkUserSideTaskCompletion();
     
-        void TaskRedistributionDone();
+        void TaskRedistributionDone(pmMemSection* pRedistributedMemSection);
         pmStatus SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId);
     
         virtual pmStatus MarkSubtaskExecutionFinished();
@@ -198,8 +202,6 @@ class pmLocalTask : public pmTask
         ulong mPendingCompletions;
         bool mUserSideTaskCompleted;
         bool mLocalStubsFreeOfTask;
-        bool mUserSignalledDeletion;
-        bool mTaskInternallyCompleted;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
     
         static ulong mSequenceId;   // Task number at the originating host

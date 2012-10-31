@@ -371,6 +371,41 @@ pmStatus pmMPI::PackData(pmCommunicatorCommandPtr pCommand)
 			break;
 		}
 
+		case pmCommunicatorCommand::OWNERSHIP_TRANSFER_PACKED:
+		{
+			pmCommunicatorCommand::ownershipTransferPacked* lData = (pmCommunicatorCommand::ownershipTransferPacked*)(pCommand->GetData());
+			if(!lData)
+				PMTHROW(pmFatalErrorException());
+            
+			pmCommunicatorCommand::memoryIdentifierStruct& lStruct = lData->memIdentifier;
+            uint lDataElementCount = (uint)(lData->transferData->size());
+			lLength += sizeof(lStruct) + sizeof(uint) + lDataElementCount * sizeof(pmCommunicatorCommand::ownershipChangeStruct);
+            
+			if(lLength > __MAX_SIGNED(int))
+				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
+            
+			lPackedData = new char[lLength];
+			int lPos = 0;
+			MPI_Comm lCommunicator;
+			SAFE_GET_MPI_COMMUNICATOR(lCommunicator, pCommand->GetDestination());
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_IDENTIFIER_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lDataElementCount, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+        
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&(lData->transferData.get())[0], lDataElementCount, GetDataTypeMPI(pmCommunicatorCommand::OWNERSHIP_CHANGE_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+            lLength = lPos;
+            
+			break;
+		}
+        
 		default:
 			PMTHROW(pmFatalErrorException());
 	}
@@ -389,119 +424,139 @@ pmStatus pmMPI::UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData,
 	{
 		case pmCommunicatorCommand::REMOTE_TASK_ASSIGN_PACKED:
 		{
-			pmCommunicatorCommand::remoteTaskAssignPacked* lPackedTask = new pmCommunicatorCommand::remoteTaskAssignPacked();
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedTask->taskStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+			pmCommunicatorCommand::remoteTaskAssignPacked* lPackedData = new pmCommunicatorCommand::remoteTaskAssignPacked();
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedData->taskStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-			if(lPackedTask->taskStruct.taskConfLength != 0)
+			if(lPackedData->taskStruct.taskConfLength != 0)
 			{
-				lPackedTask->taskConf.ptr = new char[lPackedTask->taskStruct.taskConfLength];
-				lPackedTask->taskConf.length = lPackedTask->taskStruct.taskConfLength;
+				lPackedData->taskConf.ptr = new char[lPackedData->taskStruct.taskConfLength];
+				lPackedData->taskConf.length = lPackedData->taskStruct.taskConfLength;
 				
-				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->taskConf.ptr, lPackedTask->taskConf.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedData->taskConf.ptr, lPackedData->taskConf.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
 					PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 			}
 
-			if(lPackedTask->taskStruct.assignedDeviceCount != 0)
+			if(lPackedData->taskStruct.assignedDeviceCount != 0)
 			{
                 bool lReductionCB = false;
                 
                 try {
-                    pmCallbackUnit* lCallbackUnit = pmCallbackUnit::FindCallbackUnit(lPackedTask->taskStruct.callbackKey);	// throws exception if key unregistered
+                    pmCallbackUnit* lCallbackUnit = pmCallbackUnit::FindCallbackUnit(lPackedData->taskStruct.callbackKey);	// throws exception if key unregistered
                     
                     lReductionCB = (lCallbackUnit && lCallbackUnit->GetDataReductionCB());
                 } catch(pmException e) {}
                 
                 
-                if(lPackedTask->taskStruct.schedModel == scheduler::PULL || lReductionCB)
+                if(lPackedData->taskStruct.schedModel == scheduler::PULL || lReductionCB)
                 {
-                    lPackedTask->devices.ptr = new uint[lPackedTask->taskStruct.assignedDeviceCount];
-                    lPackedTask->devices.length = lPackedTask->taskStruct.assignedDeviceCount * (uint)(sizeof(uint));
+                    lPackedData->devices.ptr = new uint[lPackedData->taskStruct.assignedDeviceCount];
+                    lPackedData->devices.length = lPackedData->taskStruct.assignedDeviceCount * (uint)(sizeof(uint));
 
-                    if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->devices.ptr, lPackedTask->taskStruct.assignedDeviceCount, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+                    if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedData->devices.ptr, lPackedData->taskStruct.assignedDeviceCount, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
                         PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
                 }
 			}
             
-            pCommand->SetData(lPackedTask, pPos);
+            pCommand->SetData(lPackedData, pPos);
 
 			break;
 		}
 
 		case pmCommunicatorCommand::SUBTASK_REDUCE_PACKED:
 		{
-			pmCommunicatorCommand::subtaskReducePacked* lPackedTask = new pmCommunicatorCommand::subtaskReducePacked();
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedTask->reduceStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+			pmCommunicatorCommand::subtaskReducePacked* lPackedData = new pmCommunicatorCommand::subtaskReducePacked();
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedData->reduceStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::SUBTASK_REDUCE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-			lPackedTask->subtaskMem.ptr = new char[lPackedTask->reduceStruct.subtaskMemLength];
-			lPackedTask->subtaskMem.length = (uint)lPackedTask->reduceStruct.subtaskMemLength;
+			lPackedData->subtaskMem.ptr = new char[lPackedData->reduceStruct.subtaskMemLength];
+			lPackedData->subtaskMem.length = (uint)lPackedData->reduceStruct.subtaskMemLength;
 				
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->subtaskMem.ptr, lPackedTask->subtaskMem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedData->subtaskMem.ptr, lPackedData->subtaskMem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-            pCommand->SetData(lPackedTask, pPos);
+            pCommand->SetData(lPackedData, pPos);
 
 			break;
 		}
 
 		case pmCommunicatorCommand::MEMORY_RECEIVE_PACKED:
 		{
-			pmCommunicatorCommand::memoryReceivePacked* lPackedTask = new pmCommunicatorCommand::memoryReceivePacked();
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedTask->receiveStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+			pmCommunicatorCommand::memoryReceivePacked* lPackedData = new pmCommunicatorCommand::memoryReceivePacked();
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedData->receiveStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-			if(lPackedTask->receiveStruct.length == 0)
+			if(lPackedData->receiveStruct.length == 0)
 			{
-				lPackedTask->mem.ptr = NULL;
-				lPackedTask->mem.length = 0;
+				lPackedData->mem.ptr = NULL;
+				lPackedData->mem.length = 0;
 			}
 			else
 			{
-				lPackedTask->mem.ptr = new char[lPackedTask->receiveStruct.length];
-				lPackedTask->mem.length = (uint)(lPackedTask->receiveStruct.length);
+				lPackedData->mem.ptr = new char[lPackedData->receiveStruct.length];
+				lPackedData->mem.length = (uint)(lPackedData->receiveStruct.length);
 				
-				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->mem.ptr, lPackedTask->mem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedData->mem.ptr, lPackedData->mem.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
 					PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 			}
 
-            pCommand->SetData(lPackedTask, pPos);
+            pCommand->SetData(lPackedData, pPos);
 
 			break;
 		}
 
 		case pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED:
 		{
-			pmCommunicatorCommand::dataRedistributionPacked* lPackedTask = new pmCommunicatorCommand::dataRedistributionPacked();
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedTask->redistributionStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+			pmCommunicatorCommand::dataRedistributionPacked* lPackedData = new pmCommunicatorCommand::dataRedistributionPacked();
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedData->redistributionStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
             
-			lPackedTask->redistributionData = new pmCommunicatorCommand::redistributionOrderStruct[lPackedTask->redistributionStruct.orderDataCount];
+			lPackedData->redistributionData = new pmCommunicatorCommand::redistributionOrderStruct[lPackedData->redistributionStruct.orderDataCount];
             
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->redistributionData, lPackedTask->redistributionStruct.orderDataCount, GetDataTypeMPI(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedData->redistributionData, lPackedData->redistributionStruct.orderDataCount, GetDataTypeMPI(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
             
-            pCommand->SetData(lPackedTask, pPos);
+            pCommand->SetData(lPackedData, pPos);
             
 			break;
 		}
 
 		case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_PACKED:
 		{
-			pmCommunicatorCommand::sendAcknowledgementPacked* lPackedTask = new pmCommunicatorCommand::sendAcknowledgementPacked();
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedTask->ackStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+			pmCommunicatorCommand::sendAcknowledgementPacked* lPackedData = new pmCommunicatorCommand::sendAcknowledgementPacked();
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedData->ackStruct), 1, GetDataTypeMPI(pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
             
-			lPackedTask->ownershipData = new pmCommunicatorCommand::ownershipDataStruct[lPackedTask->ackStruct.ownershipDataElements];
+			lPackedData->ownershipData = new pmCommunicatorCommand::ownershipDataStruct[lPackedData->ackStruct.ownershipDataElements];
             
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedTask->ownershipData, lPackedTask->ackStruct.ownershipDataElements, GetDataTypeMPI(pmCommunicatorCommand::OWNERSHIP_DATA_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, lPackedData->ownershipData, lPackedData->ackStruct.ownershipDataElements, GetDataTypeMPI(pmCommunicatorCommand::OWNERSHIP_DATA_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
             
-            pCommand->SetData(lPackedTask, pPos);
+            pCommand->SetData(lPackedData, pPos);
             
 			break;
 		}
 
+		case pmCommunicatorCommand::OWNERSHIP_TRANSFER_PACKED:
+		{
+			pmCommunicatorCommand::ownershipTransferPacked* lPackedData = new pmCommunicatorCommand::ownershipTransferPacked();
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedData->memIdentifier), 1, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_IDENTIFIER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+        
+            uint lDataElementCount = 0;
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &lDataElementCount, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+        
+			lPackedData->transferData.reset(new std::vector<pmCommunicatorCommand::ownershipChangeStruct>());
+            
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &pPos, &(lPackedData->transferData.get())[0], lDataElementCount, GetDataTypeMPI(pmCommunicatorCommand::OWNERSHIP_CHANGE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            
+            pCommand->SetData(lPackedData, pPos);
+        
+            break;
+        }
+        
 		default:
 			PMTHROW(pmFatalErrorException());
 	}
@@ -515,7 +570,8 @@ bool pmMPI::IsUnknownLengthTag(pmCommunicatorCommand::communicatorCommandTags pT
             pTag == pmCommunicatorCommand::SUBTASK_REDUCE_TAG ||
             pTag == pmCommunicatorCommand::MEMORY_RECEIVE_TAG ||
             pTag == pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG ||
-            pTag == pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG);
+            pTag == pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG ||
+            pTag == pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG);
 }
 
 pmStatus pmMPI::SendNonBlocking(pmCommunicatorCommandPtr pCommand)
@@ -876,6 +932,7 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 		case pmCommunicatorCommand::MEMORY_RECEIVE_PACKED:
         case pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED:
         case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_PACKED:
+        case pmCommunicatorCommand::OWNERSHIP_TRANSFER_PACKED:
 			return MPI_PACKED;
 			break;
 
@@ -908,12 +965,19 @@ MPI_Datatype pmMPI::GetDataTypeMPI(pmCommunicatorCommand::communicatorDataTypes 
 
 pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorDataTypes pDataType)
 {
-	std::map<pmCommunicatorCommand::communicatorDataTypes, MPI_Datatype*>::iterator lIter = mRegisteredDataTypes.find(pDataType);
-	if(lIter != mRegisteredDataTypes.end())
-		PMTHROW(pmFatalErrorException());
+#ifdef _DEBUG
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDataTypesResourceLock, Lock(), Unlock());
+        
+        std::map<pmCommunicatorCommand::communicatorDataTypes, MPI_Datatype*>::iterator lIter = mRegisteredDataTypes.find(pDataType);
+        if(lIter != mRegisteredDataTypes.end())
+            PMTHROW(pmFatalErrorException());
+    }
+#endif
 
 	int lFieldCount = 0;
-    
+
     switch(pDataType)
 	{
 		case pmCommunicatorCommand::MACHINE_POOL_STRUCT:
@@ -946,6 +1010,12 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			break;
 		}
         
+		case pmCommunicatorCommand::OWNERSHIP_CHANGE_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::ownershipChangeStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+        
 		case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT:
 		{
 			lFieldCount = pmCommunicatorCommand::sendAcknowledgementStruct::FIELD_COUNT_VALUE;
@@ -970,9 +1040,9 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			break;
 		}
             
-		case pmCommunicatorCommand::OWNERSHIP_TRANSFER_STRUCT:
+		case pmCommunicatorCommand::MEMORY_IDENTIFIER_STRUCT:
 		{
-			lFieldCount = pmCommunicatorCommand::ownershipTransferStruct::FIELD_COUNT_VALUE;
+			lFieldCount = pmCommunicatorCommand::memoryIdentifierStruct::FIELD_COUNT_VALUE;
 			break;
 		}
 
@@ -1065,8 +1135,8 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 10, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.priority, lPriorityMPI, MPI_UNSIGNED_SHORT, 11, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.schedModel, lSchedModelMPI, MPI_UNSIGNED_SHORT, 12, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemAddr, lInputMemAddrMPI, MPI_UNSIGNED_LONG, 13, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemAddr, lOutputMemAddrMPI, MPI_UNSIGNED_LONG, 14, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemGenerationNumber, lInputMemGenerationNumberMPI, MPI_UNSIGNED_LONG, 13, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemGenerationNumber, lOutputMemGenerationNumberMPI, MPI_UNSIGNED_LONG, 14, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.flags, lFlagsMPI, MPI_UNSIGNED_SHORT, 15, 1);
 
 			break;
@@ -1095,6 +1165,16 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			break;
 		}
 
+		case pmCommunicatorCommand::OWNERSHIP_CHANGE_STRUCT:
+		{
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::ownershipChangeStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 0, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 1, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.newOwnerHost, lNewOwnerHostMPI, MPI_UNSIGNED, 2, 1);
+
+			break;
+		}
+        
 		case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::sendAcknowledgementStruct, lData, lDataMPI);
@@ -1106,7 +1186,6 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.execStatus, lExecStatusMPI, MPI_UNSIGNED, 5, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originalAllotteeGlobalIndex, lOriginalAllotteeGlobalIndexMPI, MPI_UNSIGNED, 6, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.ownershipDataElements, lOwnershipDataElementsMPI, MPI_UNSIGNED, 7, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.ownerMemBaseAddr, lOwnerMemBaseAddrMPI, MPI_UNSIGNED_LONG, 8, 1);
 
 			break;
 		}
@@ -1148,17 +1227,11 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			break;
 		}
 
-        case pmCommunicatorCommand::OWNERSHIP_TRANSFER_STRUCT:
+        case pmCommunicatorCommand::MEMORY_IDENTIFIER_STRUCT:
 		{
-			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::ownershipTransferStruct, lData, lDataMPI);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 0, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.recepientBaseAddr, lRecepientBaseAddrMPI, MPI_UNSIGNED_LONG, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.recepientOffset, lRecepientOffsetMPI, MPI_UNSIGNED_LONG, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.senderBaseAddr, lSenderBaseAddrMPI, MPI_UNSIGNED_LONG, 4, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.senderOffset, lSenderOffsetMPI, MPI_UNSIGNED_LONG, 5, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 6, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.senderDeviceGlobalIndex, lSenderDeviceGlobalIndexMPI, MPI_UNSIGNED, 7, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::memoryIdentifierStruct, lData, lDataMPI);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memOwnerHost, lMemOwnerHostMPI, MPI_UNSIGNED, 0, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.generationNumber, lGenerationNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
 
             break;
         }
@@ -1166,8 +1239,8 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 		case pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::memoryTransferRequest, lData, lDataMPI);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.ownerBaseAddr, lOwnerBaseAddrMPI, MPI_UNSIGNED_LONG, 0, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receiverBaseAddr, lReceiverBaseAddrMPI, MPI_UNSIGNED_LONG, 1, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sourceMemIdentifier, lSourceMemIdentifierMPI, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_IDENTIFIER_STRUCT), 0, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destMemIdentifier, lDestMemIdentifierMPI, GetDataTypeMPI(pmCommunicatorCommand::MEMORY_IDENTIFIER_STRUCT), 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receiverOffset, lReceiverOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 4, 1);
@@ -1192,9 +1265,10 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 		case pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::memoryReceiveStruct, lData, lDataMPI);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receivingMemBaseAddr, lReceivingMemBaseAddrMPI, MPI_UNSIGNED_LONG, 0, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 2, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memOwnerHost, lMemOwnerHostMPI, MPI_UNSIGNED, 0, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.generationNumber, lGenerationNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
 
 			break;
 		}
@@ -1223,9 +1297,8 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.remoteHost, lRemoteHostMPI, MPI_UNSIGNED, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.remoteHostMemBaseAddr, lRemoteHostMemBaseAddrMPI, MPI_UNSIGNED_LONG, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtasksAccounted, lSubtasksAccountedMPI, MPI_UNSIGNED_LONG, 4, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.orderDataCount, lOrderDataCountMPI, MPI_UNSIGNED, 5, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtasksAccounted, lSubtasksAccountedMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.orderDataCount, lOrderDataCountMPI, MPI_UNSIGNED, 4, 1);
             
 			break;
 		}
@@ -1808,6 +1881,10 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
                     
 				case pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_TAG:
 					lDataType = pmCommunicatorCommand::SEND_ACKNOWLEDGEMENT_PACKED;
+					break;
+                
+				case pmCommunicatorCommand::OWNERSHIP_TRANSFER_TAG:
+					lDataType = pmCommunicatorCommand::OWNERSHIP_TRANSFER_PACKED;
 					break;
                 
 				default:

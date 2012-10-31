@@ -40,8 +40,10 @@ namespace pm
 			lStr += lInteger; \
 			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, lStr.c_str()); throw x; \
 		}
+#define PMTHROW_NODUMP(x) throw x;
 #else
 #define PMTHROW(x) throw x;
+#define PMTHROW_NODUMP(x) throw x;
 #endif
 
 	/**
@@ -92,7 +94,8 @@ namespace pm
 				COND_VAR_DESTROY_FAILURE,
 				THREAD_CREATE_ERROR,
 				THREAD_CANCEL_ERROR,
-				THREAD_AFFINITY_ERROR
+				THREAD_AFFINITY_ERROR,
+                TLS_KEY_ERROR
 			} failureTypes;
 
 			pmThreadFailureException(failureTypes pFailureId, int pErrorCode) {mFailureId = pFailureId;}
@@ -338,6 +341,13 @@ namespace pm
         
     private:
 	};
+    
+    class pmPrematureExitException : public pmException
+    {
+    public:
+        
+    private:
+    };
 
 } // end namespace pm
 

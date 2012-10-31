@@ -36,6 +36,7 @@ class pmLocalTask;
 class pmHardware;
 class pmMachine;
 class pmExecutionStub;
+class pmMemSection;
 
 class pmCommand;
 typedef std::tr1::shared_ptr<pmCommand> pmCommandPtr;
@@ -59,9 +60,6 @@ typedef pmStatus (*pmCommandCompletionCallback)(pmCommandPtr pCommand);
 class pmCommand : public pmBase
 {
 	public:
-		pmCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0, pmCommandCompletionCallback pCallback = NULL);
-		virtual ~pmCommand();
-
 		virtual bool IsValid() = 0;
 
 		virtual ushort GetType();
@@ -89,9 +87,13 @@ class pmCommand : public pmBase
 		 * Block the execution of the calling thread until the status
 		 * of the command object becomes available.
 		*/
-		virtual pmStatus WaitForFinish();
+		pmStatus WaitForFinish();
+        bool WaitWithTimeOut(ulong pTriggerTime);
 
 	protected:
+		pmCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0, pmCommandCompletionCallback pCallback = NULL);
+        virtual ~pmCommand();
+
 		ushort mCommandType;
 		void* mCommandData;
 		size_t mDataLength;
@@ -149,8 +151,8 @@ class pmCommunicatorCommand : public pmCommand
             ulong sequenceNumber;   // Sequence number of task on originating host
 			ushort priority;
 			ushort schedModel;
-			ulong inputMemAddr;		// Actual base addr of input memory
-			ulong outputMemAddr;	// Actual base addr of output memory
+			ulong inputMemGenerationNumber;
+			ulong outputMemGenerationNumber;
             ushort flags;           // LSB - multiAssignEnabled
 
 			remoteTaskAssignStruct();
@@ -225,11 +227,10 @@ class pmCommunicatorCommand : public pmCommand
 			uint execStatus;
             uint originalAllotteeGlobalIndex;
             uint ownershipDataElements;
-            ulong ownerMemBaseAddr;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 9
+				FIELD_COUNT_VALUE = 8
 			} fieldCount;
 
 		} sendAcknowledgementStruct;
@@ -303,33 +304,50 @@ class pmCommunicatorCommand : public pmCommand
 
 		} stealResponseStruct;
 
-        typedef struct ownershipTransferStruct
+        typedef struct ownershipChangeStruct
         {
-            uint originatingHost;
-            ulong sequenceNumber;	// sequence number of local task object (on originating host)
-			ulong recepientBaseAddr;	// Actual base memory address on serving host
-            ulong recepientOffset;
-			ulong senderBaseAddr;	// Actual base memory address on receiving host (on destHost)
-			ulong senderOffset;
-			ulong length;
-			uint senderDeviceGlobalIndex;
+            ulong offset;
+            ulong length;
+            uint newOwnerHost;
+        
+            typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 3
+			} fieldCount;            
+
+        } ownershipChangeStruct;
+
+        typedef struct memoryIdentifierStruct
+        {
+            uint memOwnerHost;
+            ulong generationNumber;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 8
+				FIELD_COUNT_VALUE = 2
 			} fieldCount;
         
-        } ownershipTransferStruct;
+        } memoryIdentifierStruct;
+
+        typedef struct ownershipTransferPacked
+        {
+            ownershipTransferPacked();
+            ownershipTransferPacked(pmMemSection* pMemSection, std::tr1::shared_ptr<std::vector<pmCommunicatorCommand::ownershipChangeStruct> >& pChangeData);
+            ~ownershipTransferPacked();
+        
+            memoryIdentifierStruct memIdentifier;
+            std::tr1::shared_ptr<std::vector<pmCommunicatorCommand::ownershipChangeStruct> > transferData;
+        } ownershipTransferPacked;
 
         typedef struct memoryTransferRequest
 		{
-			ulong ownerBaseAddr;	// Actual base memory address on serving host
-			ulong receiverBaseAddr;	// Actual base memory address on receiving host (on destHost)
+            memoryIdentifierStruct sourceMemIdentifier;
+            memoryIdentifierStruct destMemIdentifier;
             ulong receiverOffset;
 			ulong offset;
 			ulong length;
 			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
-            ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host. If this flag is set, memoryTransferRequest flag is ignored
+            ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host.
 
 			typedef enum fieldCount
 			{
@@ -365,13 +383,14 @@ class pmCommunicatorCommand : public pmCommand
 
 		typedef struct memoryReceiveStruct
 		{
-			ulong receivingMemBaseAddr;
+            uint memOwnerHost;
+			ulong generationNumber;
 			ulong offset;
 			ulong length;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 3
+				FIELD_COUNT_VALUE = 4
 			} fieldCount;
 
 		} memoryReceiveStruct;
@@ -379,7 +398,7 @@ class pmCommunicatorCommand : public pmCommand
 		typedef struct memoryReceivePacked
 		{
 			memoryReceivePacked();
-			memoryReceivePacked(ulong pReceivingMemBaseAddr, ulong pOffset, ulong pLength, void* pMemPtr);
+			memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr);
 			~memoryReceivePacked();
 
 			memoryReceiveStruct receiveStruct;
@@ -415,13 +434,12 @@ class pmCommunicatorCommand : public pmCommand
 			uint originatingHost;
 			ulong sequenceNumber;	// sequence number of local task object (on originating host)
             uint remoteHost;
-            ulong remoteHostMemBaseAddr;
 			ulong subtasksAccounted;
 			uint orderDataCount;
             
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 6
+				FIELD_COUNT_VALUE = 5
 			} fieldCount;            
             
         } dataRedistributionStruct;
@@ -498,7 +516,9 @@ class pmCommunicatorCommand : public pmCommand
 			TASK_EVENT_STRUCT,
 			STEAL_REQUEST_STRUCT,
 			STEAL_RESPONSE_STRUCT,
-            OWNERSHIP_TRANSFER_STRUCT,
+            MEMORY_IDENTIFIER_STRUCT,
+            OWNERSHIP_CHANGE_STRUCT,
+            OWNERSHIP_TRANSFER_PACKED,
 			MEMORY_TRANSFER_REQUEST_STRUCT,
 			SUBTASK_REDUCE_STRUCT,
 			SUBTASK_REDUCE_PACKED,
@@ -558,29 +578,6 @@ class pmPersistentCommunicatorCommand : public pmCommunicatorCommand
 	private:
 };
 
-class pmThreadCommand;
-typedef std::tr1::shared_ptr<pmThreadCommand> pmThreadCommandPtr;
-
-class pmThreadCommand : public pmCommand
-{
-	public:
-		typedef enum threadCommandTypes
-		{
-			COMMAND_WRAPPER,
-			MAX_THREAD_COMMAND_TYPES
-		} threadCommandTypes;
-
-		static pmThreadCommandPtr CreateSharedPtr(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0);
-		virtual ~pmThreadCommand() {}
-
-		virtual bool IsValid();
-
-	protected:
-		pmThreadCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0) : pmCommand(pPriority, pCommandType, pCommandData, pDataLength) {}
-
-	private:
-};
-
 class pmTaskCommand;
 typedef std::tr1::shared_ptr<pmTaskCommand> pmTaskCommandPtr;
 
@@ -626,6 +623,8 @@ class pmSubtaskRangeCommand : public pmCommand
 
 	private:
 };
+    
+bool operator==(pmCommunicatorCommand::memoryIdentifierStruct& pIdentifier1, pmCommunicatorCommand::memoryIdentifierStruct& pIdentifier2);
 
 } // end namespace pm
 

@@ -131,7 +131,8 @@ namespace pm
 		OUTPUT_MEM_WRITE_ONLY,
 		OUTPUT_MEM_READ_WRITE,
 		INPUT_MEM_READ_ONLY_LAZY,
-		OUTPUT_MEM_READ_WRITE_LAZY
+		OUTPUT_MEM_READ_WRITE_LAZY,
+        MAX_MEM_INFO
 	} pmMemInfo;
 
 	typedef struct pmDataTransferInfo
