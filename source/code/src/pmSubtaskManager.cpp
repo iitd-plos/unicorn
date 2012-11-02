@@ -89,7 +89,18 @@ bool pmSubtaskManager::execCountSorter::operator() (pmProcessingElement* pDevice
     uint lIndex2 = pDevice2->GetGlobalDeviceIndex();
     
     if(mDeviceExecutionProfile[lIndex1] == mDeviceExecutionProfile[lIndex2])
+    {
+        pmMachine* lMachine1 = pDevice1->GetMachine();
+        pmMachine* lMachine2 = pDevice2->GetMachine();
+    
+        if(lMachine1 == PM_LOCAL_MACHINE && lMachine2 != PM_LOCAL_MACHINE)
+            return pDevice2;
+
+        if(lMachine1 != PM_LOCAL_MACHINE && lMachine2 == PM_LOCAL_MACHINE)
+            return pDevice1;
+    
         return pDevice1 < pDevice2;
+    }
     
     return mDeviceExecutionProfile[lIndex1] < mDeviceExecutionProfile[lIndex2];
 }
@@ -134,7 +145,7 @@ pmStatus pmSubtaskManager::PrintExecutionProfile()
     {
         std::cout << "Device " << lStart->first << " Subtasks " << lStart->second << std::endl;
 
-	pmProcessingElement* lDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lStart->first);
+        pmProcessingElement* lDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lStart->first);
         if(lDevice->GetType() == CPU)
             lCpuSubtasks[(uint)(*(lDevice->GetMachine()))] += lStart->second;
     }
@@ -192,6 +203,8 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
         mAllottedUnassignedPartition[*lIter] = std::make_pair(lUnfinishedPartitionPtr, (ulong)0);
 
         mExecTimeStats[*lIter] = std::pair<double, ulong>(0, 0);
+    
+        mDeviceExecutionProfile[(*lIter)->GetGlobalDeviceIndex()] = 0;
 
         lFirstSubtask = lLastSubtask + 1;
 
@@ -644,6 +657,14 @@ pmSingleAssignmentSchedulingManager::pmSingleAssignmentSchedulingManager(pmLocal
     
 	pmUnfinishedPartitionPtr lUnacknowledgedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(0, lSubtaskCount-1));
 	mUnacknowledgedPartitions.insert(lUnacknowledgedPartitionPtr);
+
+#if 0
+    std::vector<pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
+	std::vector<pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
+    
+    for(; lIter != lEndIter; ++lIter)
+        mDeviceExecutionProfile[(*lIter)->GetGlobalDeviceIndex()] = 0;
+#endif
 }
 
 pmSingleAssignmentSchedulingManager::~pmSingleAssignmentSchedulingManager()

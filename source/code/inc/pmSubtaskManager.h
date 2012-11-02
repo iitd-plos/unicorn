@@ -77,7 +77,7 @@ class pmSubtaskManager : public pmBase
 		pmLocalTask* mLocalTask;
 		pmStatus mTaskStatus;
 
-    private:
+    protected:
         std::map<uint, ulong> mDeviceExecutionProfile;    // Global Device Index versus Subtasks Executed
         std::map<uint, ulong> mMachineExecutionProfile;    // Machine Index versus Subtasks Executed
     
