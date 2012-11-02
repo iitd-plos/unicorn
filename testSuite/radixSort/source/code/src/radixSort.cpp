@@ -6,6 +6,7 @@
 
 #include "radixSort.h"
 #include <math.h>
+#include <string.h>
 
 DATA_TYPE* gSampleInput;
 DATA_TYPE* gSerialOutput;

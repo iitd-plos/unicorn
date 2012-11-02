@@ -115,6 +115,8 @@ void* pmLinuxMemoryManager::AllocatePageAlignedMemoryInternal(size_t& pLength, s
     
 void pmLinuxMemoryManager::CreateMemSectionSpecifics(pmMemSection* pMemSection)
 {
+    FINALIZE_RESOURCE_PTR(dMemSectionSpecificsMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mMemSectionSpecificsMapLock, Lock(), Unlock());
+
     if(mMemSectionSpecificsMap.find(pMemSection) != mMemSectionSpecificsMap.end())
         PMTHROW(pmFatalErrorException());
     
@@ -123,6 +125,8 @@ void pmLinuxMemoryManager::CreateMemSectionSpecifics(pmMemSection* pMemSection)
 
 linuxMemManager::memSectionSpecifics& pmLinuxMemoryManager::GetMemSectionSpecifics(pmMemSection* pMemSection)
 {
+    FINALIZE_RESOURCE_PTR(dMemSectionSpecificsMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mMemSectionSpecificsMapLock, Lock(), Unlock());
+
     if(mMemSectionSpecificsMap.find(pMemSection) == mMemSectionSpecificsMap.end())
         PMTHROW(pmFatalErrorException());
     
@@ -191,8 +195,15 @@ void* pmLinuxMemoryManager::AllocateLazyMemory(pmMemSection* pMemSection, size_t
 
 pmStatus pmLinuxMemoryManager::DeallocateMemory(pmMemSection* pMemSection)
 {
-    if(mMemSectionSpecificsMap.find(pMemSection) == mMemSectionSpecificsMap.end())
-        PMTHROW(pmFatalErrorException());
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dMemSectionSpecificsMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mMemSectionSpecificsMapLock, Lock(), Unlock());
+    
+        if(mMemSectionSpecificsMap.find(pMemSection) == mMemSectionSpecificsMap.end())
+            PMTHROW(pmFatalErrorException());
+        
+        mMemSectionSpecificsMap.erase(pMemSection);
+    }
     
 	::free(pMemSection->GetMem());
 
@@ -756,6 +767,7 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
         abort();
     
     ulong lSubtaskId = *((ulong*)lSubtaskPtr);
+        
     subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(lStub, lSubtaskId);
 
     try

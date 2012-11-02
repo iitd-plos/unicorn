@@ -407,10 +407,9 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
             memcpy(lShadowMem + (lBeginIter->first - lSubscriptionInfo.offset), lMem + lBeginIter->first, lBeginIter->second.first);
     }
     
-    // Auto lock/unlock scope
+    if(lIsLazyMem)
     {
         FINALIZE_RESOURCE(dShadowMemLock, mShadowMemLock.Lock(), mShadowMemLock.Unlock());
-
         mShadowMemMap[(void*)lShadowMem].subscriptionInfo = lSubscriptionInfo;
         mShadowMemMap[(void*)lShadowMem].memSection = lMemSection;
     }
@@ -482,7 +481,7 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
 pmMemSection* pmSubscriptionManager::FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr)
 {
 	FINALIZE_RESOURCE(dShadowMemLock, mShadowMemLock.Lock(), mShadowMemLock.Unlock());
-    
+
     typedef std::map<void*, subscription::shadowMemDetails> mapType;
     mapType::iterator lStartIter;
     mapType::iterator* lStartIterAddr = &lStartIter;
@@ -746,17 +745,12 @@ void shadowMemDeallocator::operator()(void* pMem)
         {
             FINALIZE_RESOURCE(dShadowMemLock, pmSubscriptionManager::mShadowMemLock.Lock(), pmSubscriptionManager::mShadowMemLock.Unlock());
 
-        #ifdef _DEBUG
-            if(pmSubscriptionManager::mShadowMemMap.find(pMem) == pmSubscriptionManager::mShadowMemMap.end())
-                PMTHROW(pmFatalErrorException());
-        #endif
+            pmSubscriptionManager::mShadowMemMap.erase(pMem);
+        }
 
         #ifdef DUMP_SHADOW_MEM
             std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem deallocated " << (void*)pMem << std::endl;
         #endif
-       
-            pmSubscriptionManager::mShadowMemMap.erase(pMem);
-        }
     }
 }
 

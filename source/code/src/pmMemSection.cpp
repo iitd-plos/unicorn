@@ -63,15 +63,11 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationN
     pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
 
 #ifdef SUPPORT_LAZY_MEMORY
-    mLazy = ((mMemInfo == INPUT_MEM_READ_ONLY_LAZY) || (mMemInfo == OUTPUT_MEM_READ_WRITE_LAZY));
-    
-    if(mLazy)
+    if(IsLazy())
         mMem = lMemoryManager->AllocateLazyMemory(this, pLength, mVMPageCount);
     else
         mMem = lMemoryManager->AllocateMemory(this, pLength, mVMPageCount);
 #else
-    mLazy = false;
-
     if(mMemInfo == INPUT_MEM_READ_ONLY_LAZY)
         mMemInfo = INPUT_MEM_READ_ONLY;
     else if(mMemInfo == OUTPUT_MEM_READ_WRITE_LAZY)
@@ -262,10 +258,19 @@ void pmMemSection::ConvertOutputMemSectionToInputMemSection()
     if(!IsOutput())
         PMTHROW(pmFatalErrorException());
 
-    if(mMemInfo == OUTPUT_MEM_READ_WRITE || mMemInfo == OUTPUT_MEM_WRITE_ONLY)
-        mMemInfo = INPUT_MEM_READ_ONLY;
-    else
+//    if(mMemInfo == OUTPUT_MEM_READ_WRITE || mMemInfo == OUTPUT_MEM_WRITE_ONLY)
+//    {
+//        mMemInfo = INPUT_MEM_READ_ONLY;
+//    }
+//    else
+//    {
+    #ifdef SUPPORT_LAZY_MEMORY
+        pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
+        lMemoryManager->SetLazyProtection(mMem, mRequestedLength, (mOwner == PM_LOCAL_MACHINE), (mOwner == PM_LOCAL_MACHINE));
+    #endif
+
         mMemInfo = INPUT_MEM_READ_ONLY_LAZY;
+//    }
 }
 
 void pmMemSection::ConvertInputMemSectionToOutputMemSection()
@@ -277,10 +282,20 @@ void pmMemSection::ConvertInputMemSectionToOutputMemSection()
     if(!IsInput())
         PMTHROW(pmFatalErrorException());
     
-    if(mMemInfo == INPUT_MEM_READ_ONLY)
-        mMemInfo = OUTPUT_MEM_READ_WRITE;
-    else
-        mMemInfo = OUTPUT_MEM_READ_WRITE_LAZY;
+#ifdef SUPPORT_LAZY_MEMORY
+//    if(mMemInfo == INPUT_MEM_READ_ONLY_LAZY)
+//    {
+        pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
+        lMemoryManager->SetLazyProtection(mMem, mRequestedLength, true, true);
+//    }
+#endif
+
+    mMemInfo = OUTPUT_MEM_WRITE_ONLY;
+    
+//    if(mMemInfo == INPUT_MEM_READ_ONLY)
+//        mMemInfo = OUTPUT_MEM_READ_WRITE;
+//    else
+//        mMemInfo = OUTPUT_MEM_READ_WRITE_LAZY;
 }
 
 void pmMemSection::Init(pmMachine* pOwner)
@@ -294,7 +309,7 @@ void pmMemSection::Init(pmMachine* pOwner)
 	mOwnershipMap[0] = std::pair<size_t, vmRangeOwner>(mRequestedLength, lRangeOwner);
 
 #ifdef SUPPORT_LAZY_MEMORY
-    if(mLazy && IsInput() && (!pOwner || pOwner == PM_LOCAL_MACHINE))
+    if(IsLazy() && IsInput() && (!pOwner || pOwner == PM_LOCAL_MACHINE))
     {
         pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
         lMemoryManager->SetLazyProtection(mMem, mRequestedLength, true, true);
@@ -856,7 +871,7 @@ void pmMemSection::DeleteAllLocalMemSections()
     
 bool pmMemSection::IsLazy()
 {
-    return mLazy;
+    return ((mMemInfo == INPUT_MEM_READ_ONLY_LAZY) || (mMemInfo == OUTPUT_MEM_READ_WRITE_LAZY));
 }
 
 #ifdef ENABLE_MEM_PROFILING

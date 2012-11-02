@@ -41,8 +41,18 @@ void __dump_mutex(pthread_mutex_t* mutex, const char* name)
 #define DUMP_MUTEX(a, b)
 #endif
 
+pmStatus pmResourceLock::Lock()
+{
+    std::cout << "PURE VIRTUAL METHOD LOCK CALLED" << std::endl;
+    return pmSuccess;
+}
+
+    
 /* class pmPThreadResourceLock */
 pmPThreadResourceLock::pmPThreadResourceLock()
+#ifdef RECORD_LOCK_ACQUISITIONS
+    : mLine(-1)
+#endif
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_init(&mMutex, NULL), pmThreadFailureException, pmThreadFailureException::MUTEX_INIT_FAILURE );
 	DUMP_MUTEX(&mMutex, "Created");
@@ -71,5 +81,14 @@ pmStatus pmPThreadResourceLock::Unlock()
 
 	return pmSuccess;
 }
+
+#ifdef RECORD_LOCK_ACQUISITIONS
+void pmPThreadResourceLock::RecordAcquisition(const char* pFile, int pLine)
+{
+    mFile = pFile;
+    mLine = pLine;
+    mThread = pthread_self();
+}
+#endif
 
 }

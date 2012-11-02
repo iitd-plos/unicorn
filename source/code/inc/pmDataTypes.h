@@ -24,6 +24,8 @@
 #include <stdlib.h>
 #include <vector>
 
+#define RECORD_LOCK_ACQUISITIONS
+
 namespace pm
 {
 	typedef unsigned short int ushort;
@@ -185,6 +187,25 @@ namespace pm
 			} \
 	} name##_obj;
 
+#ifdef RECORD_LOCK_ACQUISITIONS
+	#define FINALIZE_RESOURCE_PTR(name, ptrType, ptr, acquisition, destruction) \
+	class name \
+	{ \
+		public:	\
+			name(ptrType* pPtr) \
+			{ \
+				mPtr = pPtr; \
+				mPtr->acquisition; \
+                mPtr->RecordAcquisition(__FILE__, __LINE__); \
+			} \
+			~name() \
+			{ \
+				mPtr->destruction; \
+			} \
+		private: \
+			ptrType* mPtr; \
+	} name##_obj(ptr);
+#else
 	#define FINALIZE_RESOURCE_PTR(name, ptrType, ptr, acquisition, destruction) \
 	class name \
 	{ \
@@ -201,7 +222,8 @@ namespace pm
 		private: \
 			ptrType* mPtr; \
 	} name##_obj(ptr);
-    
+#endif
+
     template<typename G, typename D, typename T>
 	class guarded_scoped_ptr
 	{

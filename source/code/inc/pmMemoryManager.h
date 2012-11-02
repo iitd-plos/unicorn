@@ -150,8 +150,9 @@ class pmLinuxMemoryManager : public pmMemoryManager
 #endif
 
     private:
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mMemSectionSpecificsMapLock;
         std::map<pmMemSection*, linuxMemManager::memSectionSpecifics> mMemSectionSpecificsMap;  // Singleton class (one instance of this map exists)
-
+ 
 #ifdef TRACK_MEMORY_ALLOCATIONS
 		ulong mTotalAllocatedMemory;	// Lazy + Non-Lazy
 		ulong mTotalLazyMemory;

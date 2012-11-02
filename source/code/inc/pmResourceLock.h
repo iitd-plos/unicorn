@@ -23,6 +23,10 @@
 
 #include "pmBase.h"
 
+#ifdef RECORD_LOCK_ACQUISITIONS
+#include <string>
+#endif
+
 #include THREADING_IMPLEMENTATION_HEADER
 
 namespace pm
@@ -38,8 +42,12 @@ namespace pm
 class pmResourceLock : public pmBase
 {
 	public:
-		virtual pmStatus Lock() = 0;
+        virtual pmStatus Lock() = 0;
 		virtual pmStatus Unlock() = 0;
+
+    #ifdef RECORD_LOCK_ACQUISITIONS
+        virtual void RecordAcquisition(const char* pFile, int pLine) = 0;
+    #endif
 
 	private:
 };
@@ -49,13 +57,24 @@ class pmPThreadResourceLock : public pmResourceLock
 	public:
 		pmPThreadResourceLock();
 		virtual ~pmPThreadResourceLock();
-
+    
 		virtual pmStatus Lock();
 		virtual pmStatus Unlock();
+    
+    #ifdef RECORD_LOCK_ACQUISITIONS
+        virtual void RecordAcquisition(const char* pFile, int pLine);
+    #endif
+    
 		virtual pthread_mutex_t* GetMutex() {return &mMutex;}
 
 	private:
 		pthread_mutex_t mMutex;
+
+    #ifdef RECORD_LOCK_ACQUISITIONS
+        std::string mFile;
+        int mLine;
+        pthread_t mThread;
+    #endif
 };
 
 } // end namespace pm

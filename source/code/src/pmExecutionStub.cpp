@@ -135,7 +135,7 @@ pmStatus pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOn
         }
     }
 #endif
-    
+
     return pmSuccess;
 }
     
@@ -147,10 +147,13 @@ pmStatus pmExecutionStub::CancelSubtaskRange(pmSubtaskRange& pRange)
     stubEvent lTaskEvent;
     bool lFound = (DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pRange.task, lTaskEvent) == pmSuccess);
 
-    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
 
-    if(mCurrentSubtaskStats && mCurrentSubtaskStats->task == pRange.task && mCurrentSubtaskStats->subtaskId >= pRange.startSubtask && mCurrentSubtaskStats->subtaskId <= pRange.endSubtask)
-        CancelCurrentlyExecutingSubtask(false);
+        if(mCurrentSubtaskStats && mCurrentSubtaskStats->task == pRange.task && mCurrentSubtaskStats->subtaskId >= pRange.startSubtask && mCurrentSubtaskStats->subtaskId <= pRange.endSubtask)
+            CancelCurrentlyExecutingSubtask(false);
+    }
     
     if(lFound && (pRange.endSubtask < lTaskEvent.execDetails.range.startSubtask || pRange.startSubtask > lTaskEvent.execDetails.range.endSubtask))
         SwitchThread(lTaskEvent, lPriority);
@@ -233,7 +236,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                         lCompletedRange.startSubtask = mCurrentSubtaskStats->parentRangeStartSubtask;
                         lCompletedRange.endSubtask = mCurrentSubtaskStats->subtaskId - 1;
                         lCompletedRange.originalAllottee = NULL;
-std::cout << "Added post range exec completion for range [" << lCompletedRange.startSubtask << ", " << lCompletedRange.endSubtask << "]" << std::endl;
+
                         PostHandleRangeExecutionCompletion(lCompletedRange, pmSuccess);
                     }
                 
