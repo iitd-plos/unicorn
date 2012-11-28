@@ -26,10 +26,7 @@
 #include "pmCallbackUnit.h"
 
 #include <string.h>
-
-#ifdef ENABLE_MEM_PROFILING
 #include <sstream>
-#endif
 
 namespace pm
 {
@@ -42,14 +39,19 @@ std::map<void*, pmMemSection*> pmMemSection::mAugmentaryMemSectionMap;
 RESOURCE_LOCK_IMPLEMENTATION_CLASS pmMemSection::mResourceLock;
 
 /* class pmMemSection */
-pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner, pmMemInfo pMemInfo)
+pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner)
     : mOwner(pOwner?pOwner:PM_LOCAL_MACHINE)
     , mGenerationNumberOnOwner(pGenerationNumberOnOwner)
     , mUserMemHandle(NULL)
     , mRequestedLength(pLength)
+    , mAllocatedLength(pLength)
+    , mVMPageCount(0)
+    , mLazy(false)
+    , mMem(NULL)
+    , mReadOnlyLazyMapping(NULL)
     , mLockingTask(NULL)
     , mUserDelete(false)
-    , mMemInfo(pMemInfo)
+    , mMemInfo(MAX_MEM_INFO)
 #ifdef ENABLE_MEM_PROFILING
     , mMemReceived(0)
     , mMemTransferred(0)
@@ -60,27 +62,10 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationN
     if(mGenerationNumberOnOwner == 0)
         PMTHROW(pmFatalErrorException());
 
-    pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
-
-#ifdef SUPPORT_LAZY_MEMORY
-    if(IsLazy())
-        mMem = lMemoryManager->AllocateLazyMemory(this, pLength, mVMPageCount);
-    else
-        mMem = lMemoryManager->AllocateMemory(this, pLength, mVMPageCount);
-#else
-    if(mMemInfo == INPUT_MEM_READ_ONLY_LAZY)
-        mMemInfo = INPUT_MEM_READ_ONLY;
-    else if(mMemInfo == OUTPUT_MEM_READ_WRITE_LAZY)
-        mMemInfo = OUTPUT_MEM_READ_WRITE;
-    
-	mMem = lMemoryManager->AllocateMemory(this, pLength, mVMPageCount);
-#endif
-
-	mAllocatedLength = pLength;
-
+	mMem = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->AllocateMemory(this, mAllocatedLength, mVMPageCount);
     Init(mOwner);
-    
-	if(mMem)
+
+    // Auto lock/unlock scope
 	{
 		FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
 
@@ -90,7 +75,6 @@ pmMemSection::pmMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationN
             PMTHROW(pmFatalErrorException());
 
 		mMemSectionMap[lPair] = this;
-        mAugmentaryMemSectionMap[mMem] = this;
 	}
 }
 
@@ -112,59 +96,54 @@ pmMemSection::~pmMemSection()
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
 #endif    
 
-#ifdef _DEBUG
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
+
+    #ifdef _DEBUG
         if(mLockingTask)
             PMTHROW(pmFatalErrorException());
+    #endif
+
+        if(mReadOnlyLazyMapping)
+        {
+            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeleteReadOnlyMemoryMapping(mReadOnlyLazyMapping, mAllocatedLength);
+
+            mAugmentaryMemSectionMap.erase(mReadOnlyLazyMapping);
+            mReadOnlyLazyMapping = NULL;
+        }
     }
-#endif
     
     DisposeMemory();
 }
     
-pmMemSection* pmMemSection::CreateMemSection(size_t pLength, pmMachine* pOwner, pmMemInfo pMemInfo, ulong pGenerationNumberOnOwner /* = GetNextGenerationNumber() */)
+pmMemSection* pmMemSection::CreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner /* = GetNextGenerationNumber() */)
 {
-    if(pMemInfo < 0 || pMemInfo >= MAX_MEM_INFO)
-        PMTHROW(pmFatalErrorException());
-    
-    return new pmMemSection(pLength, pOwner, pGenerationNumberOnOwner, pMemInfo);
+    return new pmMemSection(pLength, pOwner, pGenerationNumberOnOwner);
 }
 
-pmMemSection* pmMemSection::CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, pmMemInfo pMemInfo, ulong pGenerationNumberOnOwner, bool pIsInput)
+pmMemSection* pmMemSection::CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner, bool pIsInput)
 {
     pmMemSection* lMemSection = FindMemSection(pOwner, pGenerationNumberOnOwner);
     if(!lMemSection)
-        lMemSection = CreateMemSection(pLength, pOwner, pMemInfo, pGenerationNumberOnOwner);
-    
-    if(pIsInput)
-    {
-        if(lMemSection->IsOutput())
-            lMemSection->ConvertOutputMemSectionToInputMemSection();
-    }
-	else
-    {
-        if(lMemSection->IsInput())
-            lMemSection->ConvertInputMemSectionToOutputMemSection();
-    }
-    
+        lMemSection = CreateMemSection(pLength, pOwner, pGenerationNumberOnOwner);
+
     return lMemSection;
 }
-
-void pmMemSection::SwapGenerationNumbers(pmMemSection* pMemSection)
-{
-    FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
-
-    mMemSectionMap.erase(std::make_pair(mOwner, mGenerationNumberOnOwner));
-    mMemSectionMap.erase(std::make_pair(pMemSection->mOwner, pMemSection->mGenerationNumberOnOwner));
-
-    std::swap(mGenerationNumberOnOwner, pMemSection->mGenerationNumberOnOwner);
-
-    mMemSectionMap[std::make_pair(mOwner, mGenerationNumberOnOwner)] = this;
-    mMemSectionMap[std::make_pair(pMemSection->mOwner, pMemSection->mGenerationNumberOnOwner)] = pMemSection;
-}
     
+const char* pmMemSection::GetName()
+{
+    if(mName.empty())
+    {
+        std::stringstream lStream;
+        lStream << "/pm_" << ::getpid() << "_" << (uint)(*(GetMemOwnerHost())) << "_" << GetGenerationNumber();
+
+        mName = lStream.str();
+    }
+    
+    return mName.c_str();
+}
+
 pmMachine* pmMemSection::GetMemOwnerHost()
 {
     return mOwner;
@@ -232,8 +211,7 @@ void pmMemSection::DisposeMemory()
     {
         FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
         mMemSectionMap.erase(std::make_pair(mOwner, mGenerationNumberOnOwner));
-        mAugmentaryMemSectionMap.erase(mMem);
-        
+    
         MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(this);
         mMem = NULL;
     }
@@ -249,55 +227,6 @@ pmUserMemHandle* pmMemSection::GetUserMemHandle()
     return mUserMemHandle;
 }
 
-void pmMemSection::ConvertOutputMemSectionToInputMemSection()
-{
-	FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
-    if(mLockingTask)
-        PMTHROW(pmFatalErrorException());
-    
-    if(!IsOutput())
-        PMTHROW(pmFatalErrorException());
-
-//    if(mMemInfo == OUTPUT_MEM_READ_WRITE || mMemInfo == OUTPUT_MEM_WRITE_ONLY)
-//    {
-//        mMemInfo = INPUT_MEM_READ_ONLY;
-//    }
-//    else
-//    {
-    #ifdef SUPPORT_LAZY_MEMORY
-        pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
-        lMemoryManager->SetLazyProtection(mMem, mRequestedLength, (mOwner == PM_LOCAL_MACHINE), (mOwner == PM_LOCAL_MACHINE));
-    #endif
-
-        mMemInfo = INPUT_MEM_READ_ONLY_LAZY;
-//    }
-}
-
-void pmMemSection::ConvertInputMemSectionToOutputMemSection()
-{
-	FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
-    if(mLockingTask)
-        PMTHROW(pmFatalErrorException());
-    
-    if(!IsInput())
-        PMTHROW(pmFatalErrorException());
-    
-#ifdef SUPPORT_LAZY_MEMORY
-//    if(mMemInfo == INPUT_MEM_READ_ONLY_LAZY)
-//    {
-        pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
-        lMemoryManager->SetLazyProtection(mMem, mRequestedLength, true, true);
-//    }
-#endif
-
-    mMemInfo = OUTPUT_MEM_WRITE_ONLY;
-    
-//    if(mMemInfo == INPUT_MEM_READ_ONLY)
-//        mMemInfo = OUTPUT_MEM_READ_WRITE;
-//    else
-//        mMemInfo = OUTPUT_MEM_READ_WRITE_LAZY;
-}
-
 void pmMemSection::Init(pmMachine* pOwner)
 {
 	vmRangeOwner lRangeOwner;
@@ -307,19 +236,16 @@ void pmMemSection::Init(pmMachine* pOwner)
     lRangeOwner.memIdentifier.generationNumber = mGenerationNumberOnOwner;
     
 	mOwnershipMap[0] = std::pair<size_t, vmRangeOwner>(mRequestedLength, lRangeOwner);
-
-#ifdef SUPPORT_LAZY_MEMORY
-    if(IsLazy() && IsInput() && (!pOwner || pOwner == PM_LOCAL_MACHINE))
-    {
-        pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
-        lMemoryManager->SetLazyProtection(mMem, mRequestedLength, true, true);
-    }
-#endif
 }
 
 void* pmMemSection::GetMem()
 {
 	return mMem;
+}
+
+size_t pmMemSection::GetAllocatedLength()
+{
+	return mAllocatedLength;
 }
 
 size_t pmMemSection::GetLength()
@@ -338,7 +264,7 @@ pmMemSection* pmMemSection::FindMemSection(pmMachine* pOwner, ulong pGenerationN
 	return NULL;
 }
     
-pmMemSection* pmMemSection::FindMemSectionContainingAddress(void* pPtr)
+pmMemSection* pmMemSection::FindMemSectionContainingLazyAddress(void* pPtr)
 {
 	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
     
@@ -363,16 +289,33 @@ pmMemSection* pmMemSection::FindMemSectionContainingAddress(void* pPtr)
     return NULL;
 }
     
-void pmMemSection::Lock(pmTask* pTask)
+void pmMemSection::Lock(pmTask* pTask, pmMemInfo pMemInfo)
 {
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
 
-        if(mLockingTask)
+        if(mLockingTask || pMemInfo == MAX_MEM_INFO)
             PMTHROW(pmFatalErrorException());
         
         mLockingTask = pTask;
+        mMemInfo = pMemInfo;
+
+    #ifdef SUPPORT_LAZY_MEMORY
+        if((IsOutput() || !IsLazy()) && mReadOnlyLazyMapping)
+        {
+            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeleteReadOnlyMemoryMapping(mReadOnlyLazyMapping, mAllocatedLength);
+ 
+            mAugmentaryMemSectionMap.erase(mReadOnlyLazyMapping);
+            mReadOnlyLazyMapping = NULL;
+        }
+    
+        if(IsInput() && IsLazy() && !mReadOnlyLazyMapping)
+        {
+            mReadOnlyLazyMapping = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateReadOnlyMemoryMapping(this);
+            mAugmentaryMemSectionMap[mReadOnlyLazyMapping] = this;
+        }
+    #endif
     }
     
     if(IsOutput())
@@ -380,6 +323,14 @@ void pmMemSection::Lock(pmTask* pTask)
         FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
         mOriginalOwnershipMap = mOwnershipMap;
     }
+    
+#ifdef SUPPORT_LAZY_MEMORY
+    if(IsInput() && IsLazy())
+    {
+        if(IsRegionLocallyOwned(0, GetLength()))
+            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(mReadOnlyLazyMapping, mAllocatedLength, true, true);
+    }
+#endif
 }
     
 void pmMemSection::Unlock(pmTask* pTask)
@@ -390,7 +341,11 @@ void pmMemSection::Unlock(pmTask* pTask)
         FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
         
         if(!mOwnershipTransferVector.empty())
+        {
+            std::cout << IsInput() << " " << (uint)(*GetMemOwnerHost()) << " " << GetGenerationNumber() << std::endl;
+            abort();
             PMTHROW(pmFatalErrorException());
+        }
     }
 #endif
     
@@ -402,6 +357,7 @@ void pmMemSection::Unlock(pmTask* pTask)
             PMTHROW(pmFatalErrorException());
         
         mLockingTask = NULL;
+        mMemInfo = MAX_MEM_INFO;
     }
 
     bool lUserDelete = false;
@@ -642,6 +598,16 @@ pmStatus pmMemSection::TransferOwnershipImmediate(ulong pOffset, ulong pLength, 
 
 
 #ifdef SUPPORT_LAZY_MEMORY
+void* pmMemSection::GetReadOnlyLazyMemoryMapping()
+{
+    FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
+
+    if(!mReadOnlyLazyMapping)
+        PMTHROW(pmFatalErrorException());
+
+    return mReadOnlyLazyMapping;
+}
+
 uint pmMemSection::GetLazyForwardPrefetchPageCount()
 {
     return LAZY_FORWARD_PREFETCH_PAGE_COUNT;
@@ -756,7 +722,7 @@ pmStatus pmMemSection::Fetch(ushort pPriority)
     TIMER_IMPLEMENTATION_CLASS lTimer;
     lTimer.Start();
 #endif
-    
+
     std::vector<pmCommunicatorCommandPtr> lVector;
     MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(this, pPriority, 0, GetLength(), lVector);
     
@@ -775,7 +741,15 @@ pmStatus pmMemSection::Fetch(ushort pPriority)
     
     return pmSuccess;
 }
+
+bool pmMemSection::IsRegionLocallyOwned(ulong pOffset, ulong pLength)
+{
+    pmMemSection::pmMemOwnership lOwners;
+    GetOwners(pOffset, pLength, lOwners);
     
+    return ((lOwners.size() == 1) && (lOwners.begin()->second.second.host == PM_LOCAL_MACHINE));
+}
+
 pmStatus pmMemSection::GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships)
 {
     RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = mOwnershipLock;

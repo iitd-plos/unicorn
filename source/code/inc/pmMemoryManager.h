@@ -68,7 +68,9 @@ class pmMemoryManager : public pmBase
         virtual size_t GetVirtualMemoryPageSize() = 0;
     
 #ifdef SUPPORT_LAZY_MEMORY
-		virtual void* AllocateLazyMemory(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount) = 0;
+        virtual void* CreateReadOnlyMemoryMapping(pmMemSection* pMemSection) = 0;
+        virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength) = 0;
+        virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy) = 0;
         virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed) = 0;
 #endif
 
@@ -86,9 +88,6 @@ namespace linuxMemManager
         pmCommunicatorCommandPtr receiveCommand;
         
         std::map<size_t, size_t> partialReceiveRecordMap;
-    #ifdef SUPPORT_LAZY_MEMORY
-        std::map<void*, std::vector<char> > partialPageReceiveBufferMap;
-    #endif
         size_t accumulatedPartialReceivesLength;
         
         regionFetchData();
@@ -98,6 +97,7 @@ namespace linuxMemManager
         
     typedef struct memSectionSpecifics
     {
+        int mSharedMemDescriptor;
         pmInFlightRegions mInFlightMemoryMap;	// Map for regions being fetched; pair is length of region and regionFetchData
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mInFlightLock;
     } memSectionSpecifics;
@@ -123,11 +123,11 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		pmLinuxMemoryManager();
 		virtual ~pmLinuxMemoryManager();
 
-        void CreateMemSectionSpecifics(pmMemSection* pMemSection);
+        void CreateMemSectionSpecifics(pmMemSection* pMemSection, int pSharedMemDescriptor);
         linuxMemManager::memSectionSpecifics& GetMemSectionSpecifics(pmMemSection* pMemSection);
     
         size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
-        void* AllocatePageAlignedMemoryInternal(size_t& pLength, size_t& pPageCount);
+        void* AllocatePageAlignedMemoryInternal(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount, int& pSharedMemDescriptor);
 
         void FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMemSection::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand);
 
@@ -135,18 +135,24 @@ class pmLinuxMemoryManager : public pmMemoryManager
         
 #ifdef SUPPORT_LAZY_MEMORY
     public:
-        virtual void* AllocateLazyMemory(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount);
+        virtual void* CreateReadOnlyMemoryMapping(pmMemSection* pMemSection);
+        virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength);
+        virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy);
         virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
 
     private:
         pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr);
         pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
+        pmStatus CopyLazyInputMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pFaultAddr);
         pmStatus CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
 
 		pmStatus InstallSegFaultHandler();
 		pmStatus UninstallSegFaultHandler();
 
         friend void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
+
+        void* CreateMemoryMapping(int pSharedMemDescriptor, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
+        void DeleteMemoryMapping(void* pMem, size_t pLength);
 #endif
 
     private:
@@ -155,7 +161,6 @@ class pmLinuxMemoryManager : public pmMemoryManager
  
 #ifdef TRACK_MEMORY_ALLOCATIONS
 		ulong mTotalAllocatedMemory;	// Lazy + Non-Lazy
-		ulong mTotalLazyMemory;
 		ulong mTotalAllocations;
 		ulong mTotalDeallocations;
 		ulong mTotalLazySegFaults;

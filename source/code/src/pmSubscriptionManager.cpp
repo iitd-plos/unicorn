@@ -367,16 +367,8 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
     
     pmMemSection* lMemSection = mTask->GetMemSectionRW();
     bool lIsLazyMem = (lMemSection->IsLazy() && pStub->GetType() == CPU && !pMem);
-    char* lShadowMem = NULL;
-    size_t lPageCount;
 
-#ifdef SUPPORT_LAZY_MEMORY
-    if(lIsLazyMem)
-        lShadowMem = (char*)(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->AllocateLazyMemory(NULL, lSubscriptionInfo.length, lPageCount));
-    else
-#endif
-        lShadowMem = (char*)(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->AllocateMemory(NULL, lSubscriptionInfo.length, lPageCount));
-
+    char* lShadowMem = (char*)(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(lSubscriptionInfo.length, lIsLazyMem));
     if(!lShadowMem)
         PMTHROW(pmFatalErrorException());
     

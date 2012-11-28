@@ -229,9 +229,9 @@ pmStatus pmReleaseCallbacks(pmCallbackHandle pCallbackHandle)
 	SAFE_EXECUTE_ON_CONTROLLER(ReleaseCallbacks_Public, pCallbackHandle);
 }
 
-pmStatus pmCreateMemory(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMem)
+pmStatus pmCreateMemory(size_t pLength, pmMemHandle* pMem)
 {
-	SAFE_EXECUTE_ON_CONTROLLER(CreateMemory_Public, pMemInfo, pLength, pMem);
+	SAFE_EXECUTE_ON_CONTROLLER(CreateMemory_Public, pLength, pMem);
 }
 
 pmStatus pmReleaseMemory(pmMemHandle pMem)
@@ -250,16 +250,21 @@ pmStatus pmGetRawMemPtr(pmMemHandle pMem, void** pPtr)
 }
     
 pmTaskDetails::pmTaskDetails()
+    : taskConf(NULL)
+	, taskConfLength(0)
+	, inputMemHandle(NULL)
+	, outputMemHandle(NULL)
+    , inputMemInfo(INPUT_MEM_READ_ONLY_LAZY)
+    , outputMemInfo(OUTPUT_MEM_WRITE_ONLY)
+	, subtaskCount(0)
+	, taskId(0)
+	, priority(DEFAULT_PRIORITY_LEVEL)
+    , policy(SLOW_START)
+    , timeOutInSecs(__MAX(int))
+    , multiAssignEnabled(true)
+    , autoFetchOutputMem(true)
+	, cluster(NULL)
 {
-	taskConf = NULL;
-	taskConfLength = 0;
-	inputMemHandle = NULL;
-	outputMemHandle = NULL;
-	cluster = NULL;
-	subtaskCount = 0;
-	taskId = 0;
-	priority = DEFAULT_PRIORITY_LEVEL;
-    policy = SLOW_START;
     timeOutInSecs = __MAX(int);
     multiAssignEnabled = true;
     autoFetchOutputMem = true;

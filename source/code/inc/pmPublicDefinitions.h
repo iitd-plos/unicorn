@@ -209,7 +209,7 @@ namespace pm
 
 	
 	/** The memory creation API. The allocated memory is returned in the variable pMemHandle */
-	pmStatus pmCreateMemory(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMemHandle);
+	pmStatus pmCreateMemory(size_t pLength, pmMemHandle* pMemHandle);
 
 	/* The memory destruction API. The same interface is used for both input and output memory */
 	pmStatus pmReleaseMemory(pmMemHandle pMemHandle);
@@ -272,6 +272,8 @@ namespace pm
 		unsigned int taskConfLength;
 		pmMemHandle inputMemHandle;
 		pmMemHandle outputMemHandle;
+        pmMemInfo inputMemInfo;
+        pmMemInfo outputMemInfo;
 		pmCallbackHandle callbackHandle;
 		unsigned long subtaskCount;
 		unsigned long taskId;		/* Meant for application to assign and identify tasks */

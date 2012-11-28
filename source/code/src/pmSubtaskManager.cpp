@@ -94,10 +94,10 @@ bool pmSubtaskManager::execCountSorter::operator() (pmProcessingElement* pDevice
         pmMachine* lMachine2 = pDevice2->GetMachine();
     
         if(lMachine1 == PM_LOCAL_MACHINE && lMachine2 != PM_LOCAL_MACHINE)
-            return pDevice2;
+            return false;
 
         if(lMachine1 != PM_LOCAL_MACHINE && lMachine2 == PM_LOCAL_MACHINE)
-            return pDevice1;
+            return true;
     
         return pDevice1 < pDevice2;
     }

@@ -37,8 +37,7 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 
 void commonFinish();
 
-#define CREATE_INPUT_MEM(inputMemSize, lInputMem) SAFE_PM_EXEC( pmCreateMemory(INPUT_MEM_READ_ONLY, inputMemSize, &lInputMem) )
-#define CREATE_OUTPUT_MEM(outputMemSize, lOutputMem) SAFE_PM_EXEC( pmCreateMemory(OUTPUT_MEM_READ_WRITE, outputMemSize, &lOutputMem) )
+#define CREATE_MEM(memSize, memHandle) SAFE_PM_EXEC( pmCreateMemory(memSize, &memHandle) )
 
 #define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
 	pmTaskHandle lTaskHandle; \
@@ -46,11 +45,13 @@ void commonFinish();
 	pmMemHandle lOutputMemHandle; \
 	pmTaskDetails lTaskDetails; \
 	if(inputMemSize) \
-		CREATE_INPUT_MEM(inputMemSize, lInputMemHandle); \
+		CREATE_MEM(inputMemSize, lInputMemHandle); \
 	if(outputMemSize) \
-		CREATE_OUTPUT_MEM(outputMemSize, lOutputMemHandle); \
+		CREATE_MEM(outputMemSize, lOutputMemHandle); \
 	lTaskDetails.inputMemHandle = lInputMemHandle; \
 	lTaskDetails.outputMemHandle = lOutputMemHandle; \
+	lTaskDetails.inputMemInfo = INPUT_MEM_READ_ONLY_LAZY; \
+	lTaskDetails.outputMemInfo = OUTPUT_MEM_WRITE_ONLY; \
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \

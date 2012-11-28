@@ -155,6 +155,11 @@ namespace pm
 				MEM_ALIGN_FAILED,
 				MEM_PROT_NONE_FAILED,
 				MEM_PROT_RW_FAILED,
+                MMAP_FAILED,
+                MUNMAP_FAILED,
+                SHM_OPEN_FAILED,
+                SHM_UNLINK_FAILED,
+                FTRUNCATE_FAILED,
 				SEGFAULT_HANDLER_INSTALL_FAILED,
 				SEGFAULT_HANDLER_UNINSTALL_FAILED
 			} failureTypes;

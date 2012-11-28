@@ -224,11 +224,11 @@ pmStatus pmController::ReleaseCallbacks_Public(pmCallbackHandle pCallbackHandle)
 	return pmSuccess;
 }
 
-pmStatus pmController::CreateMemory_Public(pmMemInfo pMemInfo, size_t pLength, pmMemHandle* pMem)
+pmStatus pmController::CreateMemory_Public(size_t pLength, pmMemHandle* pMem)
 {
 	*pMem = NULL;
 
-    pmMemSection* lMemSection = pmMemSection::CreateMemSection(pLength, PM_LOCAL_MACHINE, pMemInfo);
+    pmMemSection* lMemSection = pmMemSection::CreateMemSection(pLength, PM_LOCAL_MACHINE);
     *pMem = new pmUserMemHandle(lMemSection);
     
 	return pmSuccess;
@@ -255,7 +255,7 @@ pmStatus pmController::GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr)
 {
 	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
     *pPtr = lMemSection->GetMem();
-    
+
     return pmSuccess;
 }
 
@@ -265,33 +265,28 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 
 	pmMemSection* lInputMem = (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.inputMemHandle))->GetMemSection();
 	pmMemSection* lOutputMem = (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.outputMemHandle))->GetMemSection();
-
-    if(lInputMem)
-    {
-        if(lInputMem->IsOutput())
-            lInputMem->ConvertOutputMemSectionToInputMemSection();
-    }
-    
-	if(lOutputMem)
-    {
-        if(lOutputMem->IsInput())
-            lOutputMem->ConvertInputMemSectionToOutputMemSection();
-    }
-
 	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(pTaskDetails.callbackHandle);
 
 	if(pTaskDetails.taskConfLength == 0)
 		pTaskDetails.taskConf = NULL;
 
     scheduler::schedulingModel lModel = scheduler::PUSH;
-    if(pTaskDetails.policy == RANDOM_STEAL)
-        lModel = scheduler::PULL;
-    else if(pTaskDetails.policy == EQUAL_STATIC)
-        lModel = scheduler::STATIC_EQUAL;
-    else if(pTaskDetails.policy == PROPORTIONAL_STATIC)
-        lModel = scheduler::STATIC_PROPORTIONAL;
+    if(pTaskDetails.policy != SLOW_START)
+    {
+        if(pTaskDetails.policy == RANDOM_STEAL)
+            lModel = scheduler::PULL;
+        else if(pTaskDetails.policy == EQUAL_STATIC)
+            lModel = scheduler::STATIC_EQUAL;
+        else if(pTaskDetails.policy == PROPORTIONAL_STATIC)
+            lModel = scheduler::STATIC_PROPORTIONAL;
+        else
+            PMTHROW(pmFatalErrorException());
+    }
+    
+    if((lInputMem == lOutputMem) || (!lInputMem && !lOutputMem))
+        PMTHROW(pmFatalErrorException());
         
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, pTaskDetails.multiAssignEnabled);
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.inputMemInfo, pTaskDetails.outputMemInfo, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, pTaskDetails.multiAssignEnabled);
 
 	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 

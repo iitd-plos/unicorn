@@ -41,22 +41,22 @@ pmBase::~pmBase()
 
 //void* pmBase::operator new (size_t  pSize)
 //{
-//	return AllocateMemory(pSize);
+//	return pmBase::AllocateMemory(pSize);
 //}
 //
 //void pmBase::operator delete (void *pPtr)
 //{	
-//	DeallocateMemory(pPtr);	
+//	pmBase::DeallocateMemory(pPtr);
 //}
 //
 //void* pmBase::operator new [] (size_t pSize)
 //{
-//	return AllocateMemory(pSize);
+//	return pmBase::AllocateMemory(pSize);
 //}
 //
 //void pmBase::operator delete [] (void* pPtr)
 //{
-//	DeallocateMemory(pPtr);	
+//	pmBase::DeallocateMemory(pPtr);
 //}
 
 void* pmBase::AllocateMemory(size_t pSize)

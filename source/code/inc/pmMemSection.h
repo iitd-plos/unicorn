@@ -92,26 +92,29 @@ class pmMemSection : public pmBase
 
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
-        static pmMemSection* CreateMemSection(size_t pLength, pmMachine* pOwner, pmMemInfo pMemInfo, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
-        static pmMemSection* CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, pmMemInfo pMemInfo, ulong pGenerationNumberOnOwner, bool pIsInput);
-    
+        static pmMemSection* CreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
+        static pmMemSection* CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner, bool pIsInput);
+
         virtual ~pmMemSection();
     
 		void* GetMem();
-		size_t GetLength();
-        
+        size_t GetLength();
+        size_t GetAllocatedLength();
+    
         void DisposeMemory();
     
         pmStatus TransferOwnershipImmediate(ulong pOffset, ulong pLength, pmMachine* pNewOwnerHost);
         pmStatus AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
         pmStatus TransferOwnershipPostTaskCompletion(vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
 		pmStatus FlushOwnerships();
+
+        bool IsRegionLocallyOwned(ulong pOffset, ulong pLength);
 		pmStatus GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
         pmStatus GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
 
         pmStatus Fetch(ushort pPriority);
         
-        void Lock(pmTask* pTask);
+        void Lock(pmTask* pTask, pmMemInfo pMemInfo);
         void Unlock(pmTask* pTask);
         pmTask* GetLockingTask();
     
@@ -125,11 +128,9 @@ class pmMemSection : public pmBase
         bool IsInput() const;
         bool IsOutput() const;
         bool IsLazy();
-    
-        void ConvertOutputMemSectionToInputMemSection();
-        void ConvertInputMemSectionToOutputMemSection();
-    
+
 #ifdef SUPPORT_LAZY_MEMORY
+        void* GetReadOnlyLazyMemoryMapping();
         uint GetLazyForwardPrefetchPageCount();
         void GetPageAlignedAddresses(size_t& pOffset, size_t& pLength);
 #endif
@@ -140,15 +141,16 @@ class pmMemSection : public pmBase
 #endif
             
         static pmMemSection* FindMemSection(pmMachine* pOwner, ulong pGenerationNumber);
-        static pmMemSection* FindMemSectionContainingAddress(void* pPtr);
+        static pmMemSection* FindMemSectionContainingLazyAddress(void* pPtr);
         static void DeleteAllLocalMemSections();
 
-        void SwapGenerationNumbers(pmMemSection* pMemSection);
         ulong GetGenerationNumber();
         pmMachine* GetMemOwnerHost();
+    
+        const char* GetName();
 
     private:    
-		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner, pmMemInfo pMemInfo);
+		pmMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner);
     
         static ulong GetNextGenerationNumber();
     
@@ -171,6 +173,8 @@ class pmMemSection : public pmBase
 		size_t mVMPageCount;
         bool mLazy;
         void* mMem;
+        void* mReadOnlyLazyMapping;
+        std::string mName;
         
         static ulong mGenerationId;
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS mGenerationLock;
