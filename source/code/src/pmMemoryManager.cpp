@@ -156,20 +156,12 @@ void* pmLinuxMemoryManager::AllocatePageAlignedMemoryInternal(pmMemSection* pMem
         int lSharedMemDescriptor = shm_open(lSharedMemName, O_RDWR | O_CREAT | O_EXCL, 0600);
         if(lSharedMemDescriptor == -1)
         {
-            if(shm_unlink(lSharedMemName) == -1)
-            {
-                perror("UNLINK ERROR ");
-                std::cout << lSharedMemName << " " << errno << std::endl;
-            }
-
+            shm_unlink(lSharedMemName);
             lSharedMemDescriptor = shm_open(lSharedMemName, O_RDWR | O_CREAT | O_EXCL, 0600);
         }
 
         if(lSharedMemDescriptor == -1)
-        {
-            perror("ERR ");
             PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SHM_OPEN_FAILED));
-        }
 
         if(ftruncate(lSharedMemDescriptor, pLength) != 0)
         {

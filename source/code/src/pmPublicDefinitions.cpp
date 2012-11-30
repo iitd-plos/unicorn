@@ -265,9 +265,6 @@ pmTaskDetails::pmTaskDetails()
     , autoFetchOutputMem(true)
 	, cluster(NULL)
 {
-    timeOutInSecs = __MAX(int);
-    multiAssignEnabled = true;
-    autoFetchOutputMem = true;
 }
 
 pmStatus pmSubmitTask(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)

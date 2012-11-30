@@ -300,11 +300,11 @@ pmStatus pmTask::MarkSubtaskExecutionFinished()
 		mSubtaskExecutionFinished = true;
 	}
 
-	if(mReducer.get_ptr())
-		mReducer->CheckReductionFinish();
-    
-    if(mRedistributor.get_ptr())
-        mRedistributor->SendRedistributionInfo();
+	if(mCallbackUnit->GetDataReductionCB())
+		GetReducer()->CheckReductionFinish();
+
+    if(mCallbackUnit->GetDataRedistributionCB())
+        GetRedistributor()->SendRedistributionInfo();
 
 	return pmSuccess;
 }
@@ -450,7 +450,7 @@ pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
 
 // This method must be called with mCompletionLock acquired
 void pmLocalTask::DoPostInternalCompletion()
-{    
+{
     FlushMemoryOwnerships();
     UnlockMemories();
 

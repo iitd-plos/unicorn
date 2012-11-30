@@ -525,7 +525,7 @@ pmStatus pmScheduler::RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmC
 	lEvent.redistributionMetaDataDetails.task = pTask;
     lEvent.redistributionMetaDataDetails.redistributionData = pRedistributionData;
     lEvent.redistributionMetaDataDetails.count = pCount;
-    
+
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
     
@@ -1080,11 +1080,18 @@ pmStatus pmScheduler::SendRedistributionData(pmTask* pTask, std::vector<pmCommun
     }
     else
     {
-        pmCommunicatorCommand::dataRedistributionPacked* lPackedData = new pmCommunicatorCommand::dataRedistributionPacked(pTask, &(*pRedistributionData)[0], pCount);
-        
-        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG, lMachine, pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
-        
-        return pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+        if((*pRedistributionData).empty())
+        {
+            (static_cast<pmRemoteTask*>(pTask))->MarkRedistributionFinished();
+        }
+        else
+        {
+            pmCommunicatorCommand::dataRedistributionPacked* lPackedData = new pmCommunicatorCommand::dataRedistributionPacked(pTask, &(*pRedistributionData)[0], pCount);
+            
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG, lMachine, pmCommunicatorCommand::DATA_REDISTRIBUTION_PACKED, lPackedData, 1, NULL, 0, gCommandCompletionCallback);
+            
+            return pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+        }
     }
     
     return pmSuccess;

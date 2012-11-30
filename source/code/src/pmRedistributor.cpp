@@ -75,7 +75,7 @@ pmStatus pmRedistributor::SendRedistributionInfo()
 	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLocalRedistributionLock, Lock(), Unlock());
 
     pmScheduler::GetScheduler()->RedistributionMetaDataEvent(mTask, &mLocalRedistributionData, (uint)mLocalRedistributionData.size());
-    
+
     return pmSuccess;
 }
 
