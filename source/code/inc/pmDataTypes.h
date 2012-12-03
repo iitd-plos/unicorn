@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <vector>
 
-#define RECORD_LOCK_ACQUISITIONS
+//#define RECORD_LOCK_ACQUISITIONS
 
 namespace pm
 {
@@ -172,7 +172,7 @@ namespace pm
 	#define FINALIZE_PTR_ARRAY(name, datatype, ptr) \
 	finalize_ptr_array<datatype> name##_obj(ptr); \
 	datatype* name = name##_obj.get_ptr();
-
+    
 	#define FINALIZE_RESOURCE(name, acquisition, destruction) \
 	class name \
 	{ \

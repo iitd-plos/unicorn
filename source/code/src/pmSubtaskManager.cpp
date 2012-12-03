@@ -204,7 +204,7 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 
         mExecTimeStats[*lIter] = std::pair<double, ulong>(0, 0);
     
-        mDeviceExecutionProfile[(*lIter)->GetGlobalDeviceIndex()] = 0;
+        UpdateExecutionProfile((*lIter), 0);
 
         lFirstSubtask = lLastSubtask + 1;
 
@@ -285,15 +285,9 @@ pmProcessingElement* pmPushSchedulingManager::SelectMultiAssignAllottee(pmProces
     std::set<pmProcessingElement*, execCountSorter>::iterator lIter = mOrderedDevices.begin(), lEndIter = mOrderedDevices.end();
     for(; lIter != lEndIter; ++lIter)
     {
-        if(*lIter == pDevice)
+        if((*lIter == pDevice) || (mAssignedPartitions.find(*lIter) == mAssignedPartitions.end()) || (mAssignedPartitions[*lIter].first->originalAllottee != NULL))
             continue;
-    
-        if(mAssignedPartitions.find(*lIter) == mAssignedPartitions.end())
-            continue;
-    
-        if(mAssignedPartitions[*lIter].first->originalAllottee != NULL)   // Assign only from original allottees
-            continue;
-    
+
         size_t lSize = mAssignedPartitions[*lIter].first->secondaryAllottees.size();
         if(lSize == MAX_SUBTASK_MULTI_ASSIGN_COUNT - 1)
             continue;
@@ -301,7 +295,7 @@ pmProcessingElement* pmPushSchedulingManager::SelectMultiAssignAllottee(pmProces
         if(lSize == 0)
             return *lIter;
 
-        /* The following code prevents reassignment of partition to a device multiple times. This may happen when a secondary allottee gets a partial negotiation from original allottee and wants a new partition to be assigned to it after acknowledging the partial negotiated one. */
+        /* The following code prevents reassignment of partition to a device multiple times. This may happen when a secondary allottee gets a partial negotiation from original allottee and wants a new partition to be assigned to it after acknowledging the partially negotiated one. */
         bool lAlreadyAssigned = false;
         std::vector<pmProcessingElement*>::iterator lInnerIter = mAssignedPartitions[*lIter].first->secondaryAllottees.begin(), lInnerEndIter = mAssignedPartitions[*lIter].first->secondaryAllottees.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
@@ -315,7 +309,7 @@ pmProcessingElement* pmPushSchedulingManager::SelectMultiAssignAllottee(pmProces
         
         if(lAlreadyAssigned)
             continue;
-    
+
         if(lSize < lSecondaryAllotteeCountOfPossibleAllottee || lSecondaryAllotteeCountOfPossibleAllottee == 0)
         {
             lPossibleAllottee = *lIter;
@@ -663,7 +657,7 @@ pmSingleAssignmentSchedulingManager::pmSingleAssignmentSchedulingManager(pmLocal
 	std::vector<pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
     
     for(; lIter != lEndIter; ++lIter)
-        mDeviceExecutionProfile[(*lIter)->GetGlobalDeviceIndex()] = 0;
+        UpdateExecutionProfile((*lIter), 0);
 #endif
 }
 

@@ -106,6 +106,17 @@ namespace linuxMemManager
 class pmLinuxMemoryManager : public pmMemoryManager
 {
     friend class pmController;
+
+    private:
+        class sharedMemAutoPtr
+        {
+            public:
+                sharedMemAutoPtr(const char* pSharedMemName);
+                ~sharedMemAutoPtr();
+        
+            private:
+                const char* mSharedMemName;
+        };
     
 	public:
         static pmMemoryManager* GetMemoryManager();

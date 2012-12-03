@@ -122,7 +122,7 @@ pmMemSection* pmMemSection::CreateMemSection(size_t pLength, pmMachine* pOwner, 
     return new pmMemSection(pLength, pOwner, pGenerationNumberOnOwner);
 }
 
-pmMemSection* pmMemSection::CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner, bool pIsInput)
+pmMemSection* pmMemSection::CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner)
 {
     pmMemSection* lMemSection = FindMemSection(pOwner, pGenerationNumberOnOwner);
     if(!lMemSection)

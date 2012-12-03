@@ -101,6 +101,9 @@ pmMemoryManager* pmLinuxMemoryManager::GetMemoryManager()
 #ifdef SUPPORT_LAZY_MEMORY
 void* pmLinuxMemoryManager::CreateMemoryMapping(int pSharedMemDescriptor, size_t pLength, bool pReadAllowed, bool pWriteAllowed)
 {
+    if(pSharedMemDescriptor == -1)
+        PMTHROW(pmFatalErrorException());
+
     int lFlags = PROT_NONE;
     if(pReadAllowed)
         lFlags |= PROT_READ;
@@ -108,7 +111,7 @@ void* pmLinuxMemoryManager::CreateMemoryMapping(int pSharedMemDescriptor, size_t
         lFlags |= PROT_WRITE;
     
 	void* lMem = mmap(NULL, pLength, lFlags, MAP_SHARED, pSharedMemDescriptor, 0);
-	if(!lMem)
+	if(lMem == MAP_FAILED || !lMem)
 		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MMAP_FAILED));
 
 	return lMem;
@@ -124,11 +127,6 @@ void* pmLinuxMemoryManager::CreateReadOnlyMemoryMapping(pmMemSection* pMemSectio
 {
     linuxMemManager::memSectionSpecifics& lSpecifics = GetMemSectionSpecifics(pMemSection);
     
-#ifdef _DEBUG
-    if(lSpecifics.mSharedMemDescriptor == -1)
-        PMTHROW(pmFatalErrorException());
-#endif
-
     return CreateMemoryMapping(lSpecifics.mSharedMemDescriptor, pMemSection->GetAllocatedLength(), false, false);
 }
     
@@ -163,21 +161,11 @@ void* pmLinuxMemoryManager::AllocatePageAlignedMemoryInternal(pmMemSection* pMem
         if(lSharedMemDescriptor == -1)
             PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SHM_OPEN_FAILED));
 
+        sharedMemAutoPtr lSharedMemAutoPtr(lSharedMemName);
         if(ftruncate(lSharedMemDescriptor, pLength) != 0)
-        {
-            shm_unlink(lSharedMemName);
             PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::FTRUNCATE_FAILED));
-        }
 
-        try
-        {
-            lPtr = CreateMemoryMapping(lSharedMemDescriptor, pLength, true, true);
-        } catch(...)
-        {
-            shm_unlink(lSharedMemName);
-            throw;
-        }
-        
+        lPtr = CreateMemoryMapping(lSharedMemDescriptor, pLength, true, true);
         pSharedMemDescriptor = lSharedMemDescriptor;
     }
     else
@@ -220,36 +208,21 @@ void* pmLinuxMemoryManager::AllocateMemory(pmMemSection* pMemSection, size_t& pL
 {
     int lSharedMemDescriptor = -1;
 
-    try
+    void* lPtr = AllocatePageAlignedMemoryInternal(pMemSection, pLength, pPageCount, lSharedMemDescriptor);
+    
+#ifdef TRACK_MEMORY_ALLOCATIONS
+    // Auto lock/unlock scope
     {
-        void* lPtr = AllocatePageAlignedMemoryInternal(pMemSection, pLength, pPageCount, lSharedMemDescriptor);
-        
-    #ifdef TRACK_MEMORY_ALLOCATIONS
-        // Auto lock/unlock scope
-        {
-            FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
-            mTotalAllocatedMemory += pLength;
-            ++mTotalAllocations;
-        }
-    #endif
+        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+        mTotalAllocatedMemory += pLength;
+        ++mTotalAllocations;
+    }
+#endif
 
-        if(pMemSection)
-            CreateMemSectionSpecifics(pMemSection, lSharedMemDescriptor);
-    
-        return lPtr;
-    }
-    catch(...)
-    {
-        if(lSharedMemDescriptor != -1)
-        {
-            DeleteMemoryMapping(pMemSection->GetMem(), pMemSection->GetAllocatedLength());
-            shm_unlink(pMemSection->GetName());
-        }
-    
-        throw;
-    }
-    
-    return NULL;
+    if(pMemSection)
+        CreateMemSectionSpecifics(pMemSection, lSharedMemDescriptor);
+
+    return lPtr;
 }
 
 #ifdef SUPPORT_LAZY_MEMORY
@@ -286,19 +259,12 @@ pmStatus pmLinuxMemoryManager::DeallocateMemory(pmMemSection* pMemSection)
     
         if(mMemSectionSpecificsMap.find(pMemSection) == mMemSectionSpecificsMap.end())
             PMTHROW(pmFatalErrorException());
-
-    #ifdef SUPPORT_LAZY_MEMORY
-        if(mMemSectionSpecificsMap[pMemSection].mSharedMemDescriptor == -1)
-            PMTHROW(pmFatalErrorException());
-    
-        DeleteMemoryMapping(pMemSection->GetMem(), pMemSection->GetAllocatedLength());
-        shm_unlink(pMemSection->GetName());
-    #endif
     
         mMemSectionSpecificsMap.erase(pMemSection);
     }
 
     #ifdef SUPPORT_LAZY_MEMORY
+        DeleteMemoryMapping(pMemSection->GetMem(), pMemSection->GetAllocatedLength());
     #else
         ::free(pMemSection->GetMem());
     #endif
@@ -855,5 +821,19 @@ linuxMemManager::regionFetchData::regionFetchData()
 {
     accumulatedPartialReceivesLength = 0;
 }
+
+    
+/* pmLinuxMemoryManager::sharedMemAutoPtr */
+pmLinuxMemoryManager::sharedMemAutoPtr::sharedMemAutoPtr(const char* pSharedMemName)
+    : mSharedMemName(pSharedMemName)
+{
+}
+    
+pmLinuxMemoryManager::sharedMemAutoPtr::~sharedMemAutoPtr()
+{
+    if(shm_unlink(mSharedMemName) == -1)
+        PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SHM_UNLINK_FAILED));
+}
+
 
 }

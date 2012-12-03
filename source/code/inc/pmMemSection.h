@@ -93,7 +93,7 @@ class pmMemSection : public pmBase
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
         static pmMemSection* CreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
-        static pmMemSection* CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner, bool pIsInput);
+        static pmMemSection* CheckAndCreateMemSection(size_t pLength, pmMachine* pOwner, ulong pGenerationNumberOnOwner);
 
         virtual ~pmMemSection();
     
