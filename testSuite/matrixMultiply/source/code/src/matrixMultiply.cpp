@@ -95,8 +95,6 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 {
 	READ_NON_COMMON_ARGS
 
-	double lStartTime = getCurrentTimeInSecs();
-
 	size_t lMatrixSize = lMatrixElems * sizeof(MATRIX_DATA_TYPE);
 
 	// Input Mem contains both input matrices one after the other
@@ -122,6 +120,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	lTaskDetails.taskConf = (void*)(&lTaskConf);
 	lTaskDetails.taskConfLength = sizeof(lTaskConf);
 
+	double lStartTime = getCurrentTimeInSecs();
+
 	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
 	
     if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
@@ -130,13 +130,13 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         return (double)-1.0;
     }
     
+	double lEndTime = getCurrentTimeInSecs();
+
 	SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
 
 	memcpy(gParallelOutput, lRawOutputPtr, lOutputMemSize);
 
 	FREE_TASK_AND_RESOURCES
-
-	double lEndTime = getCurrentTimeInSecs();
 
 	return (lEndTime - lStartTime);
 }

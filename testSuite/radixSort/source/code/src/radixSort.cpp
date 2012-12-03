@@ -181,14 +181,14 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	pmMemHandle lInputMemHandle, lOutputMemHandle;
 	size_t lMemSize = lArrayLength * sizeof(DATA_TYPE);
 
-	double lStartTime = getCurrentTimeInSecs();
-
 	CREATE_MEM(lMemSize, lInputMemHandle);
 	CREATE_MEM(lMemSize, lOutputMemHandle);
 
 	pmRawMemPtr lRawInputPtr, lRawOutputPtr;
 	pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);    
 	memcpy(lRawInputPtr, gSampleInput, lMemSize);
+
+	double lStartTime = getCurrentTimeInSecs();
 
 	for(int i=0; i<TOTAL_ROUNDS; ++i)
 	{
@@ -203,6 +203,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 			return (double)-1.0;
 	}
 
+	double lEndTime = getCurrentTimeInSecs();
+
 	SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
 
 	pmGetRawMemPtr(lOutputMemHandle, &lRawOutputPtr);
@@ -211,8 +213,6 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	pmReleaseMemory(lInputMemHandle);
 	pmReleaseMemory(lOutputMemHandle);
-
-	double lEndTime = getCurrentTimeInSecs();
 
 	return (lEndTime - lStartTime);
 }

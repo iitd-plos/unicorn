@@ -40,6 +40,9 @@ endif
 endif
 
 LIBRARIES= $(PTHREAD_LIBS) $(MPI_LIBS) -lstdc++ -lm
+ifeq ($(PLATFORM), LINUX)
+LIBRARIES += -lrt
+endif
 
 ifeq ($(DEBUG), 1)
 	FLAGS += -DDEBUG -D_DEBUG -g

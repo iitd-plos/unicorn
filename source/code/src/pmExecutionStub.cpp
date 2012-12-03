@@ -32,6 +32,8 @@
 #include "pmTaskManager.h"
 #include "pmTls.h"
 
+#include <algorithm>
+
 #include SYSTEM_CONFIGURATION_HEADER // for sched_setaffinity
 
 #define INVOKE_SAFE_PROPAGATE_ON_FAILURE(objectType, object, function, ...) \
@@ -818,7 +820,7 @@ void pmExecutionStub::MarkInsideUserCode(ulong pSubtaskId)
     
 void pmExecutionStub::TerminateCurrentSubtask()
 {
-    longjmp(*(mCurrentSubtaskStats->jmpBuf), 1);
+    siglongjmp(*(mCurrentSubtaskStats->jmpBuf), 1);
 }
 
 // This method must be called with mCurrentSubtaskLock acquired
@@ -882,7 +884,7 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
     
     guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskTerminus, currentSubtaskStats> lScopedPtr(&mCurrentSubtaskLock, &pTerminus, &mCurrentSubtaskStats, new currentSubtaskStats(pTask, pSubtaskId, !pIsMultiAssign, pParentRangeStartSubtask, &lJmpBuf, pmBase::GetCurrentTimeInSecs()));
     
-    if(!setjmp(lJmpBuf))
+    if(!sigsetjmp(lJmpBuf, 1))
     {
         UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
         lStatus = Execute(pTask, pSubtaskId);
