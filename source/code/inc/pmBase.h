@@ -54,8 +54,8 @@ class pmBase
 
 		uint GetRandomInt(uint pMaxLimit);
     
-        ulong GetIntegralCurrentTimeInSecs();
-        double GetCurrentTimeInSecs();
+        static ulong GetIntegralCurrentTimeInSecs();
+        static double GetCurrentTimeInSecs();
 
 	private:
 		static void* AllocateMemory(size_t pSize);

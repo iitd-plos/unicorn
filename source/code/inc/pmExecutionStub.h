@@ -124,11 +124,8 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
         pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
 
-        void CheckForSubtaskTermination(ulong pSubtaskId);
-    
         bool RequiresPrematureExit(ulong pSubtaskId);
 
-        bool IsInsideLibraryCode(bool& pPastCancellationStage);
         void MarkInsideLibraryCode(ulong pSubtaskId);
         void MarkInsideUserCode(ulong pSubtaskId);
     
@@ -154,9 +151,9 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
             bool executingLibraryCode;
             bool prematureTermination;
             bool taskListeningOnCancellation;
-            jmp_buf* jmpBuf;
+            sigjmp_buf* jmpBuf;
         
-            currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, jmp_buf* pJmpBuf, double pStartTime);
+            currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, sigjmp_buf* pJmpBuf, double pStartTime);
         } currentSubtaskStats;
     
         typedef class currentSubtaskTerminus
@@ -180,13 +177,14 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         pmStatus CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId);
         void CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus);
+        void CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId);
         void CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCancellation);
         void TerminateCurrentSubtask();
         void RaiseCurrentSubtaskTerminationSignalInThread();
     
 		uint mDeviceIndexOnMachine;
 		size_t mCoreId;
-        
+    
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCurrentSubtaskLock;
         currentSubtaskStats* mCurrentSubtaskStats;  // Subtask currently being executed
         std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> > mSecondaryAllotteeMap;  // PULL model: secondary allottees of a subtask

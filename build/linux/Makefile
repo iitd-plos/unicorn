@@ -19,7 +19,7 @@ COMPILER=g++
 NVCC_COMPILER=nvcc
 STRIP=strip
 FLAGS=-Wall -fPIC -DUNIX -D$(PLATFORM)
-CUDAFLAGS= -DUNIX --compiler-options -fPIC
+CUDAFLAGS= -DUNIX --compiler-options -fPIC --machine 64
 
 ifeq ($(DEBUG), 1)
 MPI_INCLUDE= -I$(MPI_DEBUG_INSTALL_PATH)/include

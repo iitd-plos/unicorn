@@ -24,7 +24,7 @@
 #include <stdlib.h>
 #include <vector>
 
-//#define RECORD_LOCK_ACQUISITIONS
+#define RECORD_LOCK_ACQUISITIONS
 
 namespace pm
 {
@@ -73,7 +73,7 @@ namespace pm
 
 			~finalize_ptr()
 			{
-				D()(mMem);
+				mDeallocator.operator()(mMem);
 			}
 
 			T* get_ptr() const
@@ -88,7 +88,7 @@ namespace pm
 
             void reset(T* pMem)
             {
-                D()(mMem);
+                mDeallocator.operator()(mMem);
                 mMem = pMem;
             }        
 
@@ -112,8 +112,14 @@ namespace pm
                 return mMem;
             }
     
+            D& GetDeallocator()
+            {
+                return mDeallocator;
+            }
+    
         private:
 			T* mMem;
+            D mDeallocator;
 	};
 
 	template<typename T>
@@ -200,6 +206,7 @@ namespace pm
 			} \
 			~name() \
 			{ \
+                mPtr->ResetAcquisition(); \
 				mPtr->destruction; \
 			} \
 		private: \
@@ -223,30 +230,69 @@ namespace pm
 			ptrType* mPtr; \
 	} name##_obj(ptr);
 #endif
+    
+    #define SCOPED_TIMER(name, str) \
+    class name \
+    { \
+        public: \
+            name(const char* pStr) \
+            : mStr(pStr) \
+            , mStartTime(pmBase::GetCurrentTimeInSecs()) \
+            { \
+            } \
+            ~name() \
+            { \
+                std::cout << "Scope Time for " << mStr << ": " << pmBase::GetCurrentTimeInSecs() - mStartTime << std::endl; \
+            } \
+        private: \
+            const char* mStr; \
+            double mStartTime; \
+    } name##_obj(str);
 
     template<typename G, typename D, typename T>
 	class guarded_scoped_ptr
 	{
         public:
-            guarded_scoped_ptr(G* pGuard, D* pTerminus, T** pPtr, T* pMem = NULL) : mGuard(pGuard), mTerminus(pTerminus), mPtr(pPtr)
+            guarded_scoped_ptr(G* pGuard, D* pTerminus, T** pPtr, T* pMem = NULL) : mGuard(pGuard), mTerminus(pTerminus), mPtr(pPtr), mLockAcquired(false)
             {
                 FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
                 
                 if(mPtr)
                     *mPtr = pMem;
             }
-            
+    
+            void SetLockAcquired()
+            {
+                mLockAcquired = true;
+            }
+    
             ~guarded_scoped_ptr()
             {
-                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
-                            
-                if(mPtr)
+                if(mLockAcquired)
                 {
-                    if(mTerminus)
-                        mTerminus->Terminating(*mPtr);
-                        
-                    delete (T*)(*mPtr);
-                    *mPtr = NULL;
+                    if(mPtr)
+                    {
+                        if(mTerminus)
+                            mTerminus->Terminating(*mPtr);
+                            
+                        delete (T*)(*mPtr);
+                        *mPtr = NULL;
+                    }
+                
+                    mGuard->Unlock();
+                }
+                else
+                {
+                    FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+                                
+                    if(mPtr)
+                    {
+                        if(mTerminus)
+                            mTerminus->Terminating(*mPtr);
+                            
+                        delete (T*)(*mPtr);
+                        *mPtr = NULL;
+                    }
                 }
             }
             
@@ -257,6 +303,7 @@ namespace pm
             G* mGuard;
             D* mTerminus;
             T** mPtr;
+            bool mLockAcquired;
 	};
 
 	class selective_finalize_base

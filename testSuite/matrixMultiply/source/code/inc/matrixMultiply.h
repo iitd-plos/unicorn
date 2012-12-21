@@ -4,7 +4,10 @@
 
 using namespace pm;
 
+#ifdef BUILD_CUDA
+#include <cuda.h>
 void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
+#endif
 
 typedef struct matrixMultiplyTaskConf
 {

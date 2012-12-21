@@ -66,6 +66,7 @@ class pmMemoryManager : public pmBase
         virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
     
         virtual size_t GetVirtualMemoryPageSize() = 0;
+        virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount) = 0;
     
 #ifdef SUPPORT_LAZY_MEMORY
         virtual void* CreateReadOnlyMemoryMapping(pmMemSection* pMemSection) = 0;
@@ -129,6 +130,8 @@ class pmLinuxMemoryManager : public pmMemoryManager
         virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
 
         virtual size_t GetVirtualMemoryPageSize();
+
+        size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
     
     private:
 		pmLinuxMemoryManager();
@@ -137,7 +140,6 @@ class pmLinuxMemoryManager : public pmMemoryManager
         void CreateMemSectionSpecifics(pmMemSection* pMemSection, int pSharedMemDescriptor);
         linuxMemManager::memSectionSpecifics& GetMemSectionSpecifics(pmMemSection* pMemSection);
     
-        size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
         void* AllocatePageAlignedMemoryInternal(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount, int& pSharedMemDescriptor);
 
         void FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMemSection::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand);
@@ -175,6 +177,7 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		ulong mTotalAllocations;
 		ulong mTotalDeallocations;
 		ulong mTotalLazySegFaults;
+        double mTotalAllocationTime;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mTrackLock;
 #endif
 };

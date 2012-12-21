@@ -52,6 +52,7 @@ pmStatus pmResourceLock::Lock()
 pmPThreadResourceLock::pmPThreadResourceLock()
 #ifdef RECORD_LOCK_ACQUISITIONS
     : mLine(-1)
+    , mIsCurrentlyAcquired(false)
 #endif
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_init(&mMutex, NULL), pmThreadFailureException, pmThreadFailureException::MUTEX_INIT_FAILURE );
@@ -87,7 +88,18 @@ void pmPThreadResourceLock::RecordAcquisition(const char* pFile, int pLine)
 {
     mFile = pFile;
     mLine = pLine;
+    mIsCurrentlyAcquired = true;
     mThread = pthread_self();
+}
+
+void pmPThreadResourceLock::ResetAcquisition()
+{
+    mIsCurrentlyAcquired = false;
+}
+
+bool pmPThreadResourceLock::IsLockSelfAcquired()
+{
+    return (mIsCurrentlyAcquired && mThread == pthread_self());
 }
 #endif
 

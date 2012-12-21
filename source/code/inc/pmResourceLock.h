@@ -47,6 +47,8 @@ class pmResourceLock : public pmBase
 
     #ifdef RECORD_LOCK_ACQUISITIONS
         virtual void RecordAcquisition(const char* pFile, int pLine) = 0;
+        virtual void ResetAcquisition() = 0;
+        virtual bool IsLockSelfAcquired() = 0;
     #endif
 
 	private:
@@ -63,6 +65,8 @@ class pmPThreadResourceLock : public pmResourceLock
     
     #ifdef RECORD_LOCK_ACQUISITIONS
         virtual void RecordAcquisition(const char* pFile, int pLine);
+        virtual void ResetAcquisition();
+        virtual bool IsLockSelfAcquired();
     #endif
     
 		virtual pthread_mutex_t* GetMutex() {return &mMutex;}
@@ -73,6 +77,7 @@ class pmPThreadResourceLock : public pmResourceLock
     #ifdef RECORD_LOCK_ACQUISITIONS
         std::string mFile;
         int mLine;
+        bool mIsCurrentlyAcquired;
         pthread_t mThread;
     #endif
 };

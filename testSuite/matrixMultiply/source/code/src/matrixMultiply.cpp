@@ -49,7 +49,7 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyI
 	// Subscribe to one row of the output matrix
 	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
 	lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, false, lSubscriptionInfo);
+	pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
 
 #ifdef BUILD_CUDA
 	// Set CUDA Launch Configuration
@@ -161,7 +161,7 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
 
-	srand(time(NULL));
+	srand((unsigned int)time(NULL));
 
 	size_t lInputSize = 2*lMatrixElems;
 
@@ -170,7 +170,7 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 	gParallelOutput = new MATRIX_DATA_TYPE[lMatrixElems];
 
 	for(size_t i=0; i<lInputSize; ++i)
-		gSampleInput[i] = i;    //(MATRIX_DATA_TYPE)rand();
+		gSampleInput[i] = (int)i;    //(MATRIX_DATA_TYPE)rand();
 
 	memset(gSerialOutput, 0, lMatrixElems*sizeof(MATRIX_DATA_TYPE));
 

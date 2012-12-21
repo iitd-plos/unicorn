@@ -45,8 +45,6 @@ namespace subscription
         private:
             pmExecutionStub* mStub;
             ulong mSubtaskId;
-            bool mIsPastCancellationStage;
-            bool mExecutingLibraryCode;
     } pmSubtaskTerminationCheckPointAutoPtr;
     
 	typedef struct subscriptionData
@@ -59,7 +57,26 @@ namespace subscription
     class shadowMemDeallocator
     {
         public:
+            shadowMemDeallocator()
+            : mTask(NULL)
+            , mExplicitAllocation(false)
+            {}
+    
+            void SetTask(pmTask* pTask)
+            {
+                mTask = pTask;
+            }
+    
+            void SetExplicitAllocation()
+            {
+                mExplicitAllocation = true;
+            }
+    
             void operator()(void* pMem);
+    
+        private:
+            pmTask* mTask;
+            bool mExplicitAllocation;
     };
     
 	typedef struct pmSubtask
@@ -68,10 +85,12 @@ namespace subscription
         finalize_ptr_array<char> mScratchBuffer;
 
         pmSubscriptionInfo mConsolidatedInputMemSubscription;   // The contiguous range enclosing all ranges in mInputMemSubscriptions
-        pmSubscriptionInfo mConsolidatedOutputMemSubscription;   // The contiguous range enclosing all ranges in mOutputMemSubscriptions
-        
+        pmSubscriptionInfo mConsolidatedOutputMemReadSubscription;   // The contiguous range enclosing all ranges in mOutputMemReadSubscriptions
+        pmSubscriptionInfo mConsolidatedOutputMemWriteSubscription;   // The contiguous range enclosing all ranges in mOutputMemWriteSubscriptions
+    
 		subscriptionRecordType mInputMemSubscriptions;
-		subscriptionRecordType mOutputMemSubscriptions;
+        subscriptionRecordType mOutputMemReadSubscriptions;
+        subscriptionRecordType mOutputMemWriteSubscriptions;
     
         finalize_ptr<void, shadowMemDeallocator> mShadowMem;
 
@@ -92,21 +111,24 @@ class pmSubscriptionManager : public pmBase
 	public:
 		pmSubscriptionManager(pmTask* pTask);
 		virtual ~pmSubscriptionManager();
+    
+        void DropAllSubscriptions();
 
 		pmStatus InitializeSubtaskDefaults(pmExecutionStub* pStub, ulong pSubtaskId);
-		pmStatus RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, bool pIsInputMem, pmSubscriptionInfo pSubscriptionInfo);
+		pmStatus RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo);
 		pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType);
 		pmStatus SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
 		pmCudaLaunchConf& GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId);
         void* GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, size_t pBufferSize);
 
 		bool GetInputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
-		bool GetOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
+		bool GetOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, bool pReadSubscription, pmSubscriptionInfo& pSubscriptionInfo);
+        bool GetUnifiedOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
     
         bool GetNonConsolidatedInputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
-        bool GetNonConsolidatedOutputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
+        bool GetNonConsolidatedOutputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, bool pReadSubscriptions, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
 
-        bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, bool pIsInputMem);
+        bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
 
         pmStatus CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, char* pMem = NULL, size_t pMemLength = 0);
         void* GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);

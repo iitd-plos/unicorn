@@ -59,7 +59,11 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
     void* lInputMem = (lInputMemSection && lInputMemSection->IsLazy()) ? (lInputMemSection->GetMem()) : NULL;
     void* lOutputMem = (lOutputMemSection && lOutputMemSection->IsLazy()) ? (lOutputMemSection->GetMem()) : NULL;
 
-	return mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId);
+    pStub->MarkInsideUserCode(pSubtaskId);
+	pmStatus lStatus = mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId);
+    pStub->MarkInsideLibraryCode(pSubtaskId);
+    
+    return lStatus;
 }
 
 
@@ -105,8 +109,6 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 
 pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex)
 {
-    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(pStub, pSubtaskId);
-    
     bool lOutputMemWriteOnly = false;
     
     pmSubtaskInfo lSubtaskInfo;
@@ -197,7 +199,9 @@ pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, u
 	pmSubtaskInfo lSubtaskInfo;
 	pTask->GetSubtaskInfo(pStub, pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
 
-	return mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
+	pmStatus lStatus = mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
+    
+    return lStatus;
 }
 
 

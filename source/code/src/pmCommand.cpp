@@ -340,11 +340,11 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
 
 	taskConfLength = pLocalTask->GetTaskConfigurationLength();
 	taskId = pLocalTask->GetTaskId();
-	inputMemLength = lInputSection?((ulong)(lInputSection->GetLength())):0;
-	outputMemLength = lOutputSection?((ulong)(lOutputSection->GetLength())):0;
+	inputMemLength = lInputSection ? ((ulong)(lInputSection->GetLength())) : 0;
+	outputMemLength = lOutputSection ? ((ulong)(lOutputSection->GetLength())) : 0;
     
-    inputMemInfo = lInputSection->GetMemInfo();
-    outputMemInfo = lOutputSection->GetMemInfo();
+    inputMemInfo = lInputSection ? lInputSection->GetMemInfo() : MAX_MEM_INFO;
+    outputMemInfo = lOutputSection ? lOutputSection->GetMemInfo() : MAX_MEM_INFO;
     
 	subtaskCount = pLocalTask->GetSubtaskCount();
 	assignedDeviceCount = pLocalTask->GetAssignedDeviceCount();
@@ -421,7 +421,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
 	this->reduceStruct.originatingHost = *(lOriginatingHost);
 	this->reduceStruct.subtaskId = pSubtaskId;
 
-	if(pTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pReducingStub, pSubtaskId, lSubscriptionInfo))
+	if(pTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pReducingStub, pSubtaskId, false, lSubscriptionInfo))
     {
         void* lShadowMem = pTask->GetSubscriptionManager().GetSubtaskShadowMem(pReducingStub, pSubtaskId);
         this->subtaskMem.length = (uint)lSubscriptionInfo.length;

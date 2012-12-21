@@ -145,7 +145,7 @@ pmStatus pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOn
 pmStatus pmExecutionStub::CancelSubtaskRange(pmSubtaskRange& pRange)
 {
     ushort lPriority = pRange.task->GetPriority();
-    
+
     stubEvent lTaskEvent;
     bool lFound = (DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pRange.task, lTaskEvent) == pmSuccess);
 
@@ -741,27 +741,36 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
 
 	if(lMemSection && !pRange.task->GetCallbackUnit()->GetDataReductionCB())
     {
-        pmSubscriptionInfo lSubscriptionInfo;
         subscription::subscriptionRecordType::const_iterator lIter, lBeginIter, lEndIter;
-        bool lHasShadowMemory = pRange.task->DoSubtasksNeedShadowMemory();
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
     
         for(ulong subtaskId = pRange.startSubtask; subtaskId <= pRange.endSubtask; ++subtaskId)
         {
-            if(!lSubscriptionManager.GetOutputMemSubscriptionForSubtask(this, subtaskId, lSubscriptionInfo))
-                PMTHROW(pmFatalErrorException());
-            
-            lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, subtaskId, lBeginIter, lEndIter);
+            lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, subtaskId, false, lBeginIter, lEndIter);
 
             for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
                 lOwnershipMap[lIter->first] = lIter->second.first;
-        
-            if(lHasShadowMemory)
-                lSubscriptionManager.CommitSubtaskShadowMem(this, subtaskId, lBeginIter, lEndIter, lSubscriptionInfo.offset);
         }
     }
 
     pmScheduler::GetScheduler()->SendAcknowledment(GetProcessingElement(), pRange, pExecStatus, lOwnershipMap);
+}
+    
+void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId)
+{
+    if(!pTask->DoSubtasksNeedShadowMemory())
+        return;
+
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+    
+    pmSubscriptionInfo lUnifiedSubscriptionInfo;
+    if(!lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(this, pSubtaskId, lUnifiedSubscriptionInfo))
+        PMTHROW(pmFatalErrorException());
+    
+    subscription::subscriptionRecordType::const_iterator lIter, lBeginIter, lEndIter;
+
+    lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, false, lBeginIter, lEndIter);
+    lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
 }
 
 // This method must be called with mCurrentSubtaskLock acquired
@@ -786,38 +795,39 @@ void pmExecutionStub::CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCance
     }
 }
 
-bool pmExecutionStub::IsInsideLibraryCode(bool& pPastCancellationStage)
-{
-    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
-
-    pPastCancellationStage = (mCurrentSubtaskStats == NULL);
-    return (!mCurrentSubtaskStats || mCurrentSubtaskStats->executingLibraryCode);
-}
-    
 void pmExecutionStub::MarkInsideLibraryCode(ulong pSubtaskId)
 {
     FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
 
-#ifdef _DEBUG
-    if(!mCurrentSubtaskStats || mCurrentSubtaskStats->subtaskId != pSubtaskId || mCurrentSubtaskStats->executingLibraryCode)
+    if(!mCurrentSubtaskStats)
+        return;
+
+    if(mCurrentSubtaskStats->subtaskId != pSubtaskId || mCurrentSubtaskStats->executingLibraryCode)
         PMTHROW(pmFatalErrorException());
-#endif
     
     mCurrentSubtaskStats->executingLibraryCode = true;
+
+    if(mCurrentSubtaskStats->prematureTermination)
+        TerminateCurrentSubtask();
 }
 
 void pmExecutionStub::MarkInsideUserCode(ulong pSubtaskId)
 {
     FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
 
-#ifdef _DEBUG
-    if(!mCurrentSubtaskStats || mCurrentSubtaskStats->subtaskId != pSubtaskId || !mCurrentSubtaskStats->executingLibraryCode)
+    if(!mCurrentSubtaskStats)
+        return;
+
+    if(mCurrentSubtaskStats->subtaskId != pSubtaskId || !mCurrentSubtaskStats->executingLibraryCode)
         PMTHROW(pmFatalErrorException());
-#endif
     
     mCurrentSubtaskStats->executingLibraryCode = false;
+
+    if(mCurrentSubtaskStats->prematureTermination)
+        TerminateCurrentSubtask();
 }
-    
+
+// This method must be called with mCurrentSubtaskLock acquired
 void pmExecutionStub::TerminateCurrentSubtask()
 {
     siglongjmp(*(mCurrentSubtaskStats->jmpBuf), 1);
@@ -827,26 +837,6 @@ void pmExecutionStub::TerminateCurrentSubtask()
 void pmExecutionStub::RaiseCurrentSubtaskTerminationSignalInThread()
 {
     InterruptThread();
-}
-
-// Must be called on stub thread
-void pmExecutionStub::CheckForSubtaskTermination(ulong pSubtaskId)
-{
-    bool lPrematureTermination = false;
-
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
-        lPrematureTermination = mCurrentSubtaskStats->prematureTermination;
-    
-    #ifdef _DEBUG
-        if(mCurrentSubtaskStats->subtaskId != pSubtaskId)
-            PMTHROW(pmFatalErrorException());
-    #endif
-    }
-    
-    if(lPrematureTermination)
-        TerminateCurrentSubtask();
 }
 
 bool pmExecutionStub::RequiresPrematureExit(ulong pSubtaskId)
@@ -880,7 +870,7 @@ pmStatus pmExecutionStub::ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool p
 pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus)
 {
     pmStatus lStatus = pmStatusUnavailable;
-    jmp_buf lJmpBuf;
+    sigjmp_buf lJmpBuf;
     
     guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskTerminus, currentSubtaskStats> lScopedPtr(&mCurrentSubtaskLock, &pTerminus, &mCurrentSubtaskStats, new currentSubtaskStats(pTask, pSubtaskId, !pIsMultiAssign, pParentRangeStartSubtask, &lJmpBuf, pmBase::GetCurrentTimeInSecs()));
     
@@ -889,14 +879,18 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
         UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
         lStatus = Execute(pTask, pSubtaskId);
     }
+    else
+    {
+        lScopedPtr.SetLockAcquired();
+        pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+        lSubscriptionManager.DestroySubtaskShadowMem(this, pSubtaskId);
+    }
     
     return lStatus;
 }
     
 pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
-    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(this, pSubtaskId);
-    
     try
     {
     #ifdef ENABLE_TASK_PROFILING
@@ -948,6 +942,9 @@ pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubta
 	else
 		INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataRedistributionCB, pTask->GetCallbackUnit()->GetDataRedistributionCB(), Invoke, this, pTask, pSubtaskId);
     
+    if(!lReduceCallback)
+        CommitSubtaskShadowMem(pTask, pSubtaskId);
+    
     return pmSuccess;
 }
 
@@ -978,7 +975,7 @@ pmStatus pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, p
 
 
 /* struct currentSubtaskStats */
-pmExecutionStub::currentSubtaskStats::currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, jmp_buf* pJmpBuf, double pStartTime)
+pmExecutionStub::currentSubtaskStats::currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, sigjmp_buf* pJmpBuf, double pStartTime)
     : task(pTask)
     , subtaskId(pSubtaskId)
     , parentRangeStartSubtask(pParentRangeStartSubtask)
@@ -1165,4 +1162,6 @@ bool execStub::stubEvent::BlocksSecondaryCommands()
     return (eventId == SUBTASK_EXEC);
 }
     
-};
+}
+
+

@@ -92,6 +92,9 @@ class pmTask : public pmBase
         void MarkAllStubsScannedForCancellationMessages();
         void RegisterStubFreeOfTask();
     
+        void* CheckOutSubtaskMemory(size_t pLength);
+        void RepoolCheckedOutSubtaskMemory(void* pMem);
+
         void UnlockMemories();
     
         std::vector<pmProcessingElement*>& GetStealListForDevice(pmProcessingElement* pDevice);
@@ -152,6 +155,12 @@ class pmTask : public pmBase
 
         std::map<pmProcessingElement*, std::vector<pmProcessingElement*> > mStealListForDevice;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mStealListLock;
+    
+        void* mCollectiveShadowMem;
+        std::vector<void*> mUnallocatedShadowMemPool;
+        size_t mIndividualShadowMemAllocationLength;
+        size_t mShadowMemCount;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mCollectiveShadowMemLock;
     
     protected:
 		uint mAssignedDeviceCount;

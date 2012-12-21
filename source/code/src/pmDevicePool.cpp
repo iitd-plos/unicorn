@@ -193,13 +193,11 @@ pmStatus pmMachinePool::RegisterSendCompletion(pmMachine* pMachine, ulong pDataS
 	if(lIndex >= (uint)mMachinesVector.size())
 		PMTHROW(pmUnknownMachineException((uint)lIndex));
 
-	mResourceLock.Lock();
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	mMachineDataVector[lIndex].dataSent += pDataSent;
 	mMachineDataVector[lIndex].sendTime += pSendTime;
 	++(mMachineDataVector[lIndex].sendCount);
-
-	mResourceLock.Unlock();
 
 	return pmSuccess;
 }
@@ -211,13 +209,11 @@ pmStatus pmMachinePool::RegisterReceiveCompletion(pmMachine* pMachine, ulong pDa
 	if(lIndex >= (uint)mMachinesVector.size())
 		PMTHROW(pmUnknownMachineException((uint)lIndex));
 
-	mResourceLock.Lock();
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	mMachineDataVector[lIndex].dataReceived += pDataReceived;
 	mMachineDataVector[lIndex].receiveTime += pReceiveTime;
 	++(mMachineDataVector[lIndex].receiveCount);
-
-	mResourceLock.Unlock();
 
 	return pmSuccess;
 }

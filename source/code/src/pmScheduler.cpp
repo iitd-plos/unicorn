@@ -1797,7 +1797,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					lSubscriptionInfo.length = lData->reduceStruct.subtaskMemLength;
                 
                     pmExecutionStub* lReducingStub = NULL;
-					lTask->GetSubscriptionManager().RegisterSubscription(lReducingStub, lData->reduceStruct.subtaskId, false, lSubscriptionInfo);
+					lTask->GetSubscriptionManager().RegisterSubscription(lReducingStub, lData->reduceStruct.subtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
 
 					lTask->GetSubscriptionManager().CreateSubtaskShadowMem(lReducingStub, lData->reduceStruct.subtaskId, (char*)(lData->subtaskMem.ptr), lData->subtaskMem.length);
 					lTask->GetReducer()->AddSubtask(lReducingStub, lData->reduceStruct.subtaskId);

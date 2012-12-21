@@ -32,6 +32,7 @@
 #include "pmMemSection.h"
 #include "pmTimedEventManager.h"
 #include "pmStubManager.h"
+#include "pmMemoryManager.h"
 
 #include <vector>
 #include <algorithm>
@@ -53,6 +54,9 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     , mReadOnlyMemAddrForSubtasks(NULL)
     , mAllStubsScanned(false)
     , mOutstandingStubs(0)
+    , mCollectiveShadowMem(NULL)
+    , mIndividualShadowMemAllocationLength(0)
+    , mShadowMemCount(0)
 {
 	mTaskConf = pTaskConf;
 	mTaskConfLength = pTaskConfLength;
@@ -89,6 +93,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 
 pmTask::~pmTask()
 {
+    mSubscriptionManager.DropAllSubscriptions();
 }
 
 pmStatus pmTask::FlushMemoryOwnerships()
@@ -238,8 +243,8 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubt
 		pSubtaskInfo.inputMem = NULL;
 		pSubtaskInfo.inputMemLength = 0;
 	}
-    
-	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lOutputMemSubscriptionInfo))
+
+	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lOutputMemSubscriptionInfo))
 	{
 		if(DoSubtasksNeedShadowMemory())
 			pSubtaskInfo.outputMem = mSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
@@ -259,6 +264,72 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubt
 	return pmSuccess;
 }
 
+void* pmTask::CheckOutSubtaskMemory(size_t pLength)
+{
+    bool lIsLazy = GetMemSectionRW()->IsLazy();
+
+    FINALIZE_RESOURCE_PTR(dCollectiveShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCollectiveShadowMemLock, Lock(), Unlock());
+
+    if(mCollectiveShadowMem)
+    {
+        if(pLength > mIndividualShadowMemAllocationLength)
+            return NULL;
+    }
+    else
+    {
+        if(!mUnallocatedShadowMemPool.empty())
+            PMTHROW(pmFatalErrorException());
+
+        size_t lPageCount = 0;
+        mIndividualShadowMemAllocationLength = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FindAllocationSize(pLength, lPageCount);
+        
+        mShadowMemCount = std::min(pmStubManager::GetStubManager()->GetStubCount(), GetSubtaskCount());
+        size_t lTotalMemSize = mShadowMemCount * mIndividualShadowMemAllocationLength;
+        
+        mCollectiveShadowMem = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(lTotalMemSize, lIsLazy);
+    
+        void* lAddr = mCollectiveShadowMem;
+        for(size_t i=0; i<mShadowMemCount; ++i)
+        {
+            mUnallocatedShadowMemPool.push_back(lAddr);
+            lAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lAddr) + mIndividualShadowMemAllocationLength);
+        }
+    }
+
+    void* lMem = NULL;
+    if(!mUnallocatedShadowMemPool.empty())
+    {
+        lMem = mUnallocatedShadowMemPool.back();
+        mUnallocatedShadowMemPool.pop_back();
+
+        if(lIsLazy)
+            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lMem, mIndividualShadowMemAllocationLength, true, true);
+    }
+    
+    return lMem;
+}
+    
+void pmTask::RepoolCheckedOutSubtaskMemory(void* pMem)
+{
+    FINALIZE_RESOURCE_PTR(dCollectiveShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCollectiveShadowMemLock, Lock(), Unlock());
+
+#ifdef _DEBUG
+    if(std::find(mUnallocatedShadowMemPool.begin(), mUnallocatedShadowMemPool.end(), pMem) != mUnallocatedShadowMemPool.end())
+        PMTHROW(pmFatalErrorException());
+    
+    if(reinterpret_cast<size_t>(pMem) < reinterpret_cast<size_t>(mCollectiveShadowMem))
+        PMTHROW(pmFatalErrorException());
+    
+    if(reinterpret_cast<size_t>(pMem) >= reinterpret_cast<size_t>(mCollectiveShadowMem) + (mShadowMemCount * mIndividualShadowMemAllocationLength))
+        PMTHROW(pmFatalErrorException());
+       
+    if(((reinterpret_cast<size_t>(pMem) - reinterpret_cast<size_t>(mCollectiveShadowMem)) % mIndividualShadowMemAllocationLength) != 0)
+        PMTHROW(pmFatalErrorException());
+#endif
+    
+    mUnallocatedShadowMemPool.push_back(pMem);
+}
+    
 pmSubscriptionManager& pmTask::GetSubscriptionManager()
 {
 	return mSubscriptionManager;
@@ -507,7 +578,7 @@ pmStatus pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubt
 {
     pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
 	pmSubscriptionInfo lSubscriptionInfo;
-	if(!lSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lSubscriptionInfo))
+	if(!lSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, false, lSubscriptionInfo))
 	{
 		lSubscriptionManager.DestroySubtaskShadowMem(pStub, pSubtaskId);
 		PMTHROW(pmFatalErrorException());

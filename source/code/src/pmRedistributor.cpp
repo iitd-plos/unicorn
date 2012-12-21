@@ -47,7 +47,7 @@ pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtas
 #endif
 
     pmSubscriptionInfo lOutputMemSubscriptionInfo;
-    if(!mTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lOutputMemSubscriptionInfo))
+    if(!mTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, false, lOutputMemSubscriptionInfo))
         return pmInvalidOffset;
 
     ulong lGlobalOffset = lOutputMemSubscriptionInfo.offset + pOffset;
@@ -62,7 +62,7 @@ pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtas
     lOrderData.length = pLength;
 
     mLocalRedistributionData.push_back(lOrderData);
-        
+
 #ifdef ENABLE_TASK_PROFILING
     mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, false);
 #endif
@@ -105,7 +105,7 @@ pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pSubtask
 
         mGlobalRedistributionMap[lData.order].push_back(lOrderData);
     }
-        
+
     mSubtasksAccounted += pSubtasksAccounted;
 
     if(mSubtasksAccounted == mTask->GetSubtaskCount())
@@ -151,7 +151,7 @@ void pmRedistributor::SetRedistributedOwnership()
                 lRangeOwner.hostOffset = lData.offset;
                 lRedistributedMemSection->TransferOwnershipPostTaskCompletion(lRangeOwner, lCurrentOffset, lData.length);
             }
-            
+        
             lCurrentOffset += lData.length;
         }
     }

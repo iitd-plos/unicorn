@@ -40,9 +40,9 @@ void commonFinish();
 #define CREATE_MEM(memSize, memHandle) SAFE_PM_EXEC( pmCreateMemory(memSize, &memHandle) )
 
 #define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
-	pmTaskHandle lTaskHandle; \
-	pmMemHandle lInputMemHandle; \
-	pmMemHandle lOutputMemHandle; \
+	pmTaskHandle lTaskHandle = NULL; \
+	pmMemHandle lInputMemHandle = NULL; \
+	pmMemHandle lOutputMemHandle = NULL; \
 	pmTaskDetails lTaskDetails; \
 	if(inputMemSize) \
 		CREATE_MEM(inputMemSize, lInputMemHandle); \

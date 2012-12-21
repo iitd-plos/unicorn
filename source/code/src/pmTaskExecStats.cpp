@@ -37,7 +37,7 @@ pmTaskExecStats::~pmTaskExecStats()
 {
 #ifdef DUMP_TASK_EXEC_STATS
     std::stringstream lStream;
-    lStream << "Task Exec Stats [Host " << pmGetHostId() << "] ............ " << std::endl;
+    lStream << std::endl << "Task Exec Stats [Host " << pmGetHostId() << "] ............ " << std::endl;
 
 	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.begin(), lEndIter = mStats.end();
     for(; lIter != lEndIter; ++lIter)

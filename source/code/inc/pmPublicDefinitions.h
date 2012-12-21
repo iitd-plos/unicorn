@@ -134,6 +134,13 @@ namespace pm
 		OUTPUT_MEM_READ_WRITE_LAZY,
         MAX_MEM_INFO
 	} pmMemInfo;
+    
+    typedef enum pmSubscriptionType
+    {
+        INPUT_MEM_READ_SUBSCRIPTION,
+        OUTPUT_MEM_READ_SUBSCRIPTION,
+        OUTPUT_MEM_WRITE_SUBSCRIPTION
+    } pmSubscriptionType;
 
 	typedef struct pmDataTransferInfo
 	{
@@ -224,16 +231,12 @@ namespace pm
      */
     pmStatus pmGetRawMemPtr(pmMemHandle pMemHandle, pmRawMemPtr* pPtr);
 
-	// The following two defines may be used in 3rd argument to pmSubscribeToMemory
-	#define INPUT_MEM 1
-	#define OUTPUT_MEM 0
-
 	/** The memory subscription API. It establishes memory dependencies for a subtask.
 	 *	Any subtask is also allowed to subscribe on behalf any other subtask.
      *  This function can only be called from DataDistribution callback. The effect
      *  of calling this function otherwise is undefined.
      */
-	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo);
+	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo);
     
 	/** The memory redistribution API. It establishes memory ordering for the
 	 *	output section computed by a subtask in the final task memory. Order 0 is assumed

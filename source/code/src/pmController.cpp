@@ -263,8 +263,8 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 {
 	*pTaskHandle = NULL;
 
-	pmMemSection* lInputMem = (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.inputMemHandle))->GetMemSection();
-	pmMemSection* lOutputMem = (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.outputMemHandle))->GetMemSection();
+	pmMemSection* lInputMem = pTaskDetails.inputMemHandle ? (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.inputMemHandle))->GetMemSection() : NULL;
+	pmMemSection* lOutputMem = pTaskDetails.outputMemHandle ? (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.outputMemHandle))->GetMemSection() : NULL;
 	pmCallbackUnit* lCallbackUnit = static_cast<pmCallbackUnit*>(pTaskDetails.callbackHandle);
 
 	if(pTaskDetails.taskConfLength == 0)
@@ -313,11 +313,11 @@ pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandl
 	return pmSuccess;
 }
 
-pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, bool pIsInputMemory, pmSubscriptionInfo pSubscriptionInfo)
+pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo)
 {
     subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
     
-	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pIsInputMemory, pSubscriptionInfo);
+	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSubscriptionType, pSubscriptionInfo);
 }
 
 pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)

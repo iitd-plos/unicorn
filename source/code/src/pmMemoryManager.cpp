@@ -35,6 +35,7 @@
 #include <fcntl.h>
 
 #include <string.h>
+#include <sstream>
 
 namespace pm
 {
@@ -81,6 +82,7 @@ pmLinuxMemoryManager::pmLinuxMemoryManager()
 	mTotalAllocations = 0;
 	mTotalDeallocations = 0;
 	mTotalLazySegFaults = 0;
+    mTotalAllocationTime = 0;
 #endif
 
 	mPageSize = ::getpagesize();
@@ -90,6 +92,19 @@ pmLinuxMemoryManager::~pmLinuxMemoryManager()
 {
 #ifdef SUPPORT_LAZY_MEMORY
 	UninstallSegFaultHandler();
+#endif
+
+#ifdef TRACK_MEMORY_ALLOCATIONS
+    std::stringstream lStream;
+    lStream << "Memory Allocation Tracking ... " << std::endl;
+    lStream << "Total Allocated Memory = " << mTotalAllocatedMemory << std::endl;
+    lStream << "Total Allocations = " << mTotalAllocations << std::endl;
+    lStream << "Total Deallocations = " << mTotalDeallocations << std::endl;
+    lStream << "Total Lazy Traps = " << mTotalLazySegFaults << std::endl;
+    lStream << "Total Allocation Time = " << mTotalAllocationTime << std::endl;
+    
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+
 #endif
 }
 
@@ -125,9 +140,23 @@ void pmLinuxMemoryManager::DeleteMemoryMapping(void* pMem, size_t pLength)
     
 void* pmLinuxMemoryManager::CreateReadOnlyMemoryMapping(pmMemSection* pMemSection)
 {
+#ifdef TRACK_MEMORY_ALLOCATIONS
+    double lTrackTime = GetCurrentTimeInSecs();
+#endif
+
     linuxMemManager::memSectionSpecifics& lSpecifics = GetMemSectionSpecifics(pMemSection);
     
-    return CreateMemoryMapping(lSpecifics.mSharedMemDescriptor, pMemSection->GetAllocatedLength(), false, false);
+    void* lPtr = CreateMemoryMapping(lSpecifics.mSharedMemDescriptor, pMemSection->GetAllocatedLength(), false, false);
+    
+#ifdef TRACK_MEMORY_ALLOCATIONS
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+        mTotalAllocationTime += (GetCurrentTimeInSecs() - lTrackTime);
+    }
+#endif
+    
+    return lPtr;
 }
     
 void pmLinuxMemoryManager::DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength)
@@ -138,6 +167,10 @@ void pmLinuxMemoryManager::DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapp
 
 void* pmLinuxMemoryManager::AllocatePageAlignedMemoryInternal(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount, int& pSharedMemDescriptor)
 {
+#ifdef TRACK_MEMORY_ALLOCATIONS
+    double lTrackTime = GetCurrentTimeInSecs();
+#endif
+    
 	if(pLength == 0)
 		return NULL;
 
@@ -180,6 +213,14 @@ void* pmLinuxMemoryManager::AllocatePageAlignedMemoryInternal(pmMemSection* pMem
     
 	if(!lPtr)
 		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::ALLOCATION_FAILED));
+    
+#ifdef TRACK_MEMORY_ALLOCATIONS
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+        mTotalAllocationTime += (GetCurrentTimeInSecs() - lTrackTime);
+    }
+#endif
     
     return lPtr;
 }
@@ -242,12 +283,7 @@ void* pmLinuxMemoryManager::CreateCheckOutMemory(size_t pLength, bool pIsLazy)
     }
 #endif
 
-    void* lPtr = AllocateMemory(NULL, pLength, lPageCount);
-    
-    if(pIsLazy)
-        SetLazyProtection(lPtr, pLength, false, false);
-    
-	return lPtr;
+    return AllocateMemory(NULL, pLength, lPageCount);
 }
 #endif
 
@@ -776,7 +812,7 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
         abort();
     
     ulong lSubtaskId = *((ulong*)lSubtaskPtr);
-        
+    
     subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(lStub, lSubtaskId);
 
     try

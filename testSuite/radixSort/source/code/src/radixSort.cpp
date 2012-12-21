@@ -88,8 +88,8 @@ pmStatus radixSortDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputM
 		lSubscriptionInfo.offset = pSubtaskId * ELEMS_PER_SUBTASK * sizeof(DATA_TYPE);
 		lSubscriptionInfo.length = (lTaskConf->arrayLen < (pSubtaskId+1)*ELEMS_PER_SUBTASK) ? ((lTaskConf->arrayLen - (pSubtaskId * ELEMS_PER_SUBTASK)) * sizeof(DATA_TYPE))  : (ELEMS_PER_SUBTASK * sizeof(DATA_TYPE));
 
-		pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, true, lSubscriptionInfo);
-		pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, false, lSubscriptionInfo);
+		pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+		pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
 	}
 	else
 	{
@@ -119,7 +119,7 @@ pmStatus radixSortDataRedistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceI
 	size_t lOffset = 0;
 	for(int k=0; k<BINS_COUNT; ++k)
 	{
-		pmRedistributeData(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, lOffset, lBins[k] * sizeof(DATA_TYPE), pTaskInfo.subtaskCount * k + pSubtaskInfo.subtaskId);
+		pmRedistributeData(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, lOffset, lBins[k] * sizeof(DATA_TYPE), (unsigned int)(pTaskInfo.subtaskCount * k + pSubtaskInfo.subtaskId));
 		lOffset += lBins[k] * sizeof(DATA_TYPE);
 	}
 
