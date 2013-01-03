@@ -19,6 +19,8 @@
  */
 
 #include "pmEventTimeline.h"
+#include "pmNetwork.h"
+
 #include <sstream>
 
 #ifdef DUMP_EVENT_TIMELINE
@@ -28,7 +30,7 @@ namespace pm
 
 pmEventTimeline::pmEventTimeline(const std::string& pName)
     : mName(pName)
-    , mHostId(pmGetHostId())
+    , mHostId(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId())
     , mZeroTime(GetCurrentTimeInSecs())
 {
 }
@@ -52,7 +54,7 @@ void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)
     if(pStart && mEventMap.find(pEventName) != mEventMap.end())
         PMTHROW(pmFatalErrorException());
     
-    if(!pStart && (mEventMap.find(pEventName) == mEventMap.end() || mEventMap[pEventName].second != -1.0))
+    if(!pStart && mEventMap.find(pEventName) == mEventMap.end())
         PMTHROW(pmFatalErrorException());
     
     if(pStart)

@@ -673,13 +673,6 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             {
                 if(lReassigned) // A secondary allottee has finished and negotiated this subtask and added a POST_HANDLE_EXEC_COMPLETION for the rest of the range
                 {
-                #ifdef DUMP_EVENT_TIMELINE
-                    std::stringstream lNewName;
-                    lEventName << "Subtask " << lLastExecutedSubtaskId << "_Cancelled";
-                    mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
-                    mEventTimelineAutoPtr->RecordEvent(lNewName.str(), false);
-                #endif
-                
                 #ifdef _DEBUG
                     if(!lRange.task->IsMultiAssignEnabled() || lRange.originalAllottee != NULL)
                     {
@@ -690,19 +683,31 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                        
                     break;
                 }
-            
+
+            #ifdef DUMP_EVENT_TIMELINE
+                if(lReassigned || lRange.originalAllottee != NULL)
+                {
+                    std::stringstream lNewName;
+                    lNewName  << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << lLastExecutedSubtaskId << "_Cancelled";
+                    mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
+                    mEventTimelineAutoPtr->RecordEvent(lNewName.str(), false);
+                }
+            #endif
+                
             #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
                 std::cout << "[Host " << pmGetHostId() << "]: Executed subtask " << lLastExecutedSubtaskId << std::endl;
             #endif
 
                 lRange.task->GetTaskExecStats().RecordStubExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
-
-            #ifdef DUMP_EVENT_TIMELINE
-                mEventTimelineAutoPtr->RecordEvent(lEventName.str(), false);
-            #endif
             
                 if(!lReassigned && lRange.originalAllottee == NULL)
+                {
+                #ifdef DUMP_EVENT_TIMELINE
+                    mEventTimelineAutoPtr->RecordEvent(lEventName.str(), false);
+                #endif
+                
                     CommonPostNegotiationOnCPU(lRange.task, lLastExecutedSubtaskId);
+                }
             
                 if(lForceAckFlag)
                     lRange.endSubtask = lLastExecutedSubtaskId;
@@ -743,6 +748,14 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 std::cout << "Multi assign partition [" << lRange.startSubtask << " - " << lRange.endSubtask << "] completed by secondary allottee - Device " << GetProcessingElement()->GetGlobalDeviceIndex() << ", Original Allottee: Device " << pEvent.negotiatedRangeDetails.range.originalAllottee->GetGlobalDeviceIndex() << std::endl;
             #endif
             }
+
+            #ifdef DUMP_EVENT_TIMELINE
+                std::stringstream lEventName, lNewName;
+                lNewName << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << lLastExecutedSubtaskId;
+                lEventName  << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << lLastExecutedSubtaskId << "_Cancelled";
+                mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
+                mEventTimelineAutoPtr->RecordEvent(lNewName.str(), false);
+            #endif
 
             CommitRange(lRange, pmSuccess);
         
