@@ -735,7 +735,17 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         
             pmSubtaskRange& lRange = pEvent.negotiatedRangeDetails.range;
             for(ulong subtaskId = lRange.startSubtask; subtaskId <= lRange.endSubtask; ++subtaskId)
+            {
+            #ifdef DUMP_EVENT_TIMELINE
+                std::stringstream lEventName, lNewName;
+                lEventName  << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << subtaskId << "_Cancelled";
+                lNewName << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << subtaskId;
+                mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
+                mEventTimelineAutoPtr->RecordEvent(lNewName.str(), false);
+            #endif
+
                 CommonPostNegotiationOnCPU(lRange.task, subtaskId);
+            }
         
             if(lRange.task->GetSchedulingModel() == scheduler::PULL)
             {
@@ -748,14 +758,6 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 std::cout << "Multi assign partition [" << lRange.startSubtask << " - " << lRange.endSubtask << "] completed by secondary allottee - Device " << GetProcessingElement()->GetGlobalDeviceIndex() << ", Original Allottee: Device " << pEvent.negotiatedRangeDetails.range.originalAllottee->GetGlobalDeviceIndex() << std::endl;
             #endif
             }
-
-            #ifdef DUMP_EVENT_TIMELINE
-                std::stringstream lEventName, lNewName;
-                lNewName << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << lLastExecutedSubtaskId;
-                lEventName  << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << lLastExecutedSubtaskId << "_Cancelled";
-                mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
-                mEventTimelineAutoPtr->RecordEvent(lNewName.str(), false);
-            #endif
 
             CommitRange(lRange, pmSuccess);
         
