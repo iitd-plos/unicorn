@@ -24,6 +24,10 @@
 #include "pmBase.h"
 #include "pmThread.h"
 
+#ifdef DUMP_EVENT_TIMELINE
+    #include "pmEventTimeline.h"
+#endif
+
 #include <setjmp.h>
 
 namespace pm
@@ -43,12 +47,16 @@ namespace execStub
 
 typedef enum eventIdentifier
 {
-    THREAD_BIND,
-    SUBTASK_EXEC,
-    SUBTASK_REDUCE,
-    NEGOTIATED_RANGE,
-	FREE_GPU_RESOURCES,
-    POST_HANDLE_EXEC_COMPLETION
+    THREAD_BIND
+    , SUBTASK_EXEC
+    , SUBTASK_REDUCE
+    , NEGOTIATED_RANGE
+	, FREE_GPU_RESOURCES
+    , POST_HANDLE_EXEC_COMPLETION
+    , DEFERRED_SHADOW_MEM_COMMITS
+#ifdef DUMP_EVENT_TIMELINE
+    , INIT_EVENT_TIMELINE
+#endif
 } eventIdentifier;
 
 typedef struct threadBind
@@ -81,6 +89,17 @@ typedef struct execCompletion
     pmStatus execStatus;
 } execCompletion;
     
+typedef struct deferredShadowMemCommits
+{
+    pmTask* task;
+} deferredShadowMemCommits;
+    
+#ifdef DUMP_EVENT_TIMELINE
+typedef struct initTimeline
+{
+} initTimeline;
+#endif
+
 typedef struct stubEvent : public pmBasicThreadEvent
 {
     eventIdentifier eventId;
@@ -91,6 +110,10 @@ typedef struct stubEvent : public pmBasicThreadEvent
         subtaskReduce reduceDetails;
         negotiatedRange negotiatedRangeDetails;
         execCompletion execCompletionDetails;
+        deferredShadowMemCommits deferredShadowMemCommitsDetails;
+    #ifdef DUMP_EVENT_TIMELINE
+        initTimeline initTimelineDetails;
+    #endif
     };
 
     virtual bool BlocksSecondaryCommands();
@@ -116,11 +139,15 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 		pmProcessingElement* GetProcessingElement();
 
+    #ifdef DUMP_EVENT_TIMELINE
+        pmStatus InitializeEventTimeline();
+    #endif
 		pmStatus ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2);
 		pmStatus StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate);
 		pmStatus CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation);
         pmStatus CancelSubtaskRange(pmSubtaskRange& pRange);
         pmStatus ProcessNegotiatedRange(pmSubtaskRange& pRange);
+        void ProcessDeferredShadowMemCommits(pmTask* pTask);
 
         pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
 
@@ -178,9 +205,14 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         pmStatus CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId);
         void CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId);
+        void DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId);
         void CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCancellation);
         void TerminateCurrentSubtask();
         void RaiseCurrentSubtaskTerminationSignalInThread();
+    
+    #ifdef DUMP_EVENT_TIMELINE
+        std::string GetEventTimelineName();
+    #endif
     
 		uint mDeviceIndexOnMachine;
 		size_t mCoreId;
@@ -188,6 +220,13 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCurrentSubtaskLock;
         currentSubtaskStats* mCurrentSubtaskStats;  // Subtask currently being executed
         std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> > mSecondaryAllotteeMap;  // PULL model: secondary allottees of a subtask
+    
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeferredShadowMemCommitsLock;
+        std::map<pmTask*, std::vector<ulong> > mDeferredShadowMemCommits;
+
+    #ifdef DUMP_EVENT_TIMELINE
+        std::auto_ptr<pmEventTimeline> mEventTimelineAutoPtr;
+    #endif
 };
 
 class pmStubGPU : public pmExecutionStub

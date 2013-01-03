@@ -127,6 +127,7 @@ class pmMemSection : public pmBase
         pmMemInfo GetMemInfo();
         bool IsInput() const;
         bool IsOutput() const;
+        bool IsReadWrite() const;
         bool IsLazy();
 
 #ifdef SUPPORT_LAZY_MEMORY
@@ -159,11 +160,11 @@ class pmMemSection : public pmBase
         pmStatus SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength, pmMemOwnership& pMap);
         void SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap);
     
-#ifdef _DEBUG
+//#ifdef _DEBUG
         void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
         void SanitizeOwnerships();
         void PrintOwnerships();
-#endif
+//#endif
     
         pmMachine* mOwner;
         ulong mGenerationNumberOnOwner;

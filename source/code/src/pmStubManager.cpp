@@ -119,4 +119,16 @@ pmStatus pmStubManager::DestroyExecutionStubs()
 	return pmSuccess;
 }
 
+#ifdef DUMP_EVENT_TIMELINE
+void pmStubManager::InitializeEventTimelines()
+{
+    std::vector<pmExecutionStub*>::iterator lIter = mStubVector.begin(), lEndIter = mStubVector.end();
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter)->InitializeEventTimeline();
+}
+#endif
+
 };
+
+
+

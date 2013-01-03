@@ -71,6 +71,7 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmDevicePool.o \
 	$(OUTDIR)/pmDispatcherGPU.o \
 	$(OUTDIR)/pmExecutionStub.o \
+	$(OUTDIR)/pmEventTimeline.o \
 	$(OUTDIR)/pmHardware.o \
 	$(OUTDIR)/pmLogger.o \
 	$(OUTDIR)/pmMemoryManager.o \

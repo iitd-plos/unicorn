@@ -729,6 +729,12 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
         {
             taskFinish& lEventDetails = pEvent.taskFinishDetails;
             pmTask* lTask = lEventDetails.task;
+        
+            if(lTask->GetMemSectionRW() && lTask->GetMemSectionRW()->IsReadWrite())
+            {
+                CommitShadowMemPendingOnAllStubs(lTask);
+                lTask->MarkAllStubsScannedForShadowMemCommitMessages();
+            }
 
             lTask->MarkSubtaskExecutionFinished();
             ClearPendingTaskCommands(lTask);
@@ -970,6 +976,14 @@ void pmScheduler::CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask, bool pTa
     uint lStubCount = (uint)(lManager->GetStubCount());
     for(uint i = 0; i < lStubCount; ++i)
         lManager->GetStub(i)->CancelAllSubtasks(pTask, pTaskListeningOnCancellation);
+}
+
+void pmScheduler::CommitShadowMemPendingOnAllStubs(pmTask* pTask)
+{
+    pmStubManager* lManager = pmStubManager::GetStubManager();
+    uint lStubCount = (uint)(lManager->GetStubCount());
+    for(uint i = 0; i < lStubCount; ++i)
+        lManager->GetStub(i)->ProcessDeferredShadowMemCommits(pTask);
 }
     
 pmStatus pmScheduler::NegotiateSubtaskRangeWithOriginalAllottee(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange)

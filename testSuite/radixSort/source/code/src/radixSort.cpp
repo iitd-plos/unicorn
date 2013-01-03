@@ -246,7 +246,7 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 	gParallelOutput = new DATA_TYPE[lArrayLength];
 
 	for(unsigned int i=0; i<lArrayLength; ++i)
-		gSampleInput[i] =  lArrayLength - i; //(DATA_TYPE)rand();
+		gSampleInput[i] =  (DATA_TYPE)rand();   //lArrayLength - i;
 
 	return 0;
 }

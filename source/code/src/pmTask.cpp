@@ -52,8 +52,10 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     , mSubscriptionManager(this)
     , mMultiAssignEnabled(pMultiAssignEnabled)
     , mReadOnlyMemAddrForSubtasks(NULL)
-    , mAllStubsScanned(false)
-    , mOutstandingStubs(0)
+    , mAllStubsScannedForCancellationMessages(false)
+    , mAllStubsScannedForShadowMemCommitMessages(false)
+    , mOutstandingStubsForCancellationMessages(0)
+    , mOutstandingStubsForShadowMemCommitMessages(0)
     , mCollectiveShadowMem(NULL)
     , mIndividualShadowMemAllocationLength(0)
     , mShadowMemCount(0)
@@ -253,11 +255,29 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubt
 
 		pSubtaskInfo.outputMemLength = lOutputMemSubscriptionInfo.length;
         pOutputMemWriteOnly = (mMemRW->GetMemInfo() == OUTPUT_MEM_WRITE_ONLY);
+    
+        if(pOutputMemWriteOnly)
+        {
+            pSubtaskInfo.outputMemWrite = pSubtaskInfo.outputMem;
+            pSubtaskInfo.outputMemWriteLength = pSubtaskInfo.outputMemLength;
+        }
+        else
+        {
+            pmSubscriptionInfo lReadSubscriptionInfo, lWriteSubscriptionInfo;
+            mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, true, lReadSubscriptionInfo);
+            mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, false, lWriteSubscriptionInfo);
+        
+            pSubtaskInfo.outputMemRead = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + lReadSubscriptionInfo.offset - lOutputMemSubscriptionInfo.offset);
+            pSubtaskInfo.outputMemWrite = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + lWriteSubscriptionInfo.offset - lOutputMemSubscriptionInfo.offset);
+        
+            pSubtaskInfo.outputMemReadLength = lReadSubscriptionInfo.length;
+            pSubtaskInfo.outputMemWriteLength = lWriteSubscriptionInfo.length;
+        }
 	}
 	else
 	{
-		pSubtaskInfo.outputMem = NULL;
-		pSubtaskInfo.outputMemLength = 0;
+		pSubtaskInfo.outputMem = pSubtaskInfo.outputMemRead = pSubtaskInfo.outputMemWrite = NULL;
+		pSubtaskInfo.outputMemLength = pSubtaskInfo.outputMemReadLength = pSubtaskInfo.outputMemWriteLength = 0;
         pOutputMemWriteOnly = false;
 	}
 
@@ -406,7 +426,7 @@ ulong pmTask::GetSubtasksExecuted()
 bool pmTask::DoSubtasksNeedShadowMemory()
 {
     return (mMemRW != NULL);
-//	return (mMemRW && (mMultiAssignEnabled || mMemRW->IsLazy() || (mCallbackUnit->GetDataReductionCB() != NULL)));
+//	return (mMemRW && (mMultiAssignEnabled || mMemRW->IsLazy() || mMemRW->IsReadWrite() || (mCallbackUnit->GetDataReductionCB() != NULL)));
 }
     
 void pmTask::TerminateTask()
@@ -418,39 +438,80 @@ void pmTask::RecordStubWillSendCancellationMessage()
 	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
 
 #ifdef _DEBUG
-    if(mAllStubsScanned)
+    if(mAllStubsScannedForCancellationMessages)
         PMTHROW(pmFatalErrorException());
 #endif
 
-    ++mOutstandingStubs;
+    ++mOutstandingStubsForCancellationMessages;
 }
     
 void pmTask::MarkAllStubsScannedForCancellationMessages()
 {
 	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
     
-    mAllStubsScanned = true;
+    mAllStubsScannedForCancellationMessages = true;
 
-    if(mOutstandingStubs == 0)
-        MarkLocalStubsFreeOfTask();
+    if(mOutstandingStubsForCancellationMessages == 0)
+        MarkLocalStubsFreeOfCancellations();
 }
     
-void pmTask::RegisterStubFreeOfTask()
+void pmTask::RegisterStubCancellationMessage()
 {
 	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
 
 #ifdef _DEBUG
-    if(mOutstandingStubs == 0)
+    if(mOutstandingStubsForCancellationMessages == 0)
         PMTHROW(pmFatalErrorException());
 #endif
     
-    --mOutstandingStubs;
+    --mOutstandingStubsForCancellationMessages;
 
-    if(mOutstandingStubs == 0 && mAllStubsScanned)
-        MarkLocalStubsFreeOfTask();
+    if(mOutstandingStubsForCancellationMessages == 0 && mAllStubsScannedForCancellationMessages)
+        MarkLocalStubsFreeOfCancellations();
 }
 
-void pmTask::MarkLocalStubsFreeOfTask()
+void pmTask::RecordStubWillSendShadowMemCommitMessage()
+{
+	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
+
+#ifdef _DEBUG
+    if(mAllStubsScannedForShadowMemCommitMessages)
+        PMTHROW(pmFatalErrorException());
+#endif
+
+    ++mOutstandingStubsForShadowMemCommitMessages;
+}
+    
+void pmTask::MarkAllStubsScannedForShadowMemCommitMessages()
+{
+	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
+    
+    mAllStubsScannedForShadowMemCommitMessages = true;
+
+    if(mOutstandingStubsForShadowMemCommitMessages == 0)
+        MarkLocalStubsFreeOfShadowMemCommits();
+}
+    
+void pmTask::RegisterStubShadowMemCommitMessage()
+{
+	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
+
+#ifdef _DEBUG
+    if(mOutstandingStubsForShadowMemCommitMessages == 0)
+        PMTHROW(pmFatalErrorException());
+#endif
+    
+    --mOutstandingStubsForShadowMemCommitMessages;
+
+    if(mOutstandingStubsForShadowMemCommitMessages == 0 && mAllStubsScannedForShadowMemCommitMessages)
+        MarkLocalStubsFreeOfShadowMemCommits();
+}
+
+void pmTask::MarkLocalStubsFreeOfCancellations()
+{
+}
+
+void pmTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
 }
 
@@ -472,7 +533,8 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, p
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled)
     , mPendingCompletions(0)
     , mUserSideTaskCompleted(false)
-    , mLocalStubsFreeOfTask(false)
+    , mLocalStubsFreeOfCancellations(false)
+    , mLocalStubsFreeOfShadowMemCommits(false)
 {
     ulong lCurrentTime = GetIntegralCurrentTimeInSecs();
     ulong lTaskTimeOutTriggerTime = lCurrentTime + pTaskTimeOutInSecs;
@@ -534,7 +596,7 @@ void pmLocalTask::TaskRedistributionDone(pmMemSection* pRedistributedMemSection)
     MarkUserSideTaskCompletion();
 }
 
-void pmLocalTask::MarkLocalStubsFreeOfTask()
+void pmLocalTask::MarkLocalStubsFreeOfCancellations()
 {
 #ifdef _DEBUG
     if(!IsMultiAssignEnabled())
@@ -543,10 +605,25 @@ void pmLocalTask::MarkLocalStubsFreeOfTask()
     
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted)
+    if(mUserSideTaskCompleted && (!GetMemSectionRW()->IsReadWrite() || mLocalStubsFreeOfShadowMemCommits))
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
     
-    mLocalStubsFreeOfTask = true;
+    mLocalStubsFreeOfCancellations = true;
+}
+
+void pmLocalTask::MarkLocalStubsFreeOfShadowMemCommits()
+{
+#ifdef _DEBUG
+    if(!GetMemSectionRW()->IsReadWrite())
+        PMTHROW(pmFatalErrorException());
+#endif
+    
+    FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+
+    if(mUserSideTaskCompleted && (!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations))
+        pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
+    
+    mLocalStubsFreeOfShadowMemCommits = true;
 }
     
 void pmLocalTask::MarkUserSideTaskCompletion()
@@ -557,7 +634,7 @@ void pmLocalTask::MarkUserSideTaskCompletion()
     {
         FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-        if(lIsMultiAssign && mLocalStubsFreeOfTask)
+        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!GetMemSectionRW()->IsReadWrite() || mLocalStubsFreeOfShadowMemCommits))
             pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
             
         mUserSideTaskCompleted = true;
@@ -735,13 +812,16 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled)
     , mUserSideTaskCompleted(false)
-    , mLocalStubsFreeOfTask(false)
+    , mLocalStubsFreeOfCancellations(false)
+    , mLocalStubsFreeOfShadowMemCommits(false)
 {
     SetSequenceNumber(pSequenceNumber);
 }
 
 pmRemoteTask::~pmRemoteTask()
 {
+    FlushMemoryOwnerships();
+    UnlockMemories();
 }
 
 pmStatus pmRemoteTask::AddAssignedDevice(pmProcessingElement* pDevice)
@@ -767,7 +847,7 @@ void pmRemoteTask::TerminateTask()
     pmScheduler::GetScheduler()->TerminateTaskEvent(this);
 }
 
-void pmRemoteTask::MarkLocalStubsFreeOfTask()
+void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 {
 #ifdef _DEBUG
     if(!IsMultiAssignEnabled())
@@ -776,14 +856,34 @@ void pmRemoteTask::MarkLocalStubsFreeOfTask()
 
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted)
+    if(mUserSideTaskCompleted && (!GetMemSectionRW()->IsReadWrite() || mLocalStubsFreeOfShadowMemCommits))
     {
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
         TerminateTask();
     }
     else
     {
-        mLocalStubsFreeOfTask = true;
+        mLocalStubsFreeOfCancellations = true;
+    }
+}
+
+void pmRemoteTask::MarkLocalStubsFreeOfShadowMemCommits()
+{
+#ifdef _DEBUG
+    if(!GetMemSectionRW()->IsReadWrite())
+        PMTHROW(pmFatalErrorException());
+#endif
+
+    FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+
+    if(mUserSideTaskCompleted && (!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations))
+    {
+        pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
+        TerminateTask();
+    }
+    else
+    {
+        mLocalStubsFreeOfShadowMemCommits = true;
     }
 }
 
@@ -793,21 +893,22 @@ void pmRemoteTask::MarkUserSideTaskCompletion()
     
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(lIsMultiAssign && mLocalStubsFreeOfTask)
+    if(!lIsMultiAssign && !GetMemSectionRW()->IsReadWrite())
     {
-        pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
         TerminateTask();
     }
     else
     {
-        if(!lIsMultiAssign)
+        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!GetMemSectionRW()->IsReadWrite() || mLocalStubsFreeOfShadowMemCommits))
+        {
+            pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
             TerminateTask();
-    
-        mUserSideTaskCompleted = true;
+        }
+        else
+        {
+            mUserSideTaskCompleted = true;
+        }
     }
-
-    FlushMemoryOwnerships();
-    UnlockMemories();
 }
 
 void pmRemoteTask::MarkReductionFinished()

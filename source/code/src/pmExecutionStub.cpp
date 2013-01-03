@@ -32,6 +32,8 @@
 #include "pmTaskManager.h"
 #include "pmTls.h"
 
+#include <string>
+#include <sstream>
 #include <algorithm>
 
 #include SYSTEM_CONFIGURATION_HEADER // for sched_setaffinity
@@ -75,6 +77,16 @@ pmProcessingElement* pmExecutionStub::GetProcessingElement()
 {
 	return pmDevicePool::GetDevicePool()->GetDeviceAtMachineIndex(PM_LOCAL_MACHINE, mDeviceIndexOnMachine);
 }
+    
+#ifdef DUMP_EVENT_TIMELINE
+pmStatus pmExecutionStub::InitializeEventTimeline()
+{
+	stubEvent lEvent;
+	lEvent.eventId = INIT_EVENT_TIMELINE;
+
+	return SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
+}
+#endif
 
 pmStatus pmExecutionStub::Push(pmSubtaskRange& pRange)
 {
@@ -183,6 +195,28 @@ void pmExecutionStub::PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange,
     lEvent.eventId = POST_HANDLE_EXEC_COMPLETION;
     
     SwitchThread(lEvent, pRange.task->GetPriority() - 1);
+}
+    
+void pmExecutionStub::ProcessDeferredShadowMemCommits(pmTask* pTask)
+{
+    bool lPendingCommits = false;
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dDeferredShadowMemCommitsLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDeferredShadowMemCommitsLock, Lock(), Unlock());
+        lPendingCommits = (mDeferredShadowMemCommits.find(pTask) != mDeferredShadowMemCommits.end());
+    }
+
+    if(lPendingCommits)
+    {
+        pTask->RecordStubWillSendShadowMemCommitMessage();
+    
+        stubEvent lEvent;
+        lEvent.deferredShadowMemCommitsDetails.task = pTask;
+        lEvent.eventId = DEFERRED_SHADOW_MEM_COMMITS;
+        
+        SwitchThread(lEvent, pTask->GetPriority() - 1);
+    }
 }
 
 pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange)
@@ -556,6 +590,15 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			break;
 		}
         
+        #ifdef DUMP_EVENT_TIMELINE
+        case INIT_EVENT_TIMELINE:
+        {
+            mEventTimelineAutoPtr.reset(new pmEventTimeline(GetEventTimelineName()));
+        
+            break;
+        }
+        #endif
+        
 		case SUBTASK_EXEC:	/* Comes from scheduler thread */
 		{
             ulong lCompletedCount, lLastExecutedSubtaskId;
@@ -594,6 +637,13 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             bool lPrematureTermination = false;
             bool lReassigned = false;
             bool lForceAckFlag = false;
+        
+        #ifdef DUMP_EVENT_TIMELINE
+            std::stringstream lEventName;
+            lEventName << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << lLastExecutedSubtaskId;
+            mEventTimelineAutoPtr->RecordEvent(lEventName.str(), true);
+        #endif
+        
             lCommand->MarkExecutionStart();
             pmStatus lExecStatus = pmExecutionStub::ExecuteWrapper(lCurrentRange.task, lLastExecutedSubtaskId, lIsMultiAssignRange, lRange.startSubtask, lReassigned, lForceAckFlag, lPrematureTermination);
             lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
@@ -602,6 +652,13 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             {
             #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
                 std::cout << "[Host " << pmGetHostId() << "]: Prematurely terminated subtask " << lLastExecutedSubtaskId << std::endl;
+            #endif
+            
+            #ifdef DUMP_EVENT_TIMELINE
+                std::stringstream lNewName;
+                lNewName  << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << lLastExecutedSubtaskId << "_Cancelled";
+                mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
+                mEventTimelineAutoPtr->RecordEvent(lNewName.str(), false);
             #endif
             
                 if(lForceAckFlag && lLastExecutedSubtaskId != 0)
@@ -616,10 +673,17 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             {
                 if(lReassigned) // A secondary allottee has finished and negotiated this subtask and added a POST_HANDLE_EXEC_COMPLETION for the rest of the range
                 {
+                #ifdef DUMP_EVENT_TIMELINE
+                    std::stringstream lNewName;
+                    lEventName << "Subtask " << lLastExecutedSubtaskId << "_Cancelled";
+                    mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
+                    mEventTimelineAutoPtr->RecordEvent(lNewName.str(), false);
+                #endif
+                
                 #ifdef _DEBUG
                     if(!lRange.task->IsMultiAssignEnabled() || lRange.originalAllottee != NULL)
                     {
-                    std::cout << "[Device " << GetProcessingElement()->GetGlobalDeviceIndex() << "]: Range - [" << lRange.startSubtask << " - " << lRange.endSubtask << "] Original Allottee: " << lRange.originalAllottee->GetGlobalDeviceIndex() << std::endl;
+                        std::cout << "[Device " << GetProcessingElement()->GetGlobalDeviceIndex() << "]: Range - [" << lRange.startSubtask << " - " << lRange.endSubtask << "] Original Allottee: " << lRange.originalAllottee->GetGlobalDeviceIndex() << std::endl;
                         PMTHROW(pmFatalErrorException());
                     }
                 #endif
@@ -633,6 +697,10 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
                 lRange.task->GetTaskExecStats().RecordStubExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
 
+            #ifdef DUMP_EVENT_TIMELINE
+                mEventTimelineAutoPtr->RecordEvent(lEventName.str(), false);
+            #endif
+            
                 if(!lReassigned && lRange.originalAllottee == NULL)
                     CommonPostNegotiationOnCPU(lRange.task, lLastExecutedSubtaskId);
             
@@ -693,6 +761,18 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         {
             HandleRangeExecutionCompletion(pEvent.execCompletionDetails.range, pEvent.execCompletionDetails.execStatus);
             break;
+        }
+        
+        case DEFERRED_SHADOW_MEM_COMMITS:
+        {
+            pmTask* lTask = pEvent.deferredShadowMemCommitsDetails.task;
+            std::vector<ulong>::iterator lIter = mDeferredShadowMemCommits[lTask].begin(), lEnd = mDeferredShadowMemCommits[lTask].end();
+            for(; lIter != lEnd; ++lIter)
+                CommitSubtaskShadowMem(lTask, *lIter);
+        
+            mDeferredShadowMemCommits.erase(lTask);
+        
+            lTask->RegisterStubShadowMemCommitMessage();
         }
 	}
 
@@ -758,9 +838,6 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
     
 void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId)
 {
-    if(!pTask->DoSubtasksNeedShadowMemory())
-        return;
-
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     
     pmSubscriptionInfo lUnifiedSubscriptionInfo;
@@ -771,6 +848,11 @@ void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId)
 
     lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, false, lBeginIter, lEndIter);
     lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
+}
+
+void pmExecutionStub::DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId)
+{
+    mDeferredShadowMemCommits[pTask].push_back(pSubtaskId);
 }
 
 // This method must be called with mCurrentSubtaskLock acquired
@@ -942,8 +1024,13 @@ pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubta
 	else
 		INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataRedistributionCB, pTask->GetCallbackUnit()->GetDataRedistributionCB(), Invoke, this, pTask, pSubtaskId);
     
-    if(!lReduceCallback)
-        CommitSubtaskShadowMem(pTask, pSubtaskId);
+    if(!lReduceCallback && pTask->DoSubtasksNeedShadowMemory())
+    {
+        if(pTask->GetMemSectionRW()->IsReadWrite())
+            DeferShadowMemCommit(pTask, pSubtaskId);
+        else
+            CommitSubtaskShadowMem(pTask, pSubtaskId);
+    }
     
     return pmSuccess;
 }
@@ -1152,9 +1239,19 @@ void pmExecutionStub::currentSubtaskTerminus::Terminating(currentSubtaskStats* p
     if(pStats->prematureTermination)
     {
         if(pStats->taskListeningOnCancellation)
-            pStats->task->RegisterStubFreeOfTask();
+            pStats->task->RegisterStubCancellationMessage();
     }
 }
+
+#ifdef DUMP_EVENT_TIMELINE
+std::string pmExecutionStub::GetEventTimelineName()
+{
+    std::stringstream lStream;
+    lStream << "Device " << GetProcessingElement()->GetGlobalDeviceIndex();
+    
+    return lStream.str();
+}
+#endif
 
 /* struct stubEvent */
 bool execStub::stubEvent::BlocksSecondaryCommands()

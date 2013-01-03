@@ -58,7 +58,7 @@ class pmTask : public pmBase
 	protected:
 		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled);
 
-	public:		
+	public:
 		virtual ~pmTask();
 
 		ulong GetTaskId();
@@ -86,11 +86,16 @@ class pmTask : public pmBase
     
         virtual pmStatus MarkSubtaskExecutionFinished();
         virtual void TerminateTask();
-        virtual void MarkLocalStubsFreeOfTask();
+        virtual void MarkLocalStubsFreeOfCancellations();
+        virtual void MarkLocalStubsFreeOfShadowMemCommits();
     
         void RecordStubWillSendCancellationMessage();
         void MarkAllStubsScannedForCancellationMessages();
-        void RegisterStubFreeOfTask();
+        void RegisterStubCancellationMessage();
+    
+        void RecordStubWillSendShadowMemCommitMessage();
+        void MarkAllStubsScannedForShadowMemCommitMessages();
+        void RegisterStubShadowMemCommitMessage();
     
         void* CheckOutSubtaskMemory(size_t pLength);
         void RepoolCheckedOutSubtaskMemory(void* pMem);
@@ -137,7 +142,7 @@ class pmTask : public pmBase
 #ifdef ENABLE_TASK_PROFILING
         pmTaskProfiler mTaskProfiler;
 #endif
-
+    
 		/* Updating properties require locking */
 		ulong mSubtasksExecuted;
 		bool mSubtaskExecutionFinished;
@@ -149,8 +154,8 @@ class pmTask : public pmBase
         finalize_ptr<pmRedistributor> mRedistributor;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mRedistributorLock;
 
-        bool mAllStubsScanned;
-        ulong mOutstandingStubs;
+        bool mAllStubsScannedForCancellationMessages, mAllStubsScannedForShadowMemCommitMessages;
+        ulong mOutstandingStubsForCancellationMessages, mOutstandingStubsForShadowMemCommitMessages;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mTaskCompletionLock;
 
         std::map<pmProcessingElement*, std::vector<pmProcessingElement*> > mStealListForDevice;
@@ -187,7 +192,8 @@ class pmLocalTask : public pmTask
     
         virtual pmStatus MarkSubtaskExecutionFinished();
         virtual void TerminateTask();
-        virtual void MarkLocalStubsFreeOfTask();
+        virtual void MarkLocalStubsFreeOfCancellations();
+        virtual void MarkLocalStubsFreeOfShadowMemCommits();
     
         void RegisterInternalTaskCompletionMessage();
         void UserDeleteTask();
@@ -200,7 +206,7 @@ class pmLocalTask : public pmTask
 		pmSubtaskManager* GetSubtaskManager();
     
         ulong GetTaskTimeOutTriggerTime();
-
+    
 	private:
         virtual ~pmLocalTask();
     
@@ -211,7 +217,7 @@ class pmLocalTask : public pmTask
 
         ulong mPendingCompletions;
         bool mUserSideTaskCompleted;
-        bool mLocalStubsFreeOfTask;
+        bool mLocalStubsFreeOfCancellations, mLocalStubsFreeOfShadowMemCommits;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
     
         static ulong mSequenceId;   // Task number at the originating host
@@ -228,7 +234,8 @@ class pmRemoteTask : public pmTask
 
         virtual pmStatus MarkSubtaskExecutionFinished();
         virtual void TerminateTask();
-        virtual void MarkLocalStubsFreeOfTask();
+        virtual void MarkLocalStubsFreeOfCancellations();
+        virtual void MarkLocalStubsFreeOfShadowMemCommits();
     
         void MarkUserSideTaskCompletion();
         void MarkReductionFinished();
@@ -238,7 +245,7 @@ class pmRemoteTask : public pmTask
         virtual ~pmRemoteTask();
     
         bool mUserSideTaskCompleted;
-        bool mLocalStubsFreeOfTask;
+        bool mLocalStubsFreeOfCancellations, mLocalStubsFreeOfShadowMemCommits;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
 
         std::vector<pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined

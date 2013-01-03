@@ -186,6 +186,11 @@ bool pmMemSection::IsOutput() const
     return (mMemInfo == OUTPUT_MEM_WRITE_ONLY || mMemInfo == OUTPUT_MEM_READ_WRITE || mMemInfo == OUTPUT_MEM_READ_WRITE_LAZY);
 }
 
+bool pmMemSection::IsReadWrite() const
+{
+    return (mMemInfo == OUTPUT_MEM_READ_WRITE || mMemInfo == OUTPUT_MEM_READ_WRITE_LAZY);
+}
+
 void pmMemSection::UserDelete()
 {
     // Auto lock/unlock scope

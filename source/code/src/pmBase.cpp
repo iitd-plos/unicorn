@@ -123,5 +123,5 @@ double pmBase::GetCurrentTimeInSecs()
     
 	return lCurrentTime;
 }
-    
+
 };

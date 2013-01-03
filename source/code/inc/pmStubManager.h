@@ -46,6 +46,10 @@ class pmStubManager : public pmBase
 		size_t GetStubCount();
 
 		pmStatus FreeGpuResources();
+    
+    #ifdef DUMP_EVENT_TIMELINE
+        void InitializeEventTimelines();
+    #endif
 
 		pmExecutionStub* GetStub(pmProcessingElement* pDevice);
 		pmExecutionStub* GetStub(uint pIndex);

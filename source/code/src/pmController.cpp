@@ -57,6 +57,10 @@ pmController::pmController()
 	mLastErrorCode = 0;
 	mFinalizedHosts = 0;
 	mSignalWait = NULL;
+
+#ifdef DUMP_EVENT_TIMELINE
+    mStubManager.InitializeEventTimelines();
+#endif
 }
 
 pmController::~pmController()

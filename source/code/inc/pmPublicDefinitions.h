@@ -109,9 +109,13 @@ namespace pm
 	{
 		unsigned long subtaskId;
 		pmRawMemPtr inputMem;
-		pmRawMemPtr outputMem;
+        pmRawMemPtr outputMem;
+        pmRawMemPtr outputMemRead;
+        pmRawMemPtr outputMemWrite;
 		size_t inputMemLength;
-		size_t outputMemLength;
+        size_t outputMemLength;
+        size_t outputMemReadLength;
+        size_t outputMemWriteLength;
 	} pmSubtaskInfo;
 
 	typedef struct pmTaskInfo

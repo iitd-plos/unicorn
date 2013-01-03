@@ -13,9 +13,9 @@ void serialMatrixMultiply(MATRIX_DATA_TYPE* pMatrixA, MATRIX_DATA_TYPE* pMatrixB
 {
 	int i, j, k;
 
-	for(i = 0; i < pDim1; i++)
-		for(j = 0; j < pDim3; j++)
-			for(k = 0; k < pDim2; k++)
+	for(i = 0; i < pDim1; ++i)
+		for(j = 0; j < pDim3; ++j)
+			for(k = 0; k < pDim2; ++k)
 				pMatrixC[i*pDim3 + j] += pMatrixA[i*pDim2 + k] * pMatrixB[k*pDim3 + j];
 }
 
@@ -170,7 +170,7 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 	gParallelOutput = new MATRIX_DATA_TYPE[lMatrixElems];
 
 	for(size_t i=0; i<lInputSize; ++i)
-		gSampleInput[i] = (int)i;    //(MATRIX_DATA_TYPE)rand();
+		gSampleInput[i] = (MATRIX_DATA_TYPE)rand(); // i;
 
 	memset(gSerialOutput, 0, lMatrixElems*sizeof(MATRIX_DATA_TYPE));
 
