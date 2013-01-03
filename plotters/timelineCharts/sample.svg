@@ -1,0 +1,439 @@
+<?xml version="1.0" encoding="utf-8"  standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" 
+ "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="600" height="480" viewBox="0 0 600 480"
+ xmlns="http://www.w3.org/2000/svg"
+ xmlns:xlink="http://www.w3.org/1999/xlink"
+>
+
+<title>gnuplot</title>
+<desc>Produced by GNUPLOT 4.4 patchlevel 4 </desc>
+
+<defs>
+
+	<circle id='gpDot' r='0.5' stroke-width='0.5'/>
+	<path id='gpPt0' stroke-width='0.222' stroke='currentColor' d='M-1,0 h2 M0,-1 v2'/>
+	<path id='gpPt1' stroke-width='0.222' stroke='currentColor' d='M-1,-1 L1,1 M1,-1 L-1,1'/>
+	<path id='gpPt2' stroke-width='0.222' stroke='currentColor' d='M-1,0 L1,0 M0,-1 L0,1 M-1,-1 L1,1 M-1,1 L1,-1'/>
+	<rect id='gpPt3' stroke-width='0.222' stroke='currentColor' x='-1' y='-1' width='2' height='2'/>
+	<rect id='gpPt4' stroke-width='0.222' stroke='currentColor' fill='currentColor' x='-1' y='-1' width='2' height='2'/>
+	<circle id='gpPt5' stroke-width='0.222' stroke='currentColor' cx='0' cy='0' r='1'/>
+	<use xlink:href='#gpPt5' id='gpPt6' fill='currentColor' stroke='none'/>
+	<path id='gpPt7' stroke-width='0.222' stroke='currentColor' d='M0,-1.33 L-1.33,0.67 L1.33,0.67 z'/>
+	<use xlink:href='#gpPt7' id='gpPt8' fill='currentColor' stroke='none'/>
+	<use xlink:href='#gpPt7' id='gpPt9' stroke='currentColor' transform='rotate(180)'/>
+	<use xlink:href='#gpPt9' id='gpPt10' fill='currentColor' stroke='none'/>
+	<use xlink:href='#gpPt3' id='gpPt11' stroke='currentColor' transform='rotate(45)'/>
+	<use xlink:href='#gpPt11' id='gpPt12' fill='currentColor' stroke='none'/>
+</defs>
+<g style="fill:none; color:white; stroke:currentColor; stroke-width:1.00; stroke-linecap:butt; stroke-linejoin:miter">
+</g>
+<g style="fill:none; color:black; stroke:currentColor; stroke-width:1.00; stroke-linecap:butt; stroke-linejoin:miter">
+	<path  d='M83.3,422.4 L83.3,413.4 M83.3,54.1 L83.3,63.1 '></path>
+	<g transform="translate(83.3,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 2.5</text>
+	</g>
+	<path  d='M126.9,422.4 L126.9,413.4 M126.9,54.1 L126.9,63.1 '></path>
+	<g transform="translate(126.9,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 2.6</text>
+	</g>
+	<path  d='M170.6,422.4 L170.6,413.4 M170.6,54.1 L170.6,63.1 '></path>
+	<g transform="translate(170.6,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 2.7</text>
+	</g>
+	<path  d='M214.2,422.4 L214.2,413.4 M214.2,54.1 L214.2,63.1 '></path>
+	<g transform="translate(214.2,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 2.8</text>
+	</g>
+	<path  d='M257.8,422.4 L257.8,413.4 M257.8,54.1 L257.8,63.1 '></path>
+	<g transform="translate(257.8,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 2.9</text>
+	</g>
+	<path  d='M301.4,422.4 L301.4,413.4 M301.4,54.1 L301.4,63.1 '></path>
+	<g transform="translate(301.4,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 3</text>
+	</g>
+	<path  d='M345.0,422.4 L345.0,413.4 M345.0,54.1 L345.0,63.1 '></path>
+	<g transform="translate(345.0,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 3.1</text>
+	</g>
+	<path  d='M388.6,422.4 L388.6,413.4 M388.6,54.1 L388.6,63.1 '></path>
+	<g transform="translate(388.6,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 3.2</text>
+	</g>
+	<path  d='M432.2,422.4 L432.2,413.4 M432.2,54.1 L432.2,63.1 '></path>
+	<g transform="translate(432.2,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 3.3</text>
+	</g>
+	<path  d='M475.8,422.4 L475.8,413.4 M475.8,54.1 L475.8,63.1 '></path>
+	<g transform="translate(475.8,444.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text> 3.4</text>
+	</g>
+	<path  d='M83.0,54.1 L83.0,422.4 L516.9,422.4 L516.9,54.1 L83.0,54.1 Z '></path>
+	<g transform="translate(299.9,471.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text>Time (in secs)</text>
+	</g>
+	<g transform="translate(299.9,31.6)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text>Non Lazy Memory Multi Assign Behaviour Study</text>
+	</g>
+	<g style = 'stroke:none; shape-rendering:crispEdges'>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '156.0,412.6 164.0,412.6 164.0,402.8 156.0,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '166.0,412.6 174.2,412.6 174.2,402.8 166.0,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '177.1,412.6 185.8,412.6 185.8,402.8 177.1,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '188.5,412.6 199.0,412.6 199.0,402.8 188.5,402.8 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '426.2,412.6 441.1,412.6 441.1,402.8 426.2,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '362.1,412.6 371.5,412.6 371.5,402.8 362.1,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '373.5,412.6 381.8,412.6 381.8,402.8 373.5,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '383.8,412.6 391.2,412.6 391.2,402.8 383.8,402.8 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '453.9,412.6 462.6,412.6 462.6,402.8 453.9,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '310.9,412.6 319.4,412.6 319.4,402.8 310.9,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '326.2,412.6 343.0,412.6 343.0,402.8 326.2,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '346.6,412.6 355.4,412.6 355.4,402.8 346.6,402.8 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '400.5,412.6 408.5,412.6 408.5,402.8 400.5,402.8 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '472.6,412.6 484.7,412.6 484.7,402.8 472.6,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '258.7,412.6 267.2,412.6 267.2,402.8 258.7,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '276.8,412.6 293.0,412.6 293.0,402.8 276.8,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '295.3,412.6 304.2,412.6 304.2,402.8 295.3,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '88.3,412.6 109.0,412.6 109.0,402.8 88.3,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '111.2,412.6 120.1,412.6 120.1,402.8 111.2,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '122.7,412.6 135.1,412.6 135.1,402.8 122.7,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '139.1,412.6 150.5,412.6 150.5,402.8 139.1,402.8 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '491.1,412.6 498.8,412.6 498.8,402.8 491.1,402.8 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '510.6,412.6 512.5,412.6 512.5,402.8 510.6,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '205.7,412.6 216.5,412.6 216.5,402.8 205.7,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '218.4,412.6 233.6,412.6 233.6,402.8 218.4,402.8 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '239.0,412.6 251.1,412.6 251.1,402.8 239.0,402.8 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '397.6,397.8 408.1,397.8 408.1,388.0 397.6,388.0 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '423.4,397.8 431.2,397.8 431.2,388.0 423.4,388.0 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '436.5,397.8 448.0,397.8 448.0,388.0 436.5,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '354.9,397.8 362.4,397.8 362.4,388.0 354.9,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '367.6,397.8 378.2,397.8 378.2,388.0 367.6,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '380.1,397.8 394.8,397.8 394.8,388.0 380.1,388.0 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '451.4,397.8 460.4,397.8 460.4,388.0 451.4,388.0 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '466.0,397.8 473.0,397.8 473.0,388.0 466.0,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '285.4,397.8 301.3,397.8 301.3,388.0 285.4,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '305.4,397.8 315.8,397.8 315.8,388.0 305.4,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '327.7,397.8 342.2,397.8 342.2,388.0 327.7,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '157.5,397.8 167.0,397.8 167.0,388.0 157.5,388.0 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '481.3,397.8 494.5,397.8 494.5,388.0 481.3,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '171.0,397.8 183.6,397.8 183.6,388.0 171.0,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '88.3,397.8 106.5,397.8 106.5,388.0 88.3,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '108.5,397.8 120.5,397.8 120.5,388.0 108.5,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '127.4,397.8 135.5,397.8 135.5,388.0 127.4,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '141.0,397.8 153.3,397.8 153.3,388.0 141.0,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '189.5,397.8 200.3,397.8 200.3,388.0 189.5,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '229.2,397.8 237.6,397.8 237.6,388.0 229.2,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '242.8,397.8 250.6,397.8 250.6,388.0 242.8,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '254.6,397.8 268.4,397.8 268.4,388.0 254.6,388.0 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '507.2,397.8 510.3,397.8 510.3,388.0 507.2,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '209.7,397.8 218.0,397.8 218.0,388.0 209.7,388.0 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '147.6,383.1 163.8,383.1 163.8,373.3 147.6,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '171.9,383.1 183.5,383.1 183.5,373.3 171.9,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '187.3,383.1 195.1,383.1 195.1,373.3 187.3,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '197.5,383.1 207.3,383.1 207.3,373.3 197.5,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '394.4,383.1 403.9,383.1 403.9,373.3 394.4,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '410.7,383.1 424.1,383.1 424.1,373.3 410.7,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '428.1,383.1 444.2,383.1 444.2,373.3 428.1,373.3 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '448.0,383.1 455.8,383.1 455.8,373.3 448.0,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '345.5,383.1 353.6,383.1 353.6,373.3 345.5,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '356.4,383.1 367.2,383.1 367.2,373.3 356.4,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '377.5,383.1 391.5,383.1 391.5,373.3 377.5,373.3 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '460.8,383.1 469.8,383.1 469.8,373.3 460.8,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '301.1,383.1 314.6,383.1 314.6,373.3 301.1,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '321.1,383.1 332.8,383.1 332.8,373.3 321.1,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '334.5,383.1 342.1,383.1 342.1,373.3 334.5,373.3 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '476.7,383.1 485.3,383.1 485.3,373.3 476.7,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '251.3,383.1 260.5,383.1 260.5,373.3 251.3,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '263.2,383.1 271.2,383.1 271.2,373.3 263.2,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '285.2,383.1 297.0,383.1 297.0,373.3 285.2,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '88.3,383.1 102.2,383.1 102.2,373.3 88.3,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '104.4,383.1 119.1,383.1 119.1,373.3 104.4,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '121.2,383.1 132.9,383.1 132.9,373.3 121.2,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '135.1,383.1 145.7,383.1 145.7,373.3 135.1,373.3 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '488.9,383.1 498.5,383.1 498.5,373.3 488.9,373.3 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '510.0,383.1 511.4,383.1 511.4,373.3 510.0,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '210.5,383.1 221.8,383.1 221.8,373.3 210.5,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '225.4,383.1 234.0,383.1 234.0,373.3 225.4,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '235.7,383.1 248.8,383.1 248.8,373.3 235.7,373.3 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '159.3,368.4 167.7,368.4 167.7,358.6 159.3,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '170.8,368.4 180.0,368.4 180.0,358.6 170.8,358.6 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '428.0,368.4 444.9,368.4 444.9,358.6 428.0,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '380.2,368.4 392.6,368.4 392.6,358.6 380.2,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '397.7,368.4 406.0,368.4 406.0,358.6 397.7,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '410.7,368.4 423.6,368.4 423.6,358.6 410.7,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '190.4,368.4 200.8,368.4 200.8,358.6 190.4,358.6 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '448.6,368.4 458.9,368.4 458.9,358.6 448.6,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '202.9,368.4 216.4,368.4 216.4,358.6 202.9,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '329.9,368.4 342.3,368.4 342.3,358.6 329.9,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '348.1,368.4 359.3,368.4 359.3,358.6 348.1,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '362.6,368.4 370.1,368.4 370.1,358.6 362.6,358.6 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '466.2,368.4 475.0,368.4 475.0,358.6 466.2,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '281.5,368.4 298.9,368.4 298.9,358.6 281.5,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '306.6,368.4 316.1,368.4 316.1,358.6 306.6,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '317.9,368.4 327.4,368.4 327.4,358.6 317.9,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '88.3,368.4 97.0,368.4 97.0,358.6 88.3,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '99.3,368.4 112.5,368.4 112.5,358.6 99.3,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '115.3,368.4 136.6,368.4 136.6,358.6 115.3,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '139.8,368.4 157.2,368.4 157.2,358.6 139.8,358.6 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '481.3,368.4 490.9,368.4 490.9,358.6 481.3,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '225.0,368.4 233.3,368.4 233.3,358.6 225.0,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '237.9,368.4 249.3,368.4 249.3,358.6 237.9,358.6 '/>
+		<polygon fill = 'rgb(  0,   0, 255)' points = '252.6,368.4 267.2,368.4 267.2,358.6 252.6,358.6 '/>
+		<polygon fill = 'rgb(  0, 255,   0)' points = '498.6,368.4 506.8,368.4 506.8,358.6 498.6,358.6 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.0,353.7 495.9,353.7 495.9,343.8 88.0,343.8 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.0,338.9 499.9,338.9 499.9,329.1 88.0,329.1 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.9,324.2 499.8,324.2 499.8,314.4 88.9,314.4 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '99.0,309.5 507.3,309.5 507.3,299.6 99.0,299.6 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '87.4,294.7 458.9,294.7 458.9,284.9 87.4,284.9 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '87.4,280.0 475.7,280.0 475.7,270.2 87.4,270.2 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.3,265.3 478.2,265.3 478.2,255.4 88.3,255.4 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.3,250.5 485.9,250.5 485.9,240.7 88.3,240.7 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '87.9,235.8 430.1,235.8 430.1,226.0 87.9,226.0 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.0,221.1 430.3,221.1 430.3,211.2 88.0,211.2 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.7,206.3 463.7,206.3 463.7,196.5 88.7,196.5 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.8,191.6 464.6,191.6 464.6,181.8 88.8,181.8 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '89.5,176.9 489.2,176.9 489.2,167.0 89.5,167.0 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.8,162.1 464.9,162.1 464.9,152.3 88.8,152.3 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.8,147.4 472.6,147.4 472.6,137.6 88.8,137.6 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.8,132.7 465.7,132.7 465.7,122.8 88.8,122.8 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '89.4,117.9 475.2,117.9 475.2,108.1 89.4,108.1 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '88.9,103.2 479.1,103.2 479.1,93.4 88.9,93.4 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '89.2,88.5 474.2,88.5 474.2,78.7 89.2,78.7 '/>
+		<polygon fill = 'rgb(255,   0,   0)' points = '107.0,73.7 500.0,73.7 500.0,63.9 107.0,63.9 '/>
+	<g transform="translate(87.4,412.2)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 0    </text>
+	</g>
+	<g transform="translate(438.2,407.7) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>15</text>
+	</g>
+	<g transform="translate(462.8,407.7) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>36</text>
+	</g>
+	<g transform="translate(409.0,407.7) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>5</text>
+	</g>
+	<g transform="translate(483.2,407.7) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>56</text>
+	</g>
+	<g transform="translate(499.5,407.7) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>92</text>
+	</g>
+	<g transform="translate(511.6,412.2)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>96</text>
+	</g>
+	<g transform="translate(87.4,397.4)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 1    </text>
+	</g>
+	<g transform="translate(407.4,392.9) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>0</text>
+	</g>
+	<g transform="translate(431.8,392.9) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>10</text>
+	</g>
+	<g transform="translate(446.8,392.9) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>24</text>
+	</g>
+	<g transform="translate(460.4,392.9) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>40</text>
+	</g>
+	<g transform="translate(474.0,392.9) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>48</text>
+	</g>
+	<g transform="translate(492.4,392.9) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>64</text>
+	</g>
+	<g transform="translate(508.7,397.4)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>88</text>
+	</g>
+	<g transform="translate(87.4,382.7)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 2    </text>
+	</g>
+	<g transform="translate(456.4,378.2) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>28</text>
+	</g>
+	<g transform="translate(469.8,378.2) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>44</text>
+	</g>
+	<g transform="translate(485.5,378.2) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>60</text>
+	</g>
+	<g transform="translate(498.2,378.2) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>88</text>
+	</g>
+	<g transform="translate(510.7,382.7)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>92</text>
+	</g>
+	<g transform="translate(87.4,368.0)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 3    </text>
+	</g>
+	<g transform="translate(441.0,363.5) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>20</text>
+	</g>
+	<g transform="translate(458.3,363.5) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>32</text>
+	</g>
+	<g transform="translate(475.1,363.5) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>52</text>
+	</g>
+	<g transform="translate(490.6,363.5) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>84</text>
+	</g>
+	<g transform="translate(507.2,363.5) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>96</text>
+	</g>
+	<g transform="translate(87.4,353.2)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 4    </text>
+	</g>
+	<g transform="translate(291.9,353.2)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>84</text>
+	</g>
+	<g transform="translate(87.4,338.5)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 5    </text>
+	</g>
+	<g transform="translate(294.0,338.5)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>88</text>
+	</g>
+	<g transform="translate(87.4,323.8)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 6    </text>
+	</g>
+	<g transform="translate(294.4,323.8)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>92</text>
+	</g>
+	<g transform="translate(87.4,309.0)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 7    </text>
+	</g>
+	<g transform="translate(303.2,309.0)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>96</text>
+	</g>
+	<g transform="translate(87.4,294.3)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 8    </text>
+	</g>
+	<g transform="translate(273.1,294.3)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>28</text>
+	</g>
+	<g transform="translate(87.4,279.6)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 9    </text>
+	</g>
+	<g transform="translate(281.6,279.6)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>48</text>
+	</g>
+	<g transform="translate(87.4,264.8)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 10    </text>
+	</g>
+	<g transform="translate(283.2,264.8)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>52</text>
+	</g>
+	<g transform="translate(87.4,250.1)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 11    </text>
+	</g>
+	<g transform="translate(287.1,250.1)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>56</text>
+	</g>
+	<g transform="translate(87.4,235.4)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 12    </text>
+	</g>
+	<g transform="translate(259.0,235.4)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>0</text>
+	</g>
+	<g transform="translate(87.4,220.7)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 13    </text>
+	</g>
+	<g transform="translate(259.2,220.7)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>5</text>
+	</g>
+	<g transform="translate(87.4,205.9)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 14    </text>
+	</g>
+	<g transform="translate(276.2,205.9)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>10</text>
+	</g>
+	<g transform="translate(87.4,191.2)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 15    </text>
+	</g>
+	<g transform="translate(276.7,191.2)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>15</text>
+	</g>
+	<g transform="translate(87.4,176.5)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 16    </text>
+	</g>
+	<g transform="translate(289.3,176.5)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>60</text>
+	</g>
+	<g transform="translate(87.4,161.7)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 17    </text>
+	</g>
+	<g transform="translate(276.8,161.7)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>32</text>
+	</g>
+	<g transform="translate(87.4,147.0)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 18    </text>
+	</g>
+	<g transform="translate(280.7,147.0)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>36</text>
+	</g>
+	<g transform="translate(87.4,132.3)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 19    </text>
+	</g>
+	<g transform="translate(277.3,132.3)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>40</text>
+	</g>
+	<g transform="translate(87.4,117.5)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 20    </text>
+	</g>
+	<g transform="translate(282.3,117.5)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>44</text>
+	</g>
+	<g transform="translate(87.4,102.8)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 21    </text>
+	</g>
+	<g transform="translate(284.0,102.8)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>20</text>
+	</g>
+	<g transform="translate(87.4,88.1)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 22    </text>
+	</g>
+	<g transform="translate(281.7,88.1)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>24</text>
+	</g>
+	<g transform="translate(87.4,73.3)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:end">
+		<text xml:space="preserve">Device 23    </text>
+	</g>
+	<g transform="translate(303.5,73.3)" style="stroke:none; fill:black; font-family:Arial; font-size:8.00pt; text-anchor:middle">
+		<text>64</text>
+	</g>
+	<g transform="translate(541.0,385.6) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text>Host 0</text>
+	</g>
+	<g transform="translate(541.0,326.6) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text>Host 1</text>
+	</g>
+	<g transform="translate(541.0,267.7) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text>Host 2</text>
+	</g>
+	<g transform="translate(541.0,208.8) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text>Host 3</text>
+	</g>
+	<g transform="translate(541.0,149.9) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text>Host 4</text>
+	</g>
+	<g transform="translate(541.0,90.9) rotate(-90)" style="stroke:none; fill:black; font-family:Arial; font-size:12.00pt; text-anchor:middle">
+		<text>Host 5</text>
+	</g>
+	</g>
+	<path  d='M524.4,358.6 L527.8,358.6 L531.2,358.6 M524.4,412.6 L527.8,412.6 L531.2,412.6 M527.8,412.6 L527.8,358.6 
+		M524.4,299.6 L527.8,299.6 L531.2,299.6 M524.4,353.7 L527.8,353.7 L531.2,353.7 M527.8,353.7 L527.8,299.6 
+		M524.4,240.7 L527.8,240.7 L531.2,240.7 M524.4,294.7 L527.8,294.7 L531.2,294.7 M527.8,294.7 L527.8,240.7 
+		M524.4,181.8 L527.8,181.8 L531.2,181.8 M524.4,235.8 L527.8,235.8 L531.2,235.8 M527.8,235.8 L527.8,181.8 
+		M524.4,122.8 L527.8,122.8 L531.2,122.8 M524.4,176.9 L527.8,176.9 L531.2,176.9 M527.8,176.9 L527.8,122.8 
+		M524.4,63.9 L527.8,63.9 L531.2,63.9 M524.4,117.9 L527.8,117.9 L531.2,117.9 M527.8,117.9 L527.8,63.9 
+		'></path>
+</g>
+	<g id="Plot_1"><title>Plot_1</title>
+<g style="fill:none; color:red; stroke:currentColor; stroke-width:1.00; stroke-linecap:butt; stroke-linejoin:miter">
+</g>
+	</g>
+<g style="fill:none; color:black; stroke:currentColor; stroke-width:1.00; stroke-linecap:butt; stroke-linejoin:miter">
+	<path  d='M83.0,54.1 L83.0,422.4 L516.9,422.4 L516.9,54.1 L83.0,54.1 Z '></path>
+</g>
+</svg>
+
