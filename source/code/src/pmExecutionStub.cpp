@@ -741,7 +741,6 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 lEventName  << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << subtaskId << "_Cancelled";
                 lNewName << "Task [" << (uint)*(lRange.task->GetOriginatingHost()) << ", " << lRange.task->GetSequenceNumber() << "] Subtask " << subtaskId;
                 mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
-                mEventTimelineAutoPtr->RecordEvent(lNewName.str(), false);
             #endif
 
                 CommonPostNegotiationOnCPU(lRange.task, subtaskId);
