@@ -29,8 +29,8 @@
 		0E31DE35168CB691002AD9AE /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = pmlib.dylib; path = "../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-btzrzgfrhtfijahfgimbyqhlmueb/Build/Products/Debug/pmlib.dylib"; sourceTree = "<group>"; };
 		0E31DE3C168CCE65002AD9AE /* matrixTranspose.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = matrixTranspose.h; sourceTree = "<group>"; };
 		0E31DE3E168CCE65002AD9AE /* matrixTranspose.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = matrixTranspose.cpp; sourceTree = "<group>"; };
-		0E31DE3F168CCE65002AD9AE /* matrixTranspose.cu */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = matrixTranspose.cu; sourceTree = "<group>"; };
 		0EEBD21E168CA14A001D9422 /* MatrixTranspose */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = MatrixTranspose; sourceTree = BUILT_PRODUCTS_DIR; };
+		0EF3BF11169C96BA0033B6A7 /* matrixTransposeCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = matrixTransposeCUDA.cu; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -58,7 +58,7 @@
 			isa = PBXGroup;
 			children = (
 				0E31DE3E168CCE65002AD9AE /* matrixTranspose.cpp */,
-				0E31DE3F168CCE65002AD9AE /* matrixTranspose.cu */,
+				0EF3BF11169C96BA0033B6A7 /* matrixTransposeCUDA.cu */,
 			);
 			name = src;
 			path = ../../../../../../testSuite/matrixTranspose/source/code/src;
@@ -204,6 +204,11 @@
 		0EEBD229168CA14A001D9422 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"DEBUG=1",
+					"SAMPLE_NAME=matrixTranspose",
+				);
 				HEADER_SEARCH_PATHS = (
 					/Users/tarunberi/Development/pmlib/source/code/inc/,
 					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
@@ -219,6 +224,8 @@
 		0EEBD22A168CA14A001D9422 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = "SAMPLE_NAME=matrixTranspose";
 				HEADER_SEARCH_PATHS = (
 					/Users/tarunberi/Development/pmlib/source/code/inc/,
 					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,

@@ -17,9 +17,14 @@ PTHREAD_LIBS= -lpthread
 
 COMPILER=g++
 NVCC_COMPILER=nvcc
-STRIP=strip
 FLAGS=-Wall -fPIC -DUNIX -D$(PLATFORM)
 CUDAFLAGS= -DUNIX --compiler-options -fPIC --machine 64
+
+ifeq ($(PLATFORM), LINUX)
+STRIP=strip -s
+else
+STRIP=strip -x
+endif
 
 ifeq ($(DEBUG), 1)
 MPI_INCLUDE= -I$(MPI_DEBUG_INSTALL_PATH)/include
@@ -137,10 +142,8 @@ $(OUTDIR)/%.o: ../../source/code/src/%.cu
 	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
 
 strip: $(PROGRAM)
-ifeq ($(PLATFORM), LINUX)
 	@echo "\n*** Stripping ***"
-	$(STRIP) -s $(PROGRAM)
-endif
+	$(STRIP) $(PROGRAM)
 
 clean: 
 	rm -f $(OUTDIR)/*.o core.* $(PROGRAM)

@@ -204,6 +204,11 @@
 		0E8178F5166F89770092C7D4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"DEBUG=1",
+					"SAMPLE_NAME=radixSort",
+				);
 				"HEADER_SEARCH_PATHS[arch=*]" = (
 					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
 					/Users/tarunberi/Development/pmlib/source/code/inc/,
@@ -219,6 +224,7 @@
 		0E8178F6166F89770092C7D4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = "SAMPLE_NAME=radixSort";
 				"HEADER_SEARCH_PATHS[arch=*]" = (
 					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
 					/Users/tarunberi/Development/pmlib/source/code/inc/,

@@ -187,8 +187,8 @@ pmStatus pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbac
 	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
     if(pCallbacks.dataDistribution)
         DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataDistribution, pmDataDistributionCB, new pmDataDistributionCB(pCallbacks.dataDistribution));
-	if(pCallbacks.subtask_cpu || pCallbacks.subtask_gpu_cuda)
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, pmSubtaskCB, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda));
+	if(pCallbacks.subtask_cpu || pCallbacks.subtask_gpu_cuda || pCallbacks.subtask_gpu_custom)
+		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lSubtask, pmSubtaskCB, new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda, pCallbacks.subtask_gpu_custom));
 	if(pCallbacks.dataReduction)
 		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lDataReduction, pmDataReductionCB, new pmDataReductionCB(pCallbacks.dataReduction));
 	if(pCallbacks.dataRedistribution)

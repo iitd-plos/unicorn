@@ -1,4 +1,7 @@
 
+namespace radixSort
+{
+
 #define DATA_TYPE unsigned int
 
 const int DEFAULT_ARRAY_LENGTH = 10000000;
@@ -20,3 +23,5 @@ typedef struct radixSortTaskConf
 	bool sortFromMsb;
     int round;
 } radixSortTaskConf;
+
+}

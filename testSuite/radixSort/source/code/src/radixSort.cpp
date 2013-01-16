@@ -8,6 +8,9 @@
 #include <math.h>
 #include <string.h>
 
+namespace radixSort
+{
+
 DATA_TYPE* gSampleInput;
 DATA_TYPE* gSerialOutput;
 DATA_TYPE* gParallelOutput;
@@ -308,4 +311,4 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-
+}

@@ -1,21 +1,31 @@
 
+/* Non-Square Matrix Transpose */
+
 #include <time.h>
 #include <string.h>
 
 #include "commonAPI.h"
 #include "matrixTranspose.h"
 
+namespace matrixTranspose
+{
+
 MATRIX_DATA_TYPE* gSerialOutput;
 MATRIX_DATA_TYPE* gParallelOutput;
 
-size_t getBlockSizeRows(size_t pMatrixDimRows)
+size_t getMin(size_t pVal1, size_t pVal2)
 {
-    return (pMatrixDimRows <= MAX_BLOCK_SIZE) ? pMatrixDimRows : MAX_BLOCK_SIZE;
+    return ((pVal1 < pVal2) ? pVal1 : pVal2);
 }
 
-size_t getBlockSizeCols(size_t pMatrixDimCols)
+void getBlockSize(size_t pMatrixDimRows, size_t pMatrixDimCols, size_t* pBlockSizeRows, size_t* pBlockSizeCols)
 {
-    return (pMatrixDimCols <= MAX_BLOCK_SIZE) ? pMatrixDimCols : MAX_BLOCK_SIZE;
+#ifdef USE_SQUARE_BLOCKS
+    *pBlockSizeRows = *pBlockSizeCols = getMin(getMin(pMatrixDimRows, pMatrixDimCols), MAX_BLOCK_SIZE);
+#else
+    *pBlockSizeRows = ((pMatrixDimRows <= MAX_BLOCK_SIZE) ? pMatrixDimRows : MAX_BLOCK_SIZE);
+    *pBlockSizeCols = ((pMatrixDimCols <= MAX_BLOCK_SIZE) ? pMatrixDimCols : MAX_BLOCK_SIZE);
+#endif
 }
 
 void setBit(char* pFlags, size_t pBit)
@@ -44,6 +54,21 @@ bool getNextCycleStart(char* pFlags, size_t pStartBit, size_t pBitCount, size_t*
     return false;
 }
 
+#ifdef USE_SQUARE_BLOCKS
+void transposeMatrixBlock(MATRIX_DATA_TYPE* pBlock, size_t pBlockDim)
+{
+    for(size_t i = 0; i < pBlockDim; ++i)
+    {
+        for(size_t j = i+1; j < pBlockDim; ++j)
+        {
+            MATRIX_DATA_TYPE lTemp = pBlock[j + i*pBlockDim];
+            pBlock[j + i*pBlockDim] = pBlock[i + j*pBlockDim];
+            pBlock[i + j*pBlockDim] = lTemp;
+        }
+    }
+}
+
+#else
 size_t getBitIndex(size_t pIndexInBlock, size_t pInputDimY, size_t pBlockSizeY)
 {
     size_t lBlockRow = (pIndexInBlock / pInputDimY);
@@ -119,6 +144,7 @@ void transposeMatrixBlock(MATRIX_DATA_TYPE* pInputBlock, MATRIX_DATA_TYPE* pOutp
 
     free(lFlags);
 }
+#endif
 
 void serialmatrixTranspose(MATRIX_DATA_TYPE* pMatrix, size_t pInputDimRows, size_t pInputDimCols)
 {
@@ -130,7 +156,8 @@ void serialmatrixTranspose(MATRIX_DATA_TYPE* pMatrix, size_t pInputDimRows, size
     setBit(lFlags, 0);
     setBit(lFlags, lBitCount - 1);
     
-    size_t lStartIndex, lIndex, lNextIndex, lVal;
+    MATRIX_DATA_TYPE lVal;
+    size_t lStartIndex, lIndex, lNextIndex;
     size_t lTestIndex = 1;
     while(getNextCycleStart(lFlags, lTestIndex, lBitCount, &lIndex))
     {
@@ -157,26 +184,6 @@ void serialmatrixTranspose(MATRIX_DATA_TYPE* pMatrix, size_t pInputDimRows, size
     free(lFlags);
 }
 
-#ifdef BUILD_CUDA
-pmCudaLaunchConf GetCudaLaunchConf(size_t pMatrixDim)
-{
-	pmCudaLaunchConf lCudaLaunchConf;
-    
-	int lMaxThreadsPerBlock = 512;	// Max. 512 threads allowed per block
-    
-	lCudaLaunchConf.threadsX = pMatrixDim;
-	if(lCudaLaunchConf.threadsX > lMaxThreadsPerBlock)
-    {
-		lCudaLaunchConf.threadsX = lMaxThreadsPerBlock;
-		lCudaLaunchConf.blocksX = pMatrixDim/lCudaLaunchConf.threadsX;
-        if(lCudaLaunchConf.blocksX * lCudaLaunchConf.threadsX < pMatrixDim)
-            ++lCudaLaunchConf.blocksX;
-    }
-    
-	return lCudaLaunchConf;
-}
-#endif
-
 pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
 {
     size_t i;
@@ -187,7 +194,7 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazy
     size_t lBlockCountCols = lTaskConf->matrixDimCols / lTaskConf->blockSizeCols;
     size_t lBlockIdRow = (int)(pSubtaskId / lBlockCountCols);
     size_t lBlockIdCol = (int)(pSubtaskId % lBlockCountCols);
-    
+
 	// Subscribe to one block of the output matrix for reading and it's transposed block for writing
     size_t lBlockElemCount = lTaskConf->blockSizeRows * lTaskConf->blockSizeCols;
     size_t lBlockOffset = ((lBlockIdCol * lTaskConf->blockSizeCols) + (lBlockIdRow * lBlockCountCols * lBlockElemCount)) * sizeof(MATRIX_DATA_TYPE);
@@ -210,22 +217,70 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazy
         lBlockOffset += lTaskConf->matrixDimRows * sizeof(MATRIX_DATA_TYPE);
     }
     
-#ifdef BUILD_CUDA
-	// Set CUDA Launch Configuration
-	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
-		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, lTaskConf->cudaLaunchConf);
-#endif
-    
 	return pmSuccess;
 }
 
 pmStatus matrixTranspose_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	matrixTransposeTaskConf* lTaskConf = (matrixTransposeTaskConf*)(pTaskInfo.taskConf);
+    
+#ifdef USE_SQUARE_BLOCKS
+    // For increased cache locality - copy the block into scratch buffer, transpose the scratch buffer and then write it to the transposed block
+    size_t lBlockDim = lTaskConf->blockSizeRows;
+    size_t lBlockDimSize = sizeof(MATRIX_DATA_TYPE) * lBlockDim;
+    size_t lBlockSize = lBlockDimSize * lBlockDim;
+    MATRIX_DATA_TYPE* lBlock = (MATRIX_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, lBlockSize);
 
+    size_t i;
+    for(i = 0; i < lBlockDim; ++i)
+        memcpy(lBlock + i*lBlockDim, ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemRead) + i*lTaskConf->matrixDimCols, lBlockDimSize);
+    
+    transposeMatrixBlock(lBlock, lBlockDim);
+    
+    for(i = 0; i < lBlockDim; ++i)
+        memcpy(((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemWrite) + i*lTaskConf->matrixDimRows, lBlock + i*lBlockDim, lBlockDimSize);
+#else
     transposeMatrixBlock((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemRead, (MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemWrite, lTaskConf->matrixDimRows, lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, lTaskConf->blockSizeCols, (pSubtaskInfo.subtaskId == 0), (pSubtaskInfo.subtaskId == pTaskInfo.subtaskCount - 1), pSubtaskInfo.subtaskId);
+#endif
 
 	return pmSuccess;
+}
+
+double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemInfo pMemInfo)
+{
+    size_t lBlockSizeRows, lBlockSizeCols;
+    getBlockSize(pMatrixDimRows, pMatrixDimCols, &lBlockSizeRows, &lBlockSizeCols);
+    size_t lBlocks = (pMatrixDimRows / lBlockSizeRows) * (pMatrixDimCols / lBlockSizeCols);
+
+	CREATE_TASK(0, 0, lBlocks, pCallbackHandle, pSchedulingPolicy)
+    
+    lTaskDetails.outputMemHandle = pMemHandle;
+    lTaskDetails.outputMemInfo = pMemInfo;
+    
+	matrixTransposeTaskConf lTaskConf;
+	lTaskConf.matrixDimRows = pMatrixDimRows;
+	lTaskConf.matrixDimCols = pMatrixDimCols;
+    lTaskConf.blockSizeRows = lBlockSizeRows;
+    lTaskConf.blockSizeCols = lBlockSizeCols;
+
+	lTaskDetails.taskConf = (void*)(&lTaskConf);
+	lTaskDetails.taskConfLength = sizeof(lTaskConf);
+    
+	double lStartTime = getCurrentTimeInSecs();
+    
+	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
+	
+    if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
+    {
+        FREE_TASK_AND_RESOURCES
+        return (double)-1.0;
+    }
+    
+	double lEndTime = getCurrentTimeInSecs();
+    
+    pmReleaseTask(lTaskHandle);
+
+    return (lEndTime - lStartTime);
 }
 
 #define READ_NON_COMMON_ARGS \
@@ -254,10 +309,6 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
 	READ_NON_COMMON_ARGS
-    
-    size_t lBlockSizeRows = getBlockSizeRows(lMatrixDimRows);
-    size_t lBlockSizeCols = getBlockSizeCols(lMatrixDimCols);
-    size_t lBlocks = (lMatrixDimRows /lBlockSizeRows) * (lMatrixDimCols / lBlockSizeCols);
 
 	// Input Mem is null
 	// Output Mem contains the input and inplace result matrix
@@ -269,49 +320,24 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     
 	CREATE_MEM(lMemSize, lMemHandle);
 
-	CREATE_TASK(0, 0, lBlocks, pCallbackHandle, pSchedulingPolicy)
-    
-    lTaskDetails.outputMemHandle = lMemHandle;
-    lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE;
-
     pmRawMemPtr lRawOutputPtr;
-    pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
+    pmGetRawMemPtr(lMemHandle, &lRawOutputPtr);
     
 	memcpy(lRawOutputPtr, gParallelOutput, lMemSize);
-    
-	matrixTransposeTaskConf lTaskConf;
-	lTaskConf.matrixDimRows = lMatrixDimRows;
-	lTaskConf.matrixDimCols = lMatrixDimCols;
-    lTaskConf.blockSizeRows = lBlockSizeRows;
-    lTaskConf.blockSizeCols = lBlockSizeCols;
-#ifdef BUILD_CUDA
-    lTaskConf.cudaLaunchConf = GetCudaLaunchConf(lMatrixDim);
-#endif
 
-	lTaskDetails.taskConf = (void*)(&lTaskConf);
-	lTaskDetails.taskConfLength = sizeof(lTaskConf);
+    double lTime = parallelMatrixTranspose(lPowRows, lPowCols, lMatrixDimRows, lMatrixDimCols, lMemHandle, pCallbackHandle, pSchedulingPolicy, OUTPUT_MEM_READ_WRITE);
     
-	double lStartTime = getCurrentTimeInSecs();
-    
-	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
-	
-    if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
+    if(lTime != -1.0)
     {
-        FREE_TASK_AND_RESOURCES
-        return (double)-1.0;
+        SAFE_PM_EXEC( pmFetchMemory(lMemHandle) );
+        
+        pmGetRawMemPtr(lMemHandle, &lRawOutputPtr);
+        memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
     }
     
-	double lEndTime = getCurrentTimeInSecs();
+    pmReleaseMemory(lMemHandle);
     
-	SAFE_PM_EXEC( pmFetchMemory(lMemHandle) );
-    
-	pmGetRawMemPtr(lMemHandle, &lRawOutputPtr);
-	memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
-    
-	pmReleaseMemory(lMemHandle);
-    pmReleaseTask(lTaskHandle);
-    
-	return (lEndTime - lStartTime);
+	return lTime;
 }
 
 pmCallbacks DoSetDefaultCallbacks()
@@ -323,7 +349,9 @@ pmCallbacks DoSetDefaultCallbacks()
 	lCallbacks.subtask_cpu = matrixTranspose_cpu;
     
 #ifdef BUILD_CUDA
-	lCallbacks.subtask_gpu_cuda = matrixTranspose_cuda;
+#ifdef USE_SQUARE_BLOCKS
+	lCallbacks.subtask_gpu_custom = matrixTranspose_cudaLaunchFunc;
+#endif
 #endif
     
 	return lCallbacks;
@@ -339,10 +367,13 @@ int DoInit(int argc, char** argv, int pCommonArgs)
     size_t lMatrixElems = lMatrixDimRows * lMatrixDimCols;
 	gSerialOutput = new MATRIX_DATA_TYPE[lMatrixElems];
 	gParallelOutput = new MATRIX_DATA_TYPE[lMatrixElems];
-    
+
+#if MATRIX_DATA_TYPE == complex
+#else
 	for(size_t i=0; i<lMatrixElems; ++i)
 		gSerialOutput[i] = gParallelOutput[i] = i;  //(MATRIX_DATA_TYPE)rand(); // i;
-    
+#endif
+
 	return 0;
 }
 
@@ -377,19 +408,23 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
     size_t lMatrixElems = lMatrixDimRows * lMatrixDimCols;
 	for(i=0; i<lMatrixElems; ++i)
     {
+#if MATRIX_DATA_TYPE == complex
+#else
 		if(gSerialOutput[i] != gParallelOutput[i])
         {
 			std::cout << "Mismatch index " << i << " Serial Value = " << gSerialOutput[i] << " Parallel Value = " << gParallelOutput[i] << std::endl;
 			return 1;
         }
+#endif
     }
-    
+
 	std::cout << "Perfect match against serial execution" << std::endl;
 	return 0;
 }
 
 /**	Non-common args
- *	1. Matrix Dimension
+ *	1. log 2 (no. of rows)
+ *	2. log 2 (no. of cols)
  */
 int main(int argc, char** argv)
 {
@@ -401,4 +436,4 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-
+}

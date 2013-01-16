@@ -246,6 +246,7 @@ sub plotRect
     else
     {
         print $WH "set obj rect fillcolor rgb \"blue\" fillstyle solid 1.0 noborder from $xMin,$yMin to $xMax,$yMax\n";
+        print $WH "set label \"$subtask\" at $xPos,$yPos rotate by 90 center font \",8\"\n";
     }
 }
 

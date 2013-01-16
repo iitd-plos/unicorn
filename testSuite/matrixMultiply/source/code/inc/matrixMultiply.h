@@ -1,4 +1,7 @@
 
+namespace matrixMultiply
+{
+
 #define DEFAULT_MATRIX_DIM 1000
 #define MATRIX_DATA_TYPE int
 
@@ -6,7 +9,8 @@ using namespace pm;
 
 #ifdef BUILD_CUDA
 #include <cuda.h>
-void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
+typedef void (*matrixMultiply_cudaFuncPtr)(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
+extern matrixMultiply_cudaFuncPtr matrixMultiply_cudaFunc;
 #endif
 
 typedef struct matrixMultiplyTaskConf
@@ -16,3 +20,5 @@ typedef struct matrixMultiplyTaskConf
 	pmCudaLaunchConf cudaLaunchConf;
 #endif
 } matrixMultiplyTaskConf;
+
+}

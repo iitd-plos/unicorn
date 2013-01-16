@@ -112,8 +112,23 @@ std::string pmDispatcherCUDA::GetDeviceDescription(size_t pDeviceIndex)
 
 	return lStr;
 }
+    
+void* pmDispatcherCUDA::GetDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo)
+{
+    void* lDeviceInfoCudaPtr = NULL;
 
-pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem)
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&lDeviceInfoCudaPtr, sizeof(pDeviceInfo) );
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lDeviceInfoCudaPtr, &pDeviceInfo, sizeof(pDeviceInfo), cudaMemcpyHostToDevice );
+    
+    return lDeviceInfoCudaPtr;
+}
+    
+void pmDispatcherCUDA::FreeDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr)
+{
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pDeviceInfoCudaPtr );
+}
+
+pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem)
 {
     bool lMatchingLastExecutionRecord = false;
     lastExecutionRecord* lLastRecord = NULL;
@@ -147,7 +162,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 
     if(pSubtaskInfo.inputMem && pSubtaskInfo.inputMemLength != 0)
     {
-        if(lMatchingLastExecutionRecord && SubtasksHaveMatchingSubscriptions(pStub, pOriginatingMachineIndex, pSequenceNumber, lLastRecord->lastSubtaskId, pSubtaskInfo.subtaskId, true))
+        if(lMatchingLastExecutionRecord && SubtasksHaveMatchingSubscriptions(pStub, pOriginatingMachineIndex, pSequenceNumber, lLastRecord->lastSubtaskId, pSubtaskInfo.subtaskId, INPUT_MEM_READ_SUBSCRIPTION))
         {
             lInputMemCudaPtr = lLastRecord->inputMemCudaPtr;
         }
@@ -194,15 +209,14 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
         if(!pOutputMemWriteOnly)
         {
             std::vector<std::pair<size_t, size_t> > lSubscriptionVector;
-            if(GetNonConsolidatedSubscriptionsForSubtask(pStub, pOriginatingMachineIndex, pSequenceNumber, OUTPUT_MEM_READ_SUBSCRIPTION, pSubtaskInfo, lSubscriptionVector))
+            GetNonConsolidatedSubscriptionsForSubtask(pStub, pOriginatingMachineIndex, pSequenceNumber, OUTPUT_MEM_READ_SUBSCRIPTION, pSubtaskInfo, lSubscriptionVector);
+
+            std::vector<std::pair<size_t, size_t> >::iterator lIter = lSubscriptionVector.begin(), lEndIter = lSubscriptionVector.end();
+            for(; lIter != lEndIter; ++lIter)
             {
-                std::vector<std::pair<size_t, size_t> >::iterator lIter = lSubscriptionVector.begin(), lEndIter = lSubscriptionVector.end();
-                for(; lIter != lEndIter; ++lIter)
-                {
-                    void* lTempDevicePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMemCudaPtr) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
-                    void* lTempHostPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pTaskOutputMem) + (*lIter).first);
-                    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTempDevicePtr, lTempHostPtr, (*lIter).second, cudaMemcpyHostToDevice );
-                }
+                void* lTempDevicePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMemCudaPtr) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
+                void* lTempHostPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pTaskOutputMem) + (*lIter).first);
+                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTempDevicePtr, lTempHostPtr, (*lIter).second, cudaMemcpyHostToDevice );
             }
         }
 	}
@@ -219,13 +233,39 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 	pmSubtaskInfo lSubtaskInfo = pSubtaskInfo;
 	lSubtaskInfo.inputMem = lInputMemCudaPtr;
 	lSubtaskInfo.outputMem = lOutputMemCudaPtr;
+    lSubtaskInfo.outputMemRead = lSubtaskInfo.outputMemWrite = NULL;
+    lSubtaskInfo.outputMemReadLength = lSubtaskInfo.outputMemWriteLength = 0;
+    if(lOutputMemCudaPtr)
+    {
+        if(!pOutputMemWriteOnly)
+        {
+            lSubtaskInfo.outputMemRead = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMemCudaPtr) + reinterpret_cast<size_t>(pSubtaskInfo.outputMemRead) - reinterpret_cast<size_t>(pSubtaskInfo.outputMem));
+            lSubtaskInfo.outputMemReadLength = pSubtaskInfo.outputMemReadLength;
+        }
 
-	dim3 gridConf(pCudaLaunchConf.blocksX, pCudaLaunchConf.blocksY, pCudaLaunchConf.blocksZ);
-	dim3 blockConf(pCudaLaunchConf.threadsX, pCudaLaunchConf.threadsY, pCudaLaunchConf.threadsZ);
+        lSubtaskInfo.outputMemWrite = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMemCudaPtr) + reinterpret_cast<size_t>(pSubtaskInfo.outputMemWrite) - reinterpret_cast<size_t>(pSubtaskInfo.outputMem));
+        lSubtaskInfo.outputMemWriteLength = pSubtaskInfo.outputMemWriteLength;
+    }
+
+    lSubtaskInfo.inputMemLength = pSubtaskInfo.inputMemLength;
 
     MarkInsideUserCode(pStub, pSubtaskInfo.subtaskId);
-	//pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem>>> (pTaskInfo, pDeviceInfo, lSubtaskInfo, lStatusPtr);
-	pKernelPtr <<<gridConf, blockConf>>> (lTaskInfo, pDeviceInfo, lSubtaskInfo, lStatusPtr);
+    
+    if(pKernelPtr)
+    {
+        dim3 gridConf(pCudaLaunchConf.blocksX, pCudaLaunchConf.blocksY, pCudaLaunchConf.blocksZ);
+        dim3 blockConf(pCudaLaunchConf.threadsX, pCudaLaunchConf.threadsY, pCudaLaunchConf.threadsZ);
+
+        if(pCudaLaunchConf.sharedMem)
+            pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem>>> (pTaskInfo, (pmDeviceInfo*)pDeviceInfoCudaPtr, lSubtaskInfo, lStatusPtr);
+        else
+            pKernelPtr <<<gridConf, blockConf>>> (lTaskInfo, (pmDeviceInfo*)pDeviceInfoCudaPtr, lSubtaskInfo, lStatusPtr);
+    }
+    else
+    {
+        pCustomKernelPtr(pTaskInfo, pDeviceInfo, lSubtaskInfo);
+    }
+
     MarkInsideLibraryCode(pStub, pSubtaskInfo.subtaskId);
 
 	if(cudaGetLastError() == cudaSuccess && !RequiresPrematureExit(pStub, pSubtaskInfo.subtaskId))
@@ -233,15 +273,14 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
         if(pSubtaskInfo.outputMem && pSubtaskInfo.outputMemLength != 0)
         {
             std::vector<std::pair<size_t, size_t> > lSubscriptionVector;
-            if(GetNonConsolidatedSubscriptionsForSubtask(pStub, pOriginatingMachineIndex, pSequenceNumber, OUTPUT_MEM_WRITE_SUBSCRIPTION, pSubtaskInfo, lSubscriptionVector))
+            GetNonConsolidatedSubscriptionsForSubtask(pStub, pOriginatingMachineIndex, pSequenceNumber, OUTPUT_MEM_WRITE_SUBSCRIPTION, pSubtaskInfo, lSubscriptionVector);
+
+            std::vector<std::pair<size_t, size_t> >::iterator lIter = lSubscriptionVector.begin(), lEndIter = lSubscriptionVector.end();
+            for(; lIter != lEndIter; ++lIter)
             {
-                std::vector<std::pair<size_t, size_t> >::iterator lIter = lSubscriptionVector.begin(), lEndIter = lSubscriptionVector.end();
-                for(; lIter != lEndIter; ++lIter)
-                {
-                    void* lTempDevicePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMemCudaPtr) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
-                    void* lTempHostPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
-                    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTempHostPtr, lTempDevicePtr, (*lIter).second, cudaMemcpyDeviceToHost );
-                }
+                void* lTempDevicePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMemCudaPtr) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
+                void* lTempHostPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
+                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTempHostPtr, lTempDevicePtr, (*lIter).second, cudaMemcpyDeviceToHost );
             }
         }
         

@@ -243,7 +243,7 @@ class pmStubGPU : public pmExecutionStub
 		virtual pmDeviceType GetType() = 0;
 
 		virtual pmStatus FreeResources() = 0;
-		virtual pmStatus FreeLastExecutionResources() = 0;
+		virtual pmStatus FreeExecutionResources() = 0;
 
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
 
@@ -284,12 +284,20 @@ class pmStubCUDA : public pmStubGPU
 		virtual pmDeviceType GetType();
 
 		virtual pmStatus FreeResources();
-		virtual pmStatus FreeLastExecutionResources();
+		virtual pmStatus FreeExecutionResources();
 
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId);
 
+    #ifdef SUPPORT_CUDA
+        void* GetDeviceInfoCudaPtr();
+    #endif
+
 	private:
 		size_t mDeviceIndex;
+
+    #ifdef SUPPORT_CUDA
+        void* mDeviceInfoCudaPtr;
+    #endif
 };
 
 bool execEventMatchFunc(execStub::stubEvent& pEvent, void* pCriterion);

@@ -60,7 +60,7 @@ class pmDataDistributionCB : public pmCallback
 class pmSubtaskCB : public pmCallback
 {
 	public:
-		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA);
+		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom);
 		virtual ~pmSubtaskCB();
 
 		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex);
@@ -69,7 +69,8 @@ class pmSubtaskCB : public pmCallback
 
 	private:
 		pmSubtaskCallback_CPU mCallback_CPU;
-		pmSubtaskCallback_GPU_CUDA mCallback_GPU_CUDA;
+        pmSubtaskCallback_GPU_CUDA mCallback_GPU_CUDA;
+        pmSubtaskCallback_GPU_Custom mCallback_GPU_Custom;
 };
 
 class pmDataReductionCB : public pmCallback

@@ -5,6 +5,9 @@
 #include "commonAPI.h"
 #include "matrixMultiply.h"
 
+namespace matrixMultiply
+{
+    
 MATRIX_DATA_TYPE* gSampleInput;
 MATRIX_DATA_TYPE* gSerialOutput;
 MATRIX_DATA_TYPE* gParallelOutput;
@@ -150,7 +153,7 @@ pmCallbacks DoSetDefaultCallbacks()
 	lCallbacks.subtask_cpu = matrixMultiply_cpu;
 
 	#ifdef BUILD_CUDA
-	lCallbacks.subtask_gpu_cuda = matrixMultiply_cuda;
+	lCallbacks.subtask_gpu_cuda = matrixMultiply_cudaFunc;
 	#endif
 
 	return lCallbacks;
@@ -218,4 +221,4 @@ int main(int argc, char** argv)
 	return 0;
 }
 
-
+}

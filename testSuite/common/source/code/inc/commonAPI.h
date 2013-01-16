@@ -6,6 +6,12 @@
 
 using namespace pm;
 
+typedef struct complex
+{
+	float x;
+	float y;
+} complex;
+
 bool localDeviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
 double getCurrentTimeInSecs();
 
@@ -27,6 +33,7 @@ double getCurrentTimeInSecs();
 
 typedef double (*serialProcessFunc)(int argc, char** argv, int pCommonArgs);
 typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy);
+typedef double (*parallelProcessFunc2)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle1, pmCallbackHandle pCallbackHandle2, pmSchedulingPolicy pSchedulingPolicy);
 typedef pmCallbacks (*callbacksFunc)();
 typedef int (*initFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*destroyFunc)();
@@ -34,6 +41,10 @@ typedef int (*compareFunc)(int argc, char** argv, int pCommonArgs);
 
 void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc pParallelFunc, 
 	callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey);
+
+void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc2 pParallelFunc,
+                    callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey1,
+                    callbacksFunc pCallbacksFunc2, std::string pCallbackKey2);
 
 void commonFinish();
 

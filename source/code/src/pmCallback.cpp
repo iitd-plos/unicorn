@@ -68,10 +68,11 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
 
 
 /* class pmSubtaskCB */
-pmSubtaskCB::pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA)
+pmSubtaskCB::pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom)
+	: mCallback_CPU(pCallback_CPU)
+	, mCallback_GPU_CUDA(pCallback_GPU_CUDA)
+    , mCallback_GPU_Custom(pCallback_GPU_Custom)
 {
-	mCallback_CPU = pCallback_CPU;
-	mCallback_GPU_CUDA = pCallback_GPU_CUDA;
 }
 
 pmSubtaskCB::~pmSubtaskCB()
@@ -93,7 +94,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 #ifdef SUPPORT_CUDA
 		case GPU_CUDA:
 		{
-			if(mCallback_GPU_CUDA)
+			if(mCallback_GPU_CUDA || mCallback_GPU_Custom)
 				return true;
 
 			break;
@@ -136,11 +137,11 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 #ifdef SUPPORT_CUDA
 		case GPU_CUDA:
 		{
-			if(!mCallback_GPU_CUDA)
+			if(!mCallback_GPU_CUDA && !mCallback_GPU_Custom)
 				return pmSuccess;
             
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskId);
-			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pBoundHardwareDeviceIndex, pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA);
+			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pBoundHardwareDeviceIndex, pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
 
 			break;
 		}

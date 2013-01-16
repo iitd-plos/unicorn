@@ -258,6 +258,8 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubt
     
         if(pOutputMemWriteOnly)
         {
+            pSubtaskInfo.outputMemRead = NULL;
+            pSubtaskInfo.outputMemReadLength = 0;
             pSubtaskInfo.outputMemWrite = pSubtaskInfo.outputMem;
             pSubtaskInfo.outputMemWriteLength = pSubtaskInfo.outputMemLength;
         }

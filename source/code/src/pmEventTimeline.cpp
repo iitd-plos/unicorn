@@ -54,7 +54,7 @@ void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)
     if(pStart && mEventMap.find(pEventName) != mEventMap.end())
         PMTHROW(pmFatalErrorException());
     
-    if(!pStart && mEventMap.find(pEventName) == mEventMap.end())
+    if(!pStart && (mEventMap.find(pEventName) == mEventMap.end() || mEventMap[pEventName].second != -1.0))
         PMTHROW(pmFatalErrorException());
     
     if(pStart)

@@ -83,7 +83,9 @@ static const char* pmErrorMessages[] =
 	"Internal failure in data packing/unpacking",
     "No compatible processing element found in the cluster",
     "Configuration file not found at expected location",
-    "Memory offset out of bounds"
+    "Memory offset out of bounds",
+    "Custom error from application",
+    "One or more callbacks are not valid"
 };
 
 const char* pmGetLibVersion()
@@ -208,19 +210,23 @@ void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle,
 }
 
 pmCallbacks::pmCallbacks()
+    : dataDistribution(NULL)
+	, subtask_cpu(NULL)
+	, subtask_gpu_cuda(NULL)
+    , subtask_gpu_custom(NULL)
+	, dataReduction(NULL)
+	, dataRedistribution(NULL)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
 {
-	dataDistribution = NULL;
-	subtask_cpu = NULL;
-	subtask_gpu_cuda = NULL;
-	dataReduction = NULL;
-	dataRedistribution = NULL;
-	deviceSelection = NULL;
-	preDataTransfer = NULL;
-	postDataTransfer = NULL;
 }
 
 pmStatus pmRegisterCallbacks(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
 {
+    if(pCallbacks.subtask_gpu_cuda != NULL && pCallbacks.subtask_gpu_custom != NULL)
+        return pmInvalidCallbacks;
+
 	SAFE_EXECUTE_ON_CONTROLLER(RegisterCallbacks_Public, pKey, pCallbacks, pCallbackHandle);
 }
 

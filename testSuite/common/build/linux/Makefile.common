@@ -4,9 +4,9 @@
 
 COMPILER=g++
 NVCC_COMPILER=nvcc
-STRIP=strip
-FLAGS=-Wall -DUNIX -DLINUX
-CUDAFLAGS= -DUNIX
+
+FLAGS +=-Wall -DUNIX -DLINUX -DSAMPLE_NAME=$(SAMPLE_NAME)
+CUDAFLAGS += -DUNIX -DSAMPLE_NAME=$(SAMPLE_NAME) --machine 64
 
 ifeq ($(CUDA_DEBUG), 1)
 	CUDAFLAGS += -G
@@ -35,6 +35,7 @@ endif
 
 ifeq ($(BUILD_CUDA), 1)
 FLAGS += -DBUILD_CUDA -DSUPPORT_CUDA
+CUDAFLAGS += -DBUILD_CUDA -DSUPPORT_CUDA
 INCLUDES += -I$(CUDA_INCLUDE_PATH)
 OBJECTS += $(CUDA_OBJECTS)
 LIBRARIES += -L$(CUDA_LIB_PATH) -lcudart
@@ -45,6 +46,12 @@ OBJECTS += commonAPI.o
 endif
 
 INCLUDES += -I$(PMLIB_INCLUDE_PATH) -I../../source/code/inc -I$(PATH_PREFIX)../../../common/source/code/inc
+
+ifeq ($(PLATFORM), LINUX)
+	STRIP=strip -s
+else
+	STRIP=strip -u -r
+endif
 
 all: prebuild compile link postbuild final
 
@@ -81,7 +88,7 @@ final:
 
 strip: $(PROGRAM)
 	@echo "\n*** Stripping ***"
-	$(STRIP) -s $(PROGRAM)
+	$(STRIP) $(PROGRAM)
 
 clean: 
 	rm -f $(OUTDIR)/*.o core.* $(PROGRAM)

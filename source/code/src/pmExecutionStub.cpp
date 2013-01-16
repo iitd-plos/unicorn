@@ -766,7 +766,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 		case FREE_GPU_RESOURCES:
 		{
 	#ifdef SUPPORT_CUDA
-			((pmStubGPU*)this)->FreeLastExecutionResources();
+			((pmStubGPU*)this)->FreeExecutionResources();
 	#endif
 			break;
 		}
@@ -1153,8 +1153,11 @@ pmStubGPU::~pmStubGPU()
 /* class pmStubCUDA */
 pmStubCUDA::pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine)
 	: pmStubGPU(pDeviceIndexOnMachine)
+    , mDeviceIndex(pDeviceIndex)
+#ifdef SUPPORT_CUDA
+    , mDeviceInfoCudaPtr(NULL)
+#endif
 {
-	mDeviceIndex = pDeviceIndex;
 }
 
 pmStubCUDA::~pmStubCUDA()
@@ -1169,9 +1172,12 @@ pmStatus pmStubCUDA::FreeResources()
     return pmSuccess;
 }
 
-pmStatus pmStubCUDA::FreeLastExecutionResources()
+pmStatus pmStubCUDA::FreeExecutionResources()
 {
 #ifdef SUPPORT_CUDA
+    if(mDeviceInfoCudaPtr)
+        pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeDeviceInfoCudaPtr(mDeviceInfoCudaPtr);
+
     pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeLastExecutionResources(mDeviceIndex);
 #endif
     return pmSuccess;
@@ -1224,6 +1230,16 @@ pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId)
 
 	return pmSuccess;
 }
+
+#ifdef SUPPORT_CUDA
+void* pmStubCUDA::GetDeviceInfoCudaPtr()
+{
+    if(!mDeviceInfoCudaPtr)
+        mDeviceInfoCudaPtr = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetDeviceInfoCudaPtr(GetProcessingElement()->GetDeviceInfo());
+        
+    return mDeviceInfoCudaPtr;
+}
+#endif
 
 
 bool execEventMatchFunc(stubEvent& pEvent, void* pCriterion)

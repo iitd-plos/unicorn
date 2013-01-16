@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		0E2C07A416A67A8000F6BB88 /* matrixTranspose.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E2C07A316A67A8000F6BB88 /* matrixTranspose.cpp */; };
 		0E817933166F8B1B0092C7D4 /* fft.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E817931166F8B1B0092C7D4 /* fft.cpp */; };
 		0E81794C166F8E600092C7D4 /* pmlib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E81794B166F8E600092C7D4 /* pmlib.dylib */; };
 		0EF13CDF166FEF8600D012B4 /* commonAPI.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EF13CDE166FEF8600D012B4 /* commonAPI.cpp */; };
@@ -25,6 +26,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		0E2C07A316A67A8000F6BB88 /* matrixTranspose.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = matrixTranspose.cpp; path = ../../../../../testSuite/matrixTranspose/source/code/src/matrixTranspose.cpp; sourceTree = "<group>"; };
 		0E817902166F89940092C7D4 /* FFT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = FFT; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E81792F166F8B1B0092C7D4 /* fft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = fft.h; sourceTree = "<group>"; };
 		0E817931166F8B1B0092C7D4 /* fft.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = fft.cpp; sourceTree = "<group>"; };
@@ -49,6 +51,7 @@
 		0E8178F7166F89940092C7D4 = {
 			isa = PBXGroup;
 			children = (
+				0E2C07A316A67A8000F6BB88 /* matrixTranspose.cpp */,
 				0EF13CDE166FEF8600D012B4 /* commonAPI.cpp */,
 				0E81794B166F8E600092C7D4 /* pmlib.dylib */,
 				0E817905166F89940092C7D4 /* FFT */,
@@ -144,6 +147,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				0E2C07A416A67A8000F6BB88 /* matrixTranspose.cpp in Sources */,
 				0EF13CDF166FEF8600D012B4 /* commonAPI.cpp in Sources */,
 				0E817933166F8B1B0092C7D4 /* fft.cpp in Sources */,
 			);
@@ -206,9 +210,17 @@
 		0E81790D166F89940092C7D4 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"DEBUG=1",
+					"SAMPLE_NAME=fft",
+					"FFT_DATA_TYPE=complex",
+					"MATRIX_DATA_TYPE=complex",
+				);
 				HEADER_SEARCH_PATHS = (
 					/Users/tarunberi/Development/pmlib/source/code/inc/,
 					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
+					/Users/tarunberi/Development/pmlib/testSuite/matrixTranspose/source/code/inc,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -221,9 +233,15 @@
 		0E81790E166F89940092C7D4 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"SAMPLE_NAME=fft",
+					"FFT_DATA_TYPE=complex",
+					"MATRIX_DATA_TYPE=complex",
+				);
 				HEADER_SEARCH_PATHS = (
 					/Users/tarunberi/Development/pmlib/source/code/inc/,
 					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
+					/Users/tarunberi/Development/pmlib/testSuite/matrixTranspose/source/code/inc,
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",

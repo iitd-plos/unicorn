@@ -64,6 +64,8 @@ namespace pm
         pmNoCompatibleDevice,
         pmConfFileNotFound,
         pmInvalidOffset,
+        pmInvalidCallbacks,
+        pmUserError,
 		pmMaxStatusValues
 	} pmStatus;
 
@@ -186,13 +188,13 @@ namespace pm
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
 	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId);
 	typedef pmStatus (*pmSubtaskCallback_CPU)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
-	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
+	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
 	typedef pmStatus (*pmDataReductionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
 	typedef pmStatus (*pmDataRedistributionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef bool     (*pmDeviceSelectionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
 	typedef pmStatus (*pmPreDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
 	typedef pmStatus (*pmPostDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
-
+    typedef pmSubtaskCallback_CPU pmSubtaskCallback_GPU_Custom;
 
 	/** Unified callback structure */
 	typedef struct pmCallbacks
@@ -201,6 +203,7 @@ namespace pm
 			pmDataDistributionCallback dataDistribution;
 			pmSubtaskCallback_CPU subtask_cpu;
 			pmSubtaskCallback_GPU_CUDA subtask_gpu_cuda;
+            pmSubtaskCallback_GPU_Custom subtask_gpu_custom;    // Atleast one of subtask_gpu_cuda and subtask_gpu_custom must be NULL
 			pmDataReductionCallback dataReduction;
 			pmDataRedistributionCallback dataRedistribution;
 			pmDeviceSelectionCallback deviceSelection;
