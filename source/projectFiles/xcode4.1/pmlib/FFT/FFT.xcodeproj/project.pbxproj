@@ -8,8 +8,8 @@
 
 /* Begin PBXBuildFile section */
 		0E2C07A416A67A8000F6BB88 /* matrixTranspose.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E2C07A316A67A8000F6BB88 /* matrixTranspose.cpp */; };
+		0E4016D916A9C3A80099CF5B /* pmlib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E4016D816A9C3A80099CF5B /* pmlib.dylib */; };
 		0E817933166F8B1B0092C7D4 /* fft.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E817931166F8B1B0092C7D4 /* fft.cpp */; };
-		0E81794C166F8E600092C7D4 /* pmlib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E81794B166F8E600092C7D4 /* pmlib.dylib */; };
 		0EF13CDF166FEF8600D012B4 /* commonAPI.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EF13CDE166FEF8600D012B4 /* commonAPI.cpp */; };
 /* End PBXBuildFile section */
 
@@ -27,12 +27,11 @@
 
 /* Begin PBXFileReference section */
 		0E2C07A316A67A8000F6BB88 /* matrixTranspose.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = matrixTranspose.cpp; path = ../../../../../testSuite/matrixTranspose/source/code/src/matrixTranspose.cpp; sourceTree = "<group>"; };
+		0E4016D816A9C3A80099CF5B /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E817902166F89940092C7D4 /* FFT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = FFT; sourceTree = BUILT_PRODUCTS_DIR; };
-		0E81792F166F8B1B0092C7D4 /* fft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = fft.h; sourceTree = "<group>"; };
-		0E817931166F8B1B0092C7D4 /* fft.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = fft.cpp; sourceTree = "<group>"; };
-		0E817932166F8B1B0092C7D4 /* fft.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = fft.cu; sourceTree = "<group>"; };
-		0E81794B166F8E600092C7D4 /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = pmlib.dylib; path = "../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-btzrzgfrhtfijahfgimbyqhlmueb/Build/Products/Debug/pmlib.dylib"; sourceTree = "<group>"; };
-		0EF13CDC166FBC6A00D012B4 /* Sources */ = {isa = PBXFileReference; lastKnownFileType = folder; name = Sources; path = ../../../../../../testSuite/fft/FFT/Sources; sourceTree = "<group>"; };
+		0E81792F166F8B1B0092C7D4 /* fft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = fft.h; path = ../../../../../testSuite/fft/source/code/inc/fft.h; sourceTree = "<group>"; };
+		0E817931166F8B1B0092C7D4 /* fft.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = fft.cpp; path = ../../../../../testSuite/fft/source/code/src/fft.cpp; sourceTree = "<group>"; };
+		0E817932166F8B1B0092C7D4 /* fft.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = fft.cu; path = ../../../../../testSuite/fft/source/code/src/fft.cu; sourceTree = "<group>"; };
 		0EF13CDE166FEF8600D012B4 /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -41,7 +40,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0E81794C166F8E600092C7D4 /* pmlib.dylib in Frameworks */,
+				0E4016D916A9C3A80099CF5B /* pmlib.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -51,9 +50,9 @@
 		0E8178F7166F89940092C7D4 = {
 			isa = PBXGroup;
 			children = (
+				0E4016D816A9C3A80099CF5B /* pmlib.dylib */,
 				0E2C07A316A67A8000F6BB88 /* matrixTranspose.cpp */,
 				0EF13CDE166FEF8600D012B4 /* commonAPI.cpp */,
-				0E81794B166F8E600092C7D4 /* pmlib.dylib */,
 				0E817905166F89940092C7D4 /* FFT */,
 				0E817903166F89940092C7D4 /* Products */,
 			);
@@ -70,7 +69,6 @@
 		0E817905166F89940092C7D4 /* FFT */ = {
 			isa = PBXGroup;
 			children = (
-				0EF13CDC166FBC6A00D012B4 /* Sources */,
 				0E81792E166F8B1B0092C7D4 /* inc */,
 				0E817930166F8B1B0092C7D4 /* src */,
 			);
@@ -83,8 +81,8 @@
 				0E81792F166F8B1B0092C7D4 /* fft.h */,
 			);
 			name = inc;
-			path = ../../../../../../testSuite/fft/source/code/inc;
-			sourceTree = "<group>";
+			path = ../../../../../testSuite/fft/source/code/inc;
+			sourceTree = SOURCE_ROOT;
 		};
 		0E817930166F8B1B0092C7D4 /* src */ = {
 			isa = PBXGroup;
@@ -93,8 +91,8 @@
 				0E817932166F8B1B0092C7D4 /* fft.cu */,
 			);
 			name = src;
-			path = ../../../../../../testSuite/fft/source/code/src;
-			sourceTree = "<group>";
+			path = ../../../../../testSuite/fft/source/code/src;
+			sourceTree = SOURCE_ROOT;
 		};
 /* End PBXGroup section */
 
@@ -225,6 +223,7 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-btzrzgfrhtfijahfgimbyqhlmueb/Build/Products/Debug\"",
+					"\"$(SRCROOT)/../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug\"",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -246,6 +245,7 @@
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-btzrzgfrhtfijahfgimbyqhlmueb/Build/Products/Debug\"",
+					"\"$(SRCROOT)/../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug\"",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};

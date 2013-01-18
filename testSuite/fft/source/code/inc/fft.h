@@ -5,7 +5,9 @@ namespace fft
 #define DEFAULT_POW_X 10
 #define DEFAULT_POW_Y 10
     
-#define FFT_DATA_TYPE complex
+#ifndef FFT_DATA_TYPE
+#error "FFT_DATA_TYPE not defined"
+#endif
 
 #ifndef MATRIX_DATA_TYPE
 #error "MATRIX_DATA_TYPE not defined"
