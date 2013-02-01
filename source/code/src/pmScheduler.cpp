@@ -38,6 +38,34 @@
 
 namespace pm
 {
+
+#ifdef DUMP_SCHEDULER_EVENT
+const char* schedulerEventName[] =
+{
+	"NEW_SUBMISSION",
+	"SUBTASK_EXECUTION",
+	"STEAL_REQUEST_STEALER",
+	"STEAL_PROCESS_TARGET",
+	"STEAL_SUCCESS_TARGET",
+	"STEAL_FAIL_TARGET",
+	"STEAL_SUCCESS_STEALER",
+	"STEAL_FAIL_STEALER",
+	"SEND_ACKNOWLEDGEMENT",
+	"RECEIVE_ACKNOWLEDGEMENT",
+	"TASK_CANCEL",
+	"TASK_FINISH",
+    "TASK_COMPLETE",
+	"SUBTASK_REDUCE",
+	"MEMORY_TRANSFER",
+	"COMMAND_COMPLETION",
+    "HOST_FINALIZATION",
+    "SUBTASK_RANGE_CANCEL",
+    "REDISTRIBUTION_METADATA_EVENT",
+    "RANGE_NEGOTIATION_EVENT",
+    "RANGE_NEGOTIATION_SUCCESS_EVENT",
+    "TERMINATE_TASK"
+};
+#endif
     
 using namespace scheduler;
 
@@ -595,7 +623,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 #ifdef DUMP_SCHEDULER_EVENT
     char lStr[512];
     
-    sprintf(lStr, "Host %d Scheduler Event: ", pmGetHostId(), schedulerEventName[pEvent.eventId]);
+    sprintf(lStr, "Host %d Scheduler Event: %s", pmGetHostId(), schedulerEventName[pEvent.eventId]);
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 #endif
     
