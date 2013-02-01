@@ -209,9 +209,9 @@
 					"DEBUG=1",
 					"SAMPLE_NAME=radixSort",
 				);
-				"HEADER_SEARCH_PATHS[arch=*]" = (
-					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
-					/Users/tarunberi/Development/pmlib/source/code/inc/,
+				HEADER_SEARCH_PATHS = (
+					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
+					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -226,9 +226,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = "SAMPLE_NAME=radixSort";
-				"HEADER_SEARCH_PATHS[arch=*]" = (
-					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
-					/Users/tarunberi/Development/pmlib/source/code/inc/,
+				HEADER_SEARCH_PATHS = (
+					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
+					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",

@@ -216,9 +216,9 @@
 					"MATRIX_DATA_TYPE=complex",
 				);
 				HEADER_SEARCH_PATHS = (
-					/Users/tarunberi/Development/pmlib/source/code/inc/,
-					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
-					/Users/tarunberi/Development/pmlib/testSuite/matrixTranspose/source/code/inc,
+					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
+					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
+					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/matrixTranspose/source/code/inc/",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
@@ -238,9 +238,9 @@
 					"MATRIX_DATA_TYPE=complex",
 				);
 				HEADER_SEARCH_PATHS = (
-					/Users/tarunberi/Development/pmlib/source/code/inc/,
-					/Users/tarunberi/Development/pmlib/testSuite/common/source/code/inc/,
-					/Users/tarunberi/Development/pmlib/testSuite/matrixTranspose/source/code/inc,
+					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
+					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
+					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/matrixTranspose/source/code/inc/",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",

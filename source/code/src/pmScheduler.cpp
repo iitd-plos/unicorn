@@ -592,6 +592,13 @@ pmStatus pmScheduler::ThreadSwitchCallback(schedulerEvent& pEvent)
 
 pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 {
+#ifdef DUMP_SCHEDULER_EVENT
+    char lStr[512];
+    
+    sprintf(lStr, "Host %d Scheduler Event: ", pmGetHostId(), schedulerEventName[pEvent.eventId]);
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
+#endif
+    
 	switch(pEvent.eventId)
 	{
 		case NEW_SUBMISSION:	/* Comes from application thread */
@@ -1949,7 +1956,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					if(!lMemSection)
 						PMTHROW(pmFatalErrorException());
 
-					MemTransferEvent(lMemSection, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
+					//MemTransferEvent(lMemSection, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
 
 					SetupNewMemTransferRequestReception();
 

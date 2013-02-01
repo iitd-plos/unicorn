@@ -133,34 +133,10 @@ void fftSerial2D(complex* input, unsigned long powx, unsigned long nx, unsigned 
 #ifdef FFT_2D
     matrixTranspose::serialmatrixTranspose(input, nx, ny);
 	
-    for(i=0; i<nx; ++i)
-		fftSerial1D(dir, powy, ny, input+i*ny);
-    
-    matrixTranspose::serialmatrixTranspose(input, ny, nx);
-
-    /*
-    size_t j;
-	complex* data = (complex*)malloc(sizeof(complex) * nx);
-
-	for(j=0; j<ny; ++j)
-	{
-		for(i=0; i<nx; ++i)
-		{
-			data[i].x = input[i*ny+j].x;
-			data[i].y = input[i*ny+j].y;
-		}
-
-		fftSerial1D(dir, powx, nx, data);
-
-		for(i=0; i<nx; ++i)
-		{
-			input[i*ny+j].x = data[i].x;
-			input[i*ny+j].y = data[i].y;
-		}
-	}
-
-	free(data);
-    */
+    for(i=0; i<ny; ++i)
+		fftSerial1D(dir, powx, nx, input+i*nx);
+//
+//    matrixTranspose::serialmatrixTranspose(input, ny, nx);
 #endif
 }
 
@@ -282,9 +258,9 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     
     if(!Parallel_FFT_1D(lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle1, pSchedulingPolicy))
         return (double)-1.0;
-    
-    if(!Parallel_Transpose(lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle2, pSchedulingPolicy))
-        return (double)-1.0;
+//
+//    if(!Parallel_Transpose(lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle2, pSchedulingPolicy))
+//        return (double)-1.0;
 #endif
 
 	double lEndTime = getCurrentTimeInSecs();
@@ -342,8 +318,8 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 
 	for(size_t i=0; i<lElems; ++i)
     {
-		gSerialOutput[i].x = gParallelOutput[i].x = (float)rand() / (float)RAND_MAX;
-		gSerialOutput[i].y = gParallelOutput[i].y = (float)rand() / (float)RAND_MAX;
+		gSerialOutput[i].x = gParallelOutput[i].x = i;  //(float)rand() / (float)RAND_MAX;
+		gSerialOutput[i].y = gParallelOutput[i].y = i + 1;  //(float)rand() / (float)RAND_MAX;
     }
 
 	return 0;
@@ -362,6 +338,18 @@ int DoDestroy()
 int DoCompare(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
+
+#if 0
+	for(i=0; i<lElemsY; ++i)
+    {
+        for(size_t j=0; j<lElemsX; ++j)
+        {
+            std::cout << gSerialOutput[i * lMatrixDimRows + j] << "(" << gParallelOutput[i * lMatrixDimRows + j] << ") ";
+        }
+
+        std::cout << std::endl;
+    }
+#endif
 
     size_t lElems = lElemsX * lElemsY;
 	for(size_t i=0; i<lElems; ++i)
