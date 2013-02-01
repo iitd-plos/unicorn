@@ -1984,7 +1984,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					if(!lMemSection)
 						PMTHROW(pmFatalErrorException());
 
-					//MemTransferEvent(lMemSection, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
+					MemTransferEvent(lMemSection, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, MAX_CONTROL_PRIORITY);
 
 					SetupNewMemTransferRequestReception();
 
