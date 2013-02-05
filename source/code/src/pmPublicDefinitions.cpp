@@ -18,10 +18,7 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
-#include "pmPublicDefinitions.h"
-#include "pmInternalDefinitions.h"
-#include "pmErrorDefinitions.h"
-
+#include "pmBase.h"
 #include "pmController.h"
 #include "pmLogger.h"
 

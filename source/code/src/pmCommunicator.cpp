@@ -21,6 +21,7 @@
 #include "pmCommunicator.h"
 #include "pmCommand.h"
 #include "pmNetwork.h"
+#include "pmHeavyOperations.h"
 
 namespace pm
 {
@@ -98,21 +99,6 @@ pmStatus pmCommunicator::Receive(pmCommunicatorCommandPtr pCommand, bool pBlocki
 
 	return lStatus;
 }
-
-/*
-pmStatus pmCommunicator::ReceivePacked(pmCommunicatorCommandPtr pCommand, bool pBlocking)
-{
-	pmNetwork* lNetwork;
-	SAFE_GET_NETWORK(lNetwork);
-	
-	pmStatus lStatus = lNetwork->ReceiveAllocateUnpackNonBlocking(pCommand);
-
-	if(pBlocking)
-		lStatus = pCommand->WaitForFinish();
-
-	return lStatus;
-}
-*/
 
 pmStatus pmCommunicator::All2All(pmCommunicatorCommandPtr pCommand, bool pBlocking /* = false */)
 {

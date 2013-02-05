@@ -57,6 +57,8 @@ pmStatus pmLogger::SetHostId(uint pHostId)
 
 pmStatus pmLogger::Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine /* = false */)
 {
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
 	if(pMsgLevel <= mLogLevel)
 	{
 		if(pMsgType == INFORMATION)

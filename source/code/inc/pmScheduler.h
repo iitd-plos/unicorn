@@ -82,7 +82,6 @@ typedef enum eventIdentifier
 	TASK_FINISH,
     TASK_COMPLETE,
 	SUBTASK_REDUCE,
-	MEMORY_TRANSFER,
 	COMMAND_COMPLETION,
     HOST_FINALIZATION,
     SUBTASK_RANGE_CANCEL,
@@ -192,18 +191,6 @@ typedef struct subtaskReduce
 	ulong subtaskId;
 } subtaskReduce;
 
-typedef struct memTransfer
-{
-	pmMemSection* srcMemSection;
-    pmCommunicatorCommand::memoryIdentifierStruct destMemIdentifier;
-	ulong offset;
-	ulong length;
-	pmMachine* machine;
-    ulong receiverOffset;
-	ushort priority;
-    bool isForwarded;
-} memTransfer;
-
 typedef struct commandCompletion
 {
 	pmCommandPtr command;
@@ -259,7 +246,6 @@ typedef struct schedulerEvent : public pmBasicThreadEvent
         taskComplete taskCompleteDetails;
         taskTerminate taskTerminateDetails;
 		subtaskReduce subtaskReduceDetails;
-		memTransfer memTransferDetails;
         hostFinalization hostFinalizationDetails;
         subtaskRangeCancel subtaskRangeCancelDetails;
         redistributionMetaData redistributionMetaDataDetails;

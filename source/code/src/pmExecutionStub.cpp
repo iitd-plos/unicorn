@@ -31,6 +31,7 @@
 #include "pmMemSection.h"
 #include "pmTaskManager.h"
 #include "pmTls.h"
+#include "pmLogger.h"
 
 #include <string>
 #include <sstream>
@@ -157,7 +158,7 @@ pmStatus pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOn
 pmStatus pmExecutionStub::CancelSubtaskRange(pmSubtaskRange& pRange)
 {
     ushort lPriority = pRange.task->GetPriority();
-
+    
     stubEvent lTaskEvent;
     bool lFound = (DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pRange.task, lTaskEvent) == pmSuccess);
 

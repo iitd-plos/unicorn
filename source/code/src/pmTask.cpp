@@ -33,6 +33,7 @@
 #include "pmTimedEventManager.h"
 #include "pmStubManager.h"
 #include "pmMemoryManager.h"
+#include "pmHeavyOperations.h"
 
 #include <vector>
 #include <algorithm>

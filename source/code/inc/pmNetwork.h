@@ -59,12 +59,13 @@ typedef struct networkEvent : public pmBasicThreadEvent
 
 class pmNetwork : public pmBase
 {
+    friend class pmHeavyOperationsThread;
+
 	public:
 		virtual pmStatus SendNonBlocking(pmCommunicatorCommandPtr pCommand) = 0;
 		virtual pmStatus BroadcastNonBlocking(pmCommunicatorCommandPtr pCommand) = 0;
 		virtual pmStatus ReceiveNonBlocking(pmCommunicatorCommandPtr pCommand) = 0;
 		virtual pmStatus All2AllNonBlocking(pmCommunicatorCommandPtr pCommand) = 0;
-		virtual pmStatus ReceiveAllocateUnpackNonBlocking(pmCommunicatorCommandPtr pCommand) = 0;		// Receive Packed Data of unknown size
         virtual pmStatus FreezeReceptionAndFinishCommands() = 0;
 
 		virtual uint GetTotalHostCount() = 0;
@@ -74,7 +75,7 @@ class pmNetwork : public pmBase
 		virtual pmStatus UnregisterTransferDataType(pmCommunicatorCommand::communicatorDataTypes pDataType) = 0;
 	
 		virtual pmStatus PackData(pmCommunicatorCommandPtr pCommand) = 0;
-		virtual pmStatus UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData, int pDataLength, int pPos) = 0;
+		virtual pmCommunicatorCommandPtr UnpackData(void* pPackedData, int pDataLength) = 0;
 
 		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommand* pCommand) = 0;
 		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommand* pCommand) = 0;
@@ -85,9 +86,10 @@ class pmNetwork : public pmBase
 		virtual ~pmNetwork();
 
     protected:
+		pmStatus SendComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus);
+		pmStatus ReceiveComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus);
+    
         static pmNetwork* mNetwork;
-
-	private:
 };
 
 class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
@@ -130,7 +132,7 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
         virtual pmStatus FreezeReceptionAndFinishCommands();
 
 		virtual pmStatus PackData(pmCommunicatorCommandPtr pCommand);
-		virtual pmStatus UnpackData(pmCommunicatorCommandPtr pCommand, void* pPackedData, int pDataLength, int pPos);
+		virtual pmCommunicatorCommandPtr UnpackData(void* pPackedData, int pDataLength);
 
 		virtual uint GetTotalHostCount() {return mTotalHosts;}
 		virtual uint GetHostId() {return mHostId;}
@@ -140,8 +142,6 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		virtual pmStatus UnregisterTransferDataType(pmCommunicatorCommand::communicatorDataTypes pDataType);
 
 		virtual pmStatus ThreadSwitchCallback(network::networkEvent& pCommand);
-
-		virtual pmStatus ReceiveAllocateUnpackNonBlocking(pmCommunicatorCommandPtr pCommand);		// Receive Packed Data of unknown size
 
 		virtual pmStatus InitializePersistentCommand(pmPersistentCommunicatorCommand* pCommand);
 		virtual pmStatus TerminatePersistentCommand(pmPersistentCommunicatorCommand* pCommand);
@@ -157,9 +157,6 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
         bool IsUnknownLengthTag(pmCommunicatorCommand::communicatorCommandTags pTag);
         pmStatus SendNonBlockingInternal(pmCommunicatorCommandPtr pCommand, void* pData, int pLength);
 		pmStatus ReceiveNonBlockingInternal(pmCommunicatorCommandPtr pCommand, void* pData, int pLength);
-
-		pmStatus SendComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus);
-		pmStatus ReceiveComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus);
 
 		virtual MPI_Request* GetPersistentSendRequest(pmPersistentCommunicatorCommand* pCommand);
 		virtual MPI_Request* GetPersistentRecvRequest(pmPersistentCommunicatorCommand* pCommand);

@@ -52,7 +52,8 @@ pmController::pmController()
     mMemoryManager(), 
     mTaskManager(), 
     mScheduler(),
-    mTimedEventManager()
+    mTimedEventManager(),
+    mHeavyOperationsThreadPool(std::max<size_t>(1, pmStubManager::GetStubManager()->GetProcessingElementsCPU() / 2))
 {
 	mLastErrorCode = 0;
 	mFinalizedHosts = 0;

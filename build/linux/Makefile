@@ -78,6 +78,7 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmExecutionStub.o \
 	$(OUTDIR)/pmEventTimeline.o \
 	$(OUTDIR)/pmHardware.o \
+	$(OUTDIR)/pmHeavyOperations.o \
 	$(OUTDIR)/pmLogger.o \
 	$(OUTDIR)/pmMemoryManager.o \
 	$(OUTDIR)/pmMemSection.o \

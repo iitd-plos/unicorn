@@ -21,8 +21,8 @@
 #ifndef __PM_LOGGER__
 #define __PM_LOGGER__
 
-#include "pmPublicDefinitions.h"
-#include "pmDataTypes.h"
+#include "pmBase.h"
+#include "pmResourceLock.h"
 
 namespace pm
 {
@@ -31,7 +31,7 @@ namespace pm
  * \brief The output/error logger
  */
 
-class pmLogger
+class pmLogger : public pmBase
 {
 friend class pmController;
 public:
@@ -62,6 +62,8 @@ private:
     ushort mLogLevel;
     uint mHostId;
     static pmLogger* mLogger;
+    
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

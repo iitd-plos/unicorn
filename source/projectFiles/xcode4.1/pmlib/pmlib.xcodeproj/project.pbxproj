@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		0E05C9221686229D0044891C /* pmEventTimeline.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E05C9201686229D0044891C /* pmEventTimeline.cpp */; };
+		0E0668DA16BEB8C6001D0B8F /* pmHeavyOperations.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E0668D816BEB8C6001D0B8F /* pmHeavyOperations.cpp */; };
 		0E20293F162DF290006DC536 /* pmTls.h in Headers */ = {isa = PBXBuildFile; fileRef = 0E20293E162DF290006DC536 /* pmTls.h */; };
 		0E202941162DF35B006DC536 /* pmTls.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E202940162DF35B006DC536 /* pmTls.cpp */; };
 		0E29502015CAFE3A00F31801 /* pmTimedEventManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */; };
@@ -82,6 +83,8 @@
 /* Begin PBXFileReference section */
 		0E05C91F1686227E0044891C /* pmEventTimeline.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmEventTimeline.h; sourceTree = "<group>"; };
 		0E05C9201686229D0044891C /* pmEventTimeline.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmEventTimeline.cpp; sourceTree = "<group>"; };
+		0E0668D616BEB8B3001D0B8F /* pmHeavyOperations.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmHeavyOperations.h; sourceTree = "<group>"; };
+		0E0668D816BEB8C6001D0B8F /* pmHeavyOperations.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmHeavyOperations.cpp; sourceTree = "<group>"; };
 		0E20293E162DF290006DC536 /* pmTls.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmTls.h; sourceTree = "<group>"; };
 		0E202940162DF35B006DC536 /* pmTls.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTls.cpp; sourceTree = "<group>"; };
 		0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTimedEventManager.cpp; sourceTree = "<group>"; };
@@ -228,6 +231,7 @@
 				2BCCED3A151C7B07006AA45D /* pmExecutionStub.h */,
 				0E05C91F1686227E0044891C /* pmEventTimeline.h */,
 				2BCCED3B151C7B07006AA45D /* pmHardware.h */,
+				0E0668D616BEB8B3001D0B8F /* pmHeavyOperations.h */,
 				2BCCED3C151C7B07006AA45D /* pmInternalDefinitions.h */,
 				2BCCED3D151C7B07006AA45D /* pmLogger.h */,
 				2BCCED3E151C7B07006AA45D /* pmMemoryManager.h */,
@@ -272,6 +276,7 @@
 				2BCCED5A151C7B07006AA45D /* pmExecutionStub.cpp */,
 				0E05C9201686229D0044891C /* pmEventTimeline.cpp */,
 				2BCCED5B151C7B07006AA45D /* pmHardware.cpp */,
+				0E0668D816BEB8C6001D0B8F /* pmHeavyOperations.cpp */,
 				2BCCED5C151C7B07006AA45D /* pmLogger.cpp */,
 				2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */,
 				2BCCED5E151C7B07006AA45D /* pmMemSection.cpp */,
@@ -427,6 +432,7 @@
 				0E29502015CAFE3A00F31801 /* pmTimedEventManager.cpp in Sources */,
 				0E202941162DF35B006DC536 /* pmTls.cpp in Sources */,
 				0E05C9221686229D0044891C /* pmEventTimeline.cpp in Sources */,
+				0E0668DA16BEB8C6001D0B8F /* pmHeavyOperations.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

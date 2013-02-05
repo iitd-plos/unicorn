@@ -20,6 +20,7 @@
 
 #include "pmEventTimeline.h"
 #include "pmNetwork.h"
+#include "pmLogger.h"
 
 #include <sstream>
 
@@ -46,7 +47,7 @@ pmEventTimeline::~pmEventTimeline()
     
     lStream << std::endl;
     
-    std::cout << lStream.str() << std::flush;
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, lStream.str().c_str());
 }
 
 void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)

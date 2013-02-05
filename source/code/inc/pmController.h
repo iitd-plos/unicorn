@@ -34,6 +34,7 @@
 #include "pmScheduler.h"
 #include "pmTimedEventManager.h"
 #include "pmTls.h"
+#include "pmHeavyOperations.h"
 
 namespace pm
 {
@@ -108,6 +109,7 @@ class pmController : public pmBase
         pmTaskManager mTaskManager;
         pmScheduler mScheduler;
         pmTimedEventManager mTimedEventManager;
+        pmHeavyOperationsThreadPool mHeavyOperationsThreadPool;
 };
 
 } // end namespace pm

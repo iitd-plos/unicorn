@@ -39,20 +39,20 @@ namespace pm
 class pmCommunicator : public pmBase
 {
     friend class pmController;
+    friend class pmHeavyOperationsThread;
 
     public:
 		static pmCommunicator* GetCommunicator();
 
 		pmStatus Send(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
 		pmStatus Receive(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);	// If no source is provided, any machine is assumed (MPI_ANY) 
-		//pmStatus ReceivePacked(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);	// If no source is provided, any machine is assumed (MPI_ANY) 
-		pmStatus SendPacked(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
-		pmStatus ReceivePacked(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);	// If no source is provided, any machine is assumed (MPI_ANY) 
 		pmStatus Broadcast(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
 		pmStatus All2All(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
 		
 	private:
 		pmCommunicator();
+
+		pmStatus SendPacked(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
 
 		static pmCommunicator* mCommunicator;
 };
