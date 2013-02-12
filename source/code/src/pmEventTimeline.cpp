@@ -39,7 +39,7 @@ pmEventTimeline::pmEventTimeline(const std::string& pName)
 pmEventTimeline::~pmEventTimeline()
 {
     std::stringstream lStream;
-    lStream << "Event Timeline " << mName << " [Host " << mHostId << "]" << std::endl;
+    lStream << "Event Timeline " << mName << std::endl;
     
     std::map<std::string, std::pair<double, double> >::iterator lIter = mEventMap.begin(), lEnd = mEventMap.end();
     for(; lIter != lEnd; ++lIter)

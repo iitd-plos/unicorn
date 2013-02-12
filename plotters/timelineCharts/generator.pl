@@ -42,7 +42,7 @@ sub plotFile
 		chomp;
         next if(/^\s*$/);
     
-		if(/^Event Timeline /)
+		if(/^PMLIB \[Host [0-9]+\] Event Timeline /)
 		{
             my $timelineName = $';
         
