@@ -120,6 +120,7 @@ class pmPushSchedulingManager : public pmSubtaskManager
 		ulong GetNextAssignmentSize(pmProcessingElement* pDevice);
 		pmStatus AssignPartition(pmProcessingElement* pDevice, pmUnfinishedPartitionPtr pUnfinishedPartitionPtr, ulong pSubtaskCount);
 		pmUnfinishedPartitionPtr FetchNewSubPartition(pmProcessingElement* pDevice, ulong pSubtaskCount);
+        bool IsUsefulAllottee(pmProcessingElement* pPotentialAllottee, pmProcessingElement* pOriginalAllottee, std::vector<pmProcessingElement*>& pExistingAllottees);
         pmProcessingElement* SelectMultiAssignAllottee(pmProcessingElement* pDevice);
         void CancelOriginalAllottee(pmProcessingElement* pOriginalAllottee, ulong pSubtaskCount, ulong pStartingSubtask);
         void CancelAllButOneSecondaryAllottee(pmProcessingElement* pOriginalAllottee, pmProcessingElement* pPreserveSecondaryAllottee, ulong pSubtaskCount, ulong pStartingSubtask);

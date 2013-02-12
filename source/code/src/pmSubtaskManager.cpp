@@ -275,6 +275,25 @@ pmStatus pmPushSchedulingManager::AssignPartition(pmProcessingElement* pDevice, 
 
 	return pmSuccess;
 }
+
+/* If a partition has already been multiassigned to a device with similar type as pPotentialAllotte and if both are on same machine, then the new assignment might not be useful */
+bool pmPushSchedulingManager::IsUsefulAllottee(pmProcessingElement* pPotentialAllottee, pmProcessingElement* pOriginalAllottee, std::vector<pmProcessingElement*>& pExistingAllottees)
+{
+    pmMachine* lPotentialMachine = pPotentialAllottee->GetMachine();
+    pmDeviceType lPotentialDeviceType = pPotentialAllottee->GetType();
+    
+    if(pOriginalAllottee->GetMachine() == lPotentialMachine && pOriginalAllottee->GetType() == lPotentialDeviceType)
+        return false;
+
+    std::vector<pmProcessingElement*>::iterator lIter = pExistingAllottees.begin(), lEndIter = pExistingAllottees.end();
+    for(; lIter < lEndIter; ++lIter)
+    {
+        if((*lIter)->GetMachine() == lPotentialMachine && (*lIter)->GetType() == lPotentialDeviceType)
+            return false;
+    }
+    
+    return true;
+}
     
 pmProcessingElement* pmPushSchedulingManager::SelectMultiAssignAllottee(pmProcessingElement* pDevice)
 {
@@ -295,7 +314,7 @@ pmProcessingElement* pmPushSchedulingManager::SelectMultiAssignAllottee(pmProces
         if(lSize == 0)
             return *lIter;
 
-        /* The following code prevents reassignment of partition to a device multiple times. This may happen when a secondary allottee gets a partial negotiation from original allottee and wants a new partition to be assigned to it after acknowledging the partially negotiated one. */
+        /* The following code prevents reassignment of a partition to a device multiple times. This may happen when a secondary allottee gets a partial negotiation from original allottee and wants a new partition to be assigned to it after acknowledging the partially negotiated one. */
         bool lAlreadyAssigned = false;
         std::vector<pmProcessingElement*>::iterator lInnerIter = mAssignedPartitions[*lIter].first->secondaryAllottees.begin(), lInnerEndIter = mAssignedPartitions[*lIter].first->secondaryAllottees.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
@@ -310,10 +329,13 @@ pmProcessingElement* pmPushSchedulingManager::SelectMultiAssignAllottee(pmProces
         if(lAlreadyAssigned)
             continue;
 
-        if(lSize < lSecondaryAllotteeCountOfPossibleAllottee || lSecondaryAllotteeCountOfPossibleAllottee == 0)
+        if(lSecondaryAllotteeCountOfPossibleAllottee == 0 || lSize < lSecondaryAllotteeCountOfPossibleAllottee)
         {
-            lPossibleAllottee = *lIter;
-            lSecondaryAllotteeCountOfPossibleAllottee = lSize;
+            if(IsUsefulAllottee(pDevice, *lIter, mAssignedPartitions[*lIter].first->secondaryAllottees))
+            {
+                lPossibleAllottee = *lIter;
+                lSecondaryAllotteeCountOfPossibleAllottee = lSize;
+            }
         }
     }
     
