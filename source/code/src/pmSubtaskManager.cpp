@@ -311,9 +311,6 @@ pmProcessingElement* pmPushSchedulingManager::SelectMultiAssignAllottee(pmProces
         if(lSize == MAX_SUBTASK_MULTI_ASSIGN_COUNT - 1)
             continue;
     
-        if(lSize == 0)
-            return *lIter;
-
         /* The following code prevents reassignment of a partition to a device multiple times. This may happen when a secondary allottee gets a partial negotiation from original allottee and wants a new partition to be assigned to it after acknowledging the partially negotiated one. */
         bool lAlreadyAssigned = false;
         std::vector<pmProcessingElement*>::iterator lInnerIter = mAssignedPartitions[*lIter].first->secondaryAllottees.begin(), lInnerEndIter = mAssignedPartitions[*lIter].first->secondaryAllottees.end();
