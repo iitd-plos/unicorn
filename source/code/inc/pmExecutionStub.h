@@ -156,6 +156,8 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void MarkInsideLibraryCode(ulong pSubtaskId);
         void MarkInsideUserCode(ulong pSubtaskId);
     
+        void WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>& pNetworkCommands);
+    
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
 		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId);
@@ -179,6 +181,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
             bool prematureTermination;
             bool taskListeningOnCancellation;
             sigjmp_buf* jmpBuf;
+            pmAccumulatorCommandPtr* accumulatorCommandPtr;
         
             currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, sigjmp_buf* pJmpBuf, double pStartTime);
         } currentSubtaskStats;

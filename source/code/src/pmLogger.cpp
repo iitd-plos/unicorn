@@ -46,6 +46,8 @@ pmLogger::pmLogger(logLevel pLogLevel)
 
 pmLogger::~pmLogger()
 {
+    if(!mDeferredStream.str().empty())
+        std::cout << mDeferredStream.str().c_str() << std::endl;
 }
 
 pmStatus pmLogger::SetHostId(uint pHostId)
@@ -54,7 +56,32 @@ pmStatus pmLogger::SetHostId(uint pHostId)
 
 	return pmSuccess;
 }
+    
+void pmLogger::PrintDeferredLog()
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
+    if(!mDeferredStream.str().empty())
+        std::cout << mDeferredStream.str().c_str() << std::endl;
+    
+    mDeferredStream.str(std::string()); // clear stream
+}
+
+pmStatus pmLogger::LogDeferred(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine /* = false */)
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+	if(pMsgLevel <= mLogLevel)
+	{
+        if(pLeadingBlankLine)
+            mDeferredStream << std::endl;
+
+        mDeferredStream << "PMLIB [Host " << mHostId << "] " << pMsg << std::endl;
+	}
+
+	return pmSuccess;
+}
+    
 pmStatus pmLogger::Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine /* = false */)
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());

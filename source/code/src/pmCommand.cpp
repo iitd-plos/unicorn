@@ -167,6 +167,19 @@ bool pmCommand::WaitWithTimeOut(ulong pTriggerTime)
     
 	return false;
 }
+    
+bool pmCommand::AddDependentIfPending(pmAccumulatorCommandPtr pSharedPtr)
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    if(mStatus == pmStatusUnavailable)
+    {
+        mDependentCommands.push_back(pSharedPtr);
+        return true;
+    }
+    
+    return false;
+}
 
 pmStatus pmCommand::MarkExecutionStart()
 {
@@ -175,6 +188,15 @@ pmStatus pmCommand::MarkExecutionStart()
 	mTimer.Start();
 
 	return pmSuccess;
+}
+    
+void pmCommand::SignalDependentCommands()
+{
+    std::vector<pmAccumulatorCommandPtr>::iterator lIter = mDependentCommands.begin(), lEndIter = mDependentCommands.end();
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter)->FinishCommand((*lIter));
+    
+    mDependentCommands.clear();
 }
 
 pmStatus pmCommand::MarkExecutionEnd(pmStatus pStatus, pmCommandPtr pSharedPtr)
@@ -195,6 +217,8 @@ pmStatus pmCommand::MarkExecutionEnd(pmStatus pStatus, pmCommandPtr pSharedPtr)
 
 	if(mCallback)
 		mCallback(pSharedPtr);
+    
+    SignalDependentCommands();
 
 	return pmSuccess;
 }
@@ -326,6 +350,61 @@ pmSubtaskRangeCommandPtr pmSubtaskRangeCommand::CreateSharedPtr(ushort pPriority
 {
 	pmSubtaskRangeCommandPtr lSharedPtr(new pmSubtaskRangeCommand(pPriority, pCommandType, pCommandData, pDataLength));
 	return lSharedPtr;
+}
+
+
+/* class pmAccumulatorCommand */
+pmAccumulatorCommand::pmAccumulatorCommand()
+    : pmCommand(MAX_CONTROL_PRIORITY, 0)
+    , mCommandCount(0)
+    , mForceCompleted(false)
+{
+}
+
+bool pmAccumulatorCommand::IsValid()
+{
+	return true;
+}
+
+pmAccumulatorCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<pmCommunicatorCommandPtr>& pVector)
+{
+    pmAccumulatorCommandPtr lSharedPtr(new pmAccumulatorCommand());
+
+    std::vector<pmCommunicatorCommandPtr>::const_iterator lIter = pVector.begin(), lEndIter = pVector.end();
+    for(; lIter !=lEndIter; ++lIter)
+    {
+        if(std::tr1::static_pointer_cast<pmCommand>((*lIter))->AddDependentIfPending(lSharedPtr))
+            ++lSharedPtr->mCommandCount;
+    }
+    
+    lSharedPtr->MarkExecutionStart();
+    
+    lSharedPtr->CheckFinish(lSharedPtr);
+
+    return lSharedPtr;
+}
+    
+void pmAccumulatorCommand::FinishCommand(pmAccumulatorCommandPtr pSharedPtr)
+{
+	FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAccumulatorResourceLock, Lock(), Unlock());
+
+    --mCommandCount;
+    CheckFinish(pSharedPtr);
+}
+    
+void pmAccumulatorCommand::ForceComplete(pmAccumulatorCommandPtr pSharedPtr)
+{
+	FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAccumulatorResourceLock, Lock(), Unlock());
+
+    MarkExecutionEnd(pmSuccess, pSharedPtr);
+    mForceCompleted = true;
+}
+
+/* This method must be called with mAccumulatorResourceLock acquired (except if called from constructor) */
+void pmAccumulatorCommand::CheckFinish(pmAccumulatorCommandPtr pSharedPtr)
+{
+    if(!mCommandCount && !mForceCompleted)
+        MarkExecutionEnd(pmSuccess, pSharedPtr);
 }
 
 

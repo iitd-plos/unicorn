@@ -101,8 +101,8 @@ class pmController : public pmBase
         pmLogger mLogger;
         TLS_IMPLEMENTATION_CLASS mTls;
         pmDispatcherGPU mDispatcherGPU;
-        pmStubManager mStubManager;
         NETWORK_IMPLEMENTATION_CLASS mNetwork;
+        pmStubManager mStubManager;
         pmCommunicator mCommunicator;
         pmMachinePool mMachinePool;
         MEMORY_MANAGER_IMPLEMENTATION_CLASS mMemoryManager;

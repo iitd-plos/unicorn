@@ -888,7 +888,14 @@ void pmExecutionStub::CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCance
         mCurrentSubtaskStats->prematureTermination = true;
         
         if(!mCurrentSubtaskStats->executingLibraryCode)
+        {
             RaiseCurrentSubtaskTerminationSignalInThread();
+        }
+        else
+        {
+            if(mCurrentSubtaskStats->accumulatorCommandPtr)
+               (*mCurrentSubtaskStats->accumulatorCommandPtr)->ForceComplete(*mCurrentSubtaskStats->accumulatorCommandPtr);
+        }
     }
 }
 
@@ -1075,6 +1082,32 @@ pmStatus pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, p
 	return lStatus;
 }
 
+void pmExecutionStub::WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>& pNetworkCommands)
+{
+    ulong lSubtaskId;
+    pmAccumulatorCommandPtr lAccumulatorCommand;
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+        if(!mCurrentSubtaskStats || mCurrentSubtaskStats->accumulatorCommandPtr != NULL)
+            PMTHROW(pmFatalErrorException());
+
+        lSubtaskId = mCurrentSubtaskStats->subtaskId;
+        lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
+    }
+    
+    guarded_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, pmAccumulatorCommandPtr> lGuardedPtr(&mCurrentSubtaskLock, &(mCurrentSubtaskStats->accumulatorCommandPtr), &lAccumulatorCommand);
+
+    pmStatus lStatus = lAccumulatorCommand->WaitForFinish();
+    
+    if(RequiresPrematureExit(lSubtaskId))
+        PMTHROW_NODUMP(pmPrematureExitException());
+
+    if(lStatus != pmSuccess)
+        PMTHROW(pmMemoryFetchException());
+}
+
 
 /* struct currentSubtaskStats */
 pmExecutionStub::currentSubtaskStats::currentSubtaskStats(pmTask* pTask, ulong pSubtaskId, bool pOriginalAllottee, ulong pParentRangeStartSubtask, sigjmp_buf* pJmpBuf, double pStartTime)
@@ -1089,6 +1122,7 @@ pmExecutionStub::currentSubtaskStats::currentSubtaskStats(pmTask* pTask, ulong p
     , prematureTermination(false)
     , taskListeningOnCancellation(false)
     , jmpBuf(pJmpBuf)
+    , accumulatorCommandPtr(NULL)
 {
 }
 

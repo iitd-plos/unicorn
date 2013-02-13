@@ -222,6 +222,17 @@ pmMPI::pmMPI() : pmNetwork()
 
 pmMPI::~pmMPI()
 {
+#ifdef SERIALIZE_DEFERRED_LOGS
+    uint lMachines = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
+    for(uint i=0; i<lMachines; ++i)
+    {
+        NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();
+    
+        if(i == NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId())
+            pmLogger::GetLogger()->PrintDeferredLog();
+    }
+#endif
+
 	StopThreadExecution();
 
 	delete mReceiveThread;

@@ -140,6 +140,10 @@ const unsigned long MEMORY_TRANSFER_TIMEOUT = 3;    // in secs
 #define DUMP_SUBTASK_EXECUTION_PROFILE
 //#define DUMP_MPI_CALLS
 
+#ifdef DUMP_EVENT_TIMELINE
+    #define SERIALIZE_DEFERRED_LOGS
+#endif
+
 #endif
 
 

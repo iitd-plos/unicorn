@@ -41,6 +41,9 @@ class pmMemSection;
 class pmCommand;
 typedef std::tr1::shared_ptr<pmCommand> pmCommandPtr;
 
+class pmAccumulatorCommand;
+typedef std::tr1::shared_ptr<pmAccumulatorCommand> pmAccumulatorCommandPtr;
+
 typedef pmStatus (*pmCommandCompletionCallback)(pmCommandPtr pCommand);
 
 /**
@@ -90,10 +93,12 @@ class pmCommand : public pmBase
 		pmStatus WaitForFinish();
         bool WaitWithTimeOut(ulong pTriggerTime);
 
+        bool AddDependentIfPending(pmAccumulatorCommandPtr pSharedPtr);
+
 	protected:
 		pmCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0, pmCommandCompletionCallback pCallback = NULL);
         virtual ~pmCommand();
-
+    
 		ushort mCommandType;
 		void* mCommandData;
 		size_t mDataLength;
@@ -101,7 +106,11 @@ class pmCommand : public pmBase
 		pmStatus mStatus;
 		finalize_ptr<pmSignalWait> mSignalWait;
 		ushort mPriority;
+    
+    private:
+        void SignalDependentCommands();
 
+        std::vector<pmAccumulatorCommandPtr> mDependentCommands;
 		TIMER_IMPLEMENTATION_CLASS mTimer;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
@@ -622,6 +631,29 @@ class pmSubtaskRangeCommand : public pmCommand
 		pmSubtaskRangeCommand(ushort pPriority, ushort pCommandType, void* pCommandData = NULL, ulong pDataLength = 0) : pmCommand(pPriority, pCommandType, pCommandData, pDataLength) {}
 
 	private:
+};
+
+class pmAccumulatorCommand : public pmCommand
+{
+	public:
+		static pmAccumulatorCommandPtr CreateSharedPtr(const std::vector<pmCommunicatorCommandPtr>& pVector);
+		virtual ~pmAccumulatorCommand() {}
+
+		virtual bool IsValid();
+    
+        void FinishCommand(pmAccumulatorCommandPtr pSharedPtr);
+    
+        void ForceComplete(pmAccumulatorCommandPtr pSharedPtr);
+
+	protected:
+		pmAccumulatorCommand();
+
+	private:
+        void CheckFinish(pmAccumulatorCommandPtr pSharedPtr);
+    
+        uint mCommandCount;
+        bool mForceCompleted;
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mAccumulatorResourceLock;
 };
     
 bool operator==(pmCommunicatorCommand::memoryIdentifierStruct& pIdentifier1, pmCommunicatorCommand::memoryIdentifierStruct& pIdentifier2);

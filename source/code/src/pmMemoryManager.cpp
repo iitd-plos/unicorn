@@ -685,7 +685,7 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, ulong 
         // We want to fetch lazy memory page and prefetch pages collectively. But we do want this thread to resume execution as soon as
         // lazy memory page is fetched without waiting for prefetch pages to come. To do this, we make two FetchMemory requests - first with
         // lazy memory page and prefetch pages and second with lazy memory page only. The in-flight memory system will piggy back second
-        // request onto first one. The current thread only waits on commands returned by second FetchMemory statement.
+        // request onto the first one. The current thread only waits on commands returned by second FetchMemory statement.
         std::vector<pmCommunicatorCommandPtr> lCommandVector;
         if(pForwardPrefetchPageCount)
             FetchMemoryRegion(pMemSection, lPriority, lOffset, lLeftoverLength, lCommandVector);
@@ -693,26 +693,7 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, ulong 
         lCommandVector.clear();
         FetchMemoryRegion(pMemSection, lPriority, lOffset, ((lLeftoverLength > lPageSize) ? lPageSize : lLeftoverLength), lCommandVector);
 
-        pmStatus lStatus;
-        std::vector<pmCommunicatorCommandPtr>::const_iterator lIter = lCommandVector.begin(), lEndIter = lCommandVector.end();
-        for(; lIter != lEndIter; ++lIter)
-        {
-            const pmCommunicatorCommandPtr& lCommand = *lIter;
-            if(lCommand.get())
-            {
-                while((lStatus = lCommand->GetStatus()) == pmStatusUnavailable)
-                {
-                    if(lCommand->WaitWithTimeOut(GetIntegralCurrentTimeInSecs() + MEMORY_TRANSFER_TIMEOUT))
-                    {
-                        if(pStub->RequiresPrematureExit(pSubtaskId))
-                            PMTHROW_NODUMP(pmPrematureExitException());
-                    }
-                }
-            
-                if(lStatus != pmSuccess)
-                    PMTHROW(pmMemoryFetchException());
-            }
-        }
+        pStub->WaitForNetworkFetch(lCommandVector);
     }
 
 	return pmSuccess;

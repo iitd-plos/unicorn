@@ -24,6 +24,8 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 
+#include <sstream>
+
 namespace pm
 {
 
@@ -53,6 +55,8 @@ public:
 
     pmStatus SetHostId(uint pHostId);
 
+    void PrintDeferredLog();
+    pmStatus LogDeferred(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine = false);
     pmStatus Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine = false);
 
 private:
@@ -61,6 +65,7 @@ private:
 
     ushort mLogLevel;
     uint mHostId;
+    std::stringstream mDeferredStream;
     static pmLogger* mLogger;
     
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;

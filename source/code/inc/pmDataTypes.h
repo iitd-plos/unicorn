@@ -306,6 +306,34 @@ namespace pm
             bool mLockAcquired;
 	};
 
+    template<typename G, typename T>
+    class guarded_ptr
+    {
+        public:
+            guarded_ptr(G* pGuard, T** pPtr, T* pMem = NULL) : mGuard(pGuard), mPtr(pPtr)
+            {
+                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+                
+                if(mPtr)
+                    *mPtr = pMem;
+            }
+
+            ~guarded_ptr()
+            {
+                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+                            
+                if(mPtr)
+                    *mPtr = NULL;
+            }
+            
+        private:
+            guarded_ptr(const guarded_ptr& pPtr);
+            const guarded_ptr& operator=(const guarded_ptr& pPtr);
+
+            G* mGuard;
+            T** mPtr;
+    };
+
 	class selective_finalize_base
 	{
 		public:

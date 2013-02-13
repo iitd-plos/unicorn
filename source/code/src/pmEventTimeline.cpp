@@ -39,19 +39,19 @@ pmEventTimeline::pmEventTimeline(const std::string& pName)
 pmEventTimeline::~pmEventTimeline()
 {
     std::stringstream lStream;
-    lStream << "Event Timeline " << mName << std::endl;
+    lStream << "Event Timeline " << mName;
     
     std::map<std::string, std::pair<double, double> >::iterator lIter = mEventMap.begin(), lEnd = mEventMap.end();
     for(; lIter != lEnd; ++lIter)
-        lStream << lIter->first << " " << lIter->second.first - mZeroTime << " " << lIter->second.second - mZeroTime << std::endl;
-    
-    lStream << std::endl;
-    
-    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, lStream.str().c_str());
+        lStream << std::endl << lIter->first << " " << lIter->second.first - mZeroTime << " " << lIter->second.second - mZeroTime;
+
+    pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::WARNING, lStream.str().c_str(), true);
 }
 
 void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)
 {
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
     if(pStart && mEventMap.find(pEventName) != mEventMap.end())
         PMTHROW(pmFatalErrorException());
     
@@ -66,6 +66,8 @@ void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)
     
 void pmEventTimeline::RenameEvent(const std::string& pEventName, const std::string& pNewName)
 {
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
     if(mEventMap.find(pEventName) == mEventMap.end())
         PMTHROW(pmFatalErrorException());
     

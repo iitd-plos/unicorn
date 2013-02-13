@@ -677,8 +677,6 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmExecutionStub* pStu
 
 pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId)
 {
-    pmStatus lStatus;
-    
     std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
 	if(mTask->GetMemSectionRO())
 	{
@@ -695,25 +693,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulo
         for(; lIter != lEndIter; ++lIter)
         {
 			std::vector<pmCommunicatorCommandPtr>& lCommandVector = lIter->second.second.receiveCommandVector;
-            std::vector<pmCommunicatorCommandPtr>::iterator lInnerIter = lCommandVector.begin(), lInnerEndIter = lCommandVector.end();
-            
-			for(; lInnerIter != lInnerEndIter; ++lInnerIter)
-			{
-				if((*lInnerIter).get())
-				{
-                    while((lStatus = (*lInnerIter)->GetStatus()) == pmStatusUnavailable)
-                    {
-                        if((*lInnerIter)->WaitWithTimeOut(GetIntegralCurrentTimeInSecs() + MEMORY_TRANSFER_TIMEOUT))
-                        {
-                            if(pStub->RequiresPrematureExit(pSubtaskId))
-                                PMTHROW_NODUMP(pmPrematureExitException());
-                        }
-                    }
-                
-                    if(lStatus != pmSuccess)
-						PMTHROW(pmMemoryFetchException());
-				}
-			}
+            pStub->WaitForNetworkFetch(lCommandVector);
 		}
 	}
 
@@ -732,25 +712,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulo
         for(; lIter != lEndIter; ++lIter)
         {
 			std::vector<pmCommunicatorCommandPtr>& lCommandVector = lIter->second.second.receiveCommandVector;
-            std::vector<pmCommunicatorCommandPtr>::iterator lInnerIter = lCommandVector.begin(), lInnerEndIter = lCommandVector.end();
-            
-			for(; lInnerIter != lInnerEndIter; ++lInnerIter)
-			{
-				if((*lInnerIter).get())
-				{
-                    while((lStatus = (*lInnerIter)->GetStatus()) == pmStatusUnavailable)
-                    {
-                        if((*lInnerIter)->WaitWithTimeOut(GetIntegralCurrentTimeInSecs() + MEMORY_TRANSFER_TIMEOUT))
-                        {
-                            if(pStub->RequiresPrematureExit(pSubtaskId))
-                                PMTHROW_NODUMP(pmPrematureExitException());
-                        }
-                    }
-                
-                    if(lStatus != pmSuccess)
-						PMTHROW(pmMemoryFetchException());
-				}
-			}
+            pStub->WaitForNetworkFetch(lCommandVector);
 		}
 	}
 
