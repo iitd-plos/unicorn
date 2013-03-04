@@ -47,25 +47,23 @@ pmReducer::~pmReducer()
 
 pmStatus pmReducer::PopulateExternalMachineList()
 {
-	std::vector<pmMachine*> lMachines;
-
+	std::set<pmMachine*> lMachines;
 	if(dynamic_cast<pmLocalTask*>(mTask))
 		pmProcessingElement::GetMachines(((pmLocalTask*)mTask)->GetAssignedDevices(), lMachines);
 	else
 		pmProcessingElement::GetMachines(((pmRemoteTask*)mTask)->GetAssignedDevices(), lMachines);
-
-	std::vector<pmMachine*>::iterator lIter = std::find(lMachines.begin(), lMachines.end(), mTask->GetOriginatingHost());
-	if(lIter == lMachines.end())
+    
+    if(lMachines.find(mTask->GetOriginatingHost()) == lMachines.end() || lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
 		PMTHROW(pmFatalErrorException());
+
+	std::vector<pmMachine*> lMachinesVector(lMachines.begin(), lMachines.end());
+	std::vector<pmMachine*>::iterator lIter = std::find(lMachinesVector.begin(), lMachinesVector.end(), mTask->GetOriginatingHost());
 
 	// Make originating host the first element of the vector
-	std::rotate(lMachines.begin(), lIter, lMachines.end());
+	std::rotate(lMachinesVector.begin(), lIter, lMachinesVector.end());
 
-	lIter = std::find(lMachines.begin(), lMachines.end(), PM_LOCAL_MACHINE);
-	if(lIter == lMachines.end())
-		PMTHROW(pmFatalErrorException());
-
-	uint lLocalMachineIndex = (uint)(lIter - lMachines.begin());
+    lIter = std::find(lMachinesVector.begin(), lMachinesVector.end(), PM_LOCAL_MACHINE);
+	uint lLocalMachineIndex = (uint)(lIter - lMachinesVector.begin());
 
 	mExternalReductionsRequired = GetMaxPossibleExternalReductionReceives((uint)(lMachines.size()) - lLocalMachineIndex);
 
@@ -86,7 +84,7 @@ pmStatus pmReducer::PopulateExternalMachineList()
 		}
 
 		uint lSendToMachineIndex = lLocalMachineIndex - lPower;
-		mSendToMachine = lMachines[lSendToMachineIndex];
+		mSendToMachine = lMachinesVector[lSendToMachineIndex];
 	}
 
 	return pmSuccess;

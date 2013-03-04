@@ -490,29 +490,109 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked()
 	memset(this, 0, sizeof(*this));
 }
 
-pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId)
+void pmCommunicatorCommand::subtaskReducePacked::CreateSubtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, subtaskReduceInfo& pInfo)
 {
-	pmMachine* lOriginatingHost = pTask->GetOriginatingHost();
+    pInfo.packedData = new subtaskReducePacked(pReducingStub, pTask, pSubtaskId, pInfo.subscriptionsVector, pInfo.allocatedSubtaskMem);
+}
+
+pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, std::vector<ownershipDataStruct>* pSubscriptionsVector, char* pAllocatedSubtaskMem)
+{
+#ifdef _DEBUG
+    if(pAllocatedSubtaskMem || pSubscriptionsVector)
+        PMTHROW(pmFatalErrorException());
+#endif
+    
+	this->reduceStruct.originatingHost = *(pTask->GetOriginatingHost());
 	this->reduceStruct.sequenceNumber = pTask->GetSequenceNumber();
-
-	pmSubscriptionInfo lSubscriptionInfo;
-
-	this->reduceStruct.originatingHost = *(lOriginatingHost);
 	this->reduceStruct.subtaskId = pSubtaskId;
 
-	if(pTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pReducingStub, pSubtaskId, false, lSubscriptionInfo))
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+    
+    subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+    pSubscriptionsVector = new std::vector<ownershipDataStruct>();    // This vector will be deleted after data is sent to the other host (in HandleCommandCompletion of scheduler thread)
+
+    this->reduceStruct.inputMemSubscriptionCount = 0;
+    this->reduceStruct.outputMemReadSubscriptionCount = 0;
+    this->reduceStruct.outputMemWriteSubscriptionCount = 0;
+
+    subscription::subscriptionRecordType::const_iterator lIter;
+    if(lSubscriptionManager.GetNonConsolidatedInputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, lBeginIter, lEndIter))
     {
-        void* lShadowMem = pTask->GetSubscriptionManager().GetSubtaskShadowMem(pReducingStub, pSubtaskId);
-        this->subtaskMem.length = (uint)lSubscriptionInfo.length;
+        for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
+        {
+            ++this->reduceStruct.inputMemSubscriptionCount;
+
+            ownershipDataStruct lStruct;
+            lStruct.offset = lIter->first;
+            lStruct.length = lIter->second.first;
+            pSubscriptionsVector->push_back(lStruct);
+        }
+    }
+
+    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, true, lBeginIter, lEndIter))
+    {
+        for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
+        {
+            ++this->reduceStruct.outputMemReadSubscriptionCount;
+
+            ownershipDataStruct lStruct;
+            lStruct.offset = lIter->first;
+            lStruct.length = lIter->second.first;
+            pSubscriptionsVector->push_back(lStruct);
+        }
+    }
+
+    size_t lTotalWriteSubscriptionLength = 0;
+    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, false, lBeginIter, lEndIter))
+    {
+        for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
+        {
+            ++this->reduceStruct.outputMemWriteSubscriptionCount;
+
+            ownershipDataStruct lStruct;
+            lStruct.offset = lIter->first;
+            lStruct.length = lIter->second.first;
+            pSubscriptionsVector->push_back(lStruct);
+        
+            lTotalWriteSubscriptionLength += lStruct.length;
+        }
+    }
+
+    pmSubscriptionInfo lUnifiedSubscriptionInfo;
+    lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pReducingStub, pSubtaskId, lUnifiedSubscriptionInfo);
+    
+    this->subscriptions = &(*pSubscriptionsVector)[0];
+    
+    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pReducingStub, pSubtaskId);
+    if((this->reduceStruct.outputMemWriteSubscriptionCount == 0) || (lTotalWriteSubscriptionLength == lUnifiedSubscriptionInfo.length))
+    {
         this->subtaskMem.ptr = lShadowMem;
-		this->reduceStruct.subscriptionOffset = lSubscriptionInfo.offset;
+        this->subtaskMem.length = (uint)lUnifiedSubscriptionInfo.length;
     }
-	else
+    else if(this->reduceStruct.outputMemWriteSubscriptionCount == 1)
     {
-        this->subtaskMem.length = 0;
-        this->subtaskMem.ptr = NULL;
-		this->reduceStruct.subscriptionOffset = 0;
+        ownershipDataStruct& lDataStruct = (*pSubscriptionsVector)[pSubscriptionsVector->size() - 1];
+        this->subtaskMem.ptr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lDataStruct.offset - lUnifiedSubscriptionInfo.offset);
+        this->subtaskMem.length = (uint)lDataStruct.length;
     }
+    else
+    {
+        this->subtaskMem.ptr = pAllocatedSubtaskMem = new char[lTotalWriteSubscriptionLength];
+        this->subtaskMem.length = (uint)lTotalWriteSubscriptionLength;
+    
+        ulong lLocation = 0;
+        uint lCount = this->reduceStruct.inputMemSubscriptionCount + this->reduceStruct.outputMemReadSubscriptionCount;
+        for(uint i = 0; i < this->reduceStruct.outputMemWriteSubscriptionCount; ++i)
+        {
+            ownershipDataStruct& lDataStruct = (*pSubscriptionsVector)[lCount + i];
+            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lDataStruct.offset - lUnifiedSubscriptionInfo.offset);
+            memcpy((char*)(this->subtaskMem.ptr) + lLocation, lSrcPtr, lDataStruct.length);
+        
+            lLocation += lDataStruct.length;
+        }
+    }
+    
+    this->reduceStruct.subtaskMemLength = this->subtaskMem.length;
 }
 
 pmCommunicatorCommand::subtaskReducePacked::~subtaskReducePacked()

@@ -34,8 +34,8 @@ pmCudaLaunchConf GetCudaLaunchConf(int pMatrixDim)
 	{
 		lCudaLaunchConf.threadsX = lMaxThreadsPerBlock;
 		lCudaLaunchConf.blocksX = pMatrixDim/lCudaLaunchConf.threadsX;
-                if(lCudaLaunchConf.blocksX * lCudaLaunchConf.threadsX < pMatrixDim)
-                        ++lCudaLaunchConf.blocksX;
+        if(lCudaLaunchConf.blocksX * lCudaLaunchConf.threadsX < pMatrixDim)
+            ++lCudaLaunchConf.blocksX;
 	}
 
 	return lCudaLaunchConf;

@@ -749,9 +749,10 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
         {
             subtaskReduce& lEventDetails = pEvent.subtaskReduceDetails;
 
-            pmCommunicatorCommand::subtaskReducePacked* lPackedData = new pmCommunicatorCommand::subtaskReducePacked(lEventDetails.reducingStub, lEventDetails.task, lEventDetails.subtaskId);
+            pmCommunicatorCommand::subtaskReducePacked::subtaskReduceInfo* lInfo = new pmCommunicatorCommand::subtaskReducePacked::subtaskReduceInfo();
+            pmCommunicatorCommand::subtaskReducePacked::CreateSubtaskReducePacked(lEventDetails.reducingStub, lEventDetails.task, lEventDetails.subtaskId, *lInfo);
 
-            pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(pmCommunicatorCommand::SUBTASK_REDUCE_TAG, pmCommunicatorCommand::SUBTASK_REDUCE_PACKED, lEventDetails.machine, lPackedData, lEventDetails.task->GetPriority());
+            pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(pmCommunicatorCommand::SUBTASK_REDUCE_TAG, pmCommunicatorCommand::SUBTASK_REDUCE_PACKED, lEventDetails.machine, lInfo, lEventDetails.task->GetPriority());
 
             break;
         }
@@ -1025,6 +1026,14 @@ pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLoc
     
 	if(lSubtaskCount == 0)
 		return pmSuccess;
+
+#ifdef TRACK_SUBTASK_EXECUTION
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+        std::cout << "Device " << pDevice->GetGlobalDeviceIndex() << " got " << lSubtaskCount << " subtasks [" << lStartingSubtask << " - " << (lStartingSubtask + lSubtaskCount - 1) << "]" << std::endl;
+    }
+#endif
 
 	if(lMachine == PM_LOCAL_MACHINE)
 	{
@@ -1487,16 +1496,18 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 		{
 			if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::SUBTASK_REDUCE_TAG)
 			{
-				pmCommunicatorCommand::subtaskReducePacked* lData = (pmCommunicatorCommand::subtaskReducePacked*)(lCommunicatorCommand->GetData());
+				pmCommunicatorCommand::subtaskReducePacked::subtaskReduceInfo* lInfo = (pmCommunicatorCommand::subtaskReducePacked::subtaskReduceInfo*)(lCommunicatorCommand->GetData());
+            
+                pmCommunicatorCommand::subtaskReducePacked* lData = lInfo->packedData;
 
 				pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->reduceStruct.originatingHost);
 				pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->reduceStruct.sequenceNumber);
-
-                std::cout << "To Be Done: Pass Reducing Stub Here Or Comment these lines as shadow mem is an auto ptr" << std::endl;
-                pmExecutionStub* lReducingStub = NULL;
-				lTask->GetSubscriptionManager().DestroySubtaskShadowMem(lReducingStub, lData->reduceStruct.subtaskId);
-
+            
                 (static_cast<pmRemoteTask*>(lTask))->MarkReductionFinished();
+
+                delete lInfo->subscriptionsVector;
+                delete lInfo->allocatedSubtaskMem;
+                delete lInfo->packedData;
 			}
 			else if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG)
 			{
@@ -1546,7 +1557,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
 				case pmCommunicatorCommand::SUBTASK_REDUCE_TAG:
-					delete (pmCommunicatorCommand::subtaskReducePacked*)(lCommunicatorCommand->GetData());
+					delete (pmCommunicatorCommand::subtaskReducePacked::subtaskReduceInfo*)(lCommunicatorCommand->GetData());
 					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
 				case pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG:
@@ -1705,20 +1716,43 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->reduceStruct.originatingHost);
 					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->reduceStruct.sequenceNumber);
-
-                    std::cout << "To Be Done: Handle non-contiguous subscriptions; find reducing stub (from reducer)" << std::endl;
-					pmSubscriptionInfo lSubscriptionInfo;
-					lSubscriptionInfo.offset = lData->reduceStruct.subscriptionOffset;
-					lSubscriptionInfo.length = lData->reduceStruct.subtaskMemLength;
                 
-                    pmExecutionStub* lReducingStub = NULL;
-					lTask->GetSubscriptionManager().RegisterSubscription(lReducingStub, lData->reduceStruct.subtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+                    pmReducer* lReducer = lTask->GetReducer();
+                    pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetStub((uint)0);
+                
+                    pmSubscriptionManager& lSubscriptionManager = lTask->GetSubscriptionManager();
+                    lSubscriptionManager.EraseSubscription(lStub, lData->reduceStruct.subtaskId);
+                    lSubscriptionManager.InitializeSubtaskDefaults(lStub, lData->reduceStruct.subtaskId);
+                
+                    pmSubscriptionInfo lSubscriptionInfo;
+                    unsigned int i, index;
+                    for(index = 0; index < lData->reduceStruct.inputMemSubscriptionCount; ++index)
+                    {
+                        lSubscriptionInfo.offset = lData->subscriptions[index].offset;
+                        lSubscriptionInfo.length = lData->subscriptions[index].length;
+                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+                    }
 
-					lTask->GetSubscriptionManager().CreateSubtaskShadowMem(lReducingStub, lData->reduceStruct.subtaskId, (char*)(lData->subtaskMem.ptr), lData->subtaskMem.length);
-					lTask->GetReducer()->AddSubtask(lReducingStub, lData->reduceStruct.subtaskId);
+                    for(i = 0; i < lData->reduceStruct.outputMemReadSubscriptionCount; ++i, ++index)
+                    {
+                        lSubscriptionInfo.offset = lData->subscriptions[index].offset;
+                        lSubscriptionInfo.length = lData->subscriptions[index].length;
+                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, OUTPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+                    }
+                
+                    for(i = 0; i < lData->reduceStruct.outputMemWriteSubscriptionCount; ++i, ++index)
+                    {
+                        lSubscriptionInfo.offset = lData->subscriptions[index].offset;
+                        lSubscriptionInfo.length = lData->subscriptions[index].length;
+                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+                    }
+                
+                    lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, lData->subtaskMem.ptr, lData->subtaskMem.length);
+					lReducer->AddSubtask(lStub, lData->reduceStruct.subtaskId);
 
 					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
 					delete[] (char*)(lData->subtaskMem.ptr);
+                    delete[] (pmCommunicatorCommand::ownershipDataStruct*)(lData->subscriptions);
 					delete (pmCommunicatorCommand::subtaskReducePacked*)(lData);
 
 					break;

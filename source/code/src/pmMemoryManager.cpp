@@ -736,13 +736,20 @@ pmStatus pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, ulong p
 	size_t lMemAddr = reinterpret_cast<size_t>(pFaultAddr);
 	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
     size_t lOffset = pShadowMemOffset + (lPageAddr - reinterpret_cast<size_t>(pShadowMemBaseAddr));
+    size_t lSrcMemBaseAddr = reinterpret_cast<size_t>(pMemSection->GetMem());
     
     void* lDestAddr = reinterpret_cast<void*>(lPageAddr);
-    void* lSrcAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pMemSection->GetMem()) + lOffset);
+    void* lSrcAddr = reinterpret_cast<void*>(lSrcMemBaseAddr + lOffset);
 
     LoadLazyMemoryPage(pStub, pSubtaskId, pMemSection, lSrcAddr);
-    SetLazyProtection(lDestAddr, lPageSize, true, true);    
-    ::memcpy(lDestAddr, lSrcAddr, lPageSize);
+    SetLazyProtection(lDestAddr, lPageSize, true, true);
+    
+    size_t lMaxSrcAddr = lSrcMemBaseAddr + pMemSection->GetLength();
+    size_t lMaxCopyAddr = reinterpret_cast<size_t>(lSrcAddr) + lPageSize;
+    if(lMaxCopyAddr > lMaxSrcAddr)
+        ::memcpy(lDestAddr, lSrcAddr, lMaxSrcAddr - reinterpret_cast<size_t>(lSrcAddr));
+    else
+        ::memcpy(lDestAddr, lSrcAddr, lPageSize);
     
     return pmSuccess;
 }

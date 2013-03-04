@@ -139,6 +139,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 		pmProcessingElement* GetProcessingElement();
 
+        pmStatus ThreadBindEvent();
     #ifdef DUMP_EVENT_TIMELINE
         pmStatus InitializeEventTimeline();
     #endif

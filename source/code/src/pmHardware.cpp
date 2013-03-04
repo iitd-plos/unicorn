@@ -112,7 +112,7 @@ pmDeviceInfo& pmProcessingElement::GetDeviceInfo()
         memcpy(lDeviceInfo->name, lName, lNameLength);
         memcpy(lDeviceInfo->description, lDesc, lDescLength);
 
-        lDeviceInfo->deviceHandle = static_cast<void*>(GetLocalExecutionStub());
+        lDeviceInfo->deviceHandle = ((GetMachine() == PM_LOCAL_MACHINE) ? static_cast<void*>(GetLocalExecutionStub()) : this);
         lDeviceInfo->name[lNameLength] = '\0';
         lDeviceInfo->description[lDescLength] = '\0';
 
@@ -140,15 +140,6 @@ pmStatus pmProcessingElement::GetMachines(std::vector<pmProcessingElement*>& pDe
 	std::vector<pmProcessingElement*>::iterator lIter;
 	for(lIter = pDevices.begin(); lIter != pDevices.end(); ++lIter)
 		pMachines.insert((*lIter)->GetMachine());
-
-	return pmSuccess;
-}
-
-pmStatus pmProcessingElement::GetMachines(std::vector<pmProcessingElement*>& pDevices, std::vector<pmMachine*>& pMachines)
-{
-	std::vector<pmProcessingElement*>::iterator lIter;
-	for(lIter = pDevices.begin(); lIter != pDevices.end(); ++lIter)
-		pMachines.push_back((*lIter)->GetMachine());
 
 	return pmSuccess;
 }

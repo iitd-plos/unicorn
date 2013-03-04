@@ -1,6 +1,11 @@
 
+#ifdef BUILD_CUDA
+
 #include "pmPublicDefinitions.h"
 #include "matrixMultiply.h"
+
+namespace matrixMultiply
+{
 
 __global__ void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus)
 {
@@ -31,3 +36,7 @@ __global__ void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceI
 }
 
 matrixMultiply_cudaFuncPtr matrixMultiply_cudaFunc = matrixMultiply_cuda;
+
+}
+
+#endif

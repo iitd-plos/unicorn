@@ -186,16 +186,20 @@ unsigned int pmGetHostCount()
 
 	return 0;
 }
-    
-void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, size_t pBufferSize)
+
+void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
+void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize)
 {
     try
     {
 		pmController* lController = pmController::GetController();
 		if(!lController)
 			return NULL;
+    
+        if(pScratchBufferInfo != PRE_SUBTASK_TO_SUBTASK && pScratchBufferInfo != SUBTASK_TO_POST_SUBTASK && pScratchBufferInfo != PRE_SUBTASK_TO_POST_SUBTASK)
+            PMTHROW(pmFatalErrorException());
         
-        return lController->GetScratchBuffer_Public(pTaskHandle, pDeviceHandle, pSubtaskId, pBufferSize);
+        return lController->GetScratchBuffer_Public(pTaskHandle, pDeviceHandle, pSubtaskId, pScratchBufferInfo, pBufferSize);
     }
     catch(pmException& e)
     {
@@ -245,6 +249,11 @@ pmStatus pmReleaseMemory(pmMemHandle pMem)
 pmStatus pmFetchMemory(pmMemHandle pMem)
 {
     SAFE_EXECUTE_ON_CONTROLLER(FetchMemory_Public, pMem);
+}
+    
+pmStatus pmFetchMemoryRange(pmMemHandle pMem, size_t pOffset, size_t pLength)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(FetchMemoryRange_Public, pMem, pOffset, pLength);
 }
     
 pmStatus pmGetRawMemPtr(pmMemHandle pMem, void** pPtr)

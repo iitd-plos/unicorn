@@ -370,24 +370,38 @@ class pmCommunicatorCommand : public pmCommand
 			uint originatingHost;
 			ulong sequenceNumber;	// sequence number of local task object (on originating host)
 			ulong subtaskId;
-			ulong subtaskMemLength;
-			ulong subscriptionOffset;
+            uint inputMemSubscriptionCount;
+            uint outputMemReadSubscriptionCount;
+            uint outputMemWriteSubscriptionCount;
+            uint subtaskMemLength;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 5
+				FIELD_COUNT_VALUE = 7
 			} fieldCount;
 
 		} subtaskReduceStruct;
-
+    
 		typedef struct subtaskReducePacked
 		{
+            typedef struct subtaskReduceInfo
+            {
+                std::vector<ownershipDataStruct>* subscriptionsVector;
+                char* allocatedSubtaskMem;
+                struct subtaskReducePacked* packedData;
+            } subtaskReduceInfo;
+
 			subtaskReducePacked();
-			subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId);
 			~subtaskReducePacked();
+        
+            static void CreateSubtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, subtaskReduceInfo& pInfo);
 
 			subtaskReduceStruct reduceStruct;
-			dataPtr subtaskMem;
+            ownershipDataStruct* subscriptions;
+			dataPtr subtaskMem; // output mem write subscription only
+        
+        private:
+            subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, std::vector<ownershipDataStruct>* pSubscriptionsVector, char* pAllocatedSubtaskMem);
 		} subtaskReducePacked;
 
 		typedef struct memoryReceiveStruct

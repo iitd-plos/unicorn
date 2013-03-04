@@ -113,7 +113,8 @@ class pmMemSection : public pmBase
         pmStatus GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
 
         pmStatus Fetch(ushort pPriority);
-        
+        pmStatus FetchRange(ushort pPriority, ulong pOffset, ulong pLength);
+    
         void Lock(pmTask* pTask, pmMemInfo pMemInfo);
         void Unlock(pmTask* pTask);
         pmTask* GetLockingTask();

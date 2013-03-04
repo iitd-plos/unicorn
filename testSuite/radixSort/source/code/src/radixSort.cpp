@@ -105,7 +105,7 @@ pmStatus radixSort_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtask
 {
 	radixSortTaskConf* lTaskConf = (radixSortTaskConf*)(pTaskInfo.taskConf);
 
-	int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, sizeof(int) * BINS_COUNT);
+	int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, SUBTASK_TO_POST_SUBTASK, sizeof(int) * BINS_COUNT, NULL);
 
 	if(lTaskConf->sortFromMsb)
 		serialMsbRadixSortRound((DATA_TYPE*)(pSubtaskInfo.inputMem), (DATA_TYPE*)(pSubtaskInfo.outputMem), (pSubtaskInfo.inputMemLength)/sizeof(DATA_TYPE), lTaskConf->round, lBins);
@@ -117,7 +117,7 @@ pmStatus radixSort_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtask
 
 pmStatus radixSortDataRedistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
-	int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, 0);
+	int* lBins = (int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, SUBTASK_TO_POST_SUBTASK, 0, NULL);
 
 	size_t lOffset = 0;
 	for(int k=0; k<BINS_COUNT; ++k)

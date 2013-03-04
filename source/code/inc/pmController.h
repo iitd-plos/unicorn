@@ -69,6 +69,7 @@ class pmController : public pmBase
 		pmStatus CreateMemory_Public(size_t pLength, pmMemHandle* pMem);
         pmStatus ReleaseMemory_Public(pmMemHandle pMem);
         pmStatus FetchMemory_Public(pmMemHandle pMem);
+        pmStatus FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, size_t pLength);
         pmStatus GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr);
 		pmStatus SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle);
 		pmStatus ReleaseTask_Public(pmTaskHandle pTaskHandle);
@@ -77,7 +78,7 @@ class pmController : public pmBase
 		pmStatus SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo);
         pmStatus RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder);
 		pmStatus SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
-        void* GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, size_t pBufferSize);
+        void* GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
 
 		uint GetHostId_Public();
 		uint GetHostCount_Public();

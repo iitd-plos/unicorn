@@ -94,6 +94,10 @@ pmStatus pmStubManager::CreateExecutionStubs()
 	mProcessingElementsGPU = pmDispatcherGPU::GetDispatcherGPU()->ProbeProcessingElementsAndCreateStubs(mStubVector);
 
 	mStubCount = mProcessingElementsCPU + mProcessingElementsGPU;
+    
+    std::vector<pmExecutionStub*>::iterator lIter = mStubVector.begin(), lEndIter = mStubVector.end();
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter)->ThreadBindEvent();
 
 	return pmSuccess;
 }

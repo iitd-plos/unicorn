@@ -97,7 +97,7 @@ class pmTask : public pmBase
         void MarkAllStubsScannedForShadowMemCommitMessages();
         void RegisterStubShadowMemCommitMessage();
     
-        void* CheckOutSubtaskMemory(size_t pLength);
+        void* CheckOutSubtaskMemory(size_t pLength, bool pForceNonLazy);
         void RepoolCheckedOutSubtaskMemory(void* pMem);
 
         void UnlockMemories();

@@ -113,7 +113,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
     bool lOutputMemWriteOnly = false;
     
     pmSubtaskInfo lSubtaskInfo;
-    pTask->GetSubtaskInfo(pStub, pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);    
+    pTask->GetSubtaskInfo(pStub, pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
 
 	switch(pStub->GetType())
 	{
@@ -150,6 +150,8 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 		default:	
 			PMTHROW(pmFatalErrorException());
 	}
+    
+    pTask->GetSubscriptionManager().DropScratchBufferIfNotRequiredPostSubtaskExec(pStub, pSubtaskId);
 
 	return pmSuccess;
 }

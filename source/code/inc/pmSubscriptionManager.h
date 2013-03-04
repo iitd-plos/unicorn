@@ -83,6 +83,8 @@ namespace subscription
 	{
 		pmCudaLaunchConf mCudaLaunchConf;
         finalize_ptr_array<char> mScratchBuffer;
+        size_t mScratchBufferSize;
+        pmScratchBufferInfo mScratchBufferInfo;
 
         pmSubscriptionInfo mConsolidatedInputMemSubscription;   // The contiguous range enclosing all ranges in mInputMemSubscriptions
         pmSubscriptionInfo mConsolidatedOutputMemReadSubscription;   // The contiguous range enclosing all ranges in mOutputMemReadSubscriptions
@@ -114,12 +116,17 @@ class pmSubscriptionManager : public pmBase
     
         void DropAllSubscriptions();
 
+        pmStatus EraseSubscription(pmExecutionStub* pStub, ulong pSubtaskId);
 		pmStatus InitializeSubtaskDefaults(pmExecutionStub* pStub, ulong pSubtaskId);
 		pmStatus RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo);
-		pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType);
+        pmStatus FreezeSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId);
+        pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType);
 		pmStatus SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
 		pmCudaLaunchConf& GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId);
-        void* GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, size_t pBufferSize);
+    
+        void DropScratchBufferIfNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId);
+        void* GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
+        void* CheckAndGetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, size_t& pScratchBufferSize, pmScratchBufferInfo& pScratchBufferInfo);
 
 		bool GetInputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
 		bool GetOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, bool pReadSubscription, pmSubscriptionInfo& pSubscriptionInfo);
@@ -130,7 +137,7 @@ class pmSubscriptionManager : public pmBase
 
         bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
 
-        pmStatus CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, char* pMem = NULL, size_t pMemLength = 0);
+        pmStatus CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, void* pMem = NULL, size_t pMemLength = 0);
         void* GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
         pmStatus DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
         void CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBeginIter, subscription::subscriptionRecordType::const_iterator& pEndIter, ulong pShadowMemOffset);

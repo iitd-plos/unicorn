@@ -59,12 +59,6 @@ pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
     : mCurrentSubtaskStats(NULL)
 {
 	mDeviceIndexOnMachine = pDeviceIndexOnMachine;
-
-	stubEvent lEvent;
-	lEvent.eventId = THREAD_BIND;
-	threadBind lBindDetails;
-	lEvent.bindDetails = lBindDetails;
-	SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
 }
 
 pmExecutionStub::~pmExecutionStub()
@@ -79,6 +73,15 @@ pmProcessingElement* pmExecutionStub::GetProcessingElement()
 	return pmDevicePool::GetDevicePool()->GetDeviceAtMachineIndex(PM_LOCAL_MACHINE, mDeviceIndexOnMachine);
 }
     
+pmStatus pmExecutionStub::ThreadBindEvent()
+{
+	stubEvent lEvent;
+	lEvent.eventId = THREAD_BIND;
+	SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
+    
+    return pmSuccess;
+}
+
 #ifdef DUMP_EVENT_TIMELINE
 pmStatus pmExecutionStub::InitializeEventTimeline()
 {
@@ -503,9 +506,10 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
                 #endif
                     mCurrentSubtaskStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask finishes
                 }
-                else
-                {   // pending range does not have current subtask or has more subtasks after the current one
-                    SwitchThread(lTaskEvent, lPriority);
+                else // pending range does not have current subtask or has more subtasks after the current one
+                {
+                    if(lTaskEvent.execDetails.rangeExecutedOnce || !(lStolenRange.startSubtask == lTaskEvent.execDetails.range.startSubtask && lStolenRange.endSubtask == lTaskEvent.execDetails.range.endSubtask + lStealCount))
+                        SwitchThread(lTaskEvent, lPriority);
                 }
                 
                 lStealSuccess = true;
@@ -841,10 +845,11 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
     
         for(ulong subtaskId = pRange.startSubtask; subtaskId <= pRange.endSubtask; ++subtaskId)
         {
-            lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, subtaskId, false, lBeginIter, lEndIter);
-
-            for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
-                lOwnershipMap[lIter->first] = lIter->second.first;
+            if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, subtaskId, false, lBeginIter, lEndIter))
+            {
+                for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
+                    lOwnershipMap[lIter->first] = lIter->second.first;
+            }
         }
     }
 
@@ -861,8 +866,8 @@ void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId)
     
     subscription::subscriptionRecordType::const_iterator lIter, lBeginIter, lEndIter;
 
-    lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, false, lBeginIter, lEndIter);
-    lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
+    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, false, lBeginIter, lEndIter))
+        lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
 }
 
 void pmExecutionStub::DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId)
@@ -1005,6 +1010,7 @@ pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
         INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
         lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, false);
 
+        pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
         pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
         
         if(pTask->DoSubtasksNeedShadowMemory())
@@ -1014,6 +1020,8 @@ pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
     #else
         pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
         INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
+
+        pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
         pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
 
         if(pTask->DoSubtasksNeedShadowMemory())

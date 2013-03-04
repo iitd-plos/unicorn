@@ -1,8 +1,12 @@
 
+#ifdef BUILD_CUDA
+
 #include "pmPublicDefinitions.h"
 #include "radixSort.h"
 
-pmStatus radixSort_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
+__global__ void radixSort_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus)
 {
 	return pmSuccess;
 }
+
+#endif

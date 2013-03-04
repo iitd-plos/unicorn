@@ -723,13 +723,18 @@ pmStatus pmMemSection::FlushOwnerships()
     
 pmStatus pmMemSection::Fetch(ushort pPriority)
 {
+    return FetchRange(pPriority, 0, GetLength());
+}
+    
+pmStatus pmMemSection::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)
+{
 #ifdef ENABLE_MEM_PROFILING
     TIMER_IMPLEMENTATION_CLASS lTimer;
     lTimer.Start();
 #endif
 
     std::vector<pmCommunicatorCommandPtr> lVector;
-    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(this, pPriority, 0, GetLength(), lVector);
+    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(this, pPriority, pOffset, pLength, lVector);
     
     std::vector<pmCommunicatorCommandPtr>::const_iterator lIter = lVector.begin(), lEndIter = lVector.end();
     for(; lIter != lEndIter; ++lIter)

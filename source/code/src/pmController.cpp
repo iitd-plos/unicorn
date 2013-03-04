@@ -256,6 +256,13 @@ pmStatus pmController::FetchMemory_Public(pmMemHandle pMem)
     return lMemSection->Fetch(MAX_PRIORITY_LEVEL);
 }
 
+pmStatus pmController::FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, size_t pLength)
+{
+	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
+    
+    return lMemSection->FetchRange(MAX_PRIORITY_LEVEL, pOffset, pLength);
+}
+    
 pmStatus pmController::GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr)
 {
 	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
@@ -356,11 +363,11 @@ uint pmController::GetHostCount_Public()
 	return NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 }
     
-void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, size_t pBufferSize)
+void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize)
 {
     subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
     
-    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pBufferSize);
+    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pScratchBufferInfo, pBufferSize);
     
     return NULL;
 }

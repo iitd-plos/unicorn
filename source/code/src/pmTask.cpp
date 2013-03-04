@@ -283,13 +283,15 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubt
 		pSubtaskInfo.outputMemLength = pSubtaskInfo.outputMemReadLength = pSubtaskInfo.outputMemWriteLength = 0;
         pOutputMemWriteOnly = false;
 	}
+    
+    pSubtaskInfo.gpuContext.scratchBuffer = NULL;
 
 	return pmSuccess;
 }
 
-void* pmTask::CheckOutSubtaskMemory(size_t pLength)
+void* pmTask::CheckOutSubtaskMemory(size_t pLength, bool pForceNonLazy)
 {
-    bool lIsLazy = GetMemSectionRW()->IsLazy();
+    bool lIsLazy = (!pForceNonLazy && GetMemSectionRW()->IsLazy());
 
     FINALIZE_RESOURCE_PTR(dCollectiveShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCollectiveShadowMemLock, Lock(), Unlock());
 
@@ -656,17 +658,25 @@ void pmLocalTask::UserDeleteTask()
     
 pmStatus pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId)
 {
+#ifdef _DEBUG
+    if(!DoSubtasksNeedShadowMemory())
+        PMTHROW(pmFatalErrorException());
+#endif
+    
     pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
-	pmSubscriptionInfo lSubscriptionInfo;
-	if(!lSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, false, lSubscriptionInfo))
-	{
-		lSubscriptionManager.DestroySubtaskShadowMem(pStub, pSubtaskId);
-		PMTHROW(pmFatalErrorException());
-	}
-std::cout << "Pending Implementation" << std::endl;
-	void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
-	GetMemSectionRW()->Update(lSubscriptionInfo.offset, lSubscriptionInfo.length, lShadowMem);
-	lSubscriptionManager.DestroySubtaskShadowMem(pStub, pSubtaskId);
+    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
+    pmMemSection* lMemRW = GetMemSectionRW();
+    
+    subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pStub, pSubtaskId, false, lBeginIter, lEndIter))
+    {
+        pmSubscriptionInfo lUnifiedSubscriptionInfo;
+        lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lUnifiedSubscriptionInfo);
+
+        subscription::subscriptionRecordType::const_iterator lIter;
+        for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
+            lMemRW->Update(lIter->first, lIter->second.first, reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lIter->first - lUnifiedSubscriptionInfo.offset));
+    }
 
     ((pmLocalTask*)this)->MarkUserSideTaskCompletion();
     

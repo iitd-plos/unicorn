@@ -81,7 +81,6 @@ class pmProcessingElement : public pmHardware
 
 		static pmStatus GetMachines(std::set<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines);
 		static pmStatus GetMachines(std::vector<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines);
-		static pmStatus GetMachines(std::vector<pmProcessingElement*>& pDevices, std::vector<pmMachine*>& pMachines);
 
 	private:
 		pmProcessingElement(pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex);

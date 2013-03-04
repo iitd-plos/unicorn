@@ -105,6 +105,11 @@ namespace pm
 
 		pmSubscriptionInfo();
 	} pmSubscriptionInfo;
+    
+    typedef struct pmGpuContext
+    {
+        void* scratchBuffer;
+    } pmGpuContext;
 
 	/** Some utility typedefs */
 	typedef struct pmSubtaskInfo
@@ -118,6 +123,7 @@ namespace pm
         size_t outputMemLength;
         size_t outputMemReadLength;
         size_t outputMemWriteLength;
+        pmGpuContext gpuContext;
 	} pmSubtaskInfo;
 
 	typedef struct pmTaskInfo
@@ -184,6 +190,14 @@ namespace pm
         PROPORTIONAL_STATIC
     } pmSchedulingPolicy;
 
+    /* The lifetime of scratch buffer for a subtask */
+    typedef enum pmScratchBufferInfo
+    {
+        PRE_SUBTASK_TO_SUBTASK,         // Scratch buffer lives from data distribution callback to subtask callback
+        SUBTASK_TO_POST_SUBTASK,        // Scractch buffer lives from subtask callback to data redistribution/reduction callback
+        PRE_SUBTASK_TO_POST_SUBTASK     // Scratch buffer lives from data distribution callback to data redistribution/reduction callback
+    } pmScratchBufferInfo;
+
 
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
 	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId);
@@ -233,6 +247,11 @@ namespace pm
      */
     pmStatus pmFetchMemory(pmMemHandle pMemHandle);
     
+    /** This routine fetches pLength bytes of distributed memory pointed to by pMem from offset pOffset into the local buffer.
+     *  This is a blocking call. 
+     */
+    pmStatus pmFetchMemoryRange(pmMemHandle pMemHandle, size_t pOffset, size_t pLength);
+
     /** This routine returns the naked memory pointer associated with pMem handle.
      *  This pointer may be used in memcpy and related functions.
      */
@@ -322,11 +341,22 @@ namespace pm
 	pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTaskHandle);
 
     
-    /** This function returns a writable buffer accessible to subtask, reduction and data redistribution callbacks. Size parameter
-     is only honored for the first invocation of this function for a particular subtask. Successive invocations return the buffer
-     allocated at initial request size. This buffer is only used to pass information generated in one callback to other callbacks */
-    void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pBufferSize);
-    
+    /** This function returns a writable buffer accessible to data distribution, subtask, data reduction and data redistribution callbacks.
+     ScratchBufferInfo and Size parameters are only honored for the first invocation of this function for a particular subtask. Successive
+     invocations return the buffer allocated at initial request size. This buffer is only used to pass information generated in one callback
+     to other callbacks */
+    #ifdef __CUDACC__
+    __host__ __device__
+    #endif
+    inline void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize, pmGpuContext* pGpuContext)
+    {
+    #if defined(__CUDA_ARCH__)
+        return (pGpuContext ? pGpuContext->scratchBuffer : NULL);
+    #else
+        void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
+        return pmGetScratchBufferHostFunc(pTaskHandle, pDeviceHandle, pSubtaskId, pScratchBufferInfo, pBufferSize);
+    #endif
+    }
 } // end namespace pm
 
 #endif

@@ -1,4 +1,7 @@
 
+#ifdef BUILD_CUDA
+#ifdef USE_SQUARE_BLOCKS
+
 #include "pmPublicDefinitions.h"
 #include "matrixTranspose.h"
 
@@ -6,9 +9,6 @@
 
 namespace matrixTranspose
 {
-
-#ifdef BUILD_CUDA
-#ifdef USE_SQUARE_BLOCKS
 
 __global__ void matrixTranspose_cuda(matrixTransposeTaskConf pTaskConf, pmSubtaskInfo pSubtaskInfo, void* pOutputBlock)
 {
@@ -69,8 +69,8 @@ pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
     return pmSuccess;
 }
 
-#else
+}
+
 #endif
 #endif
 
-}

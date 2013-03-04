@@ -51,7 +51,7 @@ endif
 
 ifeq ($(DEBUG), 1)
 	FLAGS += -DDEBUG -D_DEBUG -g
-	CUDAFLAGS += -DDEBUG -D_DEBUG -g
+	CUDAFLAGS += -DDEBUG -D_DEBUG -G -g
 	BUILD=debug
 else
 	FLAGS += -O3 -DNDEBUG

@@ -43,7 +43,6 @@ void __dump_mutex(pthread_mutex_t* mutex, const char* name)
 
 pmStatus pmResourceLock::Lock()
 {
-    std::cout << "PURE VIRTUAL METHOD LOCK CALLED" << std::endl;
     return pmSuccess;
 }
 

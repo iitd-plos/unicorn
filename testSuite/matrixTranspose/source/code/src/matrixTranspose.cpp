@@ -229,7 +229,7 @@ pmStatus matrixTranspose_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
     size_t lBlockDim = lTaskConf->blockSizeRows;
     size_t lBlockDimSize = sizeof(MATRIX_DATA_TYPE) * lBlockDim;
     size_t lBlockSize = lBlockDimSize * lBlockDim;
-    MATRIX_DATA_TYPE* lBlock = (MATRIX_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, lBlockSize);
+    MATRIX_DATA_TYPE* lBlock = (MATRIX_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, PRE_SUBTASK_TO_SUBTASK, lBlockSize, NULL);
 
     size_t i;
     for(i = 0; i < lBlockDim; ++i)
