@@ -4,6 +4,8 @@
 
 #include "commonAPI.h"
 #include "pageRank.h"
+
+#include <string.h>
 #include <math.h>
 
 namespace pageRank
@@ -31,9 +33,14 @@ void readWebMetaData(char* pBasePath)
 		exit(1);
 	}
 
-	fread((void*)(&gTotalWebPages), 4, 1, fp);
-	fread((void*)(&gMaxOutlinksPerWebPage), 4, 1, fp);
-	fread((void*)(&gWebPagesPerFile), 4, 1, fp);
+	if(fread((void*)(&gTotalWebPages), 4, 1, fp) != 1)
+		exit(1);
+
+	if(fread((void*)(&gMaxOutlinksPerWebPage), 4, 1, fp) != 1)
+		exit(1);
+
+	if(fread((void*)(&gWebPagesPerFile), 4, 1, fp) != 1)
+		exit(1);
 
 	std::cout << "Configuration: " << "Pages = " << gTotalWebPages << "; Max outlinks/page = " << gMaxOutlinksPerWebPage << "; Web pages per file = " << gWebPagesPerFile << std::endl;
 
@@ -67,7 +74,9 @@ void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int
     {
         //std::cout << "Page " << lPage+1 << std::endl;
 
-        fread((void*)(&lOutlinkCount), 4, 1, fp);
+        if(fread((void*)(&lOutlinkCount), 4, 1, fp) != 1)
+		exit(1);
+
         pData[lIndex] = lOutlinkCount;
         
         //std::cout << "Web Page: " << lPage+1 << " Outlink Count: " << lOutlinkCount << std::endl;
@@ -75,7 +84,8 @@ void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int
         for(unsigned int j=0; j<lOutlinkCount; ++j)
         {
             unsigned int lOutlinkPage = pTotalWebPages;
-            fread((void*)(&lOutlinkPage), 4, 1, fp);
+            if(fread((void*)(&lOutlinkPage), 4, 1, fp) != 1)
+		exit(1);
         
             if(lOutlinkPage > pTotalWebPages)
             {

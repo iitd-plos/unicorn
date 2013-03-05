@@ -13,8 +13,7 @@ using namespace pm;
 #define WEB_PAGES_PER_SUBTASK 10000
 
 #define MAX_BASE_PATH_LENGTH 256
-#define DEFAULT_BASE_PATH (char*)"/Users/tarunberi/Development/git-repositories/pmlib/testSuite/pageRank/build/linux/../../web_dump"
-//#define DEFAULT_BASE_PATH (char*)"../../web_dump"
+#define DEFAULT_BASE_PATH (char*)"../../web_dump"
 
 #ifdef BUILD_CUDA
 #include <cuda.h>
