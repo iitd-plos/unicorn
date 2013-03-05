@@ -75,7 +75,7 @@ void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int
         //std::cout << "Page " << lPage+1 << std::endl;
 
         if(fread((void*)(&lOutlinkCount), 4, 1, fp) != 1)
-		exit(1);
+            exit(1);
 
         pData[lIndex] = lOutlinkCount;
         
@@ -85,7 +85,7 @@ void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int
         {
             unsigned int lOutlinkPage = pTotalWebPages;
             if(fread((void*)(&lOutlinkPage), 4, 1, fp) != 1)
-		exit(1);
+                exit(1);
         
             if(lOutlinkPage > pTotalWebPages)
             {
