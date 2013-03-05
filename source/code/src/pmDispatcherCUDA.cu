@@ -109,6 +109,8 @@ std::string pmDispatcherCUDA::GetDeviceDescription(size_t pDeviceIndex)
 	lStr += lProp.clockRate;
 	lStr += ";sharedMemPerBlock=";
 	lStr += lProp.sharedMemPerBlock;
+	lStr += ";computeCapability=";
+	lStr += lProp.major + "." + lProp.minor;
 
 	return lStr;
 }

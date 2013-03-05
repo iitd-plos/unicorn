@@ -53,7 +53,10 @@ pmStatus pmReducer::PopulateExternalMachineList()
 	else
 		pmProcessingElement::GetMachines(((pmRemoteTask*)mTask)->GetAssignedDevices(), lMachines);
     
-    if(lMachines.find(mTask->GetOriginatingHost()) == lMachines.end() || lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
+    if(lMachines.find(mTask->GetOriginatingHost()) == lMachines.end())
+        lMachines.insert(mTask->GetOriginatingHost());
+    
+    if(lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
 		PMTHROW(pmFatalErrorException());
 
 	std::vector<pmMachine*> lMachinesVector(lMachines.begin(), lMachines.end());
