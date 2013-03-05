@@ -1,0 +1,24 @@
+Task Profiler [Host 1] ............
+INPUT_MEMORY_TRANSFER => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+OUTPUT_MEMORY_TRANSFER => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+TOTAL_MEMORY_TRANSFER => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+DATA_PARTITIONING => Accumulated Time: 0.599925s; Actual Time = 0.284215s; Overlapped Time = 0.31571s
+SUBTASK_EXECUTION => Accumulated Time: 0.158977s; Actual Time = 0.128181s; Overlapped Time = 0.0307958s
+DATA_REDUCTION => Accumulated Time: 0.000353336s; Actual Time = 0.000353336s; Overlapped Time = 0s
+DATA_REDISTRIBUTION => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+SUBTASK_STEAL_WAIT => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+SUBTASK_STEAL_SERVE => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+UNIVERSAL => Accumulated Time: 0.762756s; Actual Time = 0.304783s; Overlapped Time = 0.457973s
+
+
+Task Profiler [Host 0] ............
+INPUT_MEMORY_TRANSFER => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+OUTPUT_MEMORY_TRANSFER => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+TOTAL_MEMORY_TRANSFER => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+DATA_PARTITIONING => Accumulated Time: 0.794508s; Actual Time = 0.361747s; Overlapped Time = 0.432761s
+SUBTASK_EXECUTION => Accumulated Time: 0.286376s; Actual Time = 0.235738s; Overlapped Time = 0.0506377s
+DATA_REDUCTION => Accumulated Time: 0.00689578s; Actual Time = 0.00689578s; Overlapped Time = 0s
+DATA_REDISTRIBUTION => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+SUBTASK_STEAL_WAIT => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+SUBTASK_STEAL_SERVE => Accumulated Time: 0s; Actual Time = 0s; Overlapped Time = 0s
+UNIVERSAL => Accumulated Time: 1.13517s; Actual Time = 0.434591s; Overlapped Time = 0.700576s

@@ -48,7 +48,6 @@ public:
         DATA_REDISTRIBUTION,
         SUBTASK_STEAL_WAIT,
         SUBTASK_STEAL_SERVE,
-        MEMORY_ALLOCATION,
         UNIVERSAL, /* For internal use only */
         MAX_PROFILE_TYPES
     };
