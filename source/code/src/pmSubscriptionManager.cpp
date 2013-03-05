@@ -707,7 +707,15 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
         }
     }
 
-	return WaitForSubscriptions(pStub, pSubtaskId);
+	WaitForSubscriptions(pStub, pSubtaskId);
+    
+#ifdef SUPPORT_CUDA
+    #ifdef SUPPORT_LAZY_MEMORY
+        ClearInputMemLazyProtectionForCuda(pStub, pSubtaskId, pDeviceType);
+    #endif
+#endif
+    
+    return pmSuccess;
 }
 
 pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
@@ -802,6 +810,42 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulo
 
 	return pmSuccess;
 }
+    
+#ifdef SUPPORT_CUDA
+#ifdef SUPPORT_LAZY_MEMORY
+void pmSubscriptionManager::ClearInputMemLazyProtectionForCuda(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType)
+{
+	pmMemSection* lMemSection = mTask->GetMemSectionRO();
+    
+    if(lMemSection && lMemSection->IsLazy() && pDeviceType == GPU_CUDA)
+    {
+        std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+
+        size_t lLazyMemAddr = reinterpret_cast<size_t>(lMemSection->GetReadOnlyLazyMemoryMapping());
+        subscriptionRecordType::iterator lIter, lEndIter;
+        
+        // Auto lock/unlock scope
+        {        
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+            subscriptionRecordType& lMap = mSubtaskMap[lPair].mInputMemSubscriptions;
+            
+            lIter = lMap.begin();
+            lEndIter = lMap.end();
+        }
+        
+        for(; lIter != lEndIter; ++lIter)
+        {
+            pmSubscriptionInfo lSubscriptionInfo;
+            lSubscriptionInfo.offset = lIter->first;
+            lSubscriptionInfo.length = lIter->second.first;
+        
+            void* lAddr = reinterpret_cast<void*>(lLazyMemAddr + lSubscriptionInfo.offset);
+            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lAddr, lSubscriptionInfo.length, true, true);
+        }
+    }
+}
+#endif
+#endif
 
 
 /* struct pmSubtask */    

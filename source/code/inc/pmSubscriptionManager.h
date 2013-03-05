@@ -149,6 +149,12 @@ class pmSubscriptionManager : public pmBase
         pmStatus FetchInputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
         pmStatus FetchOutputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
 
+#ifdef SUPPORT_CUDA
+    #ifdef SUPPORT_LAZY_MEMORY
+        void ClearInputMemLazyProtectionForCuda(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType);
+    #endif
+#endif
+    
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 		std::map<std::pair<pmExecutionStub*, ulong>, subscription::pmSubtask> mSubtaskMap;
 
