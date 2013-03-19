@@ -76,7 +76,6 @@ class pmMemoryManager : public pmBase
 #endif
 
 	protected:
-        static pmMemoryManager* mMemoryManager;
 		size_t mPageSize;
 };
 
@@ -98,6 +97,8 @@ namespace linuxMemManager
         
     typedef struct memSectionSpecifics
     {
+        memSectionSpecifics();
+
         int mSharedMemDescriptor;
         pmInFlightRegions mInFlightMemoryMap;	// Map for regions being fetched; pair is length of region and regionFetchData
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mInFlightLock;
@@ -106,8 +107,6 @@ namespace linuxMemManager
     
 class pmLinuxMemoryManager : public pmMemoryManager
 {
-    friend class pmController;
-
     private:
         class sharedMemAutoPtr
         {

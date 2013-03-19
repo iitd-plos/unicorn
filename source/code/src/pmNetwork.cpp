@@ -34,7 +34,6 @@ namespace pm
 
 using namespace network;
 
-pmNetwork* pmNetwork::mNetwork = NULL;
 pmCluster* PM_GLOBAL_CLUSTER = NULL;
 
 //#define ENABLE_MPI_DEBUG_HOOK
@@ -167,16 +166,25 @@ pmStatus pmNetwork::ReceiveComplete(pmCommunicatorCommandPtr pCommand, pmStatus 
 /* class pmMPI */
 pmNetwork* pmMPI::GetNetwork()
 {
-	return mNetwork;
+	static pmMPI lNetwork;
+    return &lNetwork;
 }
 
-pmMPI::pmMPI() : pmNetwork()
+pmMPI::pmMPI()
+    : pmNetwork()
+    , mTotalHosts(0)
+    , mHostId(0)
+    , mDummyReceiveRequest(NULL)
+    , mDataTypesResourceLock __LOCK_NAME__("pmMPI::mDataTypesResourceLock")
+    , mResourceLock __LOCK_NAME__("pmMPI::mResourceLock")
+    , mSignalWait(NULL)
+	, mThreadTerminationFlag(false)
+    , mPersistentReceptionFreezed(false)
+    , mReceiveThread(NULL)
+#ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
+	, mProgressiveSleepTime(MIN_PROGRESSIVE_SLEEP_TIME_MILLI_SECS)
+#endif
 {
-    if(mNetwork)
-        PMTHROW(pmFatalErrorException());
-    
-    mNetwork = this;
-
 	int lThreadSupport, lMpiStatus;
 
 	//if(MPI_CALL("MPI_Init", ((lMpiStatus = MPI_Init(NULL, NULL)) != MPI_SUCCESS)))
@@ -202,16 +210,7 @@ pmMPI::pmMPI() : pmNetwork()
 	MPI_CALL("MPI_Comm_set_errhandler", MPI_Comm_set_errhandler(MPI_COMM_WORLD, MPI_ERRORS_RETURN));
 
 	PM_GLOBAL_CLUSTER = new pmClusterMPI();
-
-	mDummyReceiveRequest = NULL;
-    mSignalWait = NULL;
-	mThreadTerminationFlag = false;
-    mPersistentReceptionFreezed = false;
     
-#ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
-	mProgressiveSleepTime = MIN_PROGRESSIVE_SLEEP_TIME_MILLI_SECS;
-#endif
-
     MPI_DEBUG_HOOK
     
 	networkEvent lNetworkEvent; 
@@ -229,7 +228,13 @@ pmMPI::~pmMPI()
         NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();
     
         if(i == NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId())
+        {
+        #ifdef ENABLE_ACCUMULATED_TIMINGS
+            pmAccumulatedTimesSorter::GetAccumulatedTimesSorter()->FlushLogs();
+        #endif
+        
             pmLogger::GetLogger()->PrintDeferredLog();
+        }
     }
 #endif
 
@@ -1180,7 +1185,13 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 		{
 			lFieldCount = pmCommunicatorCommand::subtaskRangeCancelStruct::FIELD_COUNT_VALUE;
 			break;
-		}        
+		}
+
+        case pmCommunicatorCommand::FILE_OPERATIONS_STRUCT:
+		{
+			lFieldCount = pmCommunicatorCommand::fileOperationsStruct::FIELD_COUNT_VALUE;
+			break;
+		}
 
 		default:
 			PMTHROW(pmFatalErrorException());
@@ -1408,6 +1419,15 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.startSubtask, lStartSubtaskMPI, MPI_UNSIGNED_LONG, 3, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.endSubtask, lEndSubtaskMPI, MPI_UNSIGNED_LONG, 4, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originalAllotteeGlobalIndex, lOriginalAllotteeGlobalIndexMPI, MPI_UNSIGNED, 5, 1);
+
+			break;        
+        }
+
+        case pmCommunicatorCommand::FILE_OPERATIONS_STRUCT:
+        {
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::fileOperationsStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.fileName, lFileNameMPI, MPI_CHAR, 0, MAX_FILE_SIZE_LEN);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.fileOp, lFileOpMPI, MPI_UNSIGNED_SHORT, 1, 1);
 
 			break;        
         }
@@ -1800,11 +1820,11 @@ pmStatus pmMPI::FreezeReceptionAndFinishCommands()
 
 /* class pmMPI::pmUnknownLengthReceiveThread */
 pmMPI::pmUnknownLengthReceiveThread::pmUnknownLengthReceiveThread(pmMPI* pMPI)
+	: mMPI(pMPI)
+	, mThreadTerminationFlag(false)
+    , mSignalWait(NULL)
+    , mResourceLock __LOCK_NAME__("pmMPI::pmUnknownLengthReceiveThread::mResourceLock")
 {
-	mMPI = pMPI;
-	mThreadTerminationFlag = false;
-    mSignalWait = NULL;
-	
 	networkEvent lNetworkEvent; 
 	
 	SwitchThread(lNetworkEvent, MAX_PRIORITY_LEVEL);

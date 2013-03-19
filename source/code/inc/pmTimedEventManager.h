@@ -63,8 +63,6 @@ namespace timed
 
 class pmTimedEventManager : public THREADING_IMPLEMENTATION_CLASS<timed::timedEvent, ulong>
 {
-    friend class pmController;
-    
 public:
     static pmTimedEventManager* GetTimedEventManager();
     virtual ~pmTimedEventManager();
@@ -77,7 +75,6 @@ private:
     virtual pmStatus ThreadSwitchCallback(timed::timedEvent& pEvent);
 
     SIGNAL_WAIT_IMPLEMENTATION_CLASS mSignalWait;
-    static pmTimedEventManager* mTimedEventManager;
 };
     
 bool timeOutClearMatchFunc(timed::timedEvent& pEvent, void* pCriterion);

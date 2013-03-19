@@ -27,20 +27,14 @@
 namespace pm
 {
 
-pmStubManager* pmStubManager::mStubManager = NULL;
-
 pmStubManager* pmStubManager::GetStubManager()
 {
-	return mStubManager;
+	static pmStubManager lStubManager;
+    return &lStubManager;
 }
 
 pmStubManager::pmStubManager()
 {
-    if(mStubManager)
-        PMTHROW(pmFatalErrorException());
-    
-    mStubManager = this;
-
 	CreateExecutionStubs();
 }
 

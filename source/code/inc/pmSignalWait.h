@@ -55,12 +55,12 @@ class pmPThreadSignalWait : public pmSignalWait
 	private:
 		virtual pmStatus WaitTillAllBlockedThreadsWakeup();
 
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
-		pthread_cond_t mCondVariable;
-
 		bool mExiting;
 		bool mCondEnforcer;
 		uint mWaitingThreadCount;
+
+		pthread_cond_t mCondVariable;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

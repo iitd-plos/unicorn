@@ -30,6 +30,7 @@ namespace pm
 {
 
 pmTaskExecStats::pmTaskExecStats()
+    : mResourceLock __LOCK_NAME__("pmTaskExecStats::mResourceLock")
 {
 }
 

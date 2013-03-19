@@ -114,9 +114,6 @@ class pmTask : public pmBase
         pmTaskProfiler* GetTaskProfiler();
 #endif
     
-    protected:
-		pmMemSection* mMemRW;
-    
 	private:
 		pmStatus BuildTaskInfo();
         pmStatus RandomizeDevices(std::vector<pmProcessingElement*>& pDevices);
@@ -168,6 +165,7 @@ class pmTask : public pmBase
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCollectiveShadowMemLock;
     
     protected:
+		pmMemSection* mMemRW;
 		uint mAssignedDeviceCount;
 };
 
@@ -220,8 +218,8 @@ class pmLocalTask : public pmTask
         bool mLocalStubsFreeOfCancellations, mLocalStubsFreeOfShadowMemCommits;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
     
-        static ulong mSequenceId;   // Task number at the originating host
-        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mSequenceLock;
+        static ulong& GetSequenceId();   // Task number at the originating host
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetSequenceLock();
 };
 
 class pmRemoteTask : public pmTask

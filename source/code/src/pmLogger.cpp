@@ -26,22 +26,17 @@
 namespace pm
 {
 
-pmLogger* pmLogger::mLogger = NULL;
-
 pmLogger* pmLogger::GetLogger()
 {
-	return mLogger;
+	static pmLogger lLogger(LOG_LEVEL);
+    return &lLogger;
 }
 
 pmLogger::pmLogger(logLevel pLogLevel)
+    : mLogLevel(pLogLevel)
+    , mHostId((uint)-1)	// Unknown initially
+    , mResourceLock __LOCK_NAME__("pmLogger::mResourceLock")
 {
-    if(mLogger)
-        PMTHROW(pmFatalErrorException());
-    
-    mLogger = this;
-    
-	mHostId = (uint)-1;	// Unknown initially
-	mLogLevel = pLogLevel;
 }
 
 pmLogger::~pmLogger()

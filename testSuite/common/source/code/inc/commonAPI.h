@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include "pmPublicDefinitions.h"
+#include "pmPublicUtilities.h"
 
 using namespace pm;
 

@@ -56,9 +56,12 @@ using namespace execStub;
 
 /* class pmExecutionStub */
 pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
-    : mCurrentSubtaskStats(NULL)
+    : mDeviceIndexOnMachine(pDeviceIndexOnMachine)
+    , mCoreId(0)
+    , mCurrentSubtaskLock __LOCK_NAME__("pmExecutionStub::mCurrentSubtaskLock")
+    , mCurrentSubtaskStats(NULL)
+    , mDeferredShadowMemCommitsLock __LOCK_NAME__("pmExecutionStub::mDeferredShadowMemCommitsLock")
 {
-	mDeviceIndexOnMachine = pDeviceIndexOnMachine;
 }
 
 pmExecutionStub::~pmExecutionStub()
@@ -221,6 +224,15 @@ void pmExecutionStub::ProcessDeferredShadowMemCommits(pmTask* pTask)
         
         SwitchThread(lEvent, pTask->GetPriority() - 1);
     }
+}
+    
+void pmExecutionStub::CheckReductionFinishEvent(pmTask* pTask)
+{
+    stubEvent lEvent;
+    lEvent.checkReductionFinishDetails.task = pTask;
+    lEvent.eventId = CHECK_REDUCTION_FINISH;
+    
+    SwitchThread(lEvent, pTask->GetPriority());
 }
 
 pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange)
@@ -792,6 +804,13 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             mDeferredShadowMemCommits.erase(lTask);
         
             lTask->RegisterStubShadowMemCommitMessage();
+        }
+        
+        case CHECK_REDUCTION_FINISH:
+        {
+            pmTask* lTask = pEvent.checkReductionFinishDetails.task;
+
+            lTask->GetReducer()->CheckReductionFinish();
         }
 	}
 

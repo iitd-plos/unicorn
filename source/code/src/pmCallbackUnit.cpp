@@ -23,8 +23,8 @@
 namespace pm
 {
 
-std::map<std::string, pmCallbackUnit*> pmCallbackUnit::mKeyMap;
-RESOURCE_LOCK_IMPLEMENTATION_CLASS pmCallbackUnit::mResourceLock;
+STATIC_ACCESSOR(pmCallbackUnit::keyMapType, pmCallbackUnit, GetKeyMap)
+STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmCallbackUnit::mResourceLock"), pmCallbackUnit, GetResourceLock)
 
 pmCallbackUnit::pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
 	pmDataRedistributionCB* pDataRedistributionCB, pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB)
@@ -39,18 +39,20 @@ pmCallbackUnit::pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributi
 
 	mKey = pKey;
 
-	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
-	if(mKeyMap.find(mKey) != mKeyMap.end())
+    keyMapType& lKeyMap = GetKeyMap();
+	FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
+	if(lKeyMap.find(mKey) != lKeyMap.end())
 		PMTHROW(pmInvalidKeyException());
 
-	mKeyMap[mKey] = this;
+	lKeyMap[mKey] = this;
 }
 
 pmCallbackUnit::~pmCallbackUnit()
 {
-	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
+	FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
 
-	mKeyMap.erase(mKey);
+    keyMapType& lKeyMap = GetKeyMap();
+	lKeyMap.erase(mKey);
 }
 
 pmDataDistributionCB* pmCallbackUnit::GetDataDistributionCB()
@@ -97,13 +99,14 @@ pmCallbackUnit* pmCallbackUnit::FindCallbackUnit(char* pKey)
 {
 	std::string lStr(pKey);
 
-	FINALIZE_RESOURCE(dResourceLock, mResourceLock.Lock(), mResourceLock.Unlock());
+	FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
 
-	std::map<std::string, pmCallbackUnit*>::iterator lIter = mKeyMap.find(lStr);
-	if(lIter == mKeyMap.end())
+    keyMapType& lKeyMap = GetKeyMap();
+	std::map<std::string, pmCallbackUnit*>::iterator lIter = lKeyMap.find(lStr);
+	if(lIter == lKeyMap.end())
 		PMTHROW(pmInvalidKeyException());
 
-	pmCallbackUnit* lCallbackUnit = mKeyMap[lStr];
+	pmCallbackUnit* lCallbackUnit = lKeyMap[lStr];
 
 	return lCallbackUnit;
 }

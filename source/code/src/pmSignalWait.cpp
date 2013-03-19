@@ -50,12 +50,12 @@ void __dump_thread_state(bool pWait)
     
 /* class pmPThreadSignalWait */
 pmPThreadSignalWait::pmPThreadSignalWait()
+	: mExiting(false)
+    , mCondEnforcer(false)
+	, mWaitingThreadCount(0)
+    , mResourceLock __LOCK_NAME__("pmPThreadSignalWait::mResourceLock")
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_init(&mCondVariable, NULL), pmThreadFailureException, pmThreadFailureException::COND_VAR_INIT_FAILURE );
-
-	mExiting = false;	
-	mCondEnforcer = false;
-	mWaitingThreadCount = 0;
 }
 
 pmPThreadSignalWait::~pmPThreadSignalWait()

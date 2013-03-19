@@ -36,6 +36,8 @@ namespace pm
 
 class pmCallbackUnit : public pmBase
 {
+    typedef std::map<std::string, pmCallbackUnit*> keyMapType;
+
 	public:
 		pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
 			pmDataRedistributionCB* pDataRedistributionCB, pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB);
@@ -65,8 +67,8 @@ class pmCallbackUnit : public pmBase
 
 		std::string mKey;
 
-		static std::map<std::string, pmCallbackUnit*> mKeyMap;
-		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+		static keyMapType& GetKeyMap();
+		static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetResourceLock();
 };
 
 } // end namespace pm

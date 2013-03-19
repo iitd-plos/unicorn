@@ -57,7 +57,12 @@ class pmResourceLock : public pmBase
 class pmPThreadResourceLock : public pmResourceLock
 {
 	public:
-		pmPThreadResourceLock();
+		pmPThreadResourceLock(
+                        #ifdef TRACK_MUTEX_TIMINGS
+                              const char* pName = ""
+                        #endif
+                              );
+    
 		virtual ~pmPThreadResourceLock();
     
 		virtual pmStatus Lock();
@@ -73,12 +78,17 @@ class pmPThreadResourceLock : public pmResourceLock
 
 	private:
 		pthread_mutex_t mMutex;
-
+    
     #ifdef RECORD_LOCK_ACQUISITIONS
         std::string mFile;
         int mLine;
         bool mIsCurrentlyAcquired;
         pthread_t mThread;
+    #endif
+
+    #ifdef TRACK_MUTEX_TIMINGS
+        pmAccumulationTimer mLockTimer;
+        pmAccumulationTimer mUnlockTimer;
     #endif
 };
 

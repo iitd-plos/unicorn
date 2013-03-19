@@ -24,17 +24,18 @@
 /** 
  *						PARTITIONED MEMORY LIBRARY
  * PMLIB namespace. All PMLIB definitions are present in this namespace.
+ * ***************  Public include file for PMLIB core  ***************
 */
 
 #include <stdlib.h>
 
-#define MAX_NAME_STR_LEN 256
-#define MAX_DESC_STR_LEN 1024
-#define MAX_CB_KEY_LEN 128
-
 namespace pm
 {
-	/** 
+    const size_t MAX_NAME_STR_LEN = 256;
+    const size_t MAX_DESC_STR_LEN = 1024;
+    const size_t MAX_CB_KEY_LEN = 128;
+
+	/**
 	 * This enumeration defines success and all error conditions for the PMLIB Application Programming Interface (API).
 	 * Applications can depend upon these status flags to know the outcome of PMLIB functions.
 	 * Applications may use pmGetLastError for a brief description of the error.
@@ -143,6 +144,7 @@ namespace pm
 		OUTPUT_MEM_WRITE_ONLY,
 		OUTPUT_MEM_READ_WRITE,
 		INPUT_MEM_READ_ONLY_LAZY,
+        OUTPUT_MEM_WRITE_ONLY_LAZY,
 		OUTPUT_MEM_READ_WRITE_LAZY,
         MAX_MEM_INFO
 	} pmMemInfo;
@@ -357,6 +359,7 @@ namespace pm
         return pmGetScratchBufferHostFunc(pTaskHandle, pDeviceHandle, pSubtaskId, pScratchBufferInfo, pBufferSize);
     #endif
     }
+
 } // end namespace pm
 
 #endif

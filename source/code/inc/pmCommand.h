@@ -492,6 +492,24 @@ class pmCommunicatorCommand : public pmCommand
 			} fieldCount;
 
         } subtaskRangeCancelStruct;
+    
+        typedef enum fileOperations
+        {
+            MMAP_FILE,
+            MUNMAP_FILE
+        } fileOperations;
+    
+        typedef struct fileOperationsStruct
+        {
+            char fileName[MAX_FILE_SIZE_LEN];
+            ushort fileOp;  // enum fileOperations
+        
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 2
+			} fieldCount;
+
+        } fileOperationsStruct;
 
         typedef enum communicatorCommandTypes
 		{
@@ -520,6 +538,7 @@ class pmCommunicatorCommand : public pmCommand
 			HOST_FINALIZATION_TAG,
             DATA_REDISTRIBUTION_TAG,
             SUBTASK_RANGE_CANCEL_TAG,
+            FILE_OPERATIONS_TAG,
 			MAX_COMMUNICATOR_COMMAND_TAGS
 		} communicatorCommandTags;
 
@@ -552,6 +571,7 @@ class pmCommunicatorCommand : public pmCommand
             DATA_REDISTRIBUTION_STRUCT,
             DATA_REDISTRIBUTION_PACKED,
             SUBTASK_RANGE_CANCEL_STRUCT,
+            FILE_OPERATIONS_STRUCT,
 			MAX_COMMUNICATOR_DATA_TYPES
 		} communicatorDataTypes;
 
@@ -579,8 +599,6 @@ class pmCommunicatorCommand : public pmCommand
 		pmHardware* mDestination;
 		void* mSecondaryData;
 		ulong mSecondaryDataLength;
-
-		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 class pmPersistentCommunicatorCommand;

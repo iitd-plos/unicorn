@@ -22,9 +22,10 @@
 #define __PM_DATA_TYPES__
 
 #include <stdlib.h>
-#include <vector>
+#include "pmInternalDefinitions.h"
 
-#define RECORD_LOCK_ACQUISITIONS
+#include <vector>
+#include <map>
 
 namespace pm
 {
@@ -42,6 +43,27 @@ namespace pm
         ulong startSubtask;
         ulong endSubtask;
     } pmSubtaskRange;
+    
+    #define STATIC_ACCESSOR(type, className, funcName) \
+    type& className::funcName() \
+    { \
+        static type t; \
+        return t; \
+    }
+    
+    #define STATIC_ACCESSOR_INIT(type, className, funcName, initValue) \
+    type& className::funcName() \
+    { \
+        static type t = initValue; \
+        return t; \
+    }
+    
+    #define STATIC_ACCESSOR_ARG(type, arg, className, funcName) \
+    type& className::funcName() \
+    { \
+        static type t arg; \
+        return t; \
+    }
     
     template<typename T>
     class deleteDeallocator
@@ -231,24 +253,98 @@ namespace pm
 	} name##_obj(ptr);
 #endif
     
-    #define SCOPED_TIMER(name, str) \
-    class name \
-    { \
-        public: \
-            name(const char* pStr) \
-            : mStr(pStr) \
-            , mStartTime(pmBase::GetCurrentTimeInSecs()) \
-            { \
-            } \
-            ~name() \
-            { \
-                std::cout << "Scope Time for " << mStr << ": " << pmBase::GetCurrentTimeInSecs() - mStartTime << std::endl; \
-            } \
-        private: \
-            const char* mStr; \
-            double mStartTime; \
-    } name##_obj(str);
+    class pmScopeTimer
+    {
+        public:
+            pmScopeTimer(const char* pStr);
+            ~pmScopeTimer();
 
+        private:
+            const char* mStr;
+            double mStartTime;
+    };
+    
+    #define SCOPE_TIMER(name, str) pmScopeTimer name##_obj(str);
+
+    class TIMER_IMPLEMENTATION_CLASS;
+
+    class pmAccumulatedTimesSorter
+    {
+        public:
+            typedef struct accumulatedData
+            {
+                double minTime;
+                double maxTime;
+                double actualTime;
+                uint execCount;
+            } accumulatedData;
+    
+            ~pmAccumulatedTimesSorter();
+    
+            void Insert(std::string& pName, double pAccumulatedTime, double pMinTime, double pMaxTime, double pActualTime, uint pExecCount);
+    
+            void Lock();
+            void Unlock();
+    
+            void FlushLogs();
+    
+            static pmAccumulatedTimesSorter* GetAccumulatedTimesSorter();
+    
+        private:
+            pmAccumulatedTimesSorter();
+
+            ushort mMaxNameLength;
+            bool mLogsFlushed;
+            std::map<std::pair<double, std::string>, accumulatedData> mAccumulatedTimesMap;
+            pthread_mutex_t mMutex;
+    };
+    
+    class pmAccumulationTimer
+    {
+        public:
+            pmAccumulationTimer(const std::string& pStr);
+    
+            void RegisterExec();
+            void DeregisterExec(double pTime);
+
+            void Lock();
+            void Unlock();
+    
+            ~pmAccumulationTimer();
+
+        private:
+            void RecordElapsedTime();
+
+            std::string mStr;
+            double mMinTime, mMaxTime, mAccumulatedTime, mActualTime;
+            uint mExecCount, mThreadCount;
+            TIMER_IMPLEMENTATION_CLASS* mTimer;
+            pthread_mutex_t mMutex;
+    };
+
+    class pmAccumulationTimerHelper
+    {
+        public:
+            pmAccumulationTimerHelper(pmAccumulationTimer* pAccumulationTimer);
+            ~pmAccumulationTimerHelper();
+        
+        private:
+            pmAccumulationTimer* mAccumulationTimer;
+            double mStartTime;
+    };
+    
+    #define ACCUMULATION_TIMER(name, str) \
+    static pmAccumulationTimer name##_obj(str); \
+    pmAccumulationTimerHelper name##_helperTimer(&name##_obj);
+    
+    #ifdef TRACK_MUTEX_TIMINGS
+        #define __LOCK_NAME__(name) (name)
+        #define __STATIC_LOCK_NAME__(name) (name)
+    #else
+        #define __LOCK_NAME__(name) ()
+        #define __STATIC_LOCK_NAME__(name)
+    #endif
+    
     template<typename G, typename D, typename T>
 	class guarded_scoped_ptr
 	{
@@ -404,36 +500,17 @@ namespace pm
             bool mDeleteMem;
     };
 
-	typedef class pmDestroyOnException
+	class pmDestroyOnException
 	{
 		public:
-			pmDestroyOnException() {mDestroy = true;}
-			virtual ~pmDestroyOnException()
-			{
-				if(mDestroy)
-				{
-					size_t i, lSize;
-					lSize = mFreePtrs.size();
-					for(i=0; i<lSize; ++i)
-						free(mFreePtrs[i]);
-				}
-			}
+			pmDestroyOnException();
+			virtual ~pmDestroyOnException();
 
-			void AddFreePtr(void* pPtr) {mFreePtrs.push_back(pPtr);}
-			void AddDeletePtr(selective_finalize_base* pDeletePtr) {mDeletePtrs.push_back(pDeletePtr);}
-			void SetDestroy(bool pDestroy)
-			{
-				mDestroy = pDestroy;
-				if(!mDestroy)
-				{
-					size_t i, lSize;
-					lSize = mDeletePtrs.size();
-					for(i=0; i<lSize; ++i)
-						mDeletePtrs[i]->SetDelete(false);
-				}
-			}
-
-			bool shouldDelete() {return mDestroy;}
+            void AddFreePtr(void* pPtr);
+			void AddDeletePtr(selective_finalize_base* pDeletePtr);
+    
+			void SetDestroy(bool pDestroy);
+			bool ShouldDelete();
 
 		private:
             pmDestroyOnException(const pmDestroyOnException& pPtr);
@@ -442,7 +519,7 @@ namespace pm
 			bool mDestroy;
 			std::vector<selective_finalize_base*> mDeletePtrs;
 			std::vector<void*> mFreePtrs;
-	} pmDestroyOnException;
+	};
 
 	#define START_DESTROY_ON_EXCEPTION(blockName) //pmDestroyOnException blockName; try {
 	#define FREE_PTR_ON_EXCEPTION(blockName, name, ptr) name = ptr; //blockName.AddFreePtr(name);

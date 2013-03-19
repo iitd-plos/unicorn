@@ -29,23 +29,18 @@
 namespace pm
 {
 
-pmMachinePool* pmMachinePool::mMachinePool = NULL;
-pmDevicePool* pmDevicePool::mDevicePool = NULL;
 pmMachine* PM_LOCAL_MACHINE = NULL;
 
 /* class pmMachinePool */
 pmMachinePool* pmMachinePool::GetMachinePool()
 {
-	return mMachinePool;
+    static pmMachinePool lMachinePool;
+	return &lMachinePool;
 }
 
 pmMachinePool::pmMachinePool()
+    : mResourceLock __LOCK_NAME__("pmMachinePool::mResourceLock")
 {
-    if(mMachinePool)
-        PMTHROW(pmFatalErrorException());
-    
-    mMachinePool = this;
-
 	uint i=0;
     uint lMachineCount = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 
@@ -57,24 +52,22 @@ pmMachinePool::pmMachinePool()
 		All2AllMachineData(fAll2AllBuffer);
 	}
 
-	uint lLocalId = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
-
 	for(i=0; i<lMachineCount; ++i)
 	{
-		pmMachine* lMachine = new pmMachine(i);
+		pmMachine lMachine(i);
 
-		if(i == lLocalId)
-			PM_LOCAL_MACHINE = lMachine;
-	
-		pmMachineData lData;
+        pmMachineData lData;
 		lData.cpuCores = fAll2AllBuffer[i].cpuCores;
 		lData.gpuCards = fAll2AllBuffer[i].gpuCards;
 		
-		mMachinesVector.push_back(lMachine);
+        mMachinesVector.push_back(lMachine);
 		mMachineDataVector.push_back(lData);
 	}
+    
+	uint lLocalId = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
+    PM_LOCAL_MACHINE = &(mMachinesVector[lLocalId]);
 
-	pmDevicePool* lDevicePool = new pmDevicePool();
+	pmDevicePool* lDevicePool = pmDevicePool::GetDevicePool();
 
 	FINALIZE_RESOURCE(fDevicePoolResource, (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::DEVICE_POOL_STRUCT)), (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::DEVICE_POOL_STRUCT)));
 
@@ -97,12 +90,6 @@ pmMachinePool::pmMachinePool()
 
 pmMachinePool::~pmMachinePool()
 {
-    delete pmDevicePool::GetDevicePool();
-    
-	size_t lSize = mMachinesVector.size();
-
-	for(size_t i=0; i<lSize; ++i)
-		delete mMachinesVector[i];
 }
 
 pmStatus pmMachinePool::All2AllMachineData(pmCommunicatorCommand::machinePool* pAll2AllBuffer)
@@ -139,7 +126,7 @@ pmMachine* pmMachinePool::GetMachine(uint pIndex)
 	if(pIndex >= (uint)mMachinesVector.size())
 		PMTHROW(pmUnknownMachineException(pIndex));
 
-	return mMachinesVector[pIndex];
+	return &(mMachinesVector[pIndex]);
 }
 
 pmStatus pmMachinePool::GetAllDevicesOnMachine(uint pMachineIndex, std::vector<pmProcessingElement*>& pDevices)
@@ -166,11 +153,6 @@ pmStatus pmMachinePool::GetAllDevicesOnMachine(pmMachine* pMachine, std::vector<
 	}
 
 	return pmSuccess;
-}
-
-std::vector<pmMachine*>& pmMachinePool::GetAllMachines()
-{
-	return mMachinesVector;
 }
 
 uint pmMachinePool::GetFirstDeviceIndexOnMachine(uint pMachineIndex)
@@ -222,25 +204,16 @@ pmStatus pmMachinePool::RegisterReceiveCompletion(pmMachine* pMachine, ulong pDa
 /* class pmDevicePool */
 pmDevicePool* pmDevicePool::GetDevicePool()
 {
-	return mDevicePool;
+	static pmDevicePool lDevicePool;
+    return &lDevicePool;
 }
 
 pmDevicePool::pmDevicePool()
 {
-    if(mDevicePool)
-        PMTHROW(pmFatalErrorException());
-    
-    mDevicePool = this;
-    
-	mDevicesVector.clear();
-	mDeviceDataVector.clear();
 }
 
 pmDevicePool::~pmDevicePool()
 {
-	size_t lSize = mDevicesVector.size();
-	for(size_t i=0; i<lSize; ++i)
-		delete mDevicesVector[i];
 }
 
 pmStatus pmDevicePool::CreateMachineDevices(pmMachine* pMachine, uint pCpuDeviceCount, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount)
@@ -252,7 +225,8 @@ pmStatus pmDevicePool::CreateMachineDevices(pmMachine* pMachine, uint pCpuDevice
 		if(i >= pCpuDeviceCount)
 			lDeviceType = GPU_CUDA;
 #endif
-		pmProcessingElement* lDevice = new pmProcessingElement(pMachine, lDeviceType, i, pGlobalStartingDeviceIndex + i);
+
+        pmProcessingElement lDevice(pMachine, lDeviceType, i, pGlobalStartingDeviceIndex + i);
 
 		pmDeviceData lData;
 		lData.name = pDeviceData[i].name;
@@ -303,11 +277,6 @@ pmDevicePool::pmDeviceData& pmDevicePool::GetDeviceData(pmProcessingElement* pDe
 	return mDeviceDataVector[lGlobalIndex];
 }
 
-std::vector<pmProcessingElement*>& pmDevicePool::GetAllDevices()
-{
-	return mDevicesVector;
-}
-
 pmProcessingElement* pmDevicePool::GetDeviceAtMachineIndex(pmMachine* pMachine, uint pDeviceIndexOnMachine)
 {
 	uint lGlobalIndex = pmMachinePool::GetMachinePool()->GetFirstDeviceIndexOnMachine(pMachine) + pDeviceIndexOnMachine;
@@ -326,7 +295,7 @@ pmProcessingElement* pmDevicePool::GetDeviceAtGlobalIndex(uint pGlobalDeviceInde
 	if(pGlobalDeviceIndex >= (uint)mDevicesVector.size())
 		PMTHROW(pmUnknownDeviceException(pGlobalDeviceIndex));
 
-	return mDevicesVector[pGlobalDeviceIndex];
+	return &(mDevicesVector[pGlobalDeviceIndex]);
 }
 
 pmStatus pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceType pType, pmCluster* pCluster, std::set<pmProcessingElement*>& pDevices)
@@ -334,8 +303,8 @@ pmStatus pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceType pType, pmCluste
 	size_t lSize = mDevicesVector.size();
 	for(size_t i=0; i<lSize; ++i)
 	{
-		if(mDevicesVector[i]->GetType() == pType && pCluster->ContainsMachine(mDevicesVector[i]->GetMachine()))
-			pDevices.insert(mDevicesVector[i]);
+		if(mDevicesVector[i].GetType() == pType && pCluster->ContainsMachine(mDevicesVector[i].GetMachine()))
+			pDevices.insert(&(mDevicesVector[i]));
 	}
 
 	return pmSuccess;

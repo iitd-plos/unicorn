@@ -39,7 +39,8 @@ typedef enum eventIdentifier
 {
 	PACK_DATA,
     UNPACK_DATA,
-    MEM_TRANSFER
+    MEM_TRANSFER,
+    COMMAND_COMPLETION
 } eventIdentifier;
     
 typedef struct packEvent
@@ -68,6 +69,11 @@ typedef struct memTransferEvent
 	ushort priority;
     bool isForwarded;
 } memTransferEvent;
+    
+typedef struct commandCompletion
+{
+	pmCommandPtr command;
+} commandCompletion;
 
 typedef struct heavyOperationsEvent : public pmBasicThreadEvent
 {
@@ -78,6 +84,8 @@ typedef struct heavyOperationsEvent : public pmBasicThreadEvent
         unpackEvent unpackDetails;
         memTransferEvent memTransferDetails;
 	};
+    
+    commandCompletion commandCompletionDetails;
 } heavyOperationsEvent;
 
 }
@@ -91,11 +99,14 @@ public:
 private:
     virtual pmStatus ThreadSwitchCallback(heavyOperations::heavyOperationsEvent& pEvent);
     pmStatus ProcessEvent(heavyOperations::heavyOperationsEvent& pEvent);
+
+    void HandleCommandCompletion(pmCommandPtr pCommand);
 };
 
 class pmHeavyOperationsThreadPool
 {
-    friend class pmController;
+    friend class pmHeavyOperationsThread;
+	friend pmStatus HeavyOperationsCommandCompletionCallback(pmCommandPtr pCommand);
     
 public:
     virtual ~pmHeavyOperationsThreadPool();
@@ -110,11 +121,17 @@ private:
     pmHeavyOperationsThreadPool(size_t pThreadCount);
 
     void SubmitToThreadPool(heavyOperations::heavyOperationsEvent& pEvent, ushort pPriority);
-    
-    static pmHeavyOperationsThreadPool* mHeavyOperationsThreadPool;
+	void SetupPersistentCommunicationCommands();
+	void DestroyPersistentCommunicationCommands();
+    void SetupNewFileOperationsReception();
 
+    void CommandCompletionEvent(pmCommandPtr pCommand);
+    
     std::vector<pmHeavyOperationsThread*> mThreadVector;
     size_t mCurrentThread;
+    
+    pmPersistentCommunicatorCommandPtr mFileOperationsRecvCommand;
+    pmCommunicatorCommand::fileOperationsStruct mFileOperationsRecvData;
     
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };

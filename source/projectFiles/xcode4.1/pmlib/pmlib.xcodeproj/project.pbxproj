@@ -12,9 +12,12 @@
 		0E20293F162DF290006DC536 /* pmTls.h in Headers */ = {isa = PBXBuildFile; fileRef = 0E20293E162DF290006DC536 /* pmTls.h */; };
 		0E202941162DF35B006DC536 /* pmTls.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E202940162DF35B006DC536 /* pmTls.cpp */; };
 		0E29502015CAFE3A00F31801 /* pmTimedEventManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */; };
+		0E7327BF16F7A409006FE28F /* pmRegionAccessor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E7327BD16F7A409006FE28F /* pmRegionAccessor.cpp */; };
 		0E78AD0416A9B11800EF45BF /* libmpi_cxx.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E78AD0216A9B11800EF45BF /* libmpi_cxx.0.dylib */; };
 		0E78AD0516A9B11800EF45BF /* libmpi.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E78AD0316A9B11800EF45BF /* libmpi.0.dylib */; };
+		0EB3339F16F28D120078AC9C /* pmDataTypes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */; };
 		0EDC2EAA15B313C700937B7E /* pmTaskProfiler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EDC2EA915B313C700937B7E /* pmTaskProfiler.cpp */; };
+		0EFEA57216EF141000DDB741 /* pmUtility.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFEA57016EF141000DDB741 /* pmUtility.cpp */; };
 		0EFF67BA1545CF7800ED4E8F /* pmRedistributor.h in Headers */ = {isa = PBXBuildFile; fileRef = 0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */; };
 		0EFF67BD1545CF9A00ED4E8F /* pmRedistributor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */; };
 		2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED2F151C7B07006AA45D /* pmBase.h */; };
@@ -89,10 +92,16 @@
 		0E202940162DF35B006DC536 /* pmTls.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTls.cpp; sourceTree = "<group>"; };
 		0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTimedEventManager.cpp; sourceTree = "<group>"; };
 		0E29502115CAFE7300F31801 /* pmTimedEventManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmTimedEventManager.h; sourceTree = "<group>"; };
+		0E64400316F1080600D4D8E6 /* pmPublicUtilities.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmPublicUtilities.h; sourceTree = "<group>"; };
+		0E7327BC16F7A3F3006FE28F /* pmRegionAccessor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmRegionAccessor.h; sourceTree = "<group>"; };
+		0E7327BD16F7A409006FE28F /* pmRegionAccessor.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmRegionAccessor.cpp; sourceTree = "<group>"; };
 		0E78AD0216A9B11800EF45BF /* libmpi_cxx.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi_cxx.0.dylib; path = "../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib/libmpi_cxx.0.dylib"; sourceTree = "<group>"; };
 		0E78AD0316A9B11800EF45BF /* libmpi.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi.0.dylib; path = "../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib/libmpi.0.dylib"; sourceTree = "<group>"; };
+		0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmDataTypes.cpp; sourceTree = "<group>"; };
 		0EDC2E6A15B30FB900937B7E /* pmTaskProfiler.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmTaskProfiler.h; sourceTree = "<group>"; };
 		0EDC2EA915B313C700937B7E /* pmTaskProfiler.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTaskProfiler.cpp; sourceTree = "<group>"; };
+		0EFEA56F16EF13FD00DDB741 /* pmUtility.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmUtility.h; sourceTree = "<group>"; };
+		0EFEA57016EF141000DDB741 /* pmUtility.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmUtility.cpp; sourceTree = "<group>"; };
 		0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmRedistributor.h; sourceTree = "<group>"; };
 		0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmRedistributor.cpp; sourceTree = "<group>"; };
 		2BCCED1D151C7AA1006AA45D /* pmlib.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -255,6 +264,9 @@
 				2BCCED4D151C7B07006AA45D /* pmThread.h */,
 				2BCCED4E151C7B07006AA45D /* pmTimer.h */,
 				0E29502115CAFE7300F31801 /* pmTimedEventManager.h */,
+				0EFEA56F16EF13FD00DDB741 /* pmUtility.h */,
+				0E64400316F1080600D4D8E6 /* pmPublicUtilities.h */,
+				0E7327BC16F7A3F3006FE28F /* pmRegionAccessor.h */,
 			);
 			name = inc;
 			path = ../../../code/inc;
@@ -270,6 +282,7 @@
 				2BCCED54151C7B07006AA45D /* pmCommand.cpp */,
 				2BCCED55151C7B07006AA45D /* pmCommunicator.cpp */,
 				2BCCED56151C7B07006AA45D /* pmController.cpp */,
+				0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */,
 				2BCCED57151C7B07006AA45D /* pmDevicePool.cpp */,
 				2BCCED58151C7B07006AA45D /* pmDispatcherCUDA.cu */,
 				2BCCED59151C7B07006AA45D /* pmDispatcherGPU.cpp */,
@@ -299,6 +312,8 @@
 				2BCCED6C151C7B07006AA45D /* pmThread.cpp */,
 				2BCCED6D151C7B07006AA45D /* pmTimer.cpp */,
 				0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */,
+				0EFEA57016EF141000DDB741 /* pmUtility.cpp */,
+				0E7327BD16F7A409006FE28F /* pmRegionAccessor.cpp */,
 			);
 			name = src;
 			path = ../../../code/src;
@@ -433,6 +448,9 @@
 				0E202941162DF35B006DC536 /* pmTls.cpp in Sources */,
 				0E05C9221686229D0044891C /* pmEventTimeline.cpp in Sources */,
 				0E0668DA16BEB8C6001D0B8F /* pmHeavyOperations.cpp in Sources */,
+				0EFEA57216EF141000DDB741 /* pmUtility.cpp in Sources */,
+				0EB3339F16F28D120078AC9C /* pmDataTypes.cpp in Sources */,
+				0E7327BF16F7A409006FE28F /* pmRegionAccessor.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -442,7 +460,7 @@
 		2BCCED29151C7AA1006AA45D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
+				ALWAYS_SEARCH_USER_PATHS = YES;
 				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
 				COPY_PHASE_STRIP = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu99;
@@ -459,16 +477,18 @@
 				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.6;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = macosx;
+				USER_HEADER_SEARCH_PATHS = "";
 			};
 			name = Debug;
 		};
 		2BCCED2A151C7AA1006AA45D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
+				ALWAYS_SEARCH_USER_PATHS = YES;
 				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
 				COPY_PHASE_STRIP = YES;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
@@ -479,8 +499,10 @@
 				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
+				HEADER_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.6;
 				SDKROOT = macosx;
+				USER_HEADER_SEARCH_PATHS = "";
 			};
 			name = Release;
 		};
@@ -490,6 +512,7 @@
 				EXCLUDED_SOURCE_FILE_NAMES = (
 					pmSafePriorityQueue.cpp,
 					pmThread.cpp,
+					pmRegionAccessor.cpp,
 				);
 				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
 					UNIX,
@@ -498,8 +521,10 @@
 					"$(inherited)",
 				);
 				GCC_VERSION = com.apple.compilers.llvmgcc42;
-				HEADER_SEARCH_PATHS = "";
-				"HEADER_SEARCH_PATHS[arch=*]" = "/Users/tarunberi/Installations/openmpi-1.4.5-multithreaded/debug/include/";
+				HEADER_SEARCH_PATHS = (
+					"/Users/tarunberi/Installations/openmpi-1.4.5-multithreaded/release/include/",
+					$SRCROOT/../../../../thirdparty,
+				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib\"",
@@ -516,6 +541,7 @@
 				EXCLUDED_SOURCE_FILE_NAMES = (
 					pmSafePriorityQueue.cpp,
 					pmThread.cpp,
+					pmRegionAccessor.cpp,
 				);
 				GCC_OPTIMIZATION_LEVEL = 3;
 				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
@@ -523,8 +549,10 @@
 					UNIX,
 				);
 				GCC_VERSION = com.apple.compilers.llvmgcc42;
-				HEADER_SEARCH_PATHS = "";
-				"HEADER_SEARCH_PATHS[arch=*]" = "/Users/tarunberi/Installations/openmpi-1.4.5-multithreaded/release/include/";
+				HEADER_SEARCH_PATHS = (
+					"/Users/tarunberi/Installations/openmpi-1.4.5-multithreaded/release/include/",
+					$SRCROOT/../../../../thirdparty,
+				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib\"",

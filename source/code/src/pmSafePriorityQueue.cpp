@@ -24,8 +24,9 @@ namespace pm
 /* class pmSafePQ<T> */
 template<typename T, typename P>
 pmSafePQ<T, P>::pmSafePQ()
-    : mIsProcessing(false),
-    mSecondaryOperationsBlocked(false)
+    : mIsProcessing(false)
+    , mSecondaryOperationsBlocked(false)
+    , mResourceLock __LOCK_NAME__("pmSafePQ::mResourceLock")
 {
 }
 

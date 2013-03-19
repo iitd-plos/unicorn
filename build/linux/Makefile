@@ -73,6 +73,7 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmCommand.o \
 	$(OUTDIR)/pmCommunicator.o \
 	$(OUTDIR)/pmController.o \
+	$(OUTDIR)/pmDataTypes.o \
 	$(OUTDIR)/pmDevicePool.o \
 	$(OUTDIR)/pmDispatcherGPU.o \
 	$(OUTDIR)/pmExecutionStub.o \
@@ -98,7 +99,8 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmTaskProfiler.o \
 	$(OUTDIR)/pmTimer.o \
 	$(OUTDIR)/pmTimedEventManager.o \
-	$(OUTDIR)/pmTls.o
+	$(OUTDIR)/pmTls.o \
+	$(OUTDIR)/pmUtility.o 
 
 CUDA_OBJECTS = $(OUTDIR)/pmDispatcherCUDA.o
 

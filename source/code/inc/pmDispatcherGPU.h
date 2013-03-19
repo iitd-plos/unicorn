@@ -113,8 +113,6 @@ class pmDispatcherCUDA : public pmGraphicsBase
 
 class pmDispatcherGPU : public pmGraphicsBase
 {
-    friend class pmController;
-    
 	public:
 		static pmDispatcherGPU* GetDispatcherGPU();
 
@@ -127,8 +125,6 @@ class pmDispatcherGPU : public pmGraphicsBase
 		pmDispatcherGPU();
 		virtual ~pmDispatcherGPU();
 				
-		static pmDispatcherGPU* mDispatcherGPU;
-
 		size_t mCountGPU;
 		pmDispatcherCUDA* mDispatcherCUDA;
 };

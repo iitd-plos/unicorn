@@ -18,55 +18,30 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
-#ifndef __PM_LOGGER__
-#define __PM_LOGGER__
+#ifndef __PM_UTILITY__
+#define __PM_UTILITY__
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
 
-#include <sstream>
+#include <string>
+#include <map>
 
 namespace pm
 {
 
-/**
- * \brief The output/error logger
- */
-
-class pmLogger : public pmBase
+class pmUtility : public pmBase
 {
+    typedef std::map<std::string, std::pair<void*, size_t> > fileMappingsMapType;
+
 public:
-    typedef enum logLevel
-    {
-        MINIMAL,
-        DEATILED,
-        DEBUG_INTERNAL	/* Internal use Only; Not for production builds */
-    } logLevel;
-
-    typedef enum logType
-    {
-        INFORMATION,
-        WARNING,
-        ERROR
-    } logType;
-
-    static pmLogger* GetLogger();
-
-    pmStatus SetHostId(uint pHostId);
-
-    void PrintDeferredLog();
-    pmStatus LogDeferred(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine = false);
-    pmStatus Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine = false);
-
-private:
-    pmLogger(logLevel pLogLevel);
-    virtual ~pmLogger();
-
-    ushort mLogLevel;
-    uint mHostId;
-    std::stringstream mDeferredStream;
+    static void* MapFile(const char* pPath);
+    static void* GetMappedFile(const char* pPath);
+    static void UnmapFile(const char* pPath);
     
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+private:
+    static fileMappingsMapType& GetFileMappingsMap();
+    static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetResourceLock();
 };
 
 } // end namespace pm

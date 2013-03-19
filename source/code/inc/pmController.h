@@ -82,6 +82,10 @@ class pmController : public pmBase
 
 		uint GetHostId_Public();
 		uint GetHostCount_Public();
+    
+        pmStatus MapFile_Public(const char* pPath);
+        void* GetMappedFile_Public(const char* pPath);
+        pmStatus UnmapFile_Public(const char* pPath);
 
 	private:
 		pmController();
@@ -89,28 +93,12 @@ class pmController : public pmBase
     
 		pmStatus DestroyController();
 	
-		static pmStatus CreateAndInitializeController();
-
-		static pmController* mController;
-		uint mLastErrorCode;
-    
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+        uint mLastErrorCode;
 		uint mFinalizedHosts;
 	    
 		pmSignalWait* mSignalWait;
 
-        pmLogger mLogger;
-        TLS_IMPLEMENTATION_CLASS mTls;
-        pmDispatcherGPU mDispatcherGPU;
-        NETWORK_IMPLEMENTATION_CLASS mNetwork;
-        pmStubManager mStubManager;
-        pmCommunicator mCommunicator;
-        pmMachinePool mMachinePool;
-        MEMORY_MANAGER_IMPLEMENTATION_CLASS mMemoryManager;
-        pmTaskManager mTaskManager;
-        pmScheduler mScheduler;
-        pmTimedEventManager mTimedEventManager;
-        pmHeavyOperationsThreadPool mHeavyOperationsThreadPool;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

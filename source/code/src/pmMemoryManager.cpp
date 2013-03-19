@@ -62,27 +62,19 @@ void __dump_mem_req(const pmMemSection* memSection, const void* addr, size_t rec
     
 
 /* class pmLinuxMemoryManager */
-pmMemoryManager* pmMemoryManager::mMemoryManager = NULL;
-
 pmLinuxMemoryManager::pmLinuxMemoryManager()
+    : mMemSectionSpecificsMapLock __LOCK_NAME__("pmLinuxMemoryManager::mMemSectionSpecificsMapLock")
+#ifdef TRACK_MEMORY_ALLOCATIONS
+	, mTotalAllocatedMemory(0)
+	, mTotalAllocations(0)
+	, mTotalDeallocations(0)
+	, mTotalLazySegFaults(0)
+    , mTotalAllocationTime(0)
+    , mTrackLock __LOCK_NAME__("pmLinuxMemoryManager::mTrackLock")
+#endif
 {
-    if(mMemoryManager)
-        PMTHROW(pmFatalErrorException());
-    
-    mMemoryManager = this;
-
 #ifdef SUPPORT_LAZY_MEMORY
 	InstallSegFaultHandler();
-#endif
-
-#ifdef TRACK_MEMORY_ALLOCATIONS
-	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
-
-	mTotalAllocatedMemory = 0;
-	mTotalAllocations = 0;
-	mTotalDeallocations = 0;
-	mTotalLazySegFaults = 0;
-    mTotalAllocationTime = 0;
 #endif
 
 	mPageSize = ::getpagesize();
@@ -103,14 +95,15 @@ pmLinuxMemoryManager::~pmLinuxMemoryManager()
     lStream << "Total Lazy Traps = " << mTotalLazySegFaults << std::endl;
     lStream << "Total Allocation Time = " << mTotalAllocationTime << std::endl;
     
-    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str(), true);
 
 #endif
 }
 
 pmMemoryManager* pmLinuxMemoryManager::GetMemoryManager()
 {
-	return mMemoryManager;
+	static pmLinuxMemoryManager lMemoryManager;
+    return &lMemoryManager;
 }
 
 #ifdef SUPPORT_LAZY_MEMORY
@@ -440,6 +433,9 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
 
 void pmLinuxMemoryManager::FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector)
 {
+    if(!pLength)
+        PMTHROW(pmFatalErrorException());
+
     using namespace linuxMemManager;
     void* lMem = pMemSection->GetMem();
     
@@ -636,6 +632,8 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
 #ifdef SUPPORT_LAZY_MEMORY
 pmStatus pmLinuxMemoryManager::SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed)
 {
+    ACCUMULATION_TIMER(Timer_ACC, "SetLazyProtection");
+    
 	size_t lPageSize = static_cast<size_t>(GetVirtualMemoryPageSize());
 	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(reinterpret_cast<size_t>(pAddr), lPageSize);
 
@@ -653,14 +651,6 @@ pmStatus pmLinuxMemoryManager::SetLazyProtection(void* pAddr, size_t pLength, bo
 
 pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount)
 {
-#ifdef TRACK_MEMORY_ALLOCATIONS
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
-        ++mTotalLazySegFaults;
-    }
-#endif
-
 	size_t lPageSize = GetVirtualMemoryPageSize();
     size_t lBytesToBeFetched = (1 + pForwardPrefetchPageCount) * lPageSize;
 
@@ -728,7 +718,7 @@ pmStatus pmLinuxMemoryManager::CopyLazyInputMemPage(pmExecutionStub* pStub, ulon
 pmStatus pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr)
 {
 #ifdef _DEBUG
-    if(pMemSection->IsInput() || !pMemSection->IsLazy())
+    if(pMemSection->IsInput() || !pMemSection->IsLazyReadWrite())
         PMTHROW(pmFatalErrorException());
 #endif
     
@@ -794,12 +784,15 @@ pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
 
 void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
 {
-    pmExecutionStub* lStub = (pmExecutionStub*)(TLS_IMPLEMENTATION_CLASS::GetTls()->GetThreadLocalStorage(TLS_EXEC_STUB));
-    void* lSubtaskPtr = TLS_IMPLEMENTATION_CLASS::GetTls()->GetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID);
+    ACCUMULATION_TIMER(Timer_ACC, "SegFaultHandler");
+    
+    const std::pair<void*, void*>& lPair = TLS_IMPLEMENTATION_CLASS::GetTls()->GetThreadLocalStoragePair(TLS_EXEC_STUB, TLS_CURRENT_SUBTASK_ID);
+    pmExecutionStub* lStub = static_cast<pmExecutionStub*>(lPair.first);
+    void* lSubtaskPtr = lPair.second;
     if(!lStub || !lSubtaskPtr)
         abort();
     
-    ulong lSubtaskId = *((ulong*)lSubtaskPtr);
+    ulong lSubtaskId = *(static_cast<ulong*>(lSubtaskPtr));
     
     subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(lStub, lSubtaskId);
 
@@ -810,6 +803,14 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
 
         pmLinuxMemoryManager* lMemoryManager = dynamic_cast<pmLinuxMemoryManager*>(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager());
 
+    #ifdef TRACK_MEMORY_ALLOCATIONS
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lMemoryManager->mTrackLock, Lock(), Unlock());
+            ++lMemoryManager->mTotalLazySegFaults;
+        }
+    #endif
+    
         /* Check if the address belongs to a lazy input memory */
         pmMemSection* lMemSection = pmMemSection::FindMemSectionContainingLazyAddress((void*)(pSigInfo->si_addr));
         if(lMemSection)
@@ -822,8 +823,25 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
             lMemSection = pmSubscriptionManager::FindMemSectionContainingShadowAddr((void*)(pSigInfo->si_addr), lShadowMemOffset, lShadowMemBaseAddr);
             if(lMemSection && lShadowMemBaseAddr)
             {
-                if(lMemoryManager->CopyShadowMemPage(lStub, lSubtaskId, lMemSection, lShadowMemOffset, lShadowMemBaseAddr, (void*)(pSigInfo->si_addr)) != pmSuccess)
-                    abort();
+                if(lMemSection->IsLazyReadWrite())
+                {
+                    if(lMemoryManager->CopyShadowMemPage(lStub, lSubtaskId, lMemSection, lShadowMemOffset, lShadowMemBaseAddr, (void*)(pSigInfo->si_addr)) != pmSuccess)
+                        abort();
+                }
+                else
+                {
+                    pmTask* lTask = lMemSection->GetLockingTask();
+                    if(!lTask)
+                        abort();
+                
+                	size_t lPageSize = lMemoryManager->GetVirtualMemoryPageSize();
+                    size_t lMemAddr = reinterpret_cast<size_t>((void*)(pSigInfo->si_addr));
+                    size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
+                    size_t lOffset = lShadowMemOffset + (lPageAddr - reinterpret_cast<size_t>(lShadowMemBaseAddr));
+
+                    lMemoryManager->SetLazyProtection(reinterpret_cast<void*>(lPageAddr), lPageSize, true, true);
+                    lTask->GetSubscriptionManager().InitializeWriteOnlyLazyMemory(lStub, lSubtaskId, lOffset, reinterpret_cast<void*>(lPageAddr), lPageSize);
+                }
             }
             else
             {
@@ -840,6 +858,11 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
     }
 }
 #endif
+
+linuxMemManager::memSectionSpecifics::memSectionSpecifics()
+    : mInFlightLock __LOCK_NAME__("linuxMemManager::memSectionSpecifics::mInFlightLock")
+{
+}
 
 linuxMemManager::regionFetchData::regionFetchData()
 {

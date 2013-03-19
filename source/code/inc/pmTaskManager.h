@@ -44,7 +44,9 @@ class pmProcessingElement;
 
 class pmTaskManager : public pmBase
 {
-    friend class pmController;
+    typedef std::set<pmLocalTask*> localTasksSetType;
+    typedef std::set<pmRemoteTask*> remoteTasksSetType;
+    typedef std::map<std::pair<pmMachine*, ulong>, std::vector<std::pair<pmSubtaskRange, pmProcessingElement*> > > enqueuedRemoteSubtasksMapType;
 
     public:
 		static pmTaskManager* GetTaskManager();
@@ -80,13 +82,12 @@ class pmTaskManager : public pmBase
 		
         pmStatus SubmitTask(pmRemoteTask* pLocalTask);
 
-		static std::set<pmLocalTask*> mLocalTasks;		/* Tasks that originated on this machine */
-		static std::set<pmRemoteTask*> mRemoteTasks;	/* Tasks that originated on remote machines */
-		static pmTaskManager* mTaskManager;
-        static std::map<std::pair<pmMachine*, ulong>, std::vector<std::pair<pmSubtaskRange, pmProcessingElement*> > > mEnqueuedRemoteSubtasksMap;
+		static localTasksSetType& GetLocalTasks();		/* Tasks that originated on this machine */
+		static remoteTasksSetType& GetRemoteTasks();	/* Tasks that originated on remote machines */
+        static enqueuedRemoteSubtasksMapType& GetEnqueuedRemoteSubtasksMap();
 
-		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mLocalTaskResourceLock;
-		static RESOURCE_LOCK_IMPLEMENTATION_CLASS mRemoteTaskResourceLock;
+		static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetLocalTaskResourceLock();
+		static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetRemoteTaskResourceLock();
 
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mTaskFinishSignalWait;
 };

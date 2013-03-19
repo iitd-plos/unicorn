@@ -28,6 +28,7 @@
 #include "pmScheduler.h"
 #include "pmNetwork.h"
 #include "pmLogger.h"
+#include "pmUtility.h"
 
 namespace pm
 {
@@ -69,26 +70,32 @@ void __dump_mem_transfer(const pmMemSection* memSection, pmCommunicatorCommand::
 #define MEM_FORWARD_DUMP(memSection, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset)
 #endif
 
-pmHeavyOperationsThreadPool* pmHeavyOperationsThreadPool::mHeavyOperationsThreadPool = NULL;
+pmStatus HeavyOperationsCommandCompletionCallback(pmCommandPtr pCommand)
+{
+	pmHeavyOperationsThreadPool* lHeavyOperationsThreadPool = pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
+	lHeavyOperationsThreadPool->CommandCompletionEvent(pCommand);
+    
+    return pmSuccess;
+}
 
 pmHeavyOperationsThreadPool* pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()
 {
-	return mHeavyOperationsThreadPool;
+	static pmHeavyOperationsThreadPool lHeavyOperationsThreadPool(1);   //std::max<size_t>(1, pmStubManager::GetStubManager()->GetProcessingElementsCPU() / 2))
+    return &lHeavyOperationsThreadPool;
 }
 
 pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
     : mCurrentThread(0)
+    , mResourceLock __LOCK_NAME__("pmHeavyOperationsThreadPool::mResourceLock")
 {
-    if(mHeavyOperationsThreadPool)
-        PMTHROW(pmFatalErrorException());
-
-    mHeavyOperationsThreadPool = this;
-
     if(pThreadCount == 0)
         PMTHROW(pmFatalErrorException());
 
     for(size_t i=0; i<pThreadCount; ++i)
         mThreadVector.push_back(new pmHeavyOperationsThread());
+    
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::FILE_OPERATIONS_STRUCT);
+	SetupPersistentCommunicationCommands();
 }
 
 pmHeavyOperationsThreadPool::~pmHeavyOperationsThreadPool()
@@ -98,6 +105,33 @@ pmHeavyOperationsThreadPool::~pmHeavyOperationsThreadPool()
         delete mThreadVector[i];
 
     mThreadVector.clear();
+    
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::FILE_OPERATIONS_STRUCT);
+	DestroyPersistentCommunicationCommands();
+}
+
+void pmHeavyOperationsThreadPool::SetupPersistentCommunicationCommands()
+{
+#define PERSISTENT_RECV_COMMAND(tag, structType, recvDataPtr) pmPersistentCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, \
+	pmCommunicatorCommand::tag, NULL, pmCommunicatorCommand::structType, recvDataPtr, 1, NULL, 0, HeavyOperationsCommandCompletionCallback)
+
+	mFileOperationsRecvCommand = PERSISTENT_RECV_COMMAND(FILE_OPERATIONS_TAG, FILE_OPERATIONS_STRUCT, &mFileOperationsRecvData);
+    
+    pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
+    lNetwork->InitializePersistentCommand(mFileOperationsRecvCommand.get());
+
+	SetupNewFileOperationsReception();
+}
+    
+void pmHeavyOperationsThreadPool::DestroyPersistentCommunicationCommands()
+{
+    pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
+    lNetwork->TerminatePersistentCommand(mFileOperationsRecvCommand.get());
+}
+
+void pmHeavyOperationsThreadPool::SetupNewFileOperationsReception()
+{
+	pmCommunicator::GetCommunicator()->Receive(mFileOperationsRecvCommand, false);
 }
 
 void pmHeavyOperationsThreadPool::PackAndSendData(pmCommunicatorCommand::communicatorCommandTags pCommandTag, pmCommunicatorCommand::communicatorDataTypes pDataType, pmHardware* pDestination, void* pData, ushort pPriority)
@@ -140,6 +174,15 @@ void pmHeavyOperationsThreadPool::MemTransferEvent(pmMemSection* pSrcMemSection,
     lEvent.memTransferDetails.isForwarded = pIsForwarded;
     
     SubmitToThreadPool(lEvent, pPriority);
+}
+
+void pmHeavyOperationsThreadPool::CommandCompletionEvent(pmCommandPtr pCommand)
+{
+	heavyOperationsEvent lEvent;
+	lEvent.eventId = COMMAND_COMPLETION;
+	lEvent.commandCompletionDetails.command = pCommand;
+
+	SubmitToThreadPool(lEvent, pCommand->GetPriority());
 }
 
 void pmHeavyOperationsThreadPool::SubmitToThreadPool(heavyOperationsEvent& pEvent, ushort pPriority)
@@ -284,9 +327,69 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
 
             break;
         }
+        
+        case COMMAND_COMPLETION:
+        {
+            commandCompletion& lEventDetails = pEvent.commandCompletionDetails;
+
+            HandleCommandCompletion(lEventDetails.command);
+
+            break;
+        }
     }
     
     return pmSuccess;
 }
+    
+void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr pCommand)
+{
+	pmCommunicatorCommandPtr lCommunicatorCommand = std::tr1::dynamic_pointer_cast<pmCommunicatorCommand>(pCommand);
+
+	switch(lCommunicatorCommand->GetType())
+	{
+        case pmCommunicatorCommand::RECEIVE:
+        {
+            switch(lCommunicatorCommand->GetTag())
+			{
+                case pmCommunicatorCommand::FILE_OPERATIONS_TAG:
+                {
+                    pmCommunicatorCommand::fileOperationsStruct* lData = (pmCommunicatorCommand::fileOperationsStruct*)(lCommunicatorCommand->GetData());
+                    switch((pmCommunicatorCommand::fileOperations)(lData->fileOp))
+                    {
+                        case pmCommunicatorCommand::MMAP_FILE:
+                        {
+                            pmUtility::MapFile((char*)(lData->fileName));
+                            break;
+                        }
+
+                        case pmCommunicatorCommand::MUNMAP_FILE:
+                        {
+                            pmUtility::UnmapFile((char*)(lData->fileName));
+                            break;
+                        }
+
+                        default:
+                            PMTHROW(pmFatalErrorException());
+                    }
+
+                    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->SetupNewFileOperationsReception();
+                
+                    break;
+                }
+                
+                default:
+                    PMTHROW(pmFatalErrorException());
+            }
+
+            break;
+        }
+        
+        default:
+			PMTHROW(pmFatalErrorException());
+    }
+}
 
 }
+
+
+

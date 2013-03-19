@@ -31,13 +31,14 @@ namespace pm
 
 /* class pmCommand */
 pmCommand::pmCommand(ushort pPriority, ushort pCommandType, void* pCommandData /* = NULL */, ulong pDataLength /* = 0 */, pmCommandCompletionCallback pCallback /* = NULL */)
+	: mCommandType(pCommandType)
+	, mCommandData(pCommandData)
+	, mDataLength(pDataLength)
+	, mCallback(pCallback)
+	, mStatus(pmStatusUnavailable)
+    , mPriority(pPriority)
+    , mResourceLock __LOCK_NAME__("pmCommand::mResourceLock")
 {
-	mPriority = pPriority;
-	mCommandType = pCommandType;
-	mCommandData = pCommandData;
-	mDataLength = pDataLength;
-	mCallback = pCallback;
-	mStatus = pmStatusUnavailable;
 }
 
 pmCommand::~pmCommand()
@@ -358,6 +359,7 @@ pmAccumulatorCommand::pmAccumulatorCommand()
     : pmCommand(MAX_CONTROL_PRIORITY, 0)
     , mCommandCount(0)
     , mForceCompleted(false)
+    , mAccumulatorResourceLock __LOCK_NAME__("pmAccumulatorCommand::mAccumulatorResourceLock")
 {
 }
 

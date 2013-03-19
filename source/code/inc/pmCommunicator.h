@@ -38,7 +38,6 @@ namespace pm
 
 class pmCommunicator : public pmBase
 {
-    friend class pmController;
     friend class pmHeavyOperationsThread;
 
     public:
@@ -53,8 +52,6 @@ class pmCommunicator : public pmBase
 		pmCommunicator();
 
 		pmStatus SendPacked(pmCommunicatorCommandPtr pCommand, bool pBlocking = false);
-
-		static pmCommunicator* mCommunicator;
 };
 
 } // end namespace pm

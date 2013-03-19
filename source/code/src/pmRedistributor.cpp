@@ -27,10 +27,12 @@ namespace pm
 {
 
 pmRedistributor::pmRedistributor(pmTask* pTask)
+	: mTask(pTask)
+    , mTotalLengthAccounted(0)
+    , mSubtasksAccounted(0)
+    , mGlobalRedistributionLock __LOCK_NAME__("pmRedistributor::mGlobalRedistributionLock")
+    , mLocalRedistributionLock __LOCK_NAME__("pmRedistributor::mLocalRedistributionLock")
 {
-	mTask = pTask;
-    mTotalLengthAccounted = 0;
-    mSubtasksAccounted = 0;
 }
 
 pmRedistributor::~pmRedistributor()

@@ -88,14 +88,10 @@ class pmNetwork : public pmBase
     protected:
 		pmStatus SendComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus);
 		pmStatus ReceiveComplete(pmCommunicatorCommandPtr pCommand, pmStatus pStatus);
-    
-        static pmNetwork* mNetwork;
 };
 
 class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
 {
-    friend class pmController;
-
     public:
 		enum pmRequestTag
 		{
@@ -183,13 +179,13 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		bool mThreadTerminationFlag;
         bool mPersistentReceptionFreezed;
     
-#ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
-		long mProgressiveSleepTime;	// in ms
-#endif
-
 		pmUnknownLengthReceiveThread* mReceiveThread;
     
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mCommandCompletionSignalWait;
+
+#ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
+		long mProgressiveSleepTime;	// in ms
+#endif
 };
 
 } // end namespace pm

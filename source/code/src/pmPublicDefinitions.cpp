@@ -32,7 +32,7 @@ namespace pm
  * No exception is ever sent to the applications (for C compatibility)
 */
 
-#define SAFE_GET_CONTROLLER(x) { x = pmController::GetController(); if(!x) return pmInitializationFailure; }
+#define SAFE_GET_CONTROLLER(x) { x = pmController::GetController(); if(!x) throw pmFatalError; }
 #define SAFE_EXECUTE_ON_CONTROLLER(controllerFunc, ...) \
 { \
 	pmStatus dStatus = pmSuccess; \
@@ -52,7 +52,7 @@ namespace pm
 }
 
 
-/** 
+/**
  * Error code to brief error description mappings
  * Error codes are defined in pmPublicDefinitions.h (inside pmStatus enum)
 */
@@ -341,6 +341,34 @@ pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHan
 pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
 {
     SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pOffset, pLength, pOrder);
+}
+
+pmStatus pmMapFile(const char* pPath)
+{
+	SAFE_EXECUTE_ON_CONTROLLER(MapFile_Public, pPath);
+}
+
+void* pmGetMappedFile(const char* pPath)
+{
+	try
+	{
+		pmController* lController;
+		SAFE_GET_CONTROLLER(lController);
+
+		return lController->GetMappedFile_Public(pPath);
+	}
+	catch(pmException& e)
+	{
+		pmStatus lStatus = e.GetStatusCode();
+		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::ERROR, pmErrorMessages[lStatus]);
+	}
+
+	return NULL;
+}
+
+pmStatus pmUnmapFile(const char* pPath)
+{
+	SAFE_EXECUTE_ON_CONTROLLER(UnmapFile_Public, pPath);
 }
 
 } // end namespace pm

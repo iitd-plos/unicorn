@@ -265,7 +265,6 @@ typedef struct schedulerEvent : public pmBasicThreadEvent
 
 class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEvent>
 {
-    friend class pmController;
 	friend pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand);
 
 	public:
@@ -385,8 +384,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         ulong mAcknowledgementsSent;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mTrackLock;
 #endif
-    
-    static pmScheduler* mScheduler;
 };
 
 bool taskClearMatchFunc(scheduler::schedulerEvent& pEvent, void* pCriterion);

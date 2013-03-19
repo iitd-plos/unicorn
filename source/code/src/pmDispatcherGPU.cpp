@@ -39,22 +39,16 @@
 namespace pm
 {
 
-pmDispatcherGPU* pmDispatcherGPU::mDispatcherGPU = NULL;
-
 /* class pmDispatcherGPU */
 pmDispatcherGPU* pmDispatcherGPU::GetDispatcherGPU()
 {
-	return mDispatcherGPU;
+    static pmDispatcherGPU lDisptacherGPU;
+    return &lDisptacherGPU;
 }
 
 pmDispatcherGPU::pmDispatcherGPU()
 {
-    if(mDispatcherGPU)
-        PMTHROW(pmFatalErrorException());
-    
-    mDispatcherGPU = this;
-
-#ifdef SUPPORT_CUDA    
+#ifdef SUPPORT_CUDA
 	try
 	{
 		mDispatcherCUDA = new pmDispatcherCUDA();

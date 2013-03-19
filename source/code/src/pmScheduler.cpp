@@ -124,17 +124,8 @@ pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand)
 	return lScheduler->CommandCompletionEvent(pCommand);
 }
 
-static pmCommandCompletionCallback gCommandCompletionCallback = SchedulerCommandCompletionCallback;
-
-pmScheduler* pmScheduler::mScheduler = NULL;
-
 pmScheduler::pmScheduler()
 {
-    if(mScheduler)
-        PMTHROW(pmFatalErrorException());
-    
-    mScheduler = this;
-
 #ifdef TRACK_SUBTASK_EXECUTION
     mSubtasksAssigned = 0;
     mAcknowledgementsSent = 0;
@@ -187,18 +178,19 @@ pmScheduler::~pmScheduler()
 
 pmScheduler* pmScheduler::GetScheduler()
 {
-	return mScheduler;
+	static pmScheduler lScheduler;
+    return &lScheduler;
 }
 
 pmCommandCompletionCallback pmScheduler::GetUnknownLengthCommandCompletionCallback()
 {
-	return gCommandCompletionCallback;
+	return SchedulerCommandCompletionCallback;
 }
 
 pmStatus pmScheduler::SetupPersistentCommunicationCommands()
 {
 #define PERSISTENT_RECV_COMMAND(tag, structType, recvDataPtr) pmPersistentCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, \
-	pmCommunicatorCommand::tag, NULL, pmCommunicatorCommand::structType, recvDataPtr, 1, NULL, 0, gCommandCompletionCallback)
+	pmCommunicatorCommand::tag, NULL, pmCommunicatorCommand::structType, recvDataPtr, 1, NULL, 0, SchedulerCommandCompletionCallback)
 
 	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT_TAG, REMOTE_SUBTASK_ASSIGN_STRUCT, &mSubtaskAssignRecvData);
 	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, &mTaskEventRecvData);
@@ -802,7 +794,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 pmCommunicatorCommand::hostFinalizationStruct* lBroadcastData = new pmCommunicatorCommand::hostFinalizationStruct();
                 lBroadcastData->terminate = true;
 
-                pmCommunicatorCommandPtr lBroadcastCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::BROADCAST,pmCommunicatorCommand::HOST_FINALIZATION_TAG, lMasterHost, pmCommunicatorCommand::HOST_FINALIZATION_STRUCT, lBroadcastData, 1, NULL, 0, gCommandCompletionCallback);
+                pmCommunicatorCommandPtr lBroadcastCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::BROADCAST,pmCommunicatorCommand::HOST_FINALIZATION_TAG, lMasterHost, pmCommunicatorCommand::HOST_FINALIZATION_STRUCT, lBroadcastData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
                 pmCommunicator::GetCommunicator()->Broadcast(lBroadcastCommand);
             }
@@ -814,7 +806,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 pmCommunicatorCommand::hostFinalizationStruct* lData = new pmCommunicatorCommand::hostFinalizationStruct();
                 lData->terminate = false;
 
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::HOST_FINALIZATION_TAG, lMasterHost, pmCommunicatorCommand::HOST_FINALIZATION_STRUCT, lData, 1, NULL, 0, gCommandCompletionCallback);
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::HOST_FINALIZATION_TAG, lMasterHost, pmCommunicatorCommand::HOST_FINALIZATION_STRUCT, lData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
                 pmCommunicator::GetCommunicator()->Send(lCommand, false);
             }
@@ -915,7 +907,7 @@ pmStatus pmScheduler::NegotiateSubtaskRangeWithOriginalAllottee(pmProcessingElem
 		lSubtaskData->targetDeviceGlobalIndex = pRequestingDevice->GetGlobalDeviceIndex();
         lSubtaskData->assignmentType = pmCommunicatorCommand::RANGE_NEGOTIATION;
 
-		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, gCommandCompletionCallback);
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 		pmCommunicator::GetCommunicator()->Send(lCommand, false);
 	}
@@ -946,7 +938,7 @@ pmStatus pmScheduler::SendRangeNegotiationSuccess(pmProcessingElement* pRequesti
 		lSubtaskData->targetDeviceGlobalIndex = pRequestingDevice->GetGlobalDeviceIndex();
         lSubtaskData->assignmentType = pmCommunicatorCommand::SUBTASK_ASSIGNMENT_RANGE_NEGOTIATED;
 
-		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pNegotiatedRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, gCommandCompletionCallback);
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pNegotiatedRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 		pmCommunicator::GetCommunicator()->Send(lCommand, false);
 	}
@@ -983,7 +975,7 @@ pmStatus pmScheduler::SendSubtaskRangeCancellationMessage(pmProcessingElement* p
 		lRangeCancellationData->endSubtask = pRange.endSubtask;
         lRangeCancellationData->originalAllotteeGlobalIndex = (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pTargetDevice->GetGlobalDeviceIndex());
 
-		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_TAG, lMachine, pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_STRUCT, (void*)lRangeCancellationData, 1, NULL, 0, gCommandCompletionCallback);
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pRange.task->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_TAG, lMachine, pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_STRUCT, (void*)lRangeCancellationData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 		pmCommunicator::GetCommunicator()->Send(lCommand, false);
     }
@@ -1056,7 +1048,7 @@ pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLoc
 		lSubtaskData->targetDeviceGlobalIndex = pDevice->GetGlobalDeviceIndex();
         lSubtaskData->assignmentType = pmCommunicatorCommand::SUBTASK_ASSIGNMENT_REGULAR;
 
-		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, gCommandCompletionCallback);
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT, (void*)lSubtaskData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 		pmCommunicator::GetCommunicator()->Send(lCommand, false);
 	}
@@ -1120,7 +1112,7 @@ pmStatus pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 			lTaskEventData->originatingHost = *(pLocalTask->GetOriginatingHost());
 			lTaskEventData->sequenceNumber = pLocalTask->GetSequenceNumber();
 
-			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lMachine, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, gCommandCompletionCallback);
+			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lMachine, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 			pmCommunicator::GetCommunicator()->Send(lCommand, false);
 		}
@@ -1144,7 +1136,7 @@ pmStatus pmScheduler::SendTaskCompleteToTaskOwner(pmTask* pTask)
         lTaskEventData->originatingHost = *(pTask->GetOriginatingHost());
         lTaskEventData->sequenceNumber = pTask->GetSequenceNumber();
 
-        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lOriginatingHost, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, gCommandCompletionCallback);
+        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lOriginatingHost, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
         pmCommunicator::GetCommunicator()->Send(lCommand, false);
     }
@@ -1176,7 +1168,7 @@ pmStatus pmScheduler::CancelTask(pmLocalTask* pLocalTask)
 			lTaskEventData->originatingHost = *(pLocalTask->GetOriginatingHost());
 			lTaskEventData->sequenceNumber = pLocalTask->GetSequenceNumber();
 
-			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lMachine, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, gCommandCompletionCallback);
+			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pLocalTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::TASK_EVENT_TAG, lMachine, pmCommunicatorCommand::TASK_EVENT_STRUCT, lTaskEventData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 			pmCommunicator::GetCommunicator()->Send(lCommand, false);
 		}
@@ -1284,7 +1276,7 @@ pmStatus pmScheduler::StealSubtasks(pmProcessingElement* pStealingDevice, pmTask
 			lStealRequestData->sequenceNumber = pTask->GetSequenceNumber();
 			lStealRequestData->stealingDeviceExecutionRate = pExecutionRate;
 
-			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_REQUEST_TAG, lTargetMachine, pmCommunicatorCommand::STEAL_REQUEST_STRUCT, lStealRequestData, 1, NULL, 0, gCommandCompletionCallback);
+			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_REQUEST_TAG, lTargetMachine, pmCommunicatorCommand::STEAL_REQUEST_STRUCT, lStealRequestData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 			pmCommunicator::GetCommunicator()->Send(lCommand, false);
 		}
@@ -1322,7 +1314,7 @@ pmStatus pmScheduler::SendStealResponse(pmProcessingElement* pStealingDevice, pm
 		lStealResponseData->endSubtask = pRange.endSubtask;
         lStealResponseData->originalAllotteeGlobalIndex = (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pStealingDevice->GetGlobalDeviceIndex());
 
-		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_RESPONSE_TAG, lMachine, pmCommunicatorCommand::STEAL_RESPONSE_STRUCT, lStealResponseData, 1, NULL, 0, gCommandCompletionCallback);
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_RESPONSE_TAG, lMachine, pmCommunicatorCommand::STEAL_RESPONSE_STRUCT, lStealResponseData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 		pmCommunicator::GetCommunicator()->Send(lCommand, false);
 	}
@@ -1361,7 +1353,7 @@ pmStatus pmScheduler::SendFailedStealResponse(pmProcessingElement* pStealingDevi
 		lStealResponseData->endSubtask = 0;		// dummy value
         lStealResponseData->originalAllotteeGlobalIndex = 0;    // dummy value
 
-		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_RESPONSE_TAG, lMachine, pmCommunicatorCommand::STEAL_RESPONSE_STRUCT, lStealResponseData, 1, NULL, 0, gCommandCompletionCallback);
+		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(pTask->GetPriority(), pmCommunicatorCommand::SEND, pmCommunicatorCommand::STEAL_RESPONSE_TAG, lMachine, pmCommunicatorCommand::STEAL_RESPONSE_STRUCT, lStealResponseData, 1, NULL, 0, SchedulerCommandCompletionCallback);
 
 		pmCommunicator::GetCommunicator()->Send(lCommand, false);
 	}

@@ -26,19 +26,14 @@ namespace pm
 
 using namespace timed;
 
-pmTimedEventManager* pmTimedEventManager::mTimedEventManager = NULL;
-    
 pmTimedEventManager* pmTimedEventManager::GetTimedEventManager()
 {
-    return mTimedEventManager;
+    static pmTimedEventManager lTimedEventManager;
+    return &lTimedEventManager;
 }
 
 pmTimedEventManager::pmTimedEventManager()
 {
-    if(mTimedEventManager)
-        PMTHROW(pmFatalErrorException());
-    
-    mTimedEventManager = this;
 }
     
 pmTimedEventManager::~pmTimedEventManager()

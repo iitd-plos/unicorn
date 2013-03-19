@@ -35,30 +35,34 @@
 #include "pmSignalWait.h"
 #include "pmRedistributor.h"
 #include "pmSubscriptionManager.h"
+#include "pmUtility.h"
 
 namespace pm
 {
 
-pmController* pmController::mController = NULL;
-
 pmController::pmController()
-    : mLogger(pmLogger::MINIMAL),
-    mTls(),
-    mDispatcherGPU(),
-    mNetwork(),
-    mStubManager(),
-    mCommunicator(),
-    mMachinePool(), 
-    mMemoryManager(), 
-    mTaskManager(), 
-    mScheduler(),
-    mTimedEventManager(),
-    mHeavyOperationsThreadPool(1)   //std::max<size_t>(1, pmStubManager::GetStubManager()->GetProcessingElementsCPU() / 2))
+    : mLastErrorCode(0)
+	, mFinalizedHosts(0)
+	, mSignalWait(NULL)
+    , mResourceLock __LOCK_NAME__("pmController::mResourceLock")
 {
-	mLastErrorCode = 0;
-	mFinalizedHosts = 0;
-	mSignalWait = NULL;
+#ifdef ENABLE_ACCUMULATED_TIMINGS
+    pmAccumulatedTimesSorter::GetAccumulatedTimesSorter();
+#endif
 
+    pmLogger::GetLogger();
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
+    TLS_IMPLEMENTATION_CLASS::GetTls();
+    pmDispatcherGPU::GetDispatcherGPU();
+    pmStubManager::GetStubManager();
+    pmCommunicator::GetCommunicator();
+    pmMachinePool::GetMachinePool();
+    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
+    pmTaskManager::GetTaskManager();
+    pmScheduler::GetScheduler();
+    pmTimedEventManager::GetTimedEventManager();
+    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
+    
 #ifdef DUMP_EVENT_TIMELINE
     mStubManager.InitializeEventTimelines();
 #endif
@@ -71,24 +75,15 @@ pmController::~pmController()
 
 pmController* pmController::GetController()
 {
-	if(!mController)
-	{
-		if(CreateAndInitializeController() == pmSuccess)
-		{            
-			if(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier() != pmSuccess)
-			{
-				pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Global Initialization Barrier Failed");
-				PMTHROW(pmFatalErrorException());
-			}
-		}
-		else
-		{
-			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Controller Initialization Failed");
-			PMTHROW(pmFatalErrorException());
-		}
-	}
+    static pmController lController;
+    
+    if(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier() != pmSuccess)
+    {
+        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Global Initialization Barrier Failed");
+        PMTHROW(pmFatalErrorException());
+    }
 
-	return mController;
+    return &lController;
 }
 
 pmStatus pmController::DestroyController()
@@ -98,9 +93,6 @@ pmStatus pmController::DestroyController()
     pmScheduler::GetScheduler()->WaitForAllCommandsToFinish();
     
     pmMemSection::DeleteAllLocalMemSections();
-
-	delete mController;
-	mController = NULL;
 
 	return pmSuccess;
 }
@@ -156,16 +148,6 @@ pmStatus pmController::ProcessTermination()
 	mSignalWait->Signal();
 
 	return pmSuccess;
-}
-
-pmStatus pmController::CreateAndInitializeController()
-{
-	mController = new pmController();
-
-	if(mController)
-		return pmSuccess;
-
-	return pmFatalError;
 }
 
 /* Public API */
@@ -372,5 +354,67 @@ void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHa
     return NULL;
 }
 
+pmStatus pmController::MapFile_Public(const char* pPath)
+{
+    if(strlen(pPath) > MAX_FILE_SIZE_LEN - 1)
+        PMTHROW(pmFatalErrorException());
+
+    uint lCount = GetHostCount_Public();
+    for(uint i = 0; i < lCount; ++i)
+    {
+        pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
+    
+        if(lMachine == PM_LOCAL_MACHINE)
+        {
+            pmUtility::MapFile(pPath);
+        }
+        else
+        {
+            pmCommunicatorCommand::fileOperationsStruct* lFileOperationsData = new pmCommunicatorCommand::fileOperationsStruct();
+            strcpy((char*)(lFileOperationsData->fileName), pPath);
+            lFileOperationsData->fileOp = pmCommunicatorCommand::MMAP_FILE;
+
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::FILE_OPERATIONS_TAG, lMachine, pmCommunicatorCommand::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1, NULL, 0);
+
+            pmCommunicator::GetCommunicator()->Send(lCommand, false);
+        }
+    }
+    
+    return pmSuccess;
+}
+
+void* pmController::GetMappedFile_Public(const char* pPath)
+{
+    return pmUtility::GetMappedFile(pPath);
+}
+    
+pmStatus pmController::UnmapFile_Public(const char* pPath)
+{
+    if(strlen(pPath) > MAX_FILE_SIZE_LEN - 1)
+        PMTHROW(pmFatalErrorException());
+
+    uint lCount = GetHostCount_Public();
+    for(uint i = 0; i < lCount; ++i)
+    {
+        pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
+    
+        if(lMachine == PM_LOCAL_MACHINE)
+        {
+            pmUtility::UnmapFile(pPath);
+        }
+        else
+        {
+            pmCommunicatorCommand::fileOperationsStruct* lFileOperationsData = new pmCommunicatorCommand::fileOperationsStruct();
+            strcpy((char*)(lFileOperationsData->fileName), pPath);
+            lFileOperationsData->fileOp = pmCommunicatorCommand::MUNMAP_FILE;
+
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::FILE_OPERATIONS_TAG, lMachine, pmCommunicatorCommand::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1, NULL, 0);
+
+            pmCommunicator::GetCommunicator()->Send(lCommand, false);
+        }
+    }
+    
+    return pmSuccess;
+}
 
 } // end namespace pm

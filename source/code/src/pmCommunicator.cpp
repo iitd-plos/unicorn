@@ -28,19 +28,14 @@ namespace pm
 
 #define SAFE_GET_NETWORK(x) { x = NETWORK_IMPLEMENTATION_CLASS::GetNetwork(); if(!x) PMTHROW(pmFatalErrorException()); }
 
-pmCommunicator* pmCommunicator::mCommunicator = NULL;
-
 pmCommunicator::pmCommunicator()
 {
-    if(mCommunicator)
-        PMTHROW(pmFatalErrorException());
-    
-    mCommunicator = this;
 }
 
 pmCommunicator* pmCommunicator::GetCommunicator()
 {
-	return mCommunicator;
+	static pmCommunicator lCommunicator;
+    return &lCommunicator;
 }
 
 pmStatus pmCommunicator::Send(pmCommunicatorCommandPtr pCommand, bool pBlocking /* = false */)

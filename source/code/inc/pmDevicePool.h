@@ -53,8 +53,6 @@ class pmCluster;
 */
 class pmMachinePool : public pmBase
 {
-    friend class pmController;
-
     public:
 		typedef struct pmMachineData
 		{
@@ -82,8 +80,6 @@ class pmMachinePool : public pmBase
 		uint GetFirstDeviceIndexOnMachine(uint pMachineIndex);
 		uint GetFirstDeviceIndexOnMachine(pmMachine* pMachine);
 
-		std::vector<pmMachine*>& GetAllMachines();
-
 		pmStatus RegisterSendCompletion(pmMachine* pMachine, ulong pDataSent, double pSendTime);
 		pmStatus RegisterReceiveCompletion(pmMachine* pMachine, ulong pDataReceived, double pReceiveTime);
 
@@ -92,17 +88,14 @@ class pmMachinePool : public pmBase
 
 		pmStatus All2AllMachineData(pmCommunicatorCommand::machinePool* pAll2AllBuffer);
 
-		static pmMachinePool* mMachinePool;
 		std::vector<uint> mFirstDeviceIndexOnMachine;
-		std::vector<pmMachine*> mMachinesVector;
+		std::vector<pmMachine> mMachinesVector;
 		std::vector<pmMachineData> mMachineDataVector;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	/* For dynamically updating parameters */
 };
 
 class pmDevicePool : public pmBase
 {
-    friend class pmMachinePool;
-
     public:
 		typedef struct pmDeviceData
 		{
@@ -119,7 +112,6 @@ class pmDevicePool : public pmBase
 		pmStatus CreateMachineDevices(pmMachine* pMachine, uint pCpuDeviceCount, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount);
 
 		pmDeviceData& GetDeviceData(pmProcessingElement* pDevice);
-		std::vector<pmProcessingElement*>& GetAllDevices();
 
 		pmProcessingElement* GetDeviceAtMachineIndex(pmMachine* pMachine, uint pDeviceIndexOnMachine);
 		pmProcessingElement* GetDeviceAtGlobalIndex(uint pGlobalDeviceIndex);
@@ -131,8 +123,7 @@ class pmDevicePool : public pmBase
 	private:
 		pmDevicePool();
 
-		static pmDevicePool* mDevicePool;
-		std::vector<pmProcessingElement*> mDevicesVector;
+		std::vector<pmProcessingElement> mDevicesVector;
 		std::vector<pmDeviceData> mDeviceDataVector;
 };
 

@@ -20,6 +20,7 @@
 
 #include "pmResourceLock.h"
 #include "pmLogger.h"
+#include "pmTimer.h"
 
 namespace pm
 {
@@ -28,11 +29,11 @@ namespace pm
 
 #ifdef TRACK_MUTEXES
 
-void __dump_mutex(pthread_mutex_t* mutex, const char* name)
+void __dump_mutex(pthread_mutex_t* mutex, const char* state)
 {
-        char lStr[512];
-        sprintf(lStr, "Mutex State Change: %p (%s)", mutex, name);
-        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
+    char lStr[512];
+    sprintf(lStr, "Mutex State Change: %p (%s)", mutex, state);
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
 #define DUMP_MUTEX(a, b) __dump_mutex(a, b)
@@ -48,10 +49,18 @@ pmStatus pmResourceLock::Lock()
 
     
 /* class pmPThreadResourceLock */
-pmPThreadResourceLock::pmPThreadResourceLock()
+pmPThreadResourceLock::pmPThreadResourceLock(
+                                        #ifdef TRACK_MUTEX_TIMINGS
+                                              const char* pName /* = "" */
+                                        #endif
+                                             )
 #ifdef RECORD_LOCK_ACQUISITIONS
     : mLine(-1)
     , mIsCurrentlyAcquired(false)
+#endif
+#ifdef TRACK_MUTEX_TIMINGS
+    , mLockTimer(strlen(pName) ? (std::string(pName).append(" [Lock]")) : pName)
+    , mUnlockTimer(strlen(pName) ? std::string(pName).append(" [Unlock]") : pName)
 #endif
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_init(&mMutex, NULL), pmThreadFailureException, pmThreadFailureException::MUTEX_INIT_FAILURE );
@@ -68,6 +77,10 @@ pmPThreadResourceLock::~pmPThreadResourceLock()
 
 pmStatus pmPThreadResourceLock::Lock()
 {
+#ifdef TRACK_MUTEX_TIMINGS
+    pmAccumulationTimerHelper lHelperTimer(&mLockTimer);
+#endif
+
 	DUMP_MUTEX(&mMutex, "Locking");
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_LOCK_FAILURE );
 
@@ -76,6 +89,10 @@ pmStatus pmPThreadResourceLock::Lock()
 
 pmStatus pmPThreadResourceLock::Unlock()
 {
+#ifdef TRACK_MUTEX_TIMINGS
+    pmAccumulationTimerHelper lHelperTimer(&mUnlockTimer);
+#endif
+
 	DUMP_MUTEX(&mMutex, "Unlocking");
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
 

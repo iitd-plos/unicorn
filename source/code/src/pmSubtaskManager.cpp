@@ -174,6 +174,7 @@ pmStatus pmSubtaskManager::PrintExecutionProfile()
 /* class pmPushSchedulingManager */
 pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 	: pmSubtaskManager(pLocalTask)
+    , mResourceLock __LOCK_NAME__("pmPushSchedulingManager::mResourceLock")
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lPartitionCount = mLocalTask->GetAssignedDeviceCount();
@@ -663,6 +664,7 @@ pmStatus pmPushSchedulingManager::RegisterSubtaskCompletion(pmProcessingElement*
 /* class pmSingleAssignmentSchedulingManager */
 pmSingleAssignmentSchedulingManager::pmSingleAssignmentSchedulingManager(pmLocalTask* pLocalTask)
     : pmSubtaskManager(pLocalTask)
+    , mResourceLock __LOCK_NAME__("pmSingleAssignmentSchedulingManager::mResourceLock")
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
     if(lSubtaskCount == 0)
@@ -756,6 +758,7 @@ pmStatus pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(pmProces
 /* class pmPullSchedulingManager */
 pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 	: pmSingleAssignmentSchedulingManager(pLocalTask)
+    , mAssignmentResourceLock __LOCK_NAME__("pmPullSchedulingManager::mAssignmentResourceLock")
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lPartitionCount = mLocalTask->GetAssignedDeviceCount();
@@ -809,6 +812,16 @@ pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 
 pmProportionalSchedulingManager::pmProportionalSchedulingManager(pmLocalTask* pLocalTask)
 	: pmSingleAssignmentSchedulingManager(pLocalTask)
+    , mLocalCpuPower(0)
+    , mRemoteCpuPower(0)
+#ifdef SUPPORT_CUDA
+    , mLocalGpuPower(0)
+    , mRemoteGpuPower(0)
+#endif
+    , mExactMode(0)
+    , mTotalClusterPower(0)
+    , mExactCount(0)
+    , mAssignmentResourceLock __LOCK_NAME__("pmProportionalSchedulingManager::mAssignmentResourceLock")
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 

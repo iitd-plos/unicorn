@@ -34,6 +34,7 @@
 #include "pmStubManager.h"
 #include "pmMemoryManager.h"
 #include "pmHeavyOperations.h"
+#include "pmExecutionStub.h"
 
 #include <vector>
 #include <algorithm>
@@ -41,44 +42,46 @@
 namespace pm
 {
 
-RESOURCE_LOCK_IMPLEMENTATION_CLASS pmLocalTask::mSequenceLock;
-ulong pmLocalTask::mSequenceId = 0;
+STATIC_ACCESSOR_INIT(ulong, pmLocalTask, GetSequenceId, 0)
+STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmLocalTask::mSequenceLock"), pmLocalTask, GetSequenceLock)
     
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
 pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled)
-	: mOriginatingHost(pOriginatingHost)
+	: mTaskId(pTaskId)
+	, mMemRO(pMemRO)
+	, mCallbackUnit(pCallbackUnit)
+	, mSubtaskCount(pSubtaskCount)
+    , mOriginatingHost(pOriginatingHost)
     , mCluster(pCluster)
+    , mPriority((pPriority < MAX_PRIORITY_LEVEL) ? MAX_PRIORITY_LEVEL : pPriority)
+	, mTaskConf(pTaskConf)
+	, mTaskConfLength(pTaskConfLength)
+	, mSchedulingModel(pSchedulingModel)
     , mSubscriptionManager(this)
+    , mSequenceNumber(0)
     , mMultiAssignEnabled(pMultiAssignEnabled)
     , mReadOnlyMemAddrForSubtasks(NULL)
+	, mSubtasksExecuted(0)
+	, mSubtaskExecutionFinished(false)
+    , mExecLock __LOCK_NAME__("pmTask::mExecLock")
+    , mReducerLock __LOCK_NAME__("pmTask::mReducerLock")
+    , mRedistributorLock __LOCK_NAME__("pmTask::mRedistributorLock")
     , mAllStubsScannedForCancellationMessages(false)
     , mAllStubsScannedForShadowMemCommitMessages(false)
     , mOutstandingStubsForCancellationMessages(0)
     , mOutstandingStubsForShadowMemCommitMessages(0)
+    , mTaskCompletionLock __LOCK_NAME__("pmTask::mTaskCompletionLock")
+    , mStealListLock __LOCK_NAME__("pmTask::mStealListLock")
     , mCollectiveShadowMem(NULL)
     , mIndividualShadowMemAllocationLength(0)
     , mShadowMemCount(0)
+    , mCollectiveShadowMemLock __LOCK_NAME__("pmTask::mCollectiveShadowMemLock")
+	, mMemRW(pMemRW)
+	, mAssignedDeviceCount(pAssignedDeviceCount)
 {
-	mTaskConf = pTaskConf;
-	mTaskConfLength = pTaskConfLength;
-	mTaskId = pTaskId;
-	mMemRO = pMemRO;
-	mMemRW = pMemRW;
-	mCallbackUnit = pCallbackUnit;
-	mSubtaskCount = pSubtaskCount;
-	mAssignedDeviceCount = pAssignedDeviceCount;
-	mSchedulingModel = pSchedulingModel;
-
-	if(pPriority < MAX_PRIORITY_LEVEL)
-		mPriority = MAX_PRIORITY_LEVEL;
-	else
-		mPriority = pPriority;
-
 	mTaskInfo.taskHandle = NULL;
-	mSubtaskExecutionFinished = false;
-	mSubtasksExecuted = 0;
     
     if(pMemRO)
     {
@@ -96,6 +99,9 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 
 pmTask::~pmTask()
 {
+    if(mCollectiveShadowMem)
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mCollectiveShadowMem);
+
     mSubscriptionManager.DropAllSubscriptions();
 }
 
@@ -397,7 +403,12 @@ pmStatus pmTask::MarkSubtaskExecutionFinished()
 	}
 
 	if(mCallbackUnit->GetDataReductionCB())
-		GetReducer()->CheckReductionFinish();
+    {
+        if(GetOriginatingHost() == PM_LOCAL_MACHINE)
+            pmStubManager::GetStubManager()->GetStub((uint)0)->CheckReductionFinishEvent(this);
+        else
+            GetReducer()->CheckReductionFinish();
+    }
 
     if(mCallbackUnit->GetDataRedistributionCB())
         GetRedistributor()->SendRedistributionInfo();
@@ -536,23 +547,24 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
 /* class pmLocalTask */
 pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled)
+    , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)
+    , mCompletionLock __LOCK_NAME__("pmLocalTask::mCompletionLock")
 {
     ulong lCurrentTime = GetIntegralCurrentTimeInSecs();
     ulong lTaskTimeOutTriggerTime = lCurrentTime + pTaskTimeOutInSecs;
-    if(pTaskTimeOutInSecs < 0 || lTaskTimeOutTriggerTime < lCurrentTime || lTaskTimeOutTriggerTime > (ulong)__MAX(int))
-        mTaskTimeOutTriggerTime = (ulong)__MAX(int);
+    if(pTaskTimeOutInSecs > 0 && lTaskTimeOutTriggerTime > lCurrentTime && lTaskTimeOutTriggerTime < (ulong)__MAX(int))
+        mTaskTimeOutTriggerTime = lTaskTimeOutTriggerTime;
     
 	mTaskCommand = pmTaskCommand::CreateSharedPtr(pPriority, pmTaskCommand::BASIC_TASK);
     
     // Auto lock/unlock scope
     {
-        FINALIZE_RESOURCE(dSequenceLock, mSequenceLock.Lock(), mSequenceLock.Unlock());    
-        SetSequenceNumber(mSequenceId);
-        ++mSequenceId;
+        FINALIZE_RESOURCE(dSequenceLock, GetSequenceLock().Lock(), GetSequenceLock().Unlock());
+        SetSequenceNumber(GetSequenceId()++);
     }
 }
 
@@ -827,6 +839,7 @@ pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId,
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)
+    , mCompletionLock __LOCK_NAME__("pmRemoteTask::mCompletionLock")
 {
     SetSequenceNumber(pSequenceNumber);
 }

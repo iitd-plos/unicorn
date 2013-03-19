@@ -95,6 +95,7 @@ namespace subscription
         subscriptionRecordType mOutputMemWriteSubscriptions;
     
         finalize_ptr<void, shadowMemDeallocator> mShadowMem;
+        std::vector<char> mWriteOnlyLazyDefaultValue;
 
 		pmStatus Initialize(pmTask* pTask);
 	} pmSubtask;
@@ -109,6 +110,8 @@ namespace subscription
 class pmSubscriptionManager : public pmBase
 {
     friend class subscription::shadowMemDeallocator;
+    typedef std::map<void*, subscription::shadowMemDetails> shadowMemMapType;
+    typedef std::map<std::pair<pmExecutionStub*, ulong>, subscription::pmSubtask> subtaskMapType;
     
 	public:
 		pmSubscriptionManager(pmTask* pTask);
@@ -122,7 +125,10 @@ class pmSubscriptionManager : public pmBase
         pmStatus FreezeSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId);
         pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType);
 		pmStatus SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
+        pmStatus SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, char* pVal, size_t pLength);
+
 		pmCudaLaunchConf& GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId);
+        void InitializeWriteOnlyLazyMemory(pmExecutionStub* pStub, ulong pSubtaskId, size_t pOffsetFromBase, void* pLazyPageAddr, size_t pLength);
     
         void DropScratchBufferIfNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId);
         void* GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
@@ -156,12 +162,12 @@ class pmSubscriptionManager : public pmBase
 #endif
     
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
-		std::map<std::pair<pmExecutionStub*, ulong>, subscription::pmSubtask> mSubtaskMap;
+		subtaskMapType mSubtaskMap;
 
 		pmTask* mTask;
     
-        static std::map<void*, subscription::shadowMemDetails> mShadowMemMap;	// Maps shadow memory regions to pmMemSection objects
-        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mShadowMemLock;
+        static shadowMemMapType& GetShadowMemMap();	// Maps shadow memory regions to pmMemSection objects
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetShadowMemLock();
 };
 
 bool operator==(pmSubscriptionInfo& pSubscription1, pmSubscriptionInfo& pSubscription2);

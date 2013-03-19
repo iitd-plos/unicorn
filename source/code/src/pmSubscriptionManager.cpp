@@ -36,12 +36,13 @@ namespace pm
 
 using namespace subscription;
 
-std::map<void*, subscription::shadowMemDetails> pmSubscriptionManager::mShadowMemMap;
-RESOURCE_LOCK_IMPLEMENTATION_CLASS pmSubscriptionManager::mShadowMemLock;
-
+STATIC_ACCESSOR(pmSubscriptionManager::shadowMemMapType, pmSubscriptionManager, GetShadowMemMap)
+STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmSubscriptionManager::mShadowMemLock"), pmSubscriptionManager, GetShadowMemLock)
+    
 pmSubscriptionManager::pmSubscriptionManager(pmTask* pTask)
+	: mResourceLock __LOCK_NAME__("pmSubscriptionManager::mResourceLock")
+    , mTask(pTask)
 {
-	mTask = pTask;
 }
 
 pmSubscriptionManager::~pmSubscriptionManager()
@@ -230,6 +231,72 @@ pmStatus pmSubscriptionManager::SetCudaLaunchConf(pmExecutionStub* pStub, ulong 
 	mSubtaskMap[lPair].mCudaLaunchConf = pCudaLaunchConf;
 
 	return pmSuccess;
+}
+    
+pmStatus pmSubscriptionManager::SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, char* pVal, size_t pLength)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+	if(mSubtaskMap.find(lPair) == mSubtaskMap.end())
+		PMTHROW(pmFatalErrorException());
+    
+    mSubtaskMap[lPair].mWriteOnlyLazyDefaultValue.clear();
+    
+    mSubtaskMap[lPair].mWriteOnlyLazyDefaultValue.insert(mSubtaskMap[lPair].mWriteOnlyLazyDefaultValue.end(), pVal, pVal + pLength);
+    
+    return pmSuccess;
+}
+
+void pmSubscriptionManager::InitializeWriteOnlyLazyMemory(pmExecutionStub* pStub, ulong pSubtaskId, size_t pOffsetFromBase, void* pLazyPageAddr, size_t pLength)
+{
+    ACCUMULATION_TIMER(Timer_ACC, "InitializeWriteOnlyLazyMemory");
+
+    subscription::pmSubtask* lSubtaskMapVal = NULL;
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+        std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
+    
+        subtaskMapType::iterator lIter = mSubtaskMap.find(lPair);
+        if(lIter == mSubtaskMap.end())
+            PMTHROW(pmFatalErrorException());
+    
+        lSubtaskMapVal = &(lIter->second);
+    }
+    
+    size_t lDataLength = lSubtaskMapVal->mWriteOnlyLazyDefaultValue.size();
+    char* lData = &(lSubtaskMapVal->mWriteOnlyLazyDefaultValue[0]);
+    char lDefaultValue = 0;
+    
+    if(!lDataLength)
+    {
+        lDataLength = 1;
+        lData = &lDefaultValue;
+    }
+    
+    if(lDataLength == 1)
+    {
+        ACCUMULATION_TIMER(Timer_ACC_Internal, "memset");
+        memset(pLazyPageAddr, *lData, pLength);
+    }
+    else
+    {
+        size_t lIndex = pOffsetFromBase % lDataLength;
+
+        char* lAddr = (char*)pLazyPageAddr;
+        char* lLastAddr = lAddr + pLength;
+        while(lAddr != lLastAddr)
+        {
+            *lAddr = lData[lIndex];
+            ++lAddr;
+            ++lIndex;
+            if(lIndex >= lDataLength)
+                lIndex = 0;
+        }
+    }
 }
 
 pmCudaLaunchConf& pmSubscriptionManager::GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId)
@@ -512,15 +579,24 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
     {
         // Lazy protect read subscriptions
         subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-        if(GetNonConsolidatedOutputMemSubscriptionsForSubtask(pStub, pSubtaskId, true, lBeginIter, lEndIter))
+    
+        if(lMemSection->IsReadWrite())
         {
-            for(; lBeginIter != lEndIter; ++lBeginIter)
-                MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lShadowMem + (lBeginIter->first - lUnifiedSubscriptionInfo.offset), lBeginIter->second.first, false, false);
+            if(GetNonConsolidatedOutputMemSubscriptionsForSubtask(pStub, pSubtaskId, true, lBeginIter, lEndIter))
+            {
+                for(; lBeginIter != lEndIter; ++lBeginIter)
+                    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lShadowMem + (lBeginIter->first - lUnifiedSubscriptionInfo.offset), lBeginIter->second.first, false, false);
+            }
+        }
+        else
+        {
+            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lShadowMem, lUnifiedSubscriptionInfo.length, false, false);
         }
 
-        FINALIZE_RESOURCE(dShadowMemLock, mShadowMemLock.Lock(), mShadowMemLock.Unlock());
-        mShadowMemMap[(void*)lShadowMem].subscriptionInfo = lUnifiedSubscriptionInfo;
-        mShadowMemMap[(void*)lShadowMem].memSection = lMemSection;
+        FINALIZE_RESOURCE(dShadowMemLock, GetShadowMemLock().Lock(), GetShadowMemLock().Unlock());
+        shadowMemMapType& lShadowMemMap = GetShadowMemMap();
+        lShadowMemMap[(void*)lShadowMem].subscriptionInfo = lUnifiedSubscriptionInfo;
+        lShadowMemMap[(void*)lShadowMem].memSection = lMemSection;
     }
     
 	return pmSuccess;
@@ -586,31 +662,42 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
     
     DestroySubtaskShadowMem(pStub, pSubtaskId);
 }
-    
+
 pmMemSection* pmSubscriptionManager::FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr)
 {
-	FINALIZE_RESOURCE(dShadowMemLock, mShadowMemLock.Lock(), mShadowMemLock.Unlock());
+    ACCUMULATION_TIMER(Timer_ACC, "FindMemSectionContainingShadowAddr");
+
+    char* lAddress = static_cast<char*>(pAddr);
 
     typedef std::map<void*, subscription::shadowMemDetails> mapType;
     mapType::iterator lStartIter;
     mapType::iterator* lStartIterAddr = &lStartIter;
-    
-    char* lAddress = static_cast<char*>(pAddr);
-    FIND_FLOOR_ELEM(mapType, mShadowMemMap, lAddress, lStartIterAddr);
-    
-    if(lStartIterAddr)
-    {
-        char* lMemAddress = static_cast<char*>(lStartIter->first);
-        subscription::shadowMemDetails& lShadowMemDetails = lStartIter->second;
 
-        size_t lLength = lShadowMemDetails.subscriptionInfo.length;
+    char* lMemAddress = NULL;
+    subscription::shadowMemDetails* lShadowMemDetails = NULL;
+
+    shadowMemMapType& lShadowMemMap = GetShadowMemMap();
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE(dShadowMemLock, GetShadowMemLock().Lock(), GetShadowMemLock().Unlock());
+    
+        FIND_FLOOR_ELEM(mapType, lShadowMemMap, lAddress, lStartIterAddr);
         
-        if(lMemAddress <= lAddress && lAddress < lMemAddress + lLength)
-        {
-            pShadowMemOffset = lShadowMemDetails.subscriptionInfo.offset;
-            pShadowMemBaseAddr = lStartIter->first;
-            return lShadowMemDetails.memSection;
-        }
+        if(!lStartIterAddr)
+            return NULL;
+    
+        lMemAddress = static_cast<char*>(lStartIter->first);
+        lShadowMemDetails = &(lStartIter->second);
+    }
+    
+    size_t lLength = lShadowMemDetails->subscriptionInfo.length;
+    
+    if(lMemAddress <= lAddress && lAddress < lMemAddress + lLength)
+    {
+        pShadowMemOffset = lShadowMemDetails->subscriptionInfo.offset;
+        pShadowMemBaseAddr = lMemAddress;
+        return lShadowMemDetails->memSection;
     }
     
     return NULL;
@@ -746,10 +833,9 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmExecutionStub* pStu
 {
     std::vector<pmCommunicatorCommandPtr> lReceiveVector;
 	pmMemSection* lMemSection = mTask->GetMemSectionRW();
-    bool lIsWriteOnly = (lMemSection->GetMemInfo() == OUTPUT_MEM_WRITE_ONLY);
     bool lIsLazy = lMemSection->IsLazy();
     
-    if(!lIsWriteOnly && (!lIsLazy || pDeviceType != CPU))
+    if(!lMemSection->IsWriteOnly() && (!lIsLazy || pDeviceType != CPU))
     {   
         size_t lOffset = pSubscriptionInfo.offset;
         size_t lLength = pSubscriptionInfo.length;
@@ -893,9 +979,9 @@ void shadowMemDeallocator::operator()(void* pMem)
     {
         // Auto lock/unlock scope
         {
-            FINALIZE_RESOURCE(dShadowMemLock, pmSubscriptionManager::mShadowMemLock.Lock(), pmSubscriptionManager::mShadowMemLock.Unlock());
+            FINALIZE_RESOURCE(dShadowMemLock, pmSubscriptionManager::GetShadowMemLock().Lock(), pmSubscriptionManager::GetShadowMemLock().Unlock());
 
-            pmSubscriptionManager::mShadowMemMap.erase(pMem);
+            pmSubscriptionManager::GetShadowMemMap().erase(pMem);
         }
 
         if(mExplicitAllocation)

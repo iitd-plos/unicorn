@@ -75,6 +75,9 @@ typedef std::map<pmMachine*, std::tr1::shared_ptr<std::vector<pmCommunicatorComm
 
 class pmMemSection : public pmBase
 {
+    typedef std::map<std::pair<pmMachine*, ulong>, pmMemSection*> memSectionMapType;
+    typedef std::map<void*, pmMemSection*> augmentaryMemSectionMapType;
+    
 	public:
 		typedef struct vmRangeOwner
 		{
@@ -128,8 +131,11 @@ class pmMemSection : public pmBase
         pmMemInfo GetMemInfo();
         bool IsInput() const;
         bool IsOutput() const;
+        bool IsWriteOnly() const;
         bool IsReadWrite() const;
-        bool IsLazy();
+        bool IsLazy() const;
+        bool IsLazyWriteOnly() const;
+        bool IsLazyReadWrite() const;
 
 #ifdef SUPPORT_LAZY_MEMORY
         void* GetReadOnlyLazyMemoryMapping();
@@ -161,11 +167,11 @@ class pmMemSection : public pmBase
         pmStatus SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength, pmMemOwnership& pMap);
         void SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap);
     
-//#ifdef _DEBUG
+#ifdef _DEBUG
         void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
         void SanitizeOwnerships();
         void PrintOwnerships();
-//#endif
+#endif
     
         pmMachine* mOwner;
         ulong mGenerationNumberOnOwner;
@@ -178,12 +184,12 @@ class pmMemSection : public pmBase
         void* mReadOnlyLazyMapping;
         std::string mName;
         
-        static ulong mGenerationId;
-        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mGenerationLock;
+        static ulong& GetGenerationId();
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetGenerationLock();
     
-        static std::map<std::pair<pmMachine*, ulong>, pmMemSection*> mMemSectionMap;
-        static std::map<void*, pmMemSection*> mAugmentaryMemSectionMap; // Maps actual allocated memory regions to pmMemSection objects
-        static RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+        static memSectionMapType& GetMemSectionMap();
+        static augmentaryMemSectionMapType& GetAugmentaryMemSectionMap(); // Maps actual allocated memory regions to pmMemSection objects
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetResourceLock();
                 
         pmMemOwnership mOwnershipMap;       // offset versus pair (of length of region and vmRangeOwner) - dynamic
         pmMemOwnership mOriginalOwnershipMap;

@@ -31,13 +31,13 @@ namespace pm
 {
 
 pmReducer::pmReducer(pmTask* pTask)
+	: mReductionsDone(0)
+	, mExternalReductionsRequired(0)
+	, mReduceState(false)
+	, mSendToMachine(NULL)
+    , mTask(pTask)
+    , mResourceLock __LOCK_NAME__("pmReducer::mResourceLock")
 {
-	mTask = pTask;
-	mReduceState = false;
-	mReductionsDone = 0;
-	mExternalReductionsRequired = 0;
-	mSendToMachine = NULL;
-
 	PopulateExternalMachineList();
 }
 

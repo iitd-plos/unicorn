@@ -87,6 +87,9 @@ void pmTaskProfiler::RecordProfileEvent(profileType pProfileType, bool pStart)
     if(pProfileType == UNIVERSAL || pProfileType == TOTAL_MEMORY_TRANSFER)
         PMTHROW(pmFatalErrorException());
 	
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = mResourceLock[pProfileType];
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
+
     RecordProfileEventInternal(pProfileType, pStart);
     if(pProfileType == INPUT_MEMORY_TRANSFER || pProfileType == OUTPUT_MEMORY_TRANSFER)
         RecordProfileEventInternal(TOTAL_MEMORY_TRANSFER, pStart);
@@ -96,9 +99,6 @@ void pmTaskProfiler::RecordProfileEvent(profileType pProfileType, bool pStart)
     
 void pmTaskProfiler::RecordProfileEventInternal(profileType pProfileType, bool pStart)
 {
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = mResourceLock[pProfileType];
-    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
-    
     if(pStart)
     {
         if(mRecursionCount[pProfileType] == 0)

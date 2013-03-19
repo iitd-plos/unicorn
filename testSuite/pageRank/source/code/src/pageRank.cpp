@@ -81,7 +81,7 @@ void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int
         
         //std::cout << "Web Page: " << lPage+1 << " Outlink Count: " << lOutlinkCount << std::endl;
 
-        for(unsigned int j=0; j<lOutlinkCount; ++j)
+        for(unsigned int j = 0; j < lOutlinkCount; ++j)
         {
             unsigned int lOutlinkPage = pTotalWebPages;
             if(fread((void*)(&lOutlinkPage), 4, 1, fp) != 1)
@@ -96,7 +96,13 @@ void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int
             pData[lIndex + 1 + j] = lOutlinkPage;
             //std::cout << lOutlinkPage << " ";
         }
-    
+
+        if(pMaxOutlinksPerWebPage != lOutlinkCount)
+        {
+            if(fseek(fp, (pMaxOutlinksPerWebPage - lOutlinkCount) * 4, SEEK_CUR) != 0)
+                exit(1);
+        }
+
         lIndex += (pMaxOutlinksPerWebPage + 1);
 
         //std::cout << std::endl;
@@ -105,66 +111,91 @@ void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int
 	fclose(fp);
 }
     
+void mapAllFiles(char* pBasePath)
+{
+    char filePath[1024];
+    char buf[12];
+
+    unsigned int lTotalFiles = gTotalWebPages / gWebPagesPerFile;
+    for(unsigned int i = 0; i < lTotalFiles; ++i)
+    {
+        unsigned int lFileNum = 1 + i * gWebPagesPerFile;
+        
+        sprintf(buf, "%u", lFileNum);
+        strcpy(filePath, pBasePath);
+        strcat(filePath, "/web/page_");
+        strcat(filePath, buf);
+    
+        if(pmMapFile(filePath) != pmSuccess)
+            exit(1);
+    }
+}
+
+void unMapAllFiles(char* pBasePath)
+{
+    char filePath[1024];
+    char buf[12];
+
+    unsigned int lTotalFiles = gTotalWebPages / gWebPagesPerFile;
+    for(unsigned int i = 0; i < lTotalFiles; ++i)
+    {
+        unsigned int lFileNum = 1 + i * gWebPagesPerFile;
+        
+        sprintf(buf, "%u", lFileNum);
+        strcpy(filePath, pBasePath);
+        strcat(filePath, "/web/page_");
+        strcat(filePath, buf);
+    
+        if(pmUnmapFile(filePath) != pmSuccess)
+            exit(1);
+    }
+}
+    
 void initializePageRankArray(PAGE_RANK_DATA_TYPE* pPageRankArray, PAGE_RANK_DATA_TYPE pVal, unsigned int pCount)
 {
-	for(unsigned int i=0; i<pCount; ++i)
+	for(unsigned int i = 0; i < pCount; ++i)
 		pPageRankArray[i] = pVal;
 }
 
-PAGE_RANK_DATA_TYPE normalizePageRank(PAGE_RANK_DATA_TYPE pPageRank, unsigned int pTotalWebPages)
+void serialPageRank(PAGE_RANK_DATA_TYPE* pWebDump)
 {
-	return pPageRank*pTotalWebPages;
-}
+	PAGE_RANK_DATA_TYPE* lGlobalPageRankArray = NULL;
+	PAGE_RANK_DATA_TYPE* lLocalPageRankArray = NULL;
 
-PAGE_RANK_DATA_TYPE denormalizePageRank(PAGE_RANK_DATA_TYPE pPageRank, unsigned int pTotalWebPages)
-{
-	return pPageRank/pTotalWebPages;
-}
-    
-void serialPageRank(char* pBasePath)
-{
-	PAGE_RANK_DATA_TYPE* lWebDump = new PAGE_RANK_DATA_TYPE[gTotalWebPages * (gMaxOutlinksPerWebPage + 1)];
-
-    unsigned int lTotalFiles = (gTotalWebPages / gWebPagesPerFile);
-    unsigned int i = 0;
-    for(; i<lTotalFiles; ++i)
-        readWebPagesFile(pBasePath, gTotalWebPages, gMaxOutlinksPerWebPage, gWebPagesPerFile, i*gWebPagesPerFile, gWebPagesPerFile, lWebDump + (i * gWebPagesPerFile * (gMaxOutlinksPerWebPage + 1)));
-    
-    if((gTotalWebPages % gWebPagesPerFile) != 0)
-        readWebPagesFile(pBasePath, gTotalWebPages, gMaxOutlinksPerWebPage, gWebPagesPerFile, i*gWebPagesPerFile, gTotalWebPages - i*gWebPagesPerFile, lWebDump + (i * gWebPagesPerFile * (gMaxOutlinksPerWebPage + 1)));
-
-	PAGE_RANK_DATA_TYPE* lGlobalPageRankArray = gSerialOutput;
-	PAGE_RANK_DATA_TYPE* lLocalPageRankArray = new PAGE_RANK_DATA_TYPE[gTotalWebPages];
-
-	initializePageRankArray(lLocalPageRankArray, normalizePageRank(INITIAL_PAGE_RANK, gTotalWebPages), gTotalWebPages);
-
-	for(int i=0; i<PAGE_RANK_ITERATIONS; ++i)
+	for(int i = 0; i < PAGE_RANK_ITERATIONS; ++i)
 	{
-		if(i!=0)
-			memcpy((void*)lLocalPageRankArray, (void*)lGlobalPageRankArray, sizeof(PAGE_RANK_DATA_TYPE)*gTotalWebPages);
+		if(i != 0)
+        {
+            delete[] lLocalPageRankArray;
+			lLocalPageRankArray = lGlobalPageRankArray;
+        }
+
+        if(i == PAGE_RANK_ITERATIONS - 1)
+            lGlobalPageRankArray = gSerialOutput;
+        else
+            lGlobalPageRankArray = new PAGE_RANK_DATA_TYPE[gTotalWebPages];
 
         memset(lGlobalPageRankArray, 0, gTotalWebPages * sizeof(PAGE_RANK_DATA_TYPE));
-        //initializePageRankArray(lGlobalPageRankArray, normalizePageRank(1 - DAMPENING_FACTOR, gTotalWebPages), gTotalWebPages);
+        //initializePageRankArray(lGlobalPageRankArray, 1.0 - DAMPENING_FACTOR, gTotalWebPages);
 
-		unsigned int index=0;
-		for(unsigned int j=0; j<gTotalWebPages; ++j)
+		unsigned int index = 0;
+		for(unsigned int j = 0; j < gTotalWebPages; ++j)
 		{
-			unsigned int lOutlinks = lWebDump[index++];
-            PAGE_RANK_DATA_TYPE lIncr = (PAGE_RANK_DATA_TYPE)(DAMPENING_FACTOR * lLocalPageRankArray[j]/(float)lOutlinks);
+			unsigned int lOutlinks = pWebDump[index++];
+            PAGE_RANK_DATA_TYPE lIncr = (PAGE_RANK_DATA_TYPE)(DAMPENING_FACTOR * ((i == 0) ? INITIAL_PAGE_RANK : lLocalPageRankArray[j])/(float)lOutlinks);
         
-			for(unsigned int k=0; k<lOutlinks; ++k)
+			for(unsigned int k = 0; k < lOutlinks; ++k)
 			{
-				unsigned int lRefLink = lWebDump[index+k];
-				
+				unsigned int lRefLink = pWebDump[index + k];
+
 				lGlobalPageRankArray[lRefLink - 1] += lIncr;
 			}
-
+        
 			index += gMaxOutlinksPerWebPage;
 		}
 	}
 
 	delete[] lLocalPageRankArray;
-	delete[] lWebDump;
 }
 
 #ifdef BUILD_CUDA
@@ -205,26 +236,13 @@ pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMe
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
     }
 
-	// Subscribe to entire output matrix
+	// Subscribe to entire output matrix (default behaviour)
 
 #ifdef BUILD_CUDA
 	// Set CUDA Launch Configuration
 	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
 		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, GetCudaLaunchConf(lWebPages));
 #endif
-
-	PAGE_RANK_DATA_TYPE* lSubtaskWebDump = (PAGE_RANK_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, PRE_SUBTASK_TO_SUBTASK, lWebPages * (lTaskConf->maxOutlinksPerWebPage + 1) * sizeof(PAGE_RANK_DATA_TYPE), NULL);
-
-    unsigned int lFiles = (lWebPages / lTaskConf->webPagesPerFile);
-    if(lPartialLastSubtask)
-        lFiles -= 1;
-    
-    unsigned int i=0;
-    for(; i<lFiles; ++i)
-        readWebPagesFile(lTaskConf->basePath, lTaskConf->totalWebPages, lTaskConf->maxOutlinksPerWebPage, lTaskConf->webPagesPerFile, lStartPage + i * lTaskConf->webPagesPerFile, lTaskConf->webPagesPerFile, lSubtaskWebDump + i * lTaskConf->webPagesPerFile * (lTaskConf->maxOutlinksPerWebPage + 1));
-    
-    if(lPartialLastSubtask)
-        readWebPagesFile(lTaskConf->basePath, lTaskConf->totalWebPages, lTaskConf->maxOutlinksPerWebPage, lTaskConf->webPagesPerFile, lStartPage + i * lTaskConf->webPagesPerFile, lWebPages - i * lTaskConf->webPagesPerFile, lSubtaskWebDump + i * lTaskConf->webPagesPerFile * (lTaskConf->maxOutlinksPerWebPage + 1));
 
 	return pmSuccess;
 }
@@ -233,30 +251,56 @@ pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskI
 {
 	pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
 
-	PAGE_RANK_DATA_TYPE* lSubtaskWebDump = (PAGE_RANK_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, PRE_SUBTASK_TO_SUBTASK, 0, NULL);
-	PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.outputMem;
 	PAGE_RANK_DATA_TYPE* lLocalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.inputMem;
+	PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.outputMem;
     
-    memset(lGlobalArray, 0, pSubtaskInfo.outputMemLength);
-
     unsigned int lWebPages = (unsigned int)((lTaskConf->totalWebPages < ((pSubtaskInfo.subtaskId + 1) * lTaskConf->webPagesPerSubtask)) ? (lTaskConf->totalWebPages - (pSubtaskInfo.subtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
     
-	unsigned int index=0;
-	for(unsigned int j=0; j<lWebPages; ++j)
-	{
-		unsigned int lOutlinks = lSubtaskWebDump[index++];
-        PAGE_RANK_DATA_TYPE lIncr = (PAGE_RANK_DATA_TYPE)(DAMPENING_FACTOR * ((lTaskConf->iteration == 0) ? lTaskConf->initialPageRank : lLocalArray[j])/(float)lOutlinks);
+    unsigned int lWebFiles = ((lWebPages / lTaskConf->webPagesPerFile) + ((lWebPages % lTaskConf->webPagesPerFile) ? 1 : 0));
+    unsigned int lFirstWebFile = (unsigned int)pSubtaskInfo.subtaskId * lWebFiles;
+    unsigned int lLastWebFile = lFirstWebFile + lWebFiles;
+    
+    void** lWebFilePtrs = new void*[lWebFiles];
+    for(unsigned int fileIndex = lFirstWebFile; fileIndex < lLastWebFile; ++fileIndex)
+    {
+        char filePath[1024];
+        char buf[12];
 
-		for(unsigned int k=0; k<lOutlinks; ++k)
-		{
-			unsigned int lRefLink = lSubtaskWebDump[index+k];
-	
-			lGlobalArray[lRefLink - 1] += lIncr;
-		}
+        unsigned int lFileNum = 1 + fileIndex * lTaskConf->webPagesPerFile;
+        
+        sprintf(buf, "%u", lFileNum);
+        strcpy(filePath, lTaskConf->basePath);
+        strcat(filePath, "/web/page_");
+        strcat(filePath, buf);
 
-		index += lTaskConf->maxOutlinksPerWebPage;
-	}
+        lWebFilePtrs[fileIndex - lFirstWebFile] = pmGetMappedFile(filePath);
+    }
 
+    unsigned int lTotalFiles = (lTaskConf->totalWebPages / lTaskConf->webPagesPerFile) + ((lTaskConf->totalWebPages % lTaskConf->webPagesPerFile) ? 1 : 0);
+    for(unsigned int i = 0; i < lWebFiles; ++i)
+    {
+        unsigned int* lMappedFile = (unsigned int*)(lWebFilePtrs[i]);
+
+        unsigned int index = 0;
+        unsigned int lPagesInFile = lTaskConf->webPagesPerFile;
+        if(i + lFirstWebFile == lTotalFiles - 1)
+            lPagesInFile = lTaskConf->totalWebPages - (i + lFirstWebFile) * lTaskConf->webPagesPerFile;
+
+        for(unsigned int j = 0; j < lPagesInFile; ++j)
+        {
+            unsigned int lPageNum = i * lTaskConf->webPagesPerFile + j;
+
+            unsigned int lOutlinks = lMappedFile[index++];
+            PAGE_RANK_DATA_TYPE lIncr = (PAGE_RANK_DATA_TYPE)(DAMPENING_FACTOR * ((lTaskConf->iteration == 0) ? lTaskConf->initialPageRank : lLocalArray[lPageNum])/(float)lOutlinks);
+
+            for(unsigned int k = 0; k < lOutlinks; ++k)
+                lGlobalArray[lMappedFile[index + k] - 1] += lIncr;
+        
+            index += lTaskConf->maxOutlinksPerWebPage;
+        }
+    }
+
+    delete[] lWebFilePtrs;
 	return pmSuccess;
 }
     
@@ -282,11 +326,23 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
 
+	PAGE_RANK_DATA_TYPE* lWebDump = new PAGE_RANK_DATA_TYPE[gTotalWebPages * (gMaxOutlinksPerWebPage + 1)];
+
+    unsigned int lTotalFiles = (gTotalWebPages / gWebPagesPerFile);
+    unsigned int i = 0;
+    for(; i<lTotalFiles; ++i)
+        readWebPagesFile(lBasePath, gTotalWebPages, gMaxOutlinksPerWebPage, gWebPagesPerFile, i*gWebPagesPerFile, gWebPagesPerFile, lWebDump + (i * gWebPagesPerFile * (gMaxOutlinksPerWebPage + 1)));
+    
+    if((gTotalWebPages % gWebPagesPerFile) != 0)
+        readWebPagesFile(lBasePath, gTotalWebPages, gMaxOutlinksPerWebPage, gWebPagesPerFile, i*gWebPagesPerFile, gTotalWebPages - i*gWebPagesPerFile, lWebDump + (i * gWebPagesPerFile * (gMaxOutlinksPerWebPage + 1)));
+
 	double lStartTime = getCurrentTimeInSecs();
 
-	serialPageRank(lBasePath);
+	serialPageRank(lWebDump);
 
 	double lEndTime = getCurrentTimeInSecs();
+
+    delete[] lWebDump;
 
 	return (lEndTime - lStartTime);
 }
@@ -299,6 +355,8 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
 	CREATE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)
     
     lTaskDetails.inputMemHandle = pInputMemHandle;
+    lTaskDetails.outputMemInfo = OUTPUT_MEM_WRITE_ONLY_LAZY;
+
 	lTaskDetails.taskConf = (void*)(pTaskConf);
 	lTaskDetails.taskConfLength = sizeof(pageRankTaskConf);
 
@@ -321,6 +379,8 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
 double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
 	READ_NON_COMMON_ARGS
+    
+    mapAllFiles(lBasePath);
 
 	// Input Mem contains page rank of each page before the iteration
 	// Output Mem contains the page rank of each page after the iteration
@@ -334,7 +394,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.maxOutlinksPerWebPage = gMaxOutlinksPerWebPage;
     lTaskConf.webPagesPerFile = gWebPagesPerFile;
     lTaskConf.webPagesPerSubtask = gWebPagesPerSubtask;
-    lTaskConf.initialPageRank = normalizePageRank(INITIAL_PAGE_RANK, gTotalWebPages);
+    lTaskConf.initialPageRank = INITIAL_PAGE_RANK;
     strcpy(lTaskConf.basePath, lBasePath);
 
 	double lStartTime = getCurrentTimeInSecs();
@@ -367,6 +427,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         pmReleaseMemory(lInputMemHandle);
 
 	pmReleaseMemory(lOutputMemHandle);
+
+    unMapAllFiles(lBasePath);
 
 	return (lEndTime - lStartTime);
 }
@@ -415,7 +477,7 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 
 	gSerialOutput = new PAGE_RANK_DATA_TYPE[gTotalWebPages];
 	gParallelOutput = new PAGE_RANK_DATA_TYPE[gTotalWebPages];
-
+    
 	return 0;
 }
 

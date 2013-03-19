@@ -23,8 +23,6 @@
 namespace pm
 {
 
-pmTls* pmTls::mTls = NULL;
-
 /* class pmTls */
 pmTls::pmTls()
 {
@@ -38,66 +36,45 @@ pmTls::~pmTls()
 /* class pmPThreadTls */
 pmTls* pmPThreadTls::GetTls()
 {
-    return mTls;
+    static pmPThreadTls mTls;
+    return &mTls;
 }
     
 pmPThreadTls::pmPThreadTls()
 {
-    mTls = this;
-
-    FINALIZE_RESOURCE_PTR(dTlsLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTlsLock, Lock(), Unlock());
-
     for(ushort i = 0; i < TLS_MAX_KEYS; ++i)
         DefineThreadLocalStorage((pmTlsKey)i);
 }
 
 pmPThreadTls::~pmPThreadTls()
 {
-    FINALIZE_RESOURCE_PTR(dTlsLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTlsLock, Lock(), Unlock());
-
     for(ushort i = 0; i < TLS_MAX_KEYS; ++i)
         UndefineThreadLocalStorage((pmTlsKey)i);
 }
 
 void pmPThreadTls::SetThreadLocalStorage(pmTlsKey pKey, void* pValue)
 {
-    FINALIZE_RESOURCE_PTR(dTlsLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTlsLock, Lock(), Unlock());
-    
-    if(mTlsKeys.find(pKey) == mTlsKeys.end())
-        PMTHROW(pmFatalErrorException());
-    
-    THROW_ON_NON_ZERO_RET_VAL( pthread_setspecific(*(mTlsKeys[pKey]), pValue), pmThreadFailureException, pmThreadFailureException::TLS_KEY_ERROR );
+    THROW_ON_NON_ZERO_RET_VAL( pthread_setspecific(mTlsKeys[pKey], pValue), pmThreadFailureException, pmThreadFailureException::TLS_KEY_ERROR );
 }
     
 void* pmPThreadTls::GetThreadLocalStorage(pmTlsKey pKey)
 {
-    FINALIZE_RESOURCE_PTR(dTlsLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTlsLock, Lock(), Unlock());
+    return pthread_getspecific(mTlsKeys[pKey]);
+}
 
-    if(mTlsKeys.find(pKey) == mTlsKeys.end())
-        PMTHROW(pmFatalErrorException());
-    
-    return pthread_getspecific(*(mTlsKeys[pKey]));
+std::pair<void*, void*> pmPThreadTls::GetThreadLocalStoragePair(pmTlsKey pKey1, pmTlsKey pKey2)
+{
+    return std::make_pair(pthread_getspecific(mTlsKeys[pKey1]), pthread_getspecific(mTlsKeys[pKey2]));
 }
 
 void pmPThreadTls::DefineThreadLocalStorage(pmTlsKey pKey)
 {
-    if(mTlsKeys.find(pKey) != mTlsKeys.end())
-        PMTHROW(pmFatalErrorException());
-    
-    pthread_key_t* lKey = new pthread_key_t();
-    THROW_ON_NON_ZERO_RET_VAL( pthread_key_create(lKey, NULL), pmThreadFailureException, pmThreadFailureException::TLS_KEY_ERROR );
-    
-    mTlsKeys[pKey] = lKey;
+    THROW_ON_NON_ZERO_RET_VAL( pthread_key_create(&mTlsKeys[pKey], NULL), pmThreadFailureException, pmThreadFailureException::TLS_KEY_ERROR );
 }
 
 void pmPThreadTls::UndefineThreadLocalStorage(pmTlsKey pKey)
 {
-    if(mTlsKeys.find(pKey) == mTlsKeys.end())
-        PMTHROW(pmFatalErrorException());
-    
-    THROW_ON_NON_ZERO_RET_VAL( pthread_key_delete(*(mTlsKeys[pKey])), pmThreadFailureException, pmThreadFailureException::TLS_KEY_ERROR );
-
-    delete mTlsKeys[pKey];
+    THROW_ON_NON_ZERO_RET_VAL( pthread_key_delete(mTlsKeys[pKey]), pmThreadFailureException, pmThreadFailureException::TLS_KEY_ERROR );
 }
 
 }

@@ -26,7 +26,7 @@
 
 #include THREADING_IMPLEMENTATION_HEADER
 
-#include <map>
+#include <vector>
 
 namespace pm
 {
@@ -41,37 +41,34 @@ typedef enum pmTlsKey
 class pmTls
 {
     public:
-        pmTls();
-        virtual ~pmTls();
-    
         virtual void SetThreadLocalStorage(pmTlsKey pKey, void* pValue) = 0;
         virtual void* GetThreadLocalStorage(pmTlsKey pKey) = 0;
+        virtual std::pair<void*, void*> GetThreadLocalStoragePair(pmTlsKey pKey1, pmTlsKey pKey2) = 0;
     
     protected:
-        static pmTls* mTls;
-    
+        pmTls();
+        virtual ~pmTls();
+
     private:
 };
     
 class pmPThreadTls : public pmTls
 {
-    friend class pmController;
-    
     public:
         static pmTls* GetTls();
     
         void SetThreadLocalStorage(pmTlsKey pKey, void* pValue);
         void* GetThreadLocalStorage(pmTlsKey pKey);
-    
+        std::pair<void*, void*> GetThreadLocalStoragePair(pmTlsKey pKey1, pmTlsKey pKey2);
+
     private:
         pmPThreadTls();
         virtual ~pmPThreadTls();
     
         void DefineThreadLocalStorage(pmTlsKey pKey);
         void UndefineThreadLocalStorage(pmTlsKey pKey);
-    
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mTlsLock;
-        std::map<pmTlsKey, pthread_key_t*> mTlsKeys;
+
+        pthread_key_t mTlsKeys[TLS_MAX_KEYS];
 };
 
 } // end namespace pm
