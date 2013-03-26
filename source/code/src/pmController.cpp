@@ -223,6 +223,9 @@ pmStatus pmController::CreateMemory_Public(size_t pLength, pmMemHandle* pMem)
 
 pmStatus pmController::ReleaseMemory_Public(pmMemHandle pMem)
 {
+    if(!pMem)
+        PMTHROW(pmFatalErrorException());
+
 	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
 
     delete (reinterpret_cast<pmUserMemHandle*>(pMem));
@@ -233,6 +236,9 @@ pmStatus pmController::ReleaseMemory_Public(pmMemHandle pMem)
 
 pmStatus pmController::FetchMemory_Public(pmMemHandle pMem)
 {
+    if(!pMem)
+        PMTHROW(pmFatalErrorException());
+
 	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
     
     return lMemSection->Fetch(MAX_PRIORITY_LEVEL);
@@ -240,6 +246,9 @@ pmStatus pmController::FetchMemory_Public(pmMemHandle pMem)
 
 pmStatus pmController::FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, size_t pLength)
 {
+    if(!pMem)
+        PMTHROW(pmFatalErrorException());
+
 	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
     
     return lMemSection->FetchRange(MAX_PRIORITY_LEVEL, pOffset, pLength);
@@ -247,6 +256,9 @@ pmStatus pmController::FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset,
     
 pmStatus pmController::GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr)
 {
+    if(!pMem)
+        PMTHROW(pmFatalErrorException());
+
 	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
     *pPtr = lMemSection->GetMem();
 
@@ -289,11 +301,17 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
 
 pmStatus pmController::WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle)
 {
+    if(!pTaskHandle)
+        PMTHROW(pmFatalErrorException());
+
 	return (static_cast<pmLocalTask*>(pTaskHandle))->WaitForCompletion();
 }
 
 pmStatus pmController::ReleaseTask_Public(pmTaskHandle pTaskHandle)
 {
+    if(!pTaskHandle)
+        PMTHROW(pmFatalErrorException());
+
 	pmStatus lStatus = WaitForTaskCompletion_Public(pTaskHandle);
 	static_cast<pmLocalTask*>(pTaskHandle)->UserDeleteTask();
 
@@ -302,6 +320,9 @@ pmStatus pmController::ReleaseTask_Public(pmTaskHandle pTaskHandle)
 
 pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, double* pTime)
 {
+    if(!pTaskHandle)
+        PMTHROW(pmFatalErrorException());
+
 	*pTime = (static_cast<pmLocalTask*>(pTaskHandle))->GetExecutionTimeInSecs();
 
 	return pmSuccess;

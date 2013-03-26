@@ -119,12 +119,33 @@ sub storeInGraphCache
 
 sub flushGraphCache
 {
-	plotInit(1 + $#graphCache, 1);
+	plotInit(2 * (1 + $#graphCache), 2);
 
     my $i;
     for($i = 0; $i <= $#graphCache; ++$i)
     {
-        plotGraph($graphCache[$i]->{TITLE}, $graphCache[$i]->{XLABEL}, $graphCache[$i]->{YLABEL}, $graphCache[$i]->{FILE}, \@{$graphCache[$i]->{TITLES}}, $graphCache[$i]->{FIRSTLINE}, $graphCache[$i]->{LASTLINE});
+        my(%skipCols1);
+        plotGraph($graphCache[$i]->{TITLE}, $graphCache[$i]->{XLABEL}, $graphCache[$i]->{YLABEL}, $graphCache[$i]->{FILE}, \@{$graphCache[$i]->{TITLES}}, $graphCache[$i]->{FIRSTLINE}, $graphCache[$i]->{LASTLINE}, \%skipCols1);
+    
+        my(%skipCols2);
+        $skipCols2{1} = 1;
+        plotGraph($graphCache[$i]->{TITLE}, $graphCache[$i]->{XLABEL}, $graphCache[$i]->{YLABEL}, $graphCache[$i]->{FILE}, \@{$graphCache[$i]->{TITLES}}, $graphCache[$i]->{FIRSTLINE}, $graphCache[$i]->{LASTLINE}, \%skipCols2);
+
+        my(%skipCols3);
+        $skipCols3{1} = 1;
+        $skipCols3{5} = 1;
+        $skipCols3{6} = 1;
+        $skipCols3{7} = 1;
+        plotGraph($graphCache[$i]->{TITLE}, $graphCache[$i]->{XLABEL}, $graphCache[$i]->{YLABEL}, $graphCache[$i]->{FILE}, \@{$graphCache[$i]->{TITLES}}, $graphCache[$i]->{FIRSTLINE}, $graphCache[$i]->{LASTLINE}, \%skipCols3);
+
+        my(%skipCols4);
+        $skipCols4{1} = 1;
+        $skipCols4{2} = 1;
+        $skipCols4{3} = 1;
+        $skipCols4{4} = 1;
+        plotGraph($graphCache[$i]->{TITLE}, $graphCache[$i]->{XLABEL}, $graphCache[$i]->{YLABEL}, $graphCache[$i]->{FILE}, \@{$graphCache[$i]->{TITLES}}, $graphCache[$i]->{FIRSTLINE}, $graphCache[$i]->{LASTLINE}, \%skipCols4);
+    
+        last;
     }
 
 	plotTerminate();
@@ -132,8 +153,9 @@ sub flushGraphCache
 
 sub plotGraph
 {
-	my($title, $xlabel, $ylabel, $file, $titlesRef, $firstLine, $lastLine) = @_;
+	my($title, $xlabel, $ylabel, $file, $titlesRef, $firstLine, $lastLine, $skipColsRef) = @_;
 	my(@titles) = @$titlesRef;
+    my(%skipCols) = %$skipColsRef;
 
 	$xlabel .= " ".$titles[0];
 	$xlabel = removeExtraSpaces($xlabel);
@@ -144,6 +166,8 @@ sub plotGraph
 	my($i);
 	for($i = 1; $i < $#titles; ++$i)
 	{
+        next if(exists $skipCols{$i});
+    
 		plotLine(1, 1+$i, removeExtraSpaces($titles[$i]));
 	}
 

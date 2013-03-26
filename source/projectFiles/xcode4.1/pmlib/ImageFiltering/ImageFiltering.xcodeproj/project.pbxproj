@@ -1,0 +1,269 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0E10F92716F8E1040051D7CF /* imageFiltering.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E10F92516F8E1040051D7CF /* imageFiltering.cpp */; };
+		0E10F92916F8E43A0051D7CF /* commonAPI.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E10F92816F8E43A0051D7CF /* commonAPI.cpp */; };
+		0E10F92B16F8E51C0051D7CF /* pmlib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E10F92A16F8E51C0051D7CF /* pmlib.dylib */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0E10F91216F8DFB90051D7CF /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0E10F91416F8DFB90051D7CF /* ImageFiltering */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ImageFiltering; sourceTree = BUILT_PRODUCTS_DIR; };
+		0E10F92316F8E1040051D7CF /* imageFiltering.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = imageFiltering.h; sourceTree = "<group>"; };
+		0E10F92516F8E1040051D7CF /* imageFiltering.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = imageFiltering.cpp; sourceTree = "<group>"; };
+		0E10F92616F8E1040051D7CF /* imageFilteringCUDA.cu */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = imageFilteringCUDA.cu; sourceTree = "<group>"; };
+		0E10F92816F8E43A0051D7CF /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
+		0E10F92A16F8E51C0051D7CF /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = pmlib.dylib; path = "../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug/pmlib.dylib"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0E10F91116F8DFB90051D7CF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0E10F92B16F8E51C0051D7CF /* pmlib.dylib in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0E10F90B16F8DFB90051D7CF = {
+			isa = PBXGroup;
+			children = (
+				0E10F92A16F8E51C0051D7CF /* pmlib.dylib */,
+				0E10F92816F8E43A0051D7CF /* commonAPI.cpp */,
+				0E10F91616F8DFB90051D7CF /* ImageFiltering */,
+				0E10F91516F8DFB90051D7CF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0E10F91516F8DFB90051D7CF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0E10F91416F8DFB90051D7CF /* ImageFiltering */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0E10F91616F8DFB90051D7CF /* ImageFiltering */ = {
+			isa = PBXGroup;
+			children = (
+				0E10F92216F8E1040051D7CF /* inc */,
+				0E10F92416F8E1040051D7CF /* src */,
+			);
+			path = ImageFiltering;
+			sourceTree = "<group>";
+		};
+		0E10F92216F8E1040051D7CF /* inc */ = {
+			isa = PBXGroup;
+			children = (
+				0E10F92316F8E1040051D7CF /* imageFiltering.h */,
+			);
+			name = inc;
+			path = ../../../../../testSuite/imageFiltering/source/code/inc;
+			sourceTree = SOURCE_ROOT;
+		};
+		0E10F92416F8E1040051D7CF /* src */ = {
+			isa = PBXGroup;
+			children = (
+				0E10F92516F8E1040051D7CF /* imageFiltering.cpp */,
+				0E10F92616F8E1040051D7CF /* imageFilteringCUDA.cu */,
+			);
+			name = src;
+			path = ../../../../../testSuite/imageFiltering/source/code/src;
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E10F91316F8DFB90051D7CF /* ImageFiltering */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0E10F91D16F8DFB90051D7CF /* Build configuration list for PBXNativeTarget "ImageFiltering" */;
+			buildPhases = (
+				0E10F91016F8DFB90051D7CF /* Sources */,
+				0E10F91116F8DFB90051D7CF /* Frameworks */,
+				0E10F91216F8DFB90051D7CF /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ImageFiltering;
+			productName = ImageFiltering;
+			productReference = 0E10F91416F8DFB90051D7CF /* ImageFiltering */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0E10F90C16F8DFB90051D7CF /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0460;
+				ORGANIZATIONNAME = "Tarun Beri";
+			};
+			buildConfigurationList = 0E10F90F16F8DFB90051D7CF /* Build configuration list for PBXProject "ImageFiltering" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 0E10F90B16F8DFB90051D7CF;
+			productRefGroup = 0E10F91516F8DFB90051D7CF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0E10F91316F8DFB90051D7CF /* ImageFiltering */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0E10F91016F8DFB90051D7CF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0E10F92916F8E43A0051D7CF /* commonAPI.cpp in Sources */,
+				0E10F92716F8E1040051D7CF /* imageFiltering.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0E10F91B16F8DFB90051D7CF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		0E10F91C16F8DFB90051D7CF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		0E10F91E16F8DFB90051D7CF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"DEBUG=1",
+					"SAMPLE_NAME=imageFiltering",
+				);
+				HEADER_SEARCH_PATHS = (
+					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
+					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"$(SRCROOT)/../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug\"",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		0E10F91F16F8DFB90051D7CF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = "SAMPLE_NAME=imageFiltering";
+				HEADER_SEARCH_PATHS = (
+					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
+					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
+				);
+				LIBRARY_SEARCH_PATHS = (
+					"$(inherited)",
+					"\"$(SRCROOT)/../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug\"",
+				);
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0E10F90F16F8DFB90051D7CF /* Build configuration list for PBXProject "ImageFiltering" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0E10F91B16F8DFB90051D7CF /* Debug */,
+				0E10F91C16F8DFB90051D7CF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0E10F91D16F8DFB90051D7CF /* Build configuration list for PBXNativeTarget "ImageFiltering" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0E10F91E16F8DFB90051D7CF /* Debug */,
+				0E10F91F16F8DFB90051D7CF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0E10F90C16F8DFB90051D7CF /* Project object */;
+}

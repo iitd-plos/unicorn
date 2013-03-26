@@ -27,6 +27,8 @@
 #include <iomanip>
 #include <sstream>
 
+#include <string.h>
+
 namespace pm
 {
     
@@ -47,6 +49,7 @@ pmScopeTimer::~pmScopeTimer()
 }
 
     
+#ifdef ENABLE_ACCUMULATED_TIMINGS
 /* class pmAccumulationTimer */
 pmAccumulationTimer::pmAccumulationTimer(const std::string& pStr)
 : mStr(pStr)
@@ -234,7 +237,7 @@ void pmAccumulatedTimesSorter::Unlock()
 {
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
 }
-
+#endif
     
 /* class pmDestroyOnException */
 pmDestroyOnException::pmDestroyOnException()

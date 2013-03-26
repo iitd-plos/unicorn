@@ -266,6 +266,7 @@ namespace pm
     
     #define SCOPE_TIMER(name, str) pmScopeTimer name##_obj(str);
 
+#ifdef ENABLE_ACCUMULATED_TIMINGS
     class TIMER_IMPLEMENTATION_CLASS;
 
     class pmAccumulatedTimesSorter
@@ -336,6 +337,9 @@ namespace pm
     #define ACCUMULATION_TIMER(name, str) \
     static pmAccumulationTimer name##_obj(str); \
     pmAccumulationTimerHelper name##_helperTimer(&name##_obj);
+#else
+    #define ACCUMULATION_TIMER(name, str)    
+#endif
     
     #ifdef TRACK_MUTEX_TIMINGS
         #define __LOCK_NAME__(name) (name)
