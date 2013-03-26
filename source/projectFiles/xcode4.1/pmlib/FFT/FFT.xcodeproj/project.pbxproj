@@ -218,6 +218,7 @@
 				HEADER_SEARCH_PATHS = (
 					$SRCROOT/../../../../../source/code/inc/,
 					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
+					$SRCROOT/../../../../../testsuite/matrixTranspose/source/code/inc/,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -235,6 +236,7 @@
 				HEADER_SEARCH_PATHS = (
 					$SRCROOT/../../../../../source/code/inc/,
 					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
+					$SRCROOT/../../../../../testsuite/matrixTranspose/source/code/inc/,
 				);
 				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
