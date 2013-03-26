@@ -521,13 +521,9 @@
 					"$(inherited)",
 				);
 				GCC_VERSION = com.apple.compilers.llvmgcc42;
-				HEADER_SEARCH_PATHS = (
-					"/Users/tarunberi/Installations/openmpi-1.4.5-multithreaded/release/include/",
-					$SRCROOT/../../../../thirdparty,
-				);
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/include/";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib\"",
 					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib\"",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -549,13 +545,9 @@
 					UNIX,
 				);
 				GCC_VERSION = com.apple.compilers.llvmgcc42;
-				HEADER_SEARCH_PATHS = (
-					"/Users/tarunberi/Installations/openmpi-1.4.5-multithreaded/release/include/",
-					$SRCROOT/../../../../thirdparty,
-				);
+				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/include/";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
-					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/debug/lib\"",
 					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib\"",
 				);
 				PRODUCT_NAME = "$(TARGET_NAME)";

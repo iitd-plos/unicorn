@@ -216,15 +216,10 @@
 					"MATRIX_DATA_TYPE=complex",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
-					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
-					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/matrixTranspose/source/code/inc/",
+					$SRCROOT/../../../../../source/code/inc/,
+					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"\"$(SRCROOT)/../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-btzrzgfrhtfijahfgimbyqhlmueb/Build/Products/Debug\"",
-					"\"$(SRCROOT)/../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug\"",
-				);
+				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -238,15 +233,10 @@
 					"MATRIX_DATA_TYPE=complex",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
-					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
-					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/matrixTranspose/source/code/inc/",
+					$SRCROOT/../../../../../source/code/inc/,
+					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"\"$(SRCROOT)/../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-btzrzgfrhtfijahfgimbyqhlmueb/Build/Products/Debug\"",
-					"\"$(SRCROOT)/../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug\"",
-				);
+				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;

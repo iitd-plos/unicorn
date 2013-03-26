@@ -30,7 +30,7 @@
 		0E10F92516F8E1040051D7CF /* imageFiltering.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = imageFiltering.cpp; sourceTree = "<group>"; };
 		0E10F92616F8E1040051D7CF /* imageFilteringCUDA.cu */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = imageFilteringCUDA.cu; sourceTree = "<group>"; };
 		0E10F92816F8E43A0051D7CF /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
-		0E10F92A16F8E51C0051D7CF /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = pmlib.dylib; path = "../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug/pmlib.dylib"; sourceTree = "<group>"; };
+		0E10F92A16F8E51C0051D7CF /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -216,13 +216,10 @@
 					"SAMPLE_NAME=imageFiltering",
 				);
 				HEADER_SEARCH_PATHS = (
-					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
-					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
+					$SRCROOT/../../../../../source/code/inc/,
+					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"\"$(SRCROOT)/../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug\"",
-				);
+				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -232,13 +229,10 @@
 			buildSettings = {
 				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = "SAMPLE_NAME=imageFiltering";
 				HEADER_SEARCH_PATHS = (
-					"/Users/tarunberi/Development/git-repositories/pmlib/source/code/inc/",
-					"/Users/tarunberi/Development/git-repositories/pmlib/testsuite/common/source/code/inc/",
+					$SRCROOT/../../../../../source/code/inc/,
+					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"$(inherited)",
-					"\"$(SRCROOT)/../../../../../../../../Library/Developer/Xcode/DerivedData/pmlib_ws-frjsplgpuxnsetbexmhqhkajxgge/Build/Products/Debug\"",
-				);
+				LIBRARY_SEARCH_PATHS = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;
@@ -262,6 +256,7 @@
 				0E10F91F16F8DFB90051D7CF /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
 	};
