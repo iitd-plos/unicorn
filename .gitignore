@@ -5,7 +5,6 @@ source/projectFiles/xcode4.1/pmlib/.DS_Store
 source/projectFiles/xcode4.1/pmlib/FFT/FFT.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/FFT.xcscheme
 source/projectFiles/xcode4.1/pmlib/FFT/FFT.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/xcschememanagement.plist
 source/projectFiles/xcode4.1/pmlib/MatrixMultiply/.DS_Store
-source/projectFiles/xcode4.1/pmlib/MatrixMultiply/MatrixMultiply.xcodeproj/project.pbxproj
 source/projectFiles/xcode4.1/pmlib/MatrixMultiply/MatrixMultiply.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/MatrixMultiply.xcscheme
 source/projectFiles/xcode4.1/pmlib/MatrixMultiply/MatrixMultiply.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/xcschememanagement.plist
 source/projectFiles/xcode4.1/pmlib/MatrixTranspose/.DS_Store
@@ -13,10 +12,8 @@ source/projectFiles/xcode4.1/pmlib/MatrixTranspose/MatrixTranspose.xcodeproj/xcu
 source/projectFiles/xcode4.1/pmlib/MatrixTranspose/MatrixTranspose.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/xcschememanagement.plist
 source/projectFiles/xcode4.1/pmlib/RadixSort/RadixSort.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/RadixSort.xcscheme
 source/projectFiles/xcode4.1/pmlib/RadixSort/RadixSort.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/xcschememanagement.plist
-source/projectFiles/xcode4.1/pmlib/pmlib.xcodeproj/project.xcworkspace/xcuserdata/tarunberi.xcuserdatad/UserInterfaceState.xcuserstate
 source/projectFiles/xcode4.1/pmlib/pmlib.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/pmlib.xcscheme
 source/projectFiles/xcode4.1/pmlib/pmlib.xcodeproj/xcuserdata/tarunberi.xcuserdatad/xcschemes/xcschememanagement.plist
-source/projectFiles/xcode4.1/pmlib/pmlib_ws.xcworkspace/contents.xcworkspacedata
 source/projectFiles/xcode4.1/pmlib/pmlib_ws.xcworkspace/xcuserdata/tarunberi.xcuserdatad/UserInterfaceState.xcuserstate
 source/projectFiles/xcode4.1/pmlib/pmlib_ws.xcworkspace/xcuserdata/tarunberi.xcuserdatad/WorkspaceSettings.xcsettings
 source/projectFiles/xcode4.1/pmlib/pmlib_ws.xcworkspace/xcuserdata/tarunberi.xcuserdatad/xcdebugger/Breakpoints.xcbkptlist
