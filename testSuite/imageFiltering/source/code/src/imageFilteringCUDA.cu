@@ -221,7 +221,8 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     
     int lEffectiveSubImageWidth = lSubImageWidth * PIXEL_COUNT;
 
-    char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset + lTaskConf->imageBytesPerLine * (lEndRow - lTaskConf->imageHeight);
+    char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset;
+    lInvertedImageData += (lTaskConf->imageBytesPerLine * (lTaskConf->imageHeight - lEndRow) + lStartCol * PIXEL_COUNT);
 
     void* lTextureMem = NULL;
     size_t lPitch = 0;
