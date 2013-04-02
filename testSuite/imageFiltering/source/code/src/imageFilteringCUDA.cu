@@ -135,7 +135,7 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
 
     __syncthreads();
 
-#if 0   //(FILTER_RADIUS == 1)
+#if (FILTER_RADIUS == 1)
     char4 lData00 = lImage[threadIdx.y][threadIdx.x];
     char4 lData01 = lImage[threadIdx.y][1 + threadIdx.x];
     char4 lData02 = lImage[threadIdx.y][2 + threadIdx.x];
@@ -164,7 +164,7 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
 #endif
 
     int lUninvertedRow = pSubImageHeight - y - 1;
-    size_t lOffset = (lUninvertedRow * pImageWidth + threadIdx.x) * PIXEL_COUNT;
+    size_t lOffset = (lUninvertedRow * pImageWidth + x) * PIXEL_COUNT;
 
     ((char*)pOutputMem)[lOffset] = lRedVal;
     ((char*)pOutputMem)[lOffset + 1] = lGreenVal;
