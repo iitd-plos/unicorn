@@ -76,11 +76,17 @@ pmController::~pmController()
 pmController* pmController::GetController()
 {
     static pmController lController;
+    static bool lFirstCall = true;
     
-    if(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier() != pmSuccess)
+    if(lFirstCall)
     {
-        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Global Initialization Barrier Failed");
-        PMTHROW(pmFatalErrorException());
+        if(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier() != pmSuccess)
+        {
+            pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Global Initialization Barrier Failed");
+            PMTHROW(pmFatalErrorException());
+        }
+     
+        lFirstCall = false;
     }
 
     return &lController;

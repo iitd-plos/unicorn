@@ -73,8 +73,10 @@ void commonFinish();
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \
-	SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.inputMemHandle) ); \
-	SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.outputMemHandle) );
+    if(lTaskDetails.inputMemHandle) \
+        SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.inputMemHandle) ); \
+    if(lTaskDetails.outputMemHandle) \
+        SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.outputMemHandle) );
 
 
 

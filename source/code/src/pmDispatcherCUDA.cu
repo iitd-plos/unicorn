@@ -20,11 +20,13 @@
 
 #include "pmBase.h"
 #include "pmDispatcherGPU.h"
-#include <string>
 
 #ifdef SUPPORT_CUDA
 #include "pmLogger.h"
 #endif
+
+#include <string>
+#include <sstream>
 
 namespace pm
 {
@@ -105,14 +107,10 @@ std::string pmDispatcherCUDA::GetDeviceName(size_t pDeviceIndex)
 std::string pmDispatcherCUDA::GetDeviceDescription(size_t pDeviceIndex)
 {
 	cudaDeviceProp lProp = mDeviceVector[pDeviceIndex].second;
-	std::string lStr("Clock Rate=");
-	lStr += lProp.clockRate;
-	lStr += ";sharedMemPerBlock=";
-	lStr += lProp.sharedMemPerBlock;
-	lStr += ";computeCapability=";
-	lStr += lProp.major + "." + lProp.minor;
+	std::stringstream lStream;
+    lStream << "Clock Rate=" << lProp.clockRate << ";sharedMemPerBlock=" << lProp.sharedMemPerBlock << ";computeCapability=" << lProp.major << "." << lProp.minor;
 
-	return lStr;
+	return lStream.str();
 }
     
 void* pmDispatcherCUDA::GetDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo)

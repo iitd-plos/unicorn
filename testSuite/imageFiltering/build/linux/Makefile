@@ -7,7 +7,7 @@
 # make clean - Cleans test suite's release build files
 # make DEBUG=1 clean - Cleans test suite's debug build files
 
-SAMPLE_NAME=matrixMultiply
+SAMPLE_NAME=imageFiltering
 
 # 1 if CUDA code is included in the test suite; 0 otherwise
 BUILD_CUDA=$(BUILD_FOR_CUDA)

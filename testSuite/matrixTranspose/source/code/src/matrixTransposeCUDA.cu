@@ -64,7 +64,11 @@ pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
     matrixTranspose_cuda <<<gridConf, blockConf>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);
     matrixCopy_cuda <<<gridConf, blockConf>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);
     
-    cudaFree(lBlockCudaPtr);
+    if(cudaFree(lBlockCudaPtr) != cudaSuccess)
+    {
+        std::cout << "Matrix Transpose: CUDA Memory Deallocation Failed" << std::endl;
+        return pmUserError;
+    }
     
     return pmSuccess;
 }
