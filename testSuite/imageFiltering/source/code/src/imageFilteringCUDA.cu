@@ -16,7 +16,7 @@ namespace imageFiltering
 
 texture<TEXEL_TYPE, cudaTextureType2D, cudaReadModeElementType> gInvertedTextureRef;
 
-__global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth, int pSubImageHeight, size_t pAlignmentOffset, void* pOutputMem, int pImageWidth, char pFilter[FILTER_DIM][FILTER_DIM])
+__global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth, int pSubImageHeight, size_t pAlignmentOffset, void* pOutputMem, int pImageWidth, char* pFilter)
 {
     __shared__ char4 lImage[GPU_BLOCK_DIM + 2 * FILTER_RADIUS][GPU_BLOCK_DIM + 2 * FILTER_RADIUS];
 
@@ -28,8 +28,8 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
 
     int lX = 3 * (x + pOffsetX) + pAlignmentOffset;
     int lY = y + pOffsetY;
-
     char4 lData;
+    
     lData.z = tex2D(gInvertedTextureRef, lX, lY);
     lData.y = tex2D(gInvertedTextureRef, lX + 1, lY);
     lData.x = tex2D(gInvertedTextureRef, lX + 2, lY);
@@ -129,7 +129,7 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
 
     __syncthreads();
     
-#if (FILTER_RADIUS == 1)
+#if 0   //(FILTER_RADIUS == 1)
     char4 lData00 = lImage[threadIdx.y][threadIdx.x];
     char4 lData01 = lImage[threadIdx.y][1 + threadIdx.x];
     char4 lData02 = lImage[threadIdx.y][2 + threadIdx.x];
@@ -140,9 +140,9 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     char4 lData21 = lImage[2 + threadIdx.y][1 + threadIdx.x];
     char4 lData22 = lImage[2 + threadIdx.y][2 + threadIdx.x];
     
-    char lRedVal = lData00.x * pFilter[0][0] + lData01.x * pFilter[0][1] + lData02.x * pFilter[0][2] + lData10.x * pFilter[1][0] + lData11.x * pFilter[1][1] + lData12.x * pFilter[1][2] + lData20.x * pFilter[2][0] + lData21.x * pFilter[2][1] + lData22.x * pFilter[2][2];
-    char lGreenVal = lData00.y * pFilter[0][0] + lData01.y * pFilter[0][1] + lData02.y * pFilter[0][2] + lData10.y * pFilter[1][0] + lData11.y * pFilter[1][1] + lData12.y * pFilter[1][2] + lData20.y * pFilter[2][0] + lData21.y * pFilter[2][1] + lData22.y * pFilter[2][2];
-    char lBlueVal = lData00.z * pFilter[0][0] + lData01.z * pFilter[0][1] + lData02.z * pFilter[0][2] + lData10.z * pFilter[1][0] + lData11.z * pFilter[1][1] + lData12.z * pFilter[1][2] + lData20.z * pFilter[2][0] + lData21.z * pFilter[2][1] + lData22.z * pFilter[2][2];
+    char lRedVal = lData00.x * pFilter[0] + lData01.x * pFilter[1] + lData02.x * pFilter[2] + lData10.x * pFilter[3] + lData11.x * pFilter[4] + lData12.x * pFilter[5] + lData20.x * pFilter[6] + lData21.x * pFilter[7] + lData22.x * pFilter[8];
+    char lGreenVal = lData00.y * pFilter[0] + lData01.y * pFilter[1] + lData02.y * pFilter[2] + lData10.y * pFilter[3] + lData11.y * pFilter[4] + lData12.y * pFilter[5] + lData20.y * pFilter[6] + lData21.y * pFilter[7] + lData22.y * pFilter[8];
+    char lBlueVal = lData00.z * pFilter[0] + lData01.z * pFilter[1] + lData02.z * pFilter[2] + lData10.z * pFilter[3] + lData11.z * pFilter[4] + lData12.z * pFilter[5] + lData20.z * pFilter[6] + lData21.z * pFilter[7] + lData22.z * pFilter[8];
 #else
     char lRedVal = 0, lGreenVal = 0, lBlueVal = 0;
     for(int k = 0; k < FILTER_DIM; ++k)
@@ -150,9 +150,9 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
         for(int l = 0; l < FILTER_DIM; ++l)
         {
             lData = lImage[k + threadIdx.y][l + threadIdx.x];
-            lRedVal += lData.x * pFilter[k][l];
-            lGreenVal += lData.y * pFilter[k][l];
-            lBlueVal += lData.z * pFilter[k][l];
+            lRedVal += lData.x * pFilter[k * FILTER_DIM + l];
+            lGreenVal += lData.y * pFilter[k * FILTER_DIM + l];
+            lBlueVal += lData.z * pFilter[k * FILTER_DIM + l];
         }
     }
 #endif
@@ -215,7 +215,7 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     
     int lEffectiveSubImageWidth = lSubImageWidth * PIXEL_COUNT;
 
-    char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset + lTaskConf->imageBytesPerLine * lEndRow;
+    char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset + lTaskConf->imageBytesPerLine * (lEndRow - lTaskConf->imageHeight);
 
     void* lTextureMem = NULL;
     size_t lPitch = 0;
@@ -227,7 +227,7 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
 
     if(cudaMemcpy2D(lTextureMem, lPitch, lInvertedImageData, lTaskConf->imageBytesPerLine, lEffectiveSubImageWidth, lSubImageHeight, cudaMemcpyHostToDevice) != cudaSuccess)
     {
-        std::cout << "Image Filter: CUDA Memcpy Failed" << std::endl;
+        std::cout << "Image Filter: CUDA Memcpy 2D Failed" << std::endl;
         return pmUserError;
     }
     
@@ -256,6 +256,19 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
         }
     }
 
+    char* lFilterPtr = NULL;
+    if(cudaMalloc((void**)&lFilterPtr, (FILTER_DIM * FILTER_DIM)) != cudaSuccess)
+    {
+        std::cout << "Image Filter: CUDA Filter Memory Allocation Failed" << std::endl;
+        return pmUserError;
+    }
+    
+    if(cudaMemcpy(lFilterPtr, lTaskConf->filter, FILTER_DIM * FILTER_DIM, cudaMemcpyHostToDevice) != cudaSuccess)
+    {
+        std::cout << "Image Filter: CUDA Memcpy Failed" << std::endl;
+        return pmUserError;
+    }
+    
     int lOffsetX = lSubscriptionStartCol - lStartCol;
     int lOffsetY = lSubscriptionStartRow - lStartRow;
     
@@ -267,7 +280,7 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
 
     dim3 gridConf(lBlocksX, lBlocksY, 1);
     dim3 blockConf(GPU_BLOCK_DIM, GPU_BLOCK_DIM, 1);
-    imageFilter_cuda <<<gridConf, blockConf>>> (lOffsetX, lOffsetY, lThreadsX, lThreadsY, lAlignmentOffset, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lTaskConf->filter);
+    imageFilter_cuda <<<gridConf, blockConf>>> (lOffsetX, lOffsetY, lThreadsX, lThreadsY, lAlignmentOffset, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lFilterPtr);
 
     if(cudaDeviceSynchronize() != cudaSuccess)
     {
@@ -281,7 +294,7 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
         return pmUserError;
     }
 
-    if(cudaFree(lTextureMem) != cudaSuccess)
+    if(cudaFree(lTextureMem) != cudaSuccess || cudaFree(lFilterPtr) != cudaSuccess)
     {
         std::cout << "Image Filter: CUDA Memory Deallocation Failed" << std::endl;
         return pmUserError;
