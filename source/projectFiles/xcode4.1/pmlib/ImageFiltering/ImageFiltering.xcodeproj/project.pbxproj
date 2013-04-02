@@ -28,7 +28,7 @@
 		0E10F91416F8DFB90051D7CF /* ImageFiltering */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = ImageFiltering; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E10F92316F8E1040051D7CF /* imageFiltering.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = imageFiltering.h; sourceTree = "<group>"; };
 		0E10F92516F8E1040051D7CF /* imageFiltering.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = imageFiltering.cpp; sourceTree = "<group>"; };
-		0E10F92616F8E1040051D7CF /* imageFilteringCUDA.cu */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text; path = imageFilteringCUDA.cu; sourceTree = "<group>"; };
+		0E10F92616F8E1040051D7CF /* imageFilteringCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = imageFilteringCUDA.cu; sourceTree = "<group>"; };
 		0E10F92816F8E43A0051D7CF /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
 		0E10F92A16F8E51C0051D7CF /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
