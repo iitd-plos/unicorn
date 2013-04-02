@@ -375,7 +375,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 	{
 		if(lSerialOutput[i] != lParallelOutput[i])
 		{
-			std::cout << "Mismatch index " << i << " Serial Value = " << (unsigned int)(lSerialOutput[i]) << " Parallel Value = " << (unsigned int)(lParallelOutput[i]) << std::endl;
+			std::cout << "Mismatch index " << i << " Serial Value = " << (int)(lSerialOutput[i]) << " Parallel Value = " << (int)(lParallelOutput[i]) << std::endl;
 			return 1;
 		}
 	}

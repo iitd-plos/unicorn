@@ -16,7 +16,7 @@ namespace imageFiltering
 
 texture<TEXEL_TYPE, cudaTextureType2D, cudaReadModeElementType> gInvertedTextureRef;
 
-__global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth, int pSubImageHeight, size_t pAlignmentOffset, void* pOutputMem, int pImageWidth, char* pFilter)
+__global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth, int pSubImageHeight, size_t pAlignmentOffset, void* pOutputMem, int pImageWidth, int pTextureWidth, char* pFilter)
 {
     __shared__ char4 lImage[GPU_BLOCK_DIM + 2 * FILTER_RADIUS][GPU_BLOCK_DIM + 2 * FILTER_RADIUS];
 
@@ -26,7 +26,7 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     if(x >= pSubImageWidth || y >= pSubImageHeight)
         return;
 
-    int lX = 3 * (x + pOffsetX) + pAlignmentOffset;
+    int lX = PIXEL_COUNT * (x + pOffsetX) + pAlignmentOffset;
     int lY = y + pOffsetY;
     char4 lData;
     
@@ -49,7 +49,8 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     // Load the left cols
     if(threadIdx.x < FILTER_RADIUS)
     {
-        int lCol = lX - 3 * FILTER_RADIUS;
+        int lCol = lX - PIXEL_COUNT * FILTER_RADIUS;
+        if(lCol < 0) lCol = 0;
 
         lData.z = tex2D(gInvertedTextureRef, lCol, lY);
         lData.y = tex2D(gInvertedTextureRef, lCol + 1, lY);
@@ -71,7 +72,8 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     // Load the right cols
     if((x >= (pSubImageWidth - FILTER_RADIUS)) || (threadIdx.x >= (GPU_BLOCK_DIM - FILTER_RADIUS)))
     {
-        int lCol = lX + 3 * FILTER_RADIUS;
+        int lCol = lX + PIXEL_COUNT * FILTER_RADIUS;
+        if(lCol >= pTextureWidth) lCol = pTextureWidth - PIXEL_COUNT;
 
         lData.z = tex2D(gInvertedTextureRef, lCol, lY);
         lData.y = tex2D(gInvertedTextureRef, lCol + 1, lY);
@@ -83,7 +85,8 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     if(threadIdx.y < FILTER_RADIUS && threadIdx.x < FILTER_RADIUS)
     {
         int lRow = lY - FILTER_RADIUS;
-        int lCol = lX - 3 * FILTER_RADIUS;
+        int lCol = lX - PIXEL_COUNT * FILTER_RADIUS;
+        if(lCol < 0) lCol = 0;
 
         lData.z = tex2D(gInvertedTextureRef, lCol, lRow);
         lData.y = tex2D(gInvertedTextureRef, lCol + 1, lRow);
@@ -92,10 +95,11 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     }
 
     // Load the top right corner
-    if(threadIdx.y < FILTER_RADIUS && (x >= (pSubImageWidth - FILTER_RADIUS)) || (threadIdx.x >= (GPU_BLOCK_DIM - FILTER_RADIUS)))
+    if(threadIdx.y < FILTER_RADIUS && ((x >= (pSubImageWidth - FILTER_RADIUS)) || (threadIdx.x >= (GPU_BLOCK_DIM - FILTER_RADIUS))))
     {
         int lRow = lY - FILTER_RADIUS;
-        int lCol = lX + 3 * FILTER_RADIUS;
+        int lCol = lX + PIXEL_COUNT * FILTER_RADIUS;
+        if(lCol >= pTextureWidth) lCol = pTextureWidth - PIXEL_COUNT;
 
         lData.z = tex2D(gInvertedTextureRef, lCol, lRow);
         lData.y = tex2D(gInvertedTextureRef, lCol + 1, lRow);
@@ -104,10 +108,11 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     }
 
     // Load the bottom left corner
-    if((y >= (pSubImageHeight - FILTER_RADIUS)) || (threadIdx.y >= (GPU_BLOCK_DIM - FILTER_RADIUS)) && threadIdx.x < FILTER_RADIUS)
+    if(((y >= (pSubImageHeight - FILTER_RADIUS)) || (threadIdx.y >= (GPU_BLOCK_DIM - FILTER_RADIUS))) && threadIdx.x < FILTER_RADIUS)
     {
         int lRow = lY + FILTER_RADIUS;
-        int lCol = lX - 3 * FILTER_RADIUS;
+        int lCol = lX - PIXEL_COUNT * FILTER_RADIUS;
+        if(lCol < 0) lCol = 0;
 
         lData.z = tex2D(gInvertedTextureRef, lCol, lRow);
         lData.y = tex2D(gInvertedTextureRef, lCol + 1, lRow);
@@ -116,10 +121,11 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     }
 
     // Load the bottom right corner
-    if((y >= (pSubImageHeight - FILTER_RADIUS)) || (threadIdx.y >= (GPU_BLOCK_DIM - FILTER_RADIUS)) && (x >= (pSubImageWidth - FILTER_RADIUS)) || (threadIdx.x >= (GPU_BLOCK_DIM - FILTER_RADIUS)))
+    if(((y >= (pSubImageHeight - FILTER_RADIUS)) || (threadIdx.y >= (GPU_BLOCK_DIM - FILTER_RADIUS))) && ((x >= (pSubImageWidth - FILTER_RADIUS)) || (threadIdx.x >= (GPU_BLOCK_DIM - FILTER_RADIUS))))
     {
         int lRow = lY + FILTER_RADIUS;
-        int lCol = lX + 3 * FILTER_RADIUS;
+        int lCol = lX + PIXEL_COUNT * FILTER_RADIUS;
+        if(lCol >= pTextureWidth) lCol = pTextureWidth - PIXEL_COUNT;
 
         lData.z = tex2D(gInvertedTextureRef, lCol, lRow);
         lData.y = tex2D(gInvertedTextureRef, lCol + 1, lRow);
@@ -128,7 +134,7 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     }
 
     __syncthreads();
-    
+
 #if 0   //(FILTER_RADIUS == 1)
     char4 lData00 = lImage[threadIdx.y][threadIdx.x];
     char4 lData01 = lImage[threadIdx.y][1 + threadIdx.x];
@@ -280,7 +286,7 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
 
     dim3 gridConf(lBlocksX, lBlocksY, 1);
     dim3 blockConf(GPU_BLOCK_DIM, GPU_BLOCK_DIM, 1);
-    imageFilter_cuda <<<gridConf, blockConf>>> (lOffsetX, lOffsetY, lThreadsX, lThreadsY, lAlignmentOffset, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lFilterPtr);
+    imageFilter_cuda <<<gridConf, blockConf>>> (lOffsetX, lOffsetY, lThreadsX, lThreadsY, lAlignmentOffset, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lEffectiveSubImageWidth, lFilterPtr);
 
     if(cudaDeviceSynchronize() != cudaSuccess)
     {
