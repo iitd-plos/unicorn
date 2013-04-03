@@ -277,7 +277,7 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     }
     
     int lOffsetX = lSubscriptionStartCol - lStartCol;
-    int lOffsetY = lSubscriptionStartRow - lStartRow;
+    int lOffsetY = lEndRow - lSubscriptionEndRow;
     
     int lThreadsX = lSubscriptionEndCol - lSubscriptionStartCol;
     int lThreadsY = lSubscriptionEndRow - lSubscriptionStartRow;

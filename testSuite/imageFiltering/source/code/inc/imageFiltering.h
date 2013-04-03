@@ -10,8 +10,8 @@ namespace imageFiltering
 #define TILE_DIM 512
 #define GPU_BLOCK_DIM 32
     
-//#define SOBEL_FILTER
-#define AVERAGE_FILTER_3
+#define SOBEL_FILTER
+//#define AVERAGE_FILTER_3
 //#define AVERAGE_FILTER_5
 //#define RANDOM_FILTER
 

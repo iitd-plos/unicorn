@@ -38,10 +38,12 @@ void readImageMetaData(char* pImagePath)
     
     if(fileHeader.headersize != 54 || fileHeader.infoSize != 40)
         exit(1);
-    
+
+#if 0
     if(fileHeader.imageSize + fileHeader.headersize != fileHeader.filesize)
         exit(1);
-    
+#endif
+
     if(fileHeader.bitPlanes != 1 || fileHeader.bitCount != 24 || fileHeader.compression != 0)
         exit(1);
     
