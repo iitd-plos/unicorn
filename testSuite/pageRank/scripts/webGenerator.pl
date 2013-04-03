@@ -9,11 +9,14 @@ use File::Path;
 use Cwd 'abs_path';
 
 ${WEB_PAGES} = 1000000;
-${MAX_OUTLINKS_PER_WEB_PAGE} = 10;
-${WEB_PAGES_PER_FILE} = 1;
+${MAX_OUTLINKS_PER_WEB_PAGE} = 20;
+${WEB_PAGES_PER_FILE} = 1000;
 
-${VICINITY_PROBABILITY} = 80; # On scale of 100
-${VICINITY} = 5;	# Percentage radius of web considered vicinity (where most links will be concentrated); on scale of 100
+${VICINITY_PROBABILITY_1} = 90; # On scale of 100
+${VICINITY_1} = 0.1;	# Percentage diameter of web considered vicinity (where most links will be concentrated); on scale of 100
+
+${VICINITY_PROBABILITY_2} = 9; # On scale of 100
+${VICINITY_2} = 1;	# Percentage diameter of web considered vicinity (where most links will be concentrated); on scale of 100
 
 ${CURRENT_SCRIPT_LOCATION} = abs_path($0);
 
@@ -21,6 +24,9 @@ $scriptBasename = basename($0);
 ${CURRENT_SCRIPT_LOCATION} =~ s/$scriptBasename//;
 
 ${WEB_PATH} = "${CURRENT_SCRIPT_LOCATION}../web_dump";
+
+${CHECK_WEB_STRUCTURE} = 1;
+${STRUCTURE_ADHERING_PAGES} = 0;
 
 if($#ARGV != -1)
 {
@@ -72,7 +78,14 @@ sub main
         generate_web_dump_for_pages("$WEB_FILES_PATH/page_${file_num}", $start_page, ${WEB_PAGES} - $start_page);
     }
 
-    print "\nSuccessfully dumped web ...\n\n";
+    if($CHECK_WEB_STRUCTURE == 1)
+    {
+        print "\nSuccessfully dumped web ... ($STRUCTURE_ADHERING_PAGES of $WEB_PAGES pages adhere to web structure)\n\n";
+    }
+    else
+    {
+        print "\nSuccessfully dumped web ...\n\n";
+    }
 }
 
 # File Format (Binary file containing only integers)
@@ -108,11 +121,16 @@ sub generate_web_dump_for_pages
     binmode(FH);
 
     my($limit) = $MAX_OUTLINKS_PER_WEB_PAGE + 1;
-
+    my($vicinity_count_1) = int(($WEB_PAGES * ($VICINITY_1/2.0))/100.0);
+    my($vicinity_count_2) = int(($WEB_PAGES * ($VICINITY_2/2.0))/100.0);
+    
     my($page);
     for($page = ($start_page+1); $page <= $end_page; ++$page)   # 1 based page numbers
     {
         my($count) = int(rand($limit));
+        my($web_1_count) = 0;
+        my($web_2_count) = 0;
+        my($web_3_count) = 0;
 
         die "Random number out of range\n" if($count > $MAX_OUTLINKS_PER_WEB_PAGE);
 
@@ -122,11 +140,33 @@ sub generate_web_dump_for_pages
         for($i = 0; $i < $count; ++$i)
         {
             my($probability) = int(rand(100));
-            if($probability < $VICINITY_PROBABILITY)
+            if($probability < $VICINITY_PROBABILITY_1)
             {
-                my($vicinity_count) = int(($WEB_PAGES * $VICINITY)/100);
+                my($vicinity_num) = int(rand($vicinity_count_1));
 
-                my($vicinity_num) = int(rand($vicinity_count));
+                my($forward) = int(rand(10));	# With equal probability the link may be to next or prev that many pages
+                if($forward < 5)
+                {
+                    $ref_link_num = $page + $vicinity_num;
+
+                    if($ref_link_num > $WEB_PAGES)
+                    {
+                        $ref_link_num = $page - $vicinity_num;
+                    }
+                }
+                else
+                {
+                    $ref_link_num = $page - $vicinity_num;
+
+                    if($ref_link_num <= 0)
+                    {
+                        $ref_link_num = $page + $vicinity_num;
+                    }
+                }
+            }
+            elsif($probability < ($VICINITY_PROBABILITY_1 + $VICINITY_PROBABILITY_2))
+            {
+                my($vicinity_num) = int(rand($vicinity_count_2));
 
                 my($forward) = int(rand(10));	# With equal probability the link may be to next or prev that many pages
                 if($forward < 5)
@@ -152,6 +192,22 @@ sub generate_web_dump_for_pages
             {
                 $ref_link_num = 1 + int(rand($WEB_PAGES));     # 1 based indexing of web pages
             }
+            
+            if($CHECK_WEB_STRUCTURE == 1)
+            {
+                if($ref_link_num >= $page - $vicinity_count_1 && $ref_link_num <= $page + $vicinity_count_1)
+                {
+                    ++$web_1_count;
+                }
+                elsif($ref_link_num >= $page - $vicinity_count_2 && $ref_link_num <= $page + $vicinity_count_2)
+                {
+                    ++$web_2_count;
+                }
+                else
+                {
+                    ++$web_3_count;
+                }
+            }
 
             print FH pack("L", $ref_link_num);
         }
@@ -159,6 +215,28 @@ sub generate_web_dump_for_pages
         for($i = $count; $i < $MAX_OUTLINKS_PER_WEB_PAGE; ++$i)
         {
             print FH pack("L", 0);
+        }
+
+        if($CHECK_WEB_STRUCTURE == 1)
+        {
+            if($count == 0)
+            {
+                ++$STRUCTURE_ADHERING_PAGES;
+            }
+            else
+            {
+                my($percentage_1) = ($web_1_count/$count) * 100.0;
+                my($percentage_2) = ($web_2_count/$count) * 100.0;
+                if(($percentage_1 >= $VICINITY_PROBABILITY_1) && ($percentage_2 >= (100 - $VICINITY_PROBABILITY_1 - $VICINITY_PROBABILITY_2)))
+                {
+                    #print "Page $page: $count $web_1_count($percentage_1%) $web_2_count($percentage_2%) ADHERES\n";
+                    ++$STRUCTURE_ADHERING_PAGES;
+                }
+                else
+                {
+                    #print "Page $page: $count $web_1_count($percentage_1%) $web_2_count($percentage_2%) DOES NOT ADHERE\n";
+                }
+            }
         }
     }
 
