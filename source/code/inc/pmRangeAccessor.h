@@ -18,61 +18,45 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
-#ifndef __PM_REGION_ACCESSOR__
-#define __PM_REGION_ACCESSOR__
+#ifndef __PM_RANGE_ACCESSOR__
+#define __PM_RANGE_ACCESSOR__
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
 
-#include <boost/geometry.hpp>
-#include <boost/geometry/extensions/index/rtree/rtree.hpp>
-
-#include <deque>
+#include <tr1/unordered_map>
 
 namespace pm
 {
 
-template <typename boxType, typename valueType>
-class pmRTree : public boost::geometry::index::rtree<boxType, valueType>
+struct rangeComparator
 {
-    public:
-        pmRTree()
-        : boost::geometry::index::rtree<boxType, valueType>(16, 4)
-        {
-        }
-    
-        inline std::deque<valueType> FindExact(boxType const& box) const
-        {
-            std::deque<valueType> result;
-            boost::geometry::index::rtree<boxType, valueType>::m_root->find(box, result, true);
-            return result;
-        }
-    
-    private:
+    bool operator() (std::pair<size_t, size_t>& pRange1, std::pair<size_t, size_t>& pRange2)
+    {
+        return ((pRange1.first <= pRange2.first && pRange1.second >= pRange2.second) || (pRange2.first <= pRange1.first && pRange2.second >= pRange1.second));
+    }
 };
     
 template<typename valueType>
-class pmRegionAccessor
+class pmRangeAccessor : public pmBase
 {
-    typedef boost::geometry::model::point<size_t, 1, boost::geometry::cs::cartesian> pointType;
-    typedef boost::geometry::model::box<pointType> boxType;
-    typedef pmRTree<boxType, valueType> rtreeType;
-
+    typedef std::tr1::unordered_map<std::pair<size_t, size_t>, valueType, rangeComparator> hashType;
+    
     public:
-        pmRegionAccessor();
-        ~pmRegionAccessor();
+        pmRangeAccessor();
+        ~pmRangeAccessor();
     
         void Insert(size_t pOffset, size_t pLength, const valueType& pValue);
-        bool FindExact(size_t pOffset, size_t pLength, valueType& pValue);
+        bool Find(size_t pOffset, size_t pLength, valueType& pValue);
         void Erase(size_t pOffset, size_t pLength);
     
     private:
-        rtreeType mRTree;
+        hashType mHash;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
     
 } // end namespace pm
 
-#include "../src/pmRegionAccessor.cpp"
+#include "../src/pmRangeAccessor.cpp"
 
 #endif

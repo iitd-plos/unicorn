@@ -18,72 +18,56 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
-#include <deque>
-
 namespace pm
 {
-    
+
 template<typename valueType>
-pmRegionAccessor<valueType>::pmRegionAccessor()
+pmRangeAccessor<valueType>::pmRangeAccessor()
 {
 }
 
 template<typename valueType>
-pmRegionAccessor<valueType>::~pmRegionAccessor()
+pmRangeAccessor<valueType>::~pmRangeAccessor()
 {
 }
     
 template<typename valueType>
-void pmRegionAccessor<valueType>::Insert(size_t pOffset, size_t pLength, const valueType& pValue)
+void pmRangeAccessor<valueType>::Insert(size_t pOffset, size_t pLength, const valueType& pValue)
 {
-    pointType lPoint1(pOffset), lPoint2(pOffset + pLength - 1);
-    boxType lBox(lPoint1, lPoint2);
+    std::pair<size_t, size_t> lPair(pOffset, pLength);
 
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-#ifdef _DEBUG
-    if(!pLength || !mRTree.find(lBox).empty())
+    if(mHash.find(lPair) != mHash.end())
         PMTHROW(pmFatalErrorException());
-#endif
     
-    mRTree.insert(lBox, pValue);
+    mHash[lPair] = pValue;
 }
 
 template<typename valueType>
-bool pmRegionAccessor<valueType>::FindExact(size_t pOffset, size_t pLength, valueType& pValue)
+bool pmRangeAccessor<valueType>::Find(size_t pOffset, size_t pLength, valueType& pValue)
 {
-    pointType lPoint1(pOffset), lPoint2(pOffset + pLength - 1);
-    boxType lBox(lPoint1, lPoint2);
+    std::pair<size_t, size_t> lPair(pOffset, pLength);
 
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-    std::deque<valueType>& lDeque = mRTree.FindExact(lBox);
-#ifdef _DEBUG
-    if(!pLength || lDeque.size() > 1)
-        PMTHROW(pmFatalErrorException());
-#endif
-    
-    if(lDeque.empty())
+    typename hashType::iterator lIter = mHash.find(lPair);
+    if(lIter == mHash.end())
         return false;
 
-    pValue = lDeque.front();
+    pValue = lIter->second;
+    
     return true;
 }
     
 template<typename valueType>
-void pmRegionAccessor<valueType>::Erase(size_t pOffset, size_t pLength)
+void pmRangeAccessor<valueType>::Erase(size_t pOffset, size_t pLength)
 {
-    pointType lPoint1(pOffset), lPoint2(pOffset + pLength - 1);
-    boxType lBox(lPoint1, lPoint2);
+    std::pair<size_t, size_t> lPair(pOffset, pLength);
 
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-#ifdef _DEBUG
-    if(!pLength || mRTree.find(lBox).size() > 1)
-        PMTHROW(pmFatalErrorException());
-#endif
-
-    mRTree.remove(lBox);
+    mHash.erase(lPair);
 }
 
 } // end namespace pm
