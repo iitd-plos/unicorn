@@ -837,9 +837,11 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
                 	size_t lPageSize = lMemoryManager->GetVirtualMemoryPageSize();
                     size_t lMemAddr = reinterpret_cast<size_t>((void*)(pSigInfo->si_addr));
                     size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
-                    size_t lOffset = lShadowMemOffset + (lPageAddr - reinterpret_cast<size_t>(lShadowMemBaseAddr));
+                    size_t lMemOffset = (lPageAddr - reinterpret_cast<size_t>(lShadowMemBaseAddr));
+                    size_t lOffset = lShadowMemOffset + lMemOffset;
 
                     lMemoryManager->SetLazyProtection(reinterpret_cast<void*>(lPageAddr), lPageSize, true, true);
+                    lTask->GetSubscriptionManager().AddWriteOnlyLazyUnprotection(lStub, lSubtaskId, lMemOffset / lPageSize);
                     lTask->GetSubscriptionManager().InitializeWriteOnlyLazyMemory(lStub, lSubtaskId, lOffset, reinterpret_cast<void*>(lPageAddr), lPageSize);
                 }
             }

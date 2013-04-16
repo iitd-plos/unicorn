@@ -100,10 +100,13 @@ pmStatus pmPThread<T, P>::ThreadCommandLoop()
 template<typename T, typename P>
 void pmPThread<T, P>::InterruptThread()
 {
+    if(mThread == pthread_self())
+        PMTHROW(pmFatalErrorException());
+
 #ifdef MACOS
-    pthread_kill(mThread, SIGBUS);
+    THROW_ON_NON_ZERO_RET_VAL( pthread_kill(mThread, SIGBUS), pmThreadFailureException, pmThreadFailureException::SIGNAL_RAISE_ERROR );
 #else
-    pthread_kill(mThread, SIGSEGV);
+    THROW_ON_NON_ZERO_RET_VAL( pthread_kill(mThread, SIGSEGV), pmThreadFailureException, pmThreadFailureException::SIGNAL_RAISE_ERROR );
 #endif
 }
 

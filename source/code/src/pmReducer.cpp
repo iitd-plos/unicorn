@@ -24,6 +24,7 @@
 #include "pmHardware.h"
 #include "pmTask.h"
 #include "pmExecutionStub.h"
+#include "pmMemoryManager.h"
 
 #include <algorithm>
 
@@ -183,6 +184,76 @@ pmStatus pmReducer::CheckReductionFinishInternal()
 	}
 
 	return pmSuccess;
+}
+
+template<typename datatype>
+pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+{
+    size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+    size_t lDataSize = sizeof(datatype);
+    
+    if(lPageSize % lDataSize != 0)
+        PMTHROW(pmFatalErrorException());
+
+    pmSubscriptionManager& lSubscriptionManager = mTask->GetSubscriptionManager();
+    
+    datatype* lShadowMem1 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub1, pSubtaskId1);
+    datatype* lShadowMem2 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub2, pSubtaskId2);
+
+    const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pStub2, pSubtaskId2);
+    
+    std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
+    
+    switch(pReductionType)
+    {
+        case REDUCE_ADD:
+        {
+            for(; lIter != lEndIter; ++lIter)
+            {
+                size_t lStartPage = lIter->first;
+                size_t lPageCount = lIter->second;
+                
+                size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                
+                for(size_t i = 0; i < lDataCount; ++i)
+                    lArray1[i] += lArray2[i];
+            }
+            
+            break;
+        }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+    
+    return pmSuccess;
+}
+
+pmStatus pmReducer::ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+{
+    return ReduceSubtasks<int>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+}
+    
+pmStatus pmReducer::ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+{
+    return ReduceSubtasks<uint>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+}
+
+pmStatus pmReducer::ReduceLongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+{
+    return ReduceSubtasks<long>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+}
+
+pmStatus pmReducer::ReduceULongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+{
+    return ReduceSubtasks<ulong>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+}
+
+pmStatus pmReducer::ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+{
+    return ReduceSubtasks<float>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
 }
 
 }

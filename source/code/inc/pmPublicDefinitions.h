@@ -199,7 +199,7 @@ namespace pm
         SUBTASK_TO_POST_SUBTASK,        // Scractch buffer lives from subtask callback to data redistribution/reduction callback
         PRE_SUBTASK_TO_POST_SUBTASK     // Scratch buffer lives from data distribution callback to data redistribution/reduction callback
     } pmScratchBufferInfo;
-
+    
 
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
 	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId);

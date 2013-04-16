@@ -57,7 +57,6 @@ using namespace execStub;
 /* class pmExecutionStub */
 pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
     : mDeviceIndexOnMachine(pDeviceIndexOnMachine)
-    , mCoreId(0)
     , mCurrentSubtaskLock __LOCK_NAME__("pmExecutionStub::mCurrentSubtaskLock")
     , mCurrentSubtaskStats(NULL)
     , mDeferredShadowMemCommitsLock __LOCK_NAME__("pmExecutionStub::mDeferredShadowMemCommitsLock")
@@ -958,6 +957,11 @@ void pmExecutionStub::MarkInsideUserCode(ulong pSubtaskId)
 // This method must be called with mCurrentSubtaskLock acquired
 void pmExecutionStub::TerminateCurrentSubtask()
 {
+#ifdef _DEBUG
+    if(!mCurrentSubtaskStats->jmpBuf)
+        PMTHROW(pmFatalErrorException());
+#endif
+    
     siglongjmp(*(mCurrentSubtaskStats->jmpBuf), 1);
 }
 
@@ -991,7 +995,7 @@ pmStatus pmExecutionStub::ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool p
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &pSubtaskId);
     pmStatus lStatus = ExecuteWrapperInternal(pTask, pSubtaskId, pIsMultiAssign, pParentRangeStartSubtask, lTerminus);
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
-    
+
     return lStatus;
 }
     
@@ -1006,6 +1010,13 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
     {
         UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
         lStatus = Execute(pTask, pSubtaskId);
+
+#if 0
+        size_t lUnprotectedPages = pTask->GetSubscriptionManager().GetWriteOnlyLazyUnprotectedPagesCount(this, pSubtaskId);
+        size_t lTotalPages = pTask->GetMemSectionRW()->GetAllocatedLength() / 4096;
+        
+        std::cout << "Subtask " << pSubtaskId << " pages " << ((double)lUnprotectedPages/lTotalPages) * 100.0 << "%" << std::endl;
+#endif
     }
     else
     {
@@ -1086,7 +1097,16 @@ pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubta
 
 pmStatus pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2)
 {
+    TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &pSubtaskId1);
 	pmStatus lStatus = pTask->GetCallbackUnit()->GetDataReductionCB()->Invoke(pTask, this, pSubtaskId1, pStub2, pSubtaskId2);
+    TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
+
+#if 0
+    size_t lUnprotectedPages = pTask->GetSubscriptionManager().GetWriteOnlyLazyUnprotectedPagesCount(this, pSubtaskId1);
+    size_t lTotalPages = pTask->GetMemSectionRW()->GetAllocatedLength() / 4096;
+    
+    std::cout << "Subtask [" << pSubtaskId1 << " : " << pSubtaskId2 << "] pages " << ((double)lUnprotectedPages/lTotalPages) * 100.0 << "%" << std::endl;
+#endif
 
 	/* Handle Transactions */
 	switch(lStatus)

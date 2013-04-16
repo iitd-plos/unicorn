@@ -41,11 +41,20 @@ class pmReducer : public pmBase
 
 		pmStatus CheckReductionFinish();
 		pmStatus AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
-	
+
+        pmStatus ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
+        pmStatus ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
+        pmStatus ReduceLongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
+        pmStatus ReduceULongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
+        pmStatus ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
+
 	private:
 		pmStatus PopulateExternalMachineList();
 		ulong GetMaxPossibleExternalReductionReceives(uint pFollowingMachineCount);
         pmStatus CheckReductionFinishInternal();
+
+        template<typename datatype>
+        pmStatus ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
 
 		std::pair<pmExecutionStub*, ulong> mLastSubtask;
 

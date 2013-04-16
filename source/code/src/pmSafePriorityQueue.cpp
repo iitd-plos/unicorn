@@ -227,7 +227,7 @@ pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr
                     {
                         pItem = lVector[i];
                         lVector.erase(lVector.begin()+i);
-                        
+
                         if(lVector.empty())
                             mQueue.erase(lIter);
                         

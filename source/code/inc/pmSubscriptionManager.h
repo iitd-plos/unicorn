@@ -96,7 +96,9 @@ namespace subscription
     
         finalize_ptr<void, shadowMemDeallocator> mShadowMem;
         std::vector<char> mWriteOnlyLazyDefaultValue;
-
+        std::map<size_t, size_t> mWriteOnlyLazyUnprotectedPageRangesMap;
+        size_t mWriteOnlyLazyUnprotectedPageCount;
+        
 		pmStatus Initialize(pmTask* pTask);
 	} pmSubtask;
     
@@ -127,6 +129,10 @@ class pmSubscriptionManager : public pmBase
 		pmStatus SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
         pmStatus SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, char* pVal, size_t pLength);
 
+        void AddWriteOnlyLazyUnprotection(pmExecutionStub* pStub, ulong pSubtaskId, size_t pPageNum);
+        size_t GetWriteOnlyLazyUnprotectedPagesCount(pmExecutionStub* pStub, ulong pSubtaskId);
+        const std::map<size_t, size_t>& GetWriteOnlyLazyUnprotectedPageRanges(pmExecutionStub* pStub, ulong pSubtaskId);
+
 		pmCudaLaunchConf& GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId);
         void InitializeWriteOnlyLazyMemory(pmExecutionStub* pStub, ulong pSubtaskId, size_t pOffsetFromBase, void* pLazyPageAddr, size_t pLength);
     
@@ -143,7 +149,7 @@ class pmSubscriptionManager : public pmBase
 
         bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
 
-        pmStatus CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, void* pMem = NULL, size_t pMemLength = 0);
+        pmStatus CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, void* pMem = NULL, size_t pMemLength = 0, size_t pWriteOnlyUnprotectedRanges = 0, uint* pUnprotectedRanges = NULL);
         void* GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
         pmStatus DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
         void CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBeginIter, subscription::subscriptionRecordType::const_iterator& pEndIter, ulong pShadowMemOffset);

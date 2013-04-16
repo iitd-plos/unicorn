@@ -333,7 +333,7 @@ void* pmTask::CheckOutSubtaskMemory(size_t pLength, bool pForceNonLazy)
         lMem = mUnallocatedShadowMemPool.back();
         mUnallocatedShadowMemPool.pop_back();
 
-        if(lIsLazy)
+        if(GetMemSectionRW()->IsLazy())
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lMem, mIndividualShadowMemAllocationLength, true, true);
     }
     
@@ -674,7 +674,7 @@ pmStatus pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubt
     if(!DoSubtasksNeedShadowMemory())
         PMTHROW(pmFatalErrorException());
 #endif
-    
+
     pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
     void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
     pmMemSection* lMemRW = GetMemSectionRW();

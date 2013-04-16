@@ -221,13 +221,12 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCancellation);
         void TerminateCurrentSubtask();
         void RaiseCurrentSubtaskTerminationSignalInThread();
-    
+        
     #ifdef DUMP_EVENT_TIMELINE
         std::string GetEventTimelineName();
     #endif
     
 		uint mDeviceIndexOnMachine;
-		size_t mCoreId;
     
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCurrentSubtaskLock;
         currentSubtaskStats* mCurrentSubtaskStats;  // Subtask currently being executed

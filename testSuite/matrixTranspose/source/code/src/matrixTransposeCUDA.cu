@@ -1,11 +1,11 @@
 
-#ifdef BUILD_CUDA
-#ifdef USE_SQUARE_BLOCKS
-
 #include "pmPublicDefinitions.h"
 #include "matrixTranspose.h"
 
 #include <iostream>
+
+#ifdef BUILD_CUDA
+#ifdef USE_SQUARE_BLOCKS
 
 namespace matrixTranspose
 {

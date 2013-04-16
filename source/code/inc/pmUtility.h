@@ -23,23 +23,39 @@
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
+#include "pmSignalWait.h"
 
 #include <string>
 #include <map>
+#include <tr1/memory>
 
 namespace pm
 {
 
+class pmMachine;
+    
 class pmUtility : public pmBase
 {
     typedef std::map<std::string, std::pair<void*, size_t> > fileMappingsMapType;
+    typedef std::map<std::string, std::pair<size_t, std::tr1::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> > > pendingResponsesMapType;
 
 public:
-    static void* MapFile(const char* pPath);
+    static void MapFileOnAllMachines(const char* pPath);
+    static void UnmapFileOnAllMachines(const char* pPath);
     static void* GetMappedFile(const char* pPath);
+
+    static void MapFile(const char* pPath);
     static void UnmapFile(const char* pPath);
     
+    static void SendFileMappingAcknowledgement(const char* pPath, pmMachine* pSourceHost);
+    static void SendFileUnmappingAcknowledgement(const char* pPath, pmMachine* pSourceHost);
+
+    static void RegisterFileMappingResponse(const char* pPath);
+    static void RegisterFileUnmappingResponse(const char* pPath);
+
 private:
+    static pendingResponsesMapType& GetFileMappingPendingResponsesMap();
+    static pendingResponsesMapType& GetFileUnmappingPendingResponsesMap();
     static fileMappingsMapType& GetFileMappingsMap();
     static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetResourceLock();
 };

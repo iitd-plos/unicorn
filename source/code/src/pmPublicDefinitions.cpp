@@ -22,6 +22,8 @@
 #include "pmController.h"
 #include "pmLogger.h"
 
+#include "pmRangeAccessor.h"
+
 namespace pm
 {
 
@@ -119,6 +121,18 @@ pmStatus pmInitialize()
 	{
 		pmController* lController;
 		SAFE_GET_CONTROLLER(lController);		// Initializes the variable lController; If no controller returns error
+
+#if 0
+        pm::pmRangeAccessor<int> lAccessor;
+        lAccessor.Insert(0, 10, 4);
+        lAccessor.Insert(12, 20, 6);
+        
+        int lVal = 0;
+        if(lAccessor.Find(6, 1, lVal))
+            std::cout << "Found " << lVal << std::endl;
+        else
+            std::cout << " Not Found" << std::endl;
+#endif
 	}
 	catch(pmException& e)
 	{
@@ -341,6 +355,31 @@ pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHan
 pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
 {
     SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pOffset, pLength, pOrder);
+}
+    
+pmStatus pmReduceInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceInts_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pDevice2Handle, pSubtask2Id, pReductionType);
+}
+
+pmStatus pmReduceUInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceUInts_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pDevice2Handle, pSubtask2Id, pReductionType);
+}
+
+pmStatus pmReduceLongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceLongs_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pDevice2Handle, pSubtask2Id, pReductionType);
+}
+
+pmStatus pmReduceULongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceULongs_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pDevice2Handle, pSubtask2Id, pReductionType);
+}
+
+pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceFloats_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pDevice2Handle, pSubtask2Id, pReductionType);
 }
 
 pmStatus pmMapFile(const char* pPath)

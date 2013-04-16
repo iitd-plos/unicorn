@@ -572,7 +572,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
     sprintf(lStr, "Host %d Scheduler Event: %s", pmGetHostId(), schedulerEventName[pEvent.eventId]);
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 #endif
-    
+
 	switch(pEvent.eventId)
 	{
 		case NEW_SUBMISSION:	/* Comes from application thread */
@@ -1739,7 +1739,12 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                         lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
                     }
                 
-                    lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, lData->subtaskMem.ptr, lData->subtaskMem.length);
+                    size_t lUnprotectedRanges = lData->reduceStruct.writeOnlyUnprotectedPageRangesCount;
+                    size_t lUnprotectedLength = lUnprotectedRanges * 2 * sizeof(uint);
+                    void* lMem = reinterpret_cast<void*>(reinterpret_cast<size_t>(lData->subtaskMem.ptr) + lUnprotectedLength);
+
+                    lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, lMem, lData->subtaskMem.length - lUnprotectedLength, lUnprotectedRanges, (uint*)lData->subtaskMem.ptr);
+
 					lReducer->AddSubtask(lStub, lData->reduceStruct.subtaskId);
 
 					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
@@ -2004,18 +2009,6 @@ bool taskClearMatchFunc(schedulerEvent& pEvent, void* pCriterion)
                 return true;
 
             break;
-        }
-        
-        case SEND_ACKNOWLEDGEMENT:
-        {
-            if(pEvent.ackSendDetails.range.task == (pmTask*)pCriterion)
-                break;
-        }
-        
-        case RECEIVE_ACKNOWLEDGEMENT:
-        {        
-            if(pEvent.ackReceiveDetails.range.task == (pmTask*)pCriterion)
-                break;
         }
         
         case SUBTASK_RANGE_CANCEL:

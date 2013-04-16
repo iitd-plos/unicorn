@@ -94,6 +94,7 @@ namespace pm
 				THREAD_CREATE_ERROR,
 				THREAD_CANCEL_ERROR,
 				THREAD_AFFINITY_ERROR,
+                SIGNAL_RAISE_ERROR,
                 TLS_KEY_ERROR
 			} failureTypes;
 

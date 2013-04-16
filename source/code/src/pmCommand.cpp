@@ -25,6 +25,7 @@
 #include "pmCallbackUnit.h"
 #include "pmHardware.h"
 #include "pmNetwork.h"
+#include "pmMemoryManager.h"
 
 namespace pm
 {
@@ -507,7 +508,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
 	this->reduceStruct.originatingHost = *(pTask->GetOriginatingHost());
 	this->reduceStruct.sequenceNumber = pTask->GetSequenceNumber();
 	this->reduceStruct.subtaskId = pSubtaskId;
-
+    
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     
     subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
@@ -516,6 +517,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
     this->reduceStruct.inputMemSubscriptionCount = 0;
     this->reduceStruct.outputMemReadSubscriptionCount = 0;
     this->reduceStruct.outputMemWriteSubscriptionCount = 0;
+    this->reduceStruct.writeOnlyUnprotectedPageRangesCount = 0;
 
     subscription::subscriptionRecordType::const_iterator lIter;
     if(lSubscriptionManager.GetNonConsolidatedInputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, lBeginIter, lEndIter))
@@ -566,31 +568,61 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
     this->subscriptions = &(*pSubscriptionsVector)[0];
     
     void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pReducingStub, pSubtaskId);
-    if((this->reduceStruct.outputMemWriteSubscriptionCount == 0) || (lTotalWriteSubscriptionLength == lUnifiedSubscriptionInfo.length))
+    
+    if(pTask->GetMemSectionRW()->IsLazyWriteOnly())
     {
-        this->subtaskMem.ptr = lShadowMem;
-        this->subtaskMem.length = (uint)lUnifiedSubscriptionInfo.length;
-    }
-    else if(this->reduceStruct.outputMemWriteSubscriptionCount == 1)
-    {
-        ownershipDataStruct& lDataStruct = (*pSubscriptionsVector)[pSubscriptionsVector->size() - 1];
-        this->subtaskMem.ptr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lDataStruct.offset - lUnifiedSubscriptionInfo.offset);
-        this->subtaskMem.length = (uint)lDataStruct.length;
+        size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+        const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pReducingStub, pSubtaskId);
+        size_t lRangesSize = lMap.size() * 2 * sizeof(uint);
+        size_t lUnprotectedLength = lRangesSize + std::min(lSubscriptionManager.GetWriteOnlyLazyUnprotectedPagesCount(pReducingStub, pSubtaskId) * lPageSize, lUnifiedSubscriptionInfo.length);
+
+        this->subtaskMem.ptr = pAllocatedSubtaskMem = new char[lUnprotectedLength];
+        this->subtaskMem.length = (uint)lUnprotectedLength;
+        
+        uint* lPageRanges = (uint*)pAllocatedSubtaskMem;
+        char* lMem = pAllocatedSubtaskMem + lRangesSize;
+    
+        std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
+        for(; lIter != lEndIter; ++lIter)
+        {
+            *lPageRanges++ = (uint)lIter->first;
+            *lPageRanges++ = (uint)lIter->second;
+            
+            uint lMemSize = std::min((uint)(lIter->second * lPageSize), (uint)(lUnifiedSubscriptionInfo.length - lIter->first * lPageSize));
+            memcpy(lMem, ((char*)lShadowMem) + (lIter->first * lPageSize), lMemSize);
+            lMem += lMemSize;
+        }
+        
+        this->reduceStruct.writeOnlyUnprotectedPageRangesCount = (uint)(lMap.size());
     }
     else
     {
-        this->subtaskMem.ptr = pAllocatedSubtaskMem = new char[lTotalWriteSubscriptionLength];
-        this->subtaskMem.length = (uint)lTotalWriteSubscriptionLength;
-    
-        ulong lLocation = 0;
-        uint lCount = this->reduceStruct.inputMemSubscriptionCount + this->reduceStruct.outputMemReadSubscriptionCount;
-        for(uint i = 0; i < this->reduceStruct.outputMemWriteSubscriptionCount; ++i)
+        if((this->reduceStruct.outputMemReadSubscriptionCount == 0) || (lTotalWriteSubscriptionLength == lUnifiedSubscriptionInfo.length))
         {
-            ownershipDataStruct& lDataStruct = (*pSubscriptionsVector)[lCount + i];
-            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lDataStruct.offset - lUnifiedSubscriptionInfo.offset);
-            memcpy((char*)(this->subtaskMem.ptr) + lLocation, lSrcPtr, lDataStruct.length);
+            this->subtaskMem.ptr = lShadowMem;
+            this->subtaskMem.length = (uint)lUnifiedSubscriptionInfo.length;
+        }
+        else if(this->reduceStruct.outputMemWriteSubscriptionCount == 1)
+        {
+            ownershipDataStruct& lDataStruct = (*pSubscriptionsVector)[pSubscriptionsVector->size() - 1];
+            this->subtaskMem.ptr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lDataStruct.offset - lUnifiedSubscriptionInfo.offset);
+            this->subtaskMem.length = (uint)lDataStruct.length;
+        }
+        else
+        {
+            this->subtaskMem.ptr = pAllocatedSubtaskMem = new char[lTotalWriteSubscriptionLength];
+            this->subtaskMem.length = (uint)lTotalWriteSubscriptionLength;
         
-            lLocation += lDataStruct.length;
+            ulong lLocation = 0;
+            uint lCount = this->reduceStruct.inputMemSubscriptionCount + this->reduceStruct.outputMemReadSubscriptionCount;
+            for(uint i = 0; i < this->reduceStruct.outputMemWriteSubscriptionCount; ++i)
+            {
+                ownershipDataStruct& lDataStruct = (*pSubscriptionsVector)[lCount + i];
+                void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lDataStruct.offset - lUnifiedSubscriptionInfo.offset);
+                memcpy((char*)(this->subtaskMem.ptr) + lLocation, lSrcPtr, lDataStruct.length);
+            
+                lLocation += lDataStruct.length;
+            }
         }
     }
     

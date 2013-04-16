@@ -1364,7 +1364,8 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.inputMemSubscriptionCount, lInputMemSubscriptionCountMPI, MPI_UNSIGNED, 3, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemReadSubscriptionCount, lOutputMemReadSubscriptionCountMPI, MPI_UNSIGNED, 4, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.outputMemWriteSubscriptionCount, lOutputMemWriteSubscriptionCountMPI, MPI_UNSIGNED, 5, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskMemLength, lSubtaskMemLengthMPI, MPI_UNSIGNED, 6, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.writeOnlyUnprotectedPageRangesCount, lWriteOnlyUnprotectedPageRangesCountMPI, MPI_UNSIGNED, 6, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskMemLength, lSubtaskMemLengthMPI, MPI_UNSIGNED, 7, 1);
 
 			break;
 		}
@@ -1428,6 +1429,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(pmCommunicatorCommand::fileOperationsStruct, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.fileName, lFileNameMPI, MPI_CHAR, 0, MAX_FILE_SIZE_LEN);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.fileOp, lFileOpMPI, MPI_UNSIGNED_SHORT, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sourceHost, lSourceHostMPI, MPI_UNSIGNED, 2, 1);
 
 			break;        
         }

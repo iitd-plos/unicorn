@@ -183,7 +183,7 @@ class pmMemSection : public pmBase
         void* mMem;
         void* mReadOnlyLazyMapping;
         std::string mName;
-        
+
         static ulong& GetGenerationId();
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetGenerationLock();
     

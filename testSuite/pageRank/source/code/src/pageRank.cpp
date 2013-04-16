@@ -125,7 +125,7 @@ void mapAllFiles(char* pBasePath)
         strcpy(filePath, pBasePath);
         strcat(filePath, "/web/page_");
         strcat(filePath, buf);
-    
+
         if(pmMapFile(filePath) != pmSuccess)
             exit(1);
     }
@@ -306,15 +306,13 @@ pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskI
     
 pmStatus pageRankDataReduction(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
 {
-	pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
-
-	PAGE_RANK_DATA_TYPE* lGlobalArray1 = (PAGE_RANK_DATA_TYPE*)pSubtask1Info.outputMem;
-	PAGE_RANK_DATA_TYPE* lGlobalArray2 = (PAGE_RANK_DATA_TYPE*)pSubtask2Info.outputMem;
-
-    for(unsigned int i=0; i<lTaskConf->totalWebPages; ++i)
-        lGlobalArray1[i] += lGlobalArray2[i];
-    
-    return pmSuccess;
+#if PAGE_RANK_DATA_TYPE == float
+    return pmReduceFloats(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, REDUCE_ADD);
+#elif PAGE_RANK_DATA_TYPE == int
+    return pmReduceInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, REDUCE_ADD);
+#else
+#error "Unsupported data type"
+#endif
 }
 
 #define READ_NON_COMMON_ARGS \

@@ -373,11 +373,12 @@ class pmCommunicatorCommand : public pmCommand
             uint inputMemSubscriptionCount;
             uint outputMemReadSubscriptionCount;
             uint outputMemWriteSubscriptionCount;
+            uint writeOnlyUnprotectedPageRangesCount;
             uint subtaskMemLength;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 7
+				FIELD_COUNT_VALUE = 8
 			} fieldCount;
 
 		} subtaskReduceStruct;
@@ -398,7 +399,7 @@ class pmCommunicatorCommand : public pmCommand
 
 			subtaskReduceStruct reduceStruct;
             ownershipDataStruct* subscriptions;
-			dataPtr subtaskMem; // output mem write subscription only
+			dataPtr subtaskMem; // writeOnlyMemUnprotectedPageRanges followed by output mem write subscription only
         
         private:
             subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, std::vector<ownershipDataStruct>* pSubscriptionsVector, char* pAllocatedSubtaskMem);
@@ -496,17 +497,20 @@ class pmCommunicatorCommand : public pmCommand
         typedef enum fileOperations
         {
             MMAP_FILE,
-            MUNMAP_FILE
+            MUNMAP_FILE,
+            MMAP_ACK,
+            MUNMAP_ACK
         } fileOperations;
     
         typedef struct fileOperationsStruct
         {
             char fileName[MAX_FILE_SIZE_LEN];
             ushort fileOp;  // enum fileOperations
+            uint sourceHost;    // host to which ack needs to be sent
         
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 2
+				FIELD_COUNT_VALUE = 3
 			} fieldCount;
 
         } fileOperationsStruct;

@@ -29,6 +29,23 @@
 
 namespace pm
 {
+    typedef enum pmReductionType
+    {
+        REDUCE_ADD,
+        MAX_REDUCTION_TYPES
+    } pmReductionType;
+
+    /** The following functions can be used for optimal inbuilt reduction of two subtasks. Various flavors differ in the data type they process */
+    pmStatus pmReduceInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+
+    pmStatus pmReduceUInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+
+    pmStatus pmReduceLongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+
+    pmStatus pmReduceULongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+
+    pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+
     const size_t MAX_FILE_SIZE_LEN = 2048;
 
     /** This function memory maps an entire file specified by pPath on all machines in the cluster.

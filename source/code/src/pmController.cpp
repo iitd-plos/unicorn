@@ -36,6 +36,7 @@
 #include "pmRedistributor.h"
 #include "pmSubscriptionManager.h"
 #include "pmUtility.h"
+#include "pmReducer.h"
 
 namespace pm
 {
@@ -380,32 +381,53 @@ void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHa
     
     return NULL;
 }
+    
+pmStatus pmController::pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
+        PMTHROW(pmFatalErrorException());
+
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceInts(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+}
+
+pmStatus pmController::pmReduceUInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
+        PMTHROW(pmFatalErrorException());
+
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceUInts(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+}
+
+pmStatus pmController::pmReduceLongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
+        PMTHROW(pmFatalErrorException());
+
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceLongs(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+}
+
+pmStatus pmController::pmReduceULongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
+        PMTHROW(pmFatalErrorException());
+
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceULongs(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+}
+
+pmStatus pmController::pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+{
+    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
+        PMTHROW(pmFatalErrorException());
+
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceFloats(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+}
 
 pmStatus pmController::MapFile_Public(const char* pPath)
 {
     if(strlen(pPath) > MAX_FILE_SIZE_LEN - 1)
         PMTHROW(pmFatalErrorException());
 
-    uint lCount = GetHostCount_Public();
-    for(uint i = 0; i < lCount; ++i)
-    {
-        pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
-    
-        if(lMachine == PM_LOCAL_MACHINE)
-        {
-            pmUtility::MapFile(pPath);
-        }
-        else
-        {
-            pmCommunicatorCommand::fileOperationsStruct* lFileOperationsData = new pmCommunicatorCommand::fileOperationsStruct();
-            strcpy((char*)(lFileOperationsData->fileName), pPath);
-            lFileOperationsData->fileOp = pmCommunicatorCommand::MMAP_FILE;
-
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::FILE_OPERATIONS_TAG, lMachine, pmCommunicatorCommand::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1, NULL, 0);
-
-            pmCommunicator::GetCommunicator()->Send(lCommand, false);
-        }
-    }
+    pmUtility::MapFileOnAllMachines(pPath);
     
     return pmSuccess;
 }
@@ -420,26 +442,7 @@ pmStatus pmController::UnmapFile_Public(const char* pPath)
     if(strlen(pPath) > MAX_FILE_SIZE_LEN - 1)
         PMTHROW(pmFatalErrorException());
 
-    uint lCount = GetHostCount_Public();
-    for(uint i = 0; i < lCount; ++i)
-    {
-        pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
-    
-        if(lMachine == PM_LOCAL_MACHINE)
-        {
-            pmUtility::UnmapFile(pPath);
-        }
-        else
-        {
-            pmCommunicatorCommand::fileOperationsStruct* lFileOperationsData = new pmCommunicatorCommand::fileOperationsStruct();
-            strcpy((char*)(lFileOperationsData->fileName), pPath);
-            lFileOperationsData->fileOp = pmCommunicatorCommand::MUNMAP_FILE;
-
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::FILE_OPERATIONS_TAG, lMachine, pmCommunicatorCommand::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1, NULL, 0);
-
-            pmCommunicator::GetCommunicator()->Send(lCommand, false);
-        }
-    }
+    pmUtility::UnmapFileOnAllMachines(pPath);
     
     return pmSuccess;
 }

@@ -359,12 +359,28 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr pCommand)
                         case pmCommunicatorCommand::MMAP_FILE:
                         {
                             pmUtility::MapFile((char*)(lData->fileName));
+                            pmUtility::SendFileMappingAcknowledgement((char*)(lData->fileName), pmMachinePool::GetMachinePool()->GetMachine(lData->sourceHost));
+
                             break;
                         }
 
                         case pmCommunicatorCommand::MUNMAP_FILE:
                         {
                             pmUtility::UnmapFile((char*)(lData->fileName));
+                            pmUtility::SendFileUnmappingAcknowledgement((char*)(lData->fileName), pmMachinePool::GetMachinePool()->GetMachine(lData->sourceHost));
+                            
+                            break;
+                        }
+                            
+                        case pmCommunicatorCommand::MMAP_ACK:
+                        {
+                            pmUtility::RegisterFileMappingResponse((char*)(lData->fileName));
+                            break;
+                        }
+
+                        case pmCommunicatorCommand::MUNMAP_ACK:
+                        {
+                            pmUtility::RegisterFileUnmappingResponse((char*)(lData->fileName));
                             break;
                         }
 

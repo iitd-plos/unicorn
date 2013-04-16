@@ -83,6 +83,12 @@ class pmController : public pmBase
 		uint GetHostId_Public();
 		uint GetHostCount_Public();
     
+        pmStatus pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+        pmStatus pmReduceUInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+        pmStatus pmReduceLongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+        pmStatus pmReduceULongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+        pmStatus pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType);
+    
         pmStatus MapFile_Public(const char* pPath);
         void* GetMappedFile_Public(const char* pPath);
         pmStatus UnmapFile_Public(const char* pPath);
