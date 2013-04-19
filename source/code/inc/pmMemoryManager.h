@@ -152,14 +152,14 @@ class pmLinuxMemoryManager : public pmMemoryManager
         virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy);
         virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
 
+        pmStatus InstallSegFaultHandler();
+		pmStatus UninstallSegFaultHandler();
+
     private:
         pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr);
         pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
         pmStatus CopyLazyInputMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pFaultAddr);
         pmStatus CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
-
-		pmStatus InstallSegFaultHandler();
-		pmStatus UninstallSegFaultHandler();
 
         friend void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
 

@@ -65,7 +65,7 @@ pmController::pmController()
     pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
     
 #ifdef DUMP_EVENT_TIMELINE
-    mStubManager.InitializeEventTimelines();
+    pmStubManager::GetStubManager()->InitializeEventTimelines();
 #endif
 }
 

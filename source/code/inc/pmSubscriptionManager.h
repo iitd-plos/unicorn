@@ -26,6 +26,7 @@
 #include "pmCommand.h"
 
 #include <map>
+#include <setjmp.h>
 
 namespace pm
 {
@@ -36,7 +37,7 @@ class pmMemSection;
 
 namespace subscription
 {
-    typedef class pmSubtaskTerminationCheckPointAutoPtr
+    class pmSubtaskTerminationCheckPointAutoPtr
     {
         public:
             pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId);
@@ -45,7 +46,21 @@ namespace subscription
         private:
             pmExecutionStub* mStub;
             ulong mSubtaskId;
-    } pmSubtaskTerminationCheckPointAutoPtr;
+    };
+    
+    class pmJmpBufAutoPtr
+    {
+        public:
+            pmJmpBufAutoPtr();
+            ~pmJmpBufAutoPtr();
+
+            void Reset(int pJmpVal, sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId);
+        
+        private:
+            int mJmpVal;
+            pmExecutionStub* mStub;
+            ulong mSubtaskId;
+    };
     
 	typedef struct subscriptionData
 	{

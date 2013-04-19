@@ -1128,6 +1128,32 @@ void shadowMemDeallocator::operator()(void* pMem)
     }
 }
 
+    
+/* class pmJmpBufAutoPtr */
+pmJmpBufAutoPtr::pmJmpBufAutoPtr()
+    : mJmpVal(1)
+    , mStub(NULL)
+    , mSubtaskId(0)
+{
+}
+
+pmJmpBufAutoPtr::~pmJmpBufAutoPtr()
+{
+    if(!mJmpVal)
+        mStub->UnsetupJmpBuf(mSubtaskId);
+}
+
+void pmJmpBufAutoPtr::Reset(int pJmpVal, sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    mJmpVal = pJmpVal;
+    mStub = pStub;
+    mSubtaskId = pSubtaskId;
+    
+    if(!mJmpVal)
+        mStub->SetupJmpBuf(pJmpBuf, mSubtaskId);
+}
+
+
 
 /* class pmUserLibraryCodeAutoPtr */
 pmSubtaskTerminationCheckPointAutoPtr::pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId)

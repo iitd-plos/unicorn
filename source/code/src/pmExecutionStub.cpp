@@ -32,6 +32,7 @@
 #include "pmTaskManager.h"
 #include "pmTls.h"
 #include "pmLogger.h"
+#include "pmMemoryManager.h"
 
 #include <string>
 #include <sstream>
@@ -663,7 +664,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             lCommand->MarkExecutionStart();
             pmStatus lExecStatus = pmExecutionStub::ExecuteWrapper(lCurrentRange.task, lLastExecutedSubtaskId, lIsMultiAssignRange, lRange.startSubtask, lReassigned, lForceAckFlag, lPrematureTermination);
             lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
-        
+
             if(lPrematureTermination)
             {
             #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
@@ -926,6 +927,43 @@ void pmExecutionStub::MarkInsideLibraryCode(ulong pSubtaskId)
 {
     FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
 
+    MarkInsideLibraryCodeInternal(pSubtaskId);
+}
+
+void pmExecutionStub::MarkInsideUserCode(ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+    MarkInsideUserCodeInternal(pSubtaskId);
+}
+    
+void pmExecutionStub::SetupJmpBuf(sigjmp_buf* pJmpBuf, ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+    if(mCurrentSubtaskStats->jmpBuf)
+        PMTHROW(pmFatalErrorException());
+    
+    mCurrentSubtaskStats->jmpBuf = pJmpBuf;
+
+    MarkInsideUserCodeInternal(pSubtaskId);
+}
+    
+void pmExecutionStub::UnsetupJmpBuf(ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+
+    if(!mCurrentSubtaskStats->jmpBuf)
+        PMTHROW(pmFatalErrorException());
+    
+    mCurrentSubtaskStats->jmpBuf = NULL;
+
+    MarkInsideLibraryCodeInternal(pSubtaskId);
+}
+
+// This method must be called with mCurrentSubtaskLock acquired
+void pmExecutionStub::MarkInsideLibraryCodeInternal(ulong pSubtaskId)
+{
     if(!mCurrentSubtaskStats)
         return;
 
@@ -938,10 +976,9 @@ void pmExecutionStub::MarkInsideLibraryCode(ulong pSubtaskId)
         TerminateCurrentSubtask();
 }
 
-void pmExecutionStub::MarkInsideUserCode(ulong pSubtaskId)
+// This method must be called with mCurrentSubtaskLock acquired
+void pmExecutionStub::MarkInsideUserCodeInternal(ulong pSubtaskId)
 {
-    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
-
     if(!mCurrentSubtaskStats)
         return;
 
@@ -1002,27 +1039,30 @@ pmStatus pmExecutionStub::ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool p
 pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus)
 {
     pmStatus lStatus = pmStatusUnavailable;
-    sigjmp_buf lJmpBuf;
-    
-    guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskTerminus, currentSubtaskStats> lScopedPtr(&mCurrentSubtaskLock, &pTerminus, &mCurrentSubtaskStats, new currentSubtaskStats(pTask, pSubtaskId, !pIsMultiAssign, pParentRangeStartSubtask, &lJmpBuf, pmBase::GetCurrentTimeInSecs()));
-    
-    if(!sigsetjmp(lJmpBuf, 1))
+
+    guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskTerminus, currentSubtaskStats> lScopedPtr(&mCurrentSubtaskLock, &pTerminus, &mCurrentSubtaskStats, new currentSubtaskStats(pTask, pSubtaskId, !pIsMultiAssign, pParentRangeStartSubtask, NULL, pmBase::GetCurrentTimeInSecs()));
+
+    try
     {
         UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
         lStatus = Execute(pTask, pSubtaskId);
 
-#if 0
+    #if 0
         size_t lUnprotectedPages = pTask->GetSubscriptionManager().GetWriteOnlyLazyUnprotectedPagesCount(this, pSubtaskId);
         size_t lTotalPages = pTask->GetMemSectionRW()->GetAllocatedLength() / 4096;
         
         std::cout << "Subtask " << pSubtaskId << " pages " << ((double)lUnprotectedPages/lTotalPages) * 100.0 << "%" << std::endl;
-#endif
+    #endif
     }
-    else
+    catch(pmPrematureExitException& e)
     {
         lScopedPtr.SetLockAcquired();
         pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
         lSubscriptionManager.DestroySubtaskShadowMem(this, pSubtaskId);
+    
+    #if defined(LINUX) || defined(MACOS)
+        ((pmLinuxMemoryManager*)MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager())->InstallSegFaultHandler();
+    #endif
     }
     
     return lStatus;

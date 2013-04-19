@@ -21,24 +21,6 @@ void serialPrefixSum(PREFIX_SUM_DATA_TYPE* pInputArray, PREFIX_SUM_DATA_TYPE* pO
 }
 
 #ifdef BUILD_CUDA
-pmCudaLaunchConf prefixSumGetCudaLaunchConf(int pSubtaskElems)
-{
-	pmCudaLaunchConf lCudaLaunchConf;
-
-	int lMaxThreadsPerBlock = 256;
-
-	lCudaLaunchConf.threadsX = pSubtaskElems;
-	if(lCudaLaunchConf.threadsX > lMaxThreadsPerBlock)
-	{
-		lCudaLaunchConf.threadsX = lMaxThreadsPerBlock;
-		lCudaLaunchConf.blocksX = pSubtaskElems/lCudaLaunchConf.threadsX;
-        if(lCudaLaunchConf.blocksX * lCudaLaunchConf.threadsX < pSubtaskElems)
-            ++lCudaLaunchConf.blocksX;
-	}
-
-	return lCudaLaunchConf;
-}
-
 pmCudaLaunchConf elemAddGetCudaLaunchConf(int pSubtaskElems)
 {
 	pmCudaLaunchConf lCudaLaunchConf;
@@ -72,11 +54,6 @@ pmStatus prefixSumDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputM
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
     
-#ifdef BUILD_CUDA
-	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
-		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, prefixSumGetCudaLaunchConf(lSubtaskElems));
-#endif
-
 	return pmSuccess;
 }
 
@@ -201,7 +178,7 @@ bool ParallelAddAuxArray(pmMemHandle pSrcMemHandle, pmMemHandle pAuxMemHandle, u
 	lTaskDetails.inputMemHandle = pAuxMemHandle;
 	lTaskDetails.outputMemHandle = pSrcMemHandle;
     lTaskDetails.inputMemInfo = INPUT_MEM_READ_ONLY;
-    lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE_LAZY;
+    lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE;
 
 	prefixSumTaskConf lTaskConf;
 	lTaskConf.arrayLen = pArrayLength;
@@ -228,7 +205,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	// Input Mem contains input array
 	// Output Mem contains final array with prefix sums
 	// Number of subtasks is arrayLength/ELEMS_PER_SUBTASK if arrayLength is divisible by ELEMS_PER_SUBTASK; otherwise arrayLength/ELEMS_PER_SUBTASK + 1
-	pmMemHandle lInputMemHandle, lOutputMemHandle, lAuxMemHandle;
+	pmMemHandle lInputMemHandle, lOutputMemHandle, lAuxMemHandle = NULL;
 	size_t lMemSize = lArrayLength * sizeof(PREFIX_SUM_DATA_TYPE);
 
 	CREATE_MEM(lMemSize, lInputMemHandle);
@@ -243,14 +220,16 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     unsigned int lSubtaskCount = (lArrayLength/ELEMS_PER_SUBTASK) + ((lArrayLength%ELEMS_PER_SUBTASK)?1:0);
     if(!ParallelPrefixSum(lInputMemHandle, lOutputMemHandle, lArrayLength, lSubtaskCount, pCallbackHandle1, pSchedulingPolicy))
         return (double)-1.0;
+
+    if(lSubtaskCount > 1)
+    {
+        CREATE_MEM(lSubtaskCount * sizeof(PREFIX_SUM_DATA_TYPE), lAuxMemHandle);
+        PopulateAuxMem(lOutputMemHandle, lAuxMemHandle, lArrayLength, lSubtaskCount);
+
+        if(!ParallelAddAuxArray(lOutputMemHandle, lAuxMemHandle, lArrayLength, lSubtaskCount, pCallbackHandle2, pSchedulingPolicy))
+            return (double)-1.0;
+    }
     
-	pmReleaseMemory(lInputMemHandle);
-
-    CREATE_MEM(lSubtaskCount * sizeof(PREFIX_SUM_DATA_TYPE), lAuxMemHandle);
-    PopulateAuxMem(lOutputMemHandle, lAuxMemHandle, lArrayLength, lSubtaskCount);
-
-    ParallelAddAuxArray(lOutputMemHandle, lAuxMemHandle, lArrayLength, lSubtaskCount, pCallbackHandle2, pSchedulingPolicy);
-
 	double lEndTime = getCurrentTimeInSecs();
 
 	SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
@@ -259,7 +238,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
 
-    pmReleaseMemory(lAuxMemHandle);
+    if(lAuxMemHandle)
+        pmReleaseMemory(lAuxMemHandle);
+
+	pmReleaseMemory(lInputMemHandle);
 	pmReleaseMemory(lOutputMemHandle);
 
 	return (lEndTime - lStartTime);
@@ -274,7 +256,7 @@ pmCallbacks DoSetDefaultCallbacks()
 	lCallbacks.subtask_cpu = prefixSum_cpu;
 
 #ifdef BUILD_CUDA
-	lCallbacks.subtask_gpu_cuda = prefixSum_cudaFunc;
+	lCallbacks.subtask_gpu_custom = prefixSum_cudaLaunchFunc;
 #endif
 
 	return lCallbacks;
@@ -289,7 +271,7 @@ pmCallbacks DoSetDefaultCallbacks2()
 	lCallbacks.subtask_cpu = elemAdd_cpu;
 
 #ifdef BUILD_CUDA
-	lCallbacks.subtask_gpu_cuda = elemAdd_cuda;
+	lCallbacks.subtask_gpu_cuda = elemAdd_cudaFunc;
 #endif
 
 	return lCallbacks;
@@ -306,8 +288,8 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 	gSerialOutput = new PREFIX_SUM_DATA_TYPE[lArrayLength];
 	gParallelOutput = new PREFIX_SUM_DATA_TYPE[lArrayLength];
     
-	for(unsigned int i=0; i<lArrayLength; ++i)
-		gSampleInput[i] = i; // (PREFIX_SUM_DATA_TYPE)rand();   //lArrayLength - i;
+	for(unsigned int i = 0; i < lArrayLength; ++i)
+		gSampleInput[i] = (PREFIX_SUM_DATA_TYPE)rand();   //lArrayLength - i;
     
 	return 0;
 }
@@ -344,7 +326,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 	std::cout << std::endl << std::endl;
 	*/
 
-	for(unsigned int i=0; i<lArrayLength; ++i)
+	for(unsigned int i = 0; i < lArrayLength; ++i)
 	{
 		if(gSerialOutput[i] != gParallelOutput[i])
 		{

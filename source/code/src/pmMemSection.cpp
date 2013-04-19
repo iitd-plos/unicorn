@@ -114,12 +114,13 @@ pmMemSection::~pmMemSection()
         if(mReadOnlyLazyMapping)
         {
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeleteReadOnlyMemoryMapping(mReadOnlyLazyMapping, mAllocatedLength);
-            mReadOnlyLazyMapping = NULL;
 
             FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
 
             augmentaryMemSectionMapType& lAugmentaryMemSectionMap = GetAugmentaryMemSectionMap();
             lAugmentaryMemSectionMap.erase(mReadOnlyLazyMapping);
+
+            mReadOnlyLazyMapping = NULL;
         }
     }
     
@@ -342,12 +343,13 @@ void pmMemSection::Lock(pmTask* pTask, pmMemInfo pMemInfo)
         if((IsOutput() || !IsLazy()) && mReadOnlyLazyMapping)
         {
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeleteReadOnlyMemoryMapping(mReadOnlyLazyMapping, mAllocatedLength);
-            mReadOnlyLazyMapping = NULL;
  
             FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
 
             augmentaryMemSectionMapType& lAugmentaryMemSectionMap = GetAugmentaryMemSectionMap();
             lAugmentaryMemSectionMap.erase(mReadOnlyLazyMapping);
+
+            mReadOnlyLazyMapping = NULL;
         }
     
         if(IsInput() && IsLazy() && !mReadOnlyLazyMapping)

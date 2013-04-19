@@ -785,7 +785,7 @@ pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
 void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
 {
     ACCUMULATION_TIMER(Timer_ACC, "SegFaultHandler");
-    
+
     const std::pair<void*, void*>& lPair = TLS_IMPLEMENTATION_CLASS::GetTls()->GetThreadLocalStoragePair(TLS_EXEC_STUB, TLS_CURRENT_SUBTASK_ID);
     pmExecutionStub* lStub = static_cast<pmExecutionStub*>(lPair.first);
     void* lSubtaskPtr = lPair.second;

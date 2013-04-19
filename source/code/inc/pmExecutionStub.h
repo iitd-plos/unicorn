@@ -165,6 +165,9 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void MarkInsideLibraryCode(ulong pSubtaskId);
         void MarkInsideUserCode(ulong pSubtaskId);
     
+        void SetupJmpBuf(sigjmp_buf* pJmpBuf, ulong pSubtaskId);
+        void UnsetupJmpBuf(ulong pSubtaskId);
+    
         void WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>& pNetworkCommands);
     
 	protected:
@@ -177,6 +180,9 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		virtual pmStatus DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2);
 
 	private:
+        void MarkInsideLibraryCodeInternal(ulong pSubtaskId);
+        void MarkInsideUserCodeInternal(ulong pSubtaskId);
+    
         typedef struct currentSubtaskStats
         {
             pmTask* task;

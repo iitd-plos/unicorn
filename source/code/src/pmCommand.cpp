@@ -78,7 +78,7 @@ ushort pmCommand::GetPriority()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	return mStatus;
+	return mPriority;
 }
 
 pmCommandCompletionCallback pmCommand::GetCommandCompletionCallback()

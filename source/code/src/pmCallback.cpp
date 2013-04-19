@@ -58,10 +58,19 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
     
     void* lInputMem = (lInputMemSection && lInputMemSection->IsLazy()) ? (lInputMemSection->GetMem()) : NULL;
     void* lOutputMem = (lOutputMemSection && lOutputMemSection->IsLazy()) ? (lOutputMemSection->GetMem()) : NULL;
+    
+    pmStatus lStatus = pmStatusUnavailable;
+    subscription::pmJmpBufAutoPtr lJmpBufAutoPtr;
 
-    pStub->MarkInsideUserCode(pSubtaskId);
-	pmStatus lStatus = mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId);
-    pStub->MarkInsideLibraryCode(pSubtaskId);
+    sigjmp_buf lJmpBuf;
+    int lJmpVal = sigsetjmp(lJmpBuf, 0);
+    
+    lJmpBufAutoPtr.Reset(lJmpVal, &lJmpBuf, pStub, pSubtaskId);
+    
+    if(!lJmpVal)
+        lStatus = mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId);
+    else
+        PMTHROW_NODUMP(pmPrematureExitException());
     
     return lStatus;
 }
@@ -114,6 +123,8 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
     
     pmSubtaskInfo lSubtaskInfo;
     pTask->GetSubtaskInfo(pStub, pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
+    
+    pmStatus lStatus = pmStatusUnavailable;
 
 	switch(pStub->GetType())
 	{
@@ -125,11 +136,17 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
             pmTaskInfo& lTaskInfo = pTask->GetTaskInfo();
             pmDeviceInfo& lDeviceInfo = pStub->GetProcessingElement()->GetDeviceInfo();
 
-            pStub->MarkInsideUserCode(pSubtaskId);
-			pmStatus lStatus = mCallback_CPU(lTaskInfo, lDeviceInfo, lSubtaskInfo);
-            pStub->MarkInsideLibraryCode(pSubtaskId);
-        
-            return lStatus;
+            subscription::pmJmpBufAutoPtr lJmpBufAutoPtr;
+            
+            sigjmp_buf lJmpBuf;
+            int lJmpVal = sigsetjmp(lJmpBuf, 0);
+            
+            lJmpBufAutoPtr.Reset(lJmpVal, &lJmpBuf, pStub, pSubtaskId);
+            
+            if(!lJmpVal)
+                lStatus = mCallback_CPU(lTaskInfo, lDeviceInfo, lSubtaskInfo);
+            else
+                PMTHROW_NODUMP(pmPrematureExitException());
 
 			break;
 		}
@@ -141,8 +158,9 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 				return pmSuccess;
             
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskId);
-			return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pBoundHardwareDeviceIndex, pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
 
+            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pBoundHardwareDeviceIndex, pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
+            
 			break;
 		}
 #endif
