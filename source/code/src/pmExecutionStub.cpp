@@ -962,9 +962,8 @@ void pmExecutionStub::UnsetupJmpBuf(ulong pSubtaskId, bool pHasJumped)
             PMTHROW(pmFatalErrorException());
         
         mCurrentSubtaskStats->jmpBuf = NULL;
-        mCurrentSubtaskStats->prematureTermination = false;
 
-        MarkInsideLibraryCodeInternal(pSubtaskId);
+        mCurrentSubtaskStats->executingLibraryCode = true;
     }
     else
     {
@@ -974,9 +973,8 @@ void pmExecutionStub::UnsetupJmpBuf(ulong pSubtaskId, bool pHasJumped)
             PMTHROW(pmFatalErrorException());
         
         mCurrentSubtaskStats->jmpBuf = NULL;
-        mCurrentSubtaskStats->prematureTermination = false;
 
-        MarkInsideLibraryCodeInternal(pSubtaskId);
+        mCurrentSubtaskStats->executingLibraryCode = true;
     }
 }
 
