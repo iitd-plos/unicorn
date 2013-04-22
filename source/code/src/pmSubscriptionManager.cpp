@@ -1131,29 +1131,32 @@ void shadowMemDeallocator::operator()(void* pMem)
     
 /* class pmJmpBufAutoPtr */
 pmJmpBufAutoPtr::pmJmpBufAutoPtr()
-    : mJmpVal(1)
-    , mStub(NULL)
+    : mStub(NULL)
     , mSubtaskId(0)
+    , mHasJumped(false)
 {
 }
 
 pmJmpBufAutoPtr::~pmJmpBufAutoPtr()
 {
-    if(!mJmpVal)
-        mStub->UnsetupJmpBuf(mSubtaskId);
+    if(mStub)
+        mStub->UnsetupJmpBuf(mSubtaskId, mHasJumped);
 }
 
-void pmJmpBufAutoPtr::Reset(int pJmpVal, sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId)
+void pmJmpBufAutoPtr::Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId)
 {
-    mJmpVal = pJmpVal;
     mStub = pStub;
     mSubtaskId = pSubtaskId;
     
-    if(!mJmpVal)
+    if(mStub)
         mStub->SetupJmpBuf(pJmpBuf, mSubtaskId);
 }
 
-
+void pmJmpBufAutoPtr::SetHasJumped()
+{
+    mHasJumped = true;
+}
+    
 
 /* class pmUserLibraryCodeAutoPtr */
 pmSubtaskTerminationCheckPointAutoPtr::pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId)

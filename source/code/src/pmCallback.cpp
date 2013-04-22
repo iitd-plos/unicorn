@@ -64,13 +64,17 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
 
     sigjmp_buf lJmpBuf;
     int lJmpVal = sigsetjmp(lJmpBuf, 0);
-    
-    lJmpBufAutoPtr.Reset(lJmpVal, &lJmpBuf, pStub, pSubtaskId);
-    
+
     if(!lJmpVal)
+    {
+        lJmpBufAutoPtr.Reset(&lJmpBuf, pStub, pSubtaskId);
         lStatus = mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId);
+    }
     else
+    {
+        lJmpBufAutoPtr.SetHasJumped();
         PMTHROW_NODUMP(pmPrematureExitException());
+    }
     
     return lStatus;
 }
@@ -141,12 +145,16 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
             sigjmp_buf lJmpBuf;
             int lJmpVal = sigsetjmp(lJmpBuf, 0);
             
-            lJmpBufAutoPtr.Reset(lJmpVal, &lJmpBuf, pStub, pSubtaskId);
-            
             if(!lJmpVal)
+            {
+                lJmpBufAutoPtr.Reset(&lJmpBuf, pStub, pSubtaskId);
                 lStatus = mCallback_CPU(lTaskInfo, lDeviceInfo, lSubtaskInfo);
+            }
             else
+            {
+                lJmpBufAutoPtr.SetHasJumped();
                 PMTHROW_NODUMP(pmPrematureExitException());
+            }
 
 			break;
 		}

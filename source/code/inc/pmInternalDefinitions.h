@@ -123,7 +123,7 @@ const unsigned long MEMORY_TRANSFER_TIMEOUT = 3;    // in secs
 #define PROPORTIONAL_SCHEDULING_CONF_FILE "propSchedConf.txt"
 
 /* Diagnostics */
-//#define RECORD_LOCK_ACQUISITIONS
+#define RECORD_LOCK_ACQUISITIONS
 //#define TRACK_MEMORY_ALLOCATIONS
 //#define TRACK_MEMORY_REQUESTS
 //#define TRACK_SUBTASK_EXECUTION

@@ -791,6 +791,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         case POST_HANDLE_EXEC_COMPLETION:
         {
             HandleRangeExecutionCompletion(pEvent.execCompletionDetails.range, pEvent.execCompletionDetails.execStatus);
+        
             break;
         }
         
@@ -804,6 +805,8 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             mDeferredShadowMemCommits.erase(lTask);
         
             lTask->RegisterStubShadowMemCommitMessage();
+            
+            break;
         }
         
         case CHECK_REDUCTION_FINISH:
@@ -811,6 +814,8 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             pmTask* lTask = pEvent.checkReductionFinishDetails.task;
 
             lTask->GetReducer()->CheckReductionFinish();
+            
+            break;
         }
 	}
 
@@ -949,16 +954,30 @@ void pmExecutionStub::SetupJmpBuf(sigjmp_buf* pJmpBuf, ulong pSubtaskId)
     MarkInsideUserCodeInternal(pSubtaskId);
 }
     
-void pmExecutionStub::UnsetupJmpBuf(ulong pSubtaskId)
+void pmExecutionStub::UnsetupJmpBuf(ulong pSubtaskId, bool pHasJumped)
 {
-    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+    if(pHasJumped)
+    {
+        if(!mCurrentSubtaskStats->jmpBuf)
+            PMTHROW(pmFatalErrorException());
+        
+        mCurrentSubtaskStats->jmpBuf = NULL;
+        mCurrentSubtaskStats->prematureTermination = false;
 
-    if(!mCurrentSubtaskStats->jmpBuf)
-        PMTHROW(pmFatalErrorException());
-    
-    mCurrentSubtaskStats->jmpBuf = NULL;
+        MarkInsideLibraryCodeInternal(pSubtaskId);
+    }
+    else
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
 
-    MarkInsideLibraryCodeInternal(pSubtaskId);
+        if(!mCurrentSubtaskStats->jmpBuf)
+            PMTHROW(pmFatalErrorException());
+        
+        mCurrentSubtaskStats->jmpBuf = NULL;
+        mCurrentSubtaskStats->prematureTermination = false;
+
+        MarkInsideLibraryCodeInternal(pSubtaskId);
+    }
 }
 
 // This method must be called with mCurrentSubtaskLock acquired
@@ -1057,6 +1076,7 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
     catch(pmPrematureExitException& e)
     {
         lScopedPtr.SetLockAcquired();
+
         pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
         lSubscriptionManager.DestroySubtaskShadowMem(this, pSubtaskId);
     
@@ -1070,37 +1090,31 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
     
 pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
-    try
-    {
-    #ifdef ENABLE_TASK_PROFILING
-        pmTaskProfiler* lTaskProfiler = pTask->GetTaskProfiler();
+#ifdef ENABLE_TASK_PROFILING
+    pmTaskProfiler* lTaskProfiler = pTask->GetTaskProfiler();
 
-        lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, true);
-        pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
-        INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
-        lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, false);
+    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, true);
+    pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
+    INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
+    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, false);
 
-        pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
-        pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
-        
-        if(pTask->DoSubtasksNeedShadowMemory())
-            pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
+    pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
+    pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
+    
+    if(pTask->DoSubtasksNeedShadowMemory())
+        pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
 
-        lTaskProfiler->RecordProfileEvent(pmTaskProfiler::SUBTASK_EXECUTION, true);
-    #else
-        pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
-        INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
+    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::SUBTASK_EXECUTION, true);
+#else
+    pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
+    INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
 
-        pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
-        pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
+    pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
+    pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
 
-        if(pTask->DoSubtasksNeedShadowMemory())
-            pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
-    #endif
-    }
-    catch(pmPrematureExitException&)
-    {
-    }
+    if(pTask->DoSubtasksNeedShadowMemory())
+        pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
+#endif
 	
 	return pmSuccess;
 }

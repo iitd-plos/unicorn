@@ -54,12 +54,13 @@ namespace subscription
             pmJmpBufAutoPtr();
             ~pmJmpBufAutoPtr();
 
-            void Reset(int pJmpVal, sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId);
+            void Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId);
+            void SetHasJumped();
         
         private:
-            int mJmpVal;
             pmExecutionStub* mStub;
             ulong mSubtaskId;
+            bool mHasJumped;
     };
     
 	typedef struct subscriptionData

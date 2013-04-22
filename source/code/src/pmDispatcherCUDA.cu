@@ -333,10 +333,10 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
         sigjmp_buf lJmpBuf;
         int lJmpVal = sigsetjmp(lJmpBuf, 0);
         
-        lJmpBufAutoPtr.Reset(lJmpVal, &lJmpBuf, pStub, pSubtaskInfo.subtaskId);
-        
         if(!lJmpVal)
         {
+            lJmpBufAutoPtr.Reset(&lJmpBuf, pStub, pSubtaskInfo.subtaskId);
+
             if(pKernelPtr)
             {
                 dim3 gridConf(pCudaLaunchConf.blocksX, pCudaLaunchConf.blocksY, pCudaLaunchConf.blocksZ);
@@ -391,6 +391,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
         }
         else
         {
+            lJmpBufAutoPtr.SetHasJumped();
             PMTHROW_NODUMP(pmPrematureExitException());
         }
     }

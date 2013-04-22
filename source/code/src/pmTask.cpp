@@ -368,6 +368,9 @@ pmSubscriptionManager& pmTask::GetSubscriptionManager()
 
 pmReducer* pmTask::GetReducer()
 {
+    if(!mCallbackUnit->GetDataReductionCB())
+        return NULL;
+    
     FINALIZE_RESOURCE_PTR(dReducerLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mReducerLock, Lock(), Unlock());
 
 	if(!mReducer.get_ptr())
@@ -378,6 +381,9 @@ pmReducer* pmTask::GetReducer()
 
 pmRedistributor* pmTask::GetRedistributor()
 {
+    if(!mCallbackUnit->GetDataRedistributionCB())
+        return NULL;
+
     FINALIZE_RESOURCE_PTR(dRedistributorLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mRedistributorLock, Lock(), Unlock());
     
     if(!mRedistributor.get_ptr())

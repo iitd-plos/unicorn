@@ -166,7 +166,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void MarkInsideUserCode(ulong pSubtaskId);
     
         void SetupJmpBuf(sigjmp_buf* pJmpBuf, ulong pSubtaskId);
-        void UnsetupJmpBuf(ulong pSubtaskId);
+        void UnsetupJmpBuf(ulong pSubtaskId, bool pHasJumped);
     
         void WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>& pNetworkCommands);
     
