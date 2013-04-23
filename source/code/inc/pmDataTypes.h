@@ -27,6 +27,8 @@
 #include <vector>
 #include <map>
 
+#include <setjmp.h>
+
 namespace pm
 {
 	typedef unsigned short int ushort;
@@ -35,6 +37,33 @@ namespace pm
 
 	class pmTask;
     class pmProcessingElement;
+    class pmExecutionStub;
+
+    class pmSubtaskTerminationCheckPointAutoPtr
+    {
+        public:
+            pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId);
+            ~pmSubtaskTerminationCheckPointAutoPtr();
+    
+        private:
+            pmExecutionStub* mStub;
+            ulong mSubtaskId;
+    };
+    
+    class pmJmpBufAutoPtr
+    {
+        public:
+            pmJmpBufAutoPtr();
+            ~pmJmpBufAutoPtr();
+
+            void Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId);
+            void SetHasJumped();
+        
+        private:
+            pmExecutionStub* mStub;
+            ulong mSubtaskId;
+            bool mHasJumped;
+    };
 
     typedef struct pmSubtaskRange
     {

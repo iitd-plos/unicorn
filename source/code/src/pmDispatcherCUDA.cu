@@ -20,7 +20,6 @@
 
 #include "pmBase.h"
 #include "pmDispatcherGPU.h"
-#include "pmSubscriptionManager.h"
 
 #ifdef SUPPORT_CUDA
 #include "pmLogger.h"
@@ -328,7 +327,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 
     // Jmp Buffer Scope
     {
-        subscription::pmJmpBufAutoPtr lJmpBufAutoPtr;
+        pmJmpBufAutoPtr lJmpBufAutoPtr;
         
         sigjmp_buf lJmpBuf;
         int lJmpVal = sigsetjmp(lJmpBuf, 0);

@@ -794,7 +794,7 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
     
     ulong lSubtaskId = *(static_cast<ulong*>(lSubtaskPtr));
     
-    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(lStub, lSubtaskId);
+    pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(lStub, lSubtaskId);
 
     try
     {

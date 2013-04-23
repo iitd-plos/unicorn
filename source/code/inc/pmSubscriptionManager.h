@@ -28,8 +28,6 @@
 #include <map>
 #include <vector>
 
-#include <setjmp.h>
-
 namespace pm
 {
 
@@ -39,32 +37,6 @@ class pmMemSection;
 
 namespace subscription
 {
-    class pmSubtaskTerminationCheckPointAutoPtr
-    {
-        public:
-            pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId);
-            ~pmSubtaskTerminationCheckPointAutoPtr();
-    
-        private:
-            pmExecutionStub* mStub;
-            ulong mSubtaskId;
-    };
-    
-    class pmJmpBufAutoPtr
-    {
-        public:
-            pmJmpBufAutoPtr();
-            ~pmJmpBufAutoPtr();
-
-            void Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId);
-            void SetHasJumped();
-        
-        private:
-            pmExecutionStub* mStub;
-            ulong mSubtaskId;
-            bool mHasJumped;
-    };
-    
 	typedef struct subscriptionData
 	{
 		std::vector<pmCommunicatorCommandPtr> receiveCommandVector;

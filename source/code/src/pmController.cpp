@@ -337,7 +337,7 @@ pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandl
 
 pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo)
 {
-    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
+    pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
     
 	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSubscriptionType, pSubscriptionInfo);
 }
@@ -352,7 +352,7 @@ pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDevic
     
 pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
 {
-    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
+    pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
 
 	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pCudaLaunchConf);
 }
@@ -375,7 +375,7 @@ uint pmController::GetHostCount_Public()
     
 void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize)
 {
-    subscription::pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
+    pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId);
     
     return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pScratchBufferInfo, pBufferSize);
     

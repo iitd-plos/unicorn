@@ -60,7 +60,7 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
     void* lOutputMem = (lOutputMemSection && lOutputMemSection->IsLazy()) ? (lOutputMemSection->GetMem()) : NULL;
     
     pmStatus lStatus = pmStatusUnavailable;
-    subscription::pmJmpBufAutoPtr lJmpBufAutoPtr;
+    pmJmpBufAutoPtr lJmpBufAutoPtr;
 
     sigjmp_buf lJmpBuf;
     int lJmpVal = sigsetjmp(lJmpBuf, 0);
@@ -140,7 +140,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
             pmTaskInfo& lTaskInfo = pTask->GetTaskInfo();
             pmDeviceInfo& lDeviceInfo = pStub->GetProcessingElement()->GetDeviceInfo();
 
-            subscription::pmJmpBufAutoPtr lJmpBufAutoPtr;
+            pmJmpBufAutoPtr lJmpBufAutoPtr;
             
             sigjmp_buf lJmpBuf;
             int lJmpVal = sigsetjmp(lJmpBuf, 0);

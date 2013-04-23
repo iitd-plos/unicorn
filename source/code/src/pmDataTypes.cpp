@@ -22,6 +22,7 @@
 #include "pmLogger.h"
 #include "pmTimer.h"
 #include "pmResourceLock.h"
+#include "pmExecutionStub.h"
 
 #include <iostream>
 #include <iomanip>
@@ -31,6 +32,49 @@
 
 namespace pm
 {
+
+/* class pmJmpBufAutoPtr */
+pmJmpBufAutoPtr::pmJmpBufAutoPtr()
+    : mStub(NULL)
+    , mSubtaskId(0)
+    , mHasJumped(false)
+{
+}
+
+pmJmpBufAutoPtr::~pmJmpBufAutoPtr()
+{
+    if(mStub)
+        mStub->UnsetupJmpBuf(mSubtaskId, mHasJumped);
+}
+
+void pmJmpBufAutoPtr::Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    mStub = pStub;
+    mSubtaskId = pSubtaskId;
+    
+    if(mStub)
+        mStub->SetupJmpBuf(pJmpBuf, mSubtaskId);
+}
+
+void pmJmpBufAutoPtr::SetHasJumped()
+{
+    mHasJumped = true;
+}
+    
+
+/* class pmUserLibraryCodeAutoPtr */
+pmSubtaskTerminationCheckPointAutoPtr::pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId)
+    : mStub(pStub)
+    , mSubtaskId(pSubtaskId)
+{
+    mStub->MarkInsideLibraryCode(mSubtaskId);
+}
+    
+pmSubtaskTerminationCheckPointAutoPtr::~pmSubtaskTerminationCheckPointAutoPtr()
+{
+    mStub->MarkInsideUserCode(mSubtaskId);
+}
+
     
 const uint MAX_FLOAT_WIDTH = 8;
 const uint MAX_INT_WIDTH = 8;
