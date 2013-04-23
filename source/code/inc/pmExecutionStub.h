@@ -233,7 +233,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     #endif
     
 		uint mDeviceIndexOnMachine;
-    
+
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCurrentSubtaskLock;
         currentSubtaskStats* mCurrentSubtaskStats;  // Subtask currently being executed
         std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> > mSecondaryAllotteeMap;  // PULL model: secondary allottees of a subtask

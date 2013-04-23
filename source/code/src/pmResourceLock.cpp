@@ -22,6 +22,10 @@
 #include "pmLogger.h"
 #include "pmTimer.h"
 
+#ifdef TRACK_MUTEX_TIMINGS
+#include <string.h>
+#endif
+
 namespace pm
 {
 
