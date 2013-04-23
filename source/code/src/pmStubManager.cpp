@@ -80,6 +80,8 @@ pmStatus pmStubManager::CreateExecutionStubs()
 	GetSystemInfo(&sysinfo);
 	numCPU = sysinfo.dwNumberOfProcessors;
 	*/
+    
+    // sysconf(_SC_HT_CAPABLE) && sysconf(_SC_HT_ENABLED);
 
 	mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
 	for(size_t i=0; i<mProcessingElementsCPU; ++i)

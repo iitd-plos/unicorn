@@ -26,6 +26,8 @@
 #include "pmCommand.h"
 
 #include <map>
+#include <vector>
+
 #include <setjmp.h>
 
 namespace pm
@@ -129,8 +131,8 @@ class pmSubscriptionManager : public pmBase
 {
     friend class subscription::shadowMemDeallocator;
     typedef std::map<void*, subscription::shadowMemDetails> shadowMemMapType;
-    typedef std::map<std::pair<pmExecutionStub*, ulong>, subscription::pmSubtask> subtaskMapType;
-    
+    typedef std::map<ulong, subscription::pmSubtask> subtaskMapType;
+
 	public:
 		pmSubscriptionManager(pmTask* pTask);
 		virtual ~pmSubscriptionManager();
@@ -176,6 +178,8 @@ class pmSubscriptionManager : public pmBase
 		pmStatus WaitForSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId);
         pmStatus FetchInputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
         pmStatus FetchOutputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
+    
+        subscription::pmSubtask& GetSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
 
 #ifdef SUPPORT_CUDA
     #ifdef SUPPORT_LAZY_MEMORY
@@ -183,8 +187,7 @@ class pmSubscriptionManager : public pmBase
     #endif
 #endif
     
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
-		subtaskMapType mSubtaskMap;
+        std::vector<std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS> > mSubtaskMapVector;
 
 		pmTask* mTask;
     
