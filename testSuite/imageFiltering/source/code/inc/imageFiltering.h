@@ -7,7 +7,7 @@ namespace imageFiltering
 #define PIXEL_COUNT 3    // assumes 24-bit RGB
 #define IMAGE_SIZE (gImageWidth * gImageHeight * PIXEL_COUNT)
     
-#define TILE_DIM 512
+#define TILE_DIM 2048
 #define GPU_BLOCK_DIM 32
     
 #define SOBEL_FILTER

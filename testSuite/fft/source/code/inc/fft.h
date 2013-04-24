@@ -4,6 +4,8 @@ namespace fft
     
 #define DEFAULT_POW_X 10
 #define DEFAULT_POW_Y 10
+
+#define ROWS_PER_FFT_SUBTASK 1024  // must be a power of 2
     
 #ifndef FFT_DATA_TYPE
 #error "FFT_DATA_TYPE not defined"
@@ -20,8 +22,6 @@ namespace fft
 
 using namespace pm;
 
-void fft_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
-
 typedef struct fftTaskConf
 {
 	size_t elemsX;  // rows
@@ -30,11 +30,18 @@ typedef struct fftTaskConf
     size_t powY;
 } fftTaskConf;
 
+#ifdef BUILD_CUDA
+#include <cuda.h>
+pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
+#endif
+
 }
 
 #ifdef FFT_2D
 namespace matrixTranspose
 {
+    using namespace pm;
+
     void serialmatrixTranspose(MATRIX_DATA_TYPE* pMatrix, size_t pInputDimRows, size_t pInputDimCols);
 
     pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId);
@@ -42,5 +49,9 @@ namespace matrixTranspose
     pmStatus matrixTranspose_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
 
     double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemInfo pMemInfo);
+
+#ifdef BUILD_CUDA
+    pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
+#endif
 }
 #endif

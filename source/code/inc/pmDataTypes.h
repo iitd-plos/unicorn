@@ -21,13 +21,13 @@
 #ifndef __PM_DATA_TYPES__
 #define __PM_DATA_TYPES__
 
-#include <stdlib.h>
 #include "pmInternalDefinitions.h"
+
+#include <stdlib.h>
+#include <setjmp.h>
 
 #include <vector>
 #include <map>
-
-#include <setjmp.h>
 
 namespace pm
 {

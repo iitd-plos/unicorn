@@ -325,7 +325,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     
 	memcpy(lRawOutputPtr, gParallelOutput, lMemSize);
 
-    double lTime = parallelMatrixTranspose(lPowRows, lPowCols, lMatrixDimRows, lMatrixDimCols, lMemHandle, pCallbackHandle, pSchedulingPolicy, OUTPUT_MEM_READ_WRITE_LAZY);
+    double lTime = parallelMatrixTranspose(lPowRows, lPowCols, lMatrixDimRows, lMatrixDimCols, lMemHandle, pCallbackHandle, pSchedulingPolicy, OUTPUT_MEM_READ_WRITE);
     
     if(lTime != -1.0)
     {

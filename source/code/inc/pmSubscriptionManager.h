@@ -151,8 +151,6 @@ class pmSubscriptionManager : public pmBase
         pmStatus FetchInputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
         pmStatus FetchOutputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
     
-        subscription::pmSubtask& GetSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
-
 #ifdef SUPPORT_CUDA
     #ifdef SUPPORT_LAZY_MEMORY
         void ClearInputMemLazyProtectionForCuda(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType);

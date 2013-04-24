@@ -4,10 +4,10 @@ namespace matrixTranspose
 
 #define DEFAULT_POW_ROWS 10
 #define DEFAULT_POW_COLS 11
-#define MAX_BLOCK_SIZE 512   // Must be a power of 2
+#define MAX_BLOCK_SIZE 4096   // Must be a power of 2
     
 #ifndef MATRIX_DATA_TYPE
-#define MATRIX_DATA_TYPE float
+#define MATRIX_DATA_TYPE int
 #endif
 
 #define USE_SQUARE_BLOCKS     // Using square blocks ensures that there will be no overlap of input and output locations within a block

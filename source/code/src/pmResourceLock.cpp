@@ -46,11 +46,6 @@ void __dump_mutex(pthread_mutex_t* mutex, const char* state)
 #define DUMP_MUTEX(a, b)
 #endif
 
-pmStatus pmResourceLock::Lock()
-{
-    return pmSuccess;
-}
-
     
 /* class pmPThreadResourceLock */
 pmPThreadResourceLock::pmPThreadResourceLock(
@@ -63,7 +58,12 @@ pmPThreadResourceLock::pmPThreadResourceLock(
     , mIsCurrentlyAcquired(false)
 #endif
 #ifdef TRACK_MUTEX_TIMINGS
-    , mLockTimer(strlen(pName) ? (std::string(pName).append(" [Lock]")) : pName)
+#ifdef RECORD_LOCK_ACQUISITIONS
+    ,
+#else
+    :
+#endif
+     mLockTimer(strlen(pName) ? (std::string(pName).append(" [Lock]")) : pName)
     , mUnlockTimer(strlen(pName) ? std::string(pName).append(" [Unlock]") : pName)
 #endif
 {

@@ -25,6 +25,7 @@ FLAGS += -DFFT_DATA_TYPE=complex -DMATRIX_DATA_TYPE=complex
 
 ifeq ($(BUILD_CUDA), 1)
 CUDAFLAGS += -DFFT_DATA_TYPE=complex -DMATRIX_DATA_TYPE=complex
+LIBRARIES += -lcufft
 endif
 
 INCLUDES += -I$(PATH_PREFIX)../../../matrixTranspose/source/code/inc

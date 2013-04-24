@@ -14,7 +14,7 @@ const int TOTAL_ROUNDS = 1; //(TOTAL_BITS/BITS_PER_ROUND);
 const int BINS_COUNT = (1 << BITS_PER_ROUND);
 
 #ifdef BUILD_CUDA
-void radixSort_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
+void radixSort_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
 #endif
 
 typedef struct radixSortTaskConf

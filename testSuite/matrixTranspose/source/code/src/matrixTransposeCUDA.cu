@@ -1,5 +1,6 @@
 
 #include "pmPublicDefinitions.h"
+#include "commonAPI.h"
 #include "matrixTranspose.h"
 
 #include <iostream>

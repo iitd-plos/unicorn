@@ -107,14 +107,14 @@ void fftSerial1D(int dir, unsigned long m, unsigned long nn, complex* data)
 	}
 
 	/* Scaling for forward transform */
-	if(dir == 1)
-	{
-		/*for (i=0;i<nn;i++)
-		{
-			data[i].x /= (float)nn;
-			data[i].y /= (float)nn;
-		}*/
-	}
+//	if(dir == 1)
+//	{
+//		for(i = 0; i < nn; ++i)
+//		{
+//			data[i].x /= (float)nn;
+//			data[i].y /= (float)nn;
+//		}
+//	}
 }
 
 /*-------------------------------------------------------------------------
@@ -135,8 +135,8 @@ void fftSerial2D(complex* input, unsigned long powx, unsigned long nx, unsigned 
 	
     for(i=0; i<ny; ++i)
 		fftSerial1D(dir, powx, nx, input+i*nx);
-//
-//    matrixTranspose::serialmatrixTranspose(input, ny, nx);
+
+    matrixTranspose::serialmatrixTranspose(input, ny, nx);
 #endif
 }
 
@@ -145,8 +145,9 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pm
 	pmSubscriptionInfo lSubscriptionInfo;
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
-    lSubscriptionInfo.offset = pSubtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
-    lSubscriptionInfo.length = lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+    lSubscriptionInfo.offset = ROWS_PER_FFT_SUBTASK * pSubtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+    lSubscriptionInfo.length = ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
 
@@ -157,7 +158,8 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
-    fftSerial1D(FORWARD_TRANSFORM_DIRECTION, lTaskConf->powY, lTaskConf->elemsY, (FFT_DATA_TYPE*)pSubtaskInfo.outputMem);
+    for(unsigned int i = 0; i < ROWS_PER_FFT_SUBTASK; ++i)
+        fftSerial1D(FORWARD_TRANSFORM_DIRECTION, lTaskConf->powY, lTaskConf->elemsY, (FFT_DATA_TYPE*)pSubtaskInfo.outputMem + (i * lTaskConf->elemsY));
 
 	return pmSuccess;
 }
@@ -186,7 +188,8 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 
 bool Parallel_FFT_1D(pmMemHandle pOutputMemHandle, pmMemInfo pOutputMemInfo, fftTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
-	CREATE_TASK(0, 0, pTaskConf->elemsX, pCallbackHandle, pSchedulingPolicy)
+    unsigned long lSubtaskCount = pTaskConf->elemsX / ROWS_PER_FFT_SUBTASK;
+	CREATE_TASK(0, 0, lSubtaskCount, pCallbackHandle, pSchedulingPolicy)
 
     lTaskDetails.outputMemInfo = pOutputMemInfo;
 
@@ -258,9 +261,9 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     
     if(!Parallel_FFT_1D(lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle1, pSchedulingPolicy))
         return (double)-1.0;
-//
-//    if(!Parallel_Transpose(lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle2, pSchedulingPolicy))
-//        return (double)-1.0;
+
+    if(!Parallel_Transpose(lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle2, pSchedulingPolicy))
+        return (double)-1.0;
 #endif
 
 	double lEndTime = getCurrentTimeInSecs();
@@ -284,7 +287,7 @@ pmCallbacks DoSetDefaultCallbacks()
 	lCallbacks.subtask_cpu = fft_cpu;
 
 #ifdef BUILD_CUDA
-	lCallbacks.subtask_gpu_cuda = fft_cuda;
+	lCallbacks.subtask_gpu_custom = fft_cudaLaunchFunc;
 #endif
 
 	return lCallbacks;
@@ -299,7 +302,7 @@ pmCallbacks DoSetDefaultCallbacks2()
 	lCallbacks.subtask_cpu = matrixTranspose::matrixTranspose_cpu;
 
 #ifdef BUILD_CUDA
-	lCallbacks.subtask_gpu_cuda = fft_cuda;
+	lCallbacks.subtask_gpu_custom = matrixTranspose::matrixTranspose_cudaLaunchFunc;
 #endif
 
 	return lCallbacks;
@@ -340,9 +343,9 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 	READ_NON_COMMON_ARGS
 
 #if 0
-	for(i=0; i<lElemsY; ++i)
+	for(i = 0; i < lElemsY; ++i)
     {
-        for(size_t j=0; j<lElemsX; ++j)
+        for(size_t j = 0; j < lElemsX; ++j)
         {
             std::cout << gSerialOutput[i * lMatrixDimRows + j] << "(" << gParallelOutput[i * lMatrixDimRows + j] << ") ";
         }
@@ -351,12 +354,14 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
     }
 #endif
 
+    float EPSILON = 0.1;
+    
     size_t lElems = lElemsX * lElemsY;
-	for(size_t i=0; i<lElems; ++i)
+	for(size_t i = 0; i < lElems; ++i)
 	{
-		if((int)fabs(gSerialOutput[i].x - gParallelOutput[i].x) > 0 || (int)fabs(gSerialOutput[i].y - gParallelOutput[i].y) > 0)
+        if(fabs(gSerialOutput[i].x - gParallelOutput[i].x) > EPSILON || fabs(gSerialOutput[i].y - gParallelOutput[i].y) > EPSILON)
 		{
-            std::cout << "Mismatch index " << i << " Serial Value = (" << gSerialOutput[i].x << ", " << gSerialOutput[i].y << ") Parallel Value = (" << gParallelOutput[i].x << ", " << gParallelOutput[i].y << ")" << std::endl;
+            std::cout << "Mismatch index " << i << " Serial Value = (" << gSerialOutput[i].x << ", " << gSerialOutput[i].y << ") Parallel Value = (" << gParallelOutput[i].x << ", " << gParallelOutput[i].y << ")" << " Diff (" << gSerialOutput[i].x - gParallelOutput[i].x << ", " << gSerialOutput[i].y - gParallelOutput[i].y << ")" << std::endl;
             return 1;
 		}
 	}
