@@ -458,8 +458,13 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
         PMTHROW(pmFatalErrorException());
 
 #ifdef _DEBUG
-    if(lSubtask.mShadowMem.get_ptr() != NULL)
-        PMTHROW(pmFatalErrorException());
+    // Auto lock/unlock scope
+    {
+        GET_SUBTASK(lSubtask, pStub, pSubtaskId);
+
+        if(lSubtask.mShadowMem.get_ptr() != NULL)
+            PMTHROW(pmFatalErrorException());
+    }
 #endif
     
     pmMemSection* lMemSection = mTask->GetMemSectionRW();

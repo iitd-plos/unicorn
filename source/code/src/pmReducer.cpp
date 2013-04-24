@@ -200,32 +200,67 @@ pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, p
     datatype* lShadowMem1 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub1, pSubtaskId1);
     datatype* lShadowMem2 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub2, pSubtaskId2);
 
-    const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pStub2, pSubtaskId2);
-    
-    std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
-    
-    switch(pReductionType)
+    if(mTask->GetMemSectionRW()->IsLazyWriteOnly())
     {
-        case REDUCE_ADD:
+        const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pStub2, pSubtaskId2);
+        
+        std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
+        
+        switch(pReductionType)
         {
-            for(; lIter != lEndIter; ++lIter)
+            case REDUCE_ADD:
             {
-                size_t lStartPage = lIter->first;
-                size_t lPageCount = lIter->second;
+                for(; lIter != lEndIter; ++lIter)
+                {
+                    size_t lStartPage = lIter->first;
+                    size_t lPageCount = lIter->second;
+                    
+                    size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                    datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                    datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                    
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lArray1[i] += lArray2[i];
+                }
                 
-                size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
-                datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
-                datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
-                
-                for(size_t i = 0; i < lDataCount; ++i)
-                    lArray1[i] += lArray2[i];
+                break;
             }
-            
-            break;
+                
+            default:
+                PMTHROW(pmFatalErrorException());
         }
-            
-        default:
+    }
+    else
+    {
+        if(mTask->GetMemSectionRW()->IsReadWrite())
             PMTHROW(pmFatalErrorException());
+        
+        pmSubscriptionInfo lUnifiedSubscriptionInfo1, lUnifiedSubscriptionInfo2;
+
+        if(!lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub1, pSubtaskId1, lUnifiedSubscriptionInfo1))
+            PMTHROW(pmFatalErrorException());
+        
+        if(!lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub2, pSubtaskId2, lUnifiedSubscriptionInfo2))
+            PMTHROW(pmFatalErrorException());
+        
+        if(lUnifiedSubscriptionInfo1.length != lUnifiedSubscriptionInfo2.length)
+            PMTHROW(pmFatalErrorException());
+        
+        size_t lDataCount = lUnifiedSubscriptionInfo1.length / sizeof(datatype);
+
+        switch(pReductionType)
+        {
+            case REDUCE_ADD:
+            {
+                for(size_t i = 0; i < lDataCount; ++i)
+                    lShadowMem1[i] += lShadowMem2[i];
+                
+                break;
+            }
+                
+            default:
+                PMTHROW(pmFatalErrorException());
+        }
     }
     
     return pmSuccess;
