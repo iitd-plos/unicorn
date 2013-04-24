@@ -147,15 +147,17 @@ class pmSubscriptionManager : public pmBase
         static pmMemSection* FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr);
 
 	private:
-		pmStatus WaitForSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId);
-        pmStatus FetchInputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
-        pmStatus FetchOutputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
+        pmStatus WaitForSubscriptions(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub);
+        pmStatus FetchInputMemSubscription(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
+        pmStatus FetchOutputMemSubscription(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
     
 #ifdef SUPPORT_CUDA
     #ifdef SUPPORT_LAZY_MEMORY
-        void ClearInputMemLazyProtectionForCuda(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType);
+        void ClearInputMemLazyProtectionForCuda(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType);
     #endif
 #endif
+
+        pmStatus DestroySubtaskShadowMemInternal(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub, ulong pSubtaskId);
     
         std::vector<std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS> > mSubtaskMapVector;
 

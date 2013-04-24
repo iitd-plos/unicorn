@@ -453,13 +453,9 @@ bool pmSubscriptionManager::GetUnifiedOutputMemSubscriptionForSubtask(pmExecutio
 
 pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, void* pMem /* = NULL */, size_t pMemLength /* = 0 */, size_t pWriteOnlyUnprotectedRanges /* = 0 */, uint* pUnprotectedRanges /* = NULL */)
 {
-    GET_SUBTASK(lSubtask, pStub, pSubtaskId);
-
     pmSubscriptionInfo lUnifiedSubscriptionInfo;
     if(!GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lUnifiedSubscriptionInfo))
         PMTHROW(pmFatalErrorException());
-    
-    std::pair<pmExecutionStub*, ulong> lPair(pStub, pSubtaskId);
 
 #ifdef _DEBUG
     if(lSubtask.mShadowMem.get_ptr() != NULL)
@@ -489,17 +485,24 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
     std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem " << (void*)lShadowMem << " allocated for device/subtask " << pStub << "/" << pSubtaskId << " " << std::endl;
 #endif
 
-    lSubtask.mShadowMem.reset(lShadowMem);
+    // Auto lock/unlock scope
+    {
+        GET_SUBTASK(lSubtask, pStub, pSubtaskId);
 
-    if(lExplicitAllocation)
-        lSubtask.mShadowMem.GetDeallocator().SetExplicitAllocation();
+        lSubtask.mShadowMem.reset(lShadowMem);
 
-    lSubtask.mShadowMem.GetDeallocator().SetTask(mTask);
+        if(lExplicitAllocation)
+            lSubtask.mShadowMem.GetDeallocator().SetExplicitAllocation();
+
+        lSubtask.mShadowMem.GetDeallocator().SetTask(mTask);
+    }
 
     if(pMem)
     {
         if(lMemSection->IsLazyWriteOnly())
         {
+            GET_SUBTASK(lSubtask, pStub, pSubtaskId);
+
             size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
             char* lSrcMem = (char*)pMem;
 
@@ -589,11 +592,17 @@ pmStatus pmSubscriptionManager::DestroySubtaskShadowMem(pmExecutionStub* pStub, 
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
 
+	return DestroySubtaskShadowMemInternal(lSubtask, pStub, pSubtaskId);
+}
+
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+pmStatus pmSubscriptionManager::DestroySubtaskShadowMemInternal(pmSubtask& pSubtask, pmExecutionStub* pStub, ulong pSubtaskId)
+{
     #ifdef DUMP_SHADOW_MEM
-        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem destroyed for device/subtask " << pStub << "/" << pSubtaskId << " " << (void*)(lSubtask.mShadowMem.get_ptr()) << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem destroyed for device/subtask " << pStub << "/" << pSubtaskId << " " << (void*)(pSubtask.mShadowMem.get_ptr()) << std::endl;
     #endif
 
-	lSubtask.mShadowMem.reset(NULL);
+	pSubtask.mShadowMem.reset(NULL);
 
 	return pmSuccess;
 }
@@ -618,7 +627,7 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
     for(; lIter != pEndIter; ++lIter)
         memcpy(lMem + lIter->first, lShadowMem + (lIter->first - pShadowMemOffset), lIter->second.first);
     
-    DestroySubtaskShadowMem(pStub, pSubtaskId);
+    DestroySubtaskShadowMemInternal(lSubtask, pStub, pSubtaskId);
 }
 
 pmMemSection* pmSubscriptionManager::FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr)
@@ -718,7 +727,7 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
             lSubscription.offset = lIter->first;
             lSubscription.length = lIter->second.first;
             
-            FetchInputMemSubscription(pStub, pSubtaskId, pDeviceType, lSubscription, lIter->second.second);
+            FetchInputMemSubscription(lSubtask, pDeviceType, lSubscription, lIter->second.second);
         }
     }
 
@@ -738,22 +747,23 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
             lSubscription.offset = lIter->first;
             lSubscription.length = lIter->second.first;
             
-            FetchOutputMemSubscription(pStub, pSubtaskId, pDeviceType, lSubscription, lIter->second.second);
+            FetchOutputMemSubscription(lSubtask, pDeviceType, lSubscription, lIter->second.second);
         }
     }
 
-	WaitForSubscriptions(pStub, pSubtaskId);
+	WaitForSubscriptions(lSubtask, pStub);
     
 #ifdef SUPPORT_CUDA
     #ifdef SUPPORT_LAZY_MEMORY
-        ClearInputMemLazyProtectionForCuda(pStub, pSubtaskId, pDeviceType);
+        ClearInputMemLazyProtectionForCuda(lSubtask, pDeviceType);
     #endif
 #endif
     
     return pmSuccess;
 }
 
-pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
 {
     std::vector<pmCommunicatorCommandPtr> lReceiveVector;
 	pmMemSection* lMemSection = mTask->GetMemSectionRO();
@@ -777,7 +787,8 @@ pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmExecutionStub* pStub
 	return pmSuccess;
 }
 
-pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
 {
     std::vector<pmCommunicatorCommandPtr> lReceiveVector;
 	pmMemSection* lMemSection = mTask->GetMemSectionRW();
@@ -801,15 +812,14 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmExecutionStub* pStu
 	return pmSuccess;
 }
 
-pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId)
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+pmStatus pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutionStub* pStub)
 {
-    GET_SUBTASK(lSubtask, pStub, pSubtaskId);
-
 	if(mTask->GetMemSectionRO())
 	{
         subscriptionRecordType::iterator lIter, lEndIter;
         
-        subscriptionRecordType& lMap = lSubtask.mInputMemSubscriptions;
+        subscriptionRecordType& lMap = pSubtask.mInputMemSubscriptions;
         lIter = lMap.begin();
         lEndIter = lMap.end();
         
@@ -824,7 +834,7 @@ pmStatus pmSubscriptionManager::WaitForSubscriptions(pmExecutionStub* pStub, ulo
 	{
         subscriptionRecordType::iterator lIter, lEndIter;
         
-        subscriptionRecordType& lMap = lSubtask.mOutputMemReadSubscriptions;
+        subscriptionRecordType& lMap = pSubtask.mOutputMemReadSubscriptions;
         lIter = lMap.begin();
         lEndIter = lMap.end();
         
@@ -933,18 +943,17 @@ const std::map<size_t, size_t>& pmSubscriptionManager::GetWriteOnlyLazyUnprotect
 }
 
 #ifdef SUPPORT_CUDA
-void pmSubscriptionManager::ClearInputMemLazyProtectionForCuda(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType)
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+void pmSubscriptionManager::ClearInputMemLazyProtectionForCuda(pmSubtask& pSubtask, pmDeviceType pDeviceType)
 {
 	pmMemSection* lMemSection = mTask->GetMemSectionRO();
     
     if(lMemSection && lMemSection->IsLazy() && pDeviceType == GPU_CUDA)
     {
-        GET_SUBTASK(lSubtask, pStub, pSubtaskId);
-
         size_t lLazyMemAddr = reinterpret_cast<size_t>(lMemSection->GetReadOnlyLazyMemoryMapping());
         subscriptionRecordType::iterator lIter, lEndIter;
         
-        subscriptionRecordType& lMap = lSubtask.mInputMemSubscriptions;
+        subscriptionRecordType& lMap = pSubtask.mInputMemSubscriptions;
         
         lIter = lMap.begin();
         lEndIter = lMap.end();
