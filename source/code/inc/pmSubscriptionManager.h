@@ -158,6 +158,9 @@ class pmSubscriptionManager : public pmBase
 #endif
 
         pmStatus DestroySubtaskShadowMemInternal(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub, ulong pSubtaskId);
+        bool SubtasksHaveMatchingSubscriptionsCommonStub(pmExecutionStub* pStub, ulong pSubtaskId1, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
+        bool SubtasksHaveMatchingSubscriptionsDifferentStubs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
+        bool SubtasksHaveMatchingSubscriptionsInternal(subscription::pmSubtask& pSubtask1, subscription::pmSubtask& pSubtask2, pmSubscriptionType pSubscriptionType);
     
         std::vector<std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS> > mSubtaskMapVector;
 

@@ -409,12 +409,7 @@ pmStatus pmTask::MarkSubtaskExecutionFinished()
 	}
 
 	if(mCallbackUnit->GetDataReductionCB())
-    {
-        if(GetOriginatingHost() == PM_LOCAL_MACHINE)
-            pmStubManager::GetStubManager()->GetStub((uint)0)->CheckReductionFinishEvent(this);
-        else
-            GetReducer()->CheckReductionFinish();
-    }
+        GetReducer()->CheckReductionFinish();
 
     if(mCallbackUnit->GetDataRedistributionCB())
         GetRedistributor()->SendRedistributionInfo();
@@ -583,7 +578,7 @@ void pmLocalTask::TerminateTask()
     pmTimedEventManager::GetTimedEventManager()->ClearTaskTimeOutEvent(this, GetTaskTimeOutTriggerTime());    
     pmScheduler::GetScheduler()->TerminateTaskEvent(this);
 }
-    
+
 void pmLocalTask::RegisterInternalTaskCompletionMessage()
 {
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());

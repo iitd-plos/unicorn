@@ -226,11 +226,11 @@ void pmExecutionStub::ProcessDeferredShadowMemCommits(pmTask* pTask)
     }
 }
     
-void pmExecutionStub::CheckReductionFinishEvent(pmTask* pTask)
+void pmExecutionStub::ReductionFinishEvent(pmTask* pTask)
 {
     stubEvent lEvent;
-    lEvent.checkReductionFinishDetails.task = pTask;
-    lEvent.eventId = CHECK_REDUCTION_FINISH;
+    lEvent.reductionFinishDetails.task = pTask;
+    lEvent.eventId = REDUCTION_FINISH;
     
     SwitchThread(lEvent, pTask->GetPriority());
 }
@@ -809,11 +809,11 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             break;
         }
         
-        case CHECK_REDUCTION_FINISH:
+        case REDUCTION_FINISH:
         {
-            pmTask* lTask = pEvent.checkReductionFinishDetails.task;
+            pmTask* lTask = pEvent.reductionFinishDetails.task;
 
-            lTask->GetReducer()->CheckReductionFinish();
+            lTask->GetReducer()->HandleReductionFinish();
             
             break;
         }

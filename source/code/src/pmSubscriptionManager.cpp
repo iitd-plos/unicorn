@@ -44,6 +44,16 @@ if(dPair.first.find(subtaskId) == dPair.first.end()) \
     PMTHROW(pmFatalErrorException()); \
 subscription::pmSubtask& subtaskVar = dPair.first[subtaskId];
 
+#define GET_SUBTASKS(subtaskVar1, subtaskVar2, stub, subtaskId1, subtaskId2) \
+std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS>& dPair = mSubtaskMapVector[stub->GetProcessingElement()->GetDeviceIndexInMachine()]; \
+FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &dPair.second, Lock(), Unlock()); \
+if(dPair.first.find(subtaskId1) == dPair.first.end()) \
+    PMTHROW(pmFatalErrorException()); \
+if(dPair.first.find(subtaskId2) == dPair.first.end()) \
+    PMTHROW(pmFatalErrorException()); \
+subscription::pmSubtask& subtaskVar1 = dPair.first[subtaskId1]; \
+subscription::pmSubtask& subtaskVar2 = dPair.first[subtaskId2];
+
 #define GET_SUBTASK2(subtaskVar, stub, subtaskId) \
 std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS>& dPair2 = mSubtaskMapVector[stub->GetProcessingElement()->GetDeviceIndexInMachine()]; \
 FINALIZE_RESOURCE_PTR(dResourceLock2, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &dPair2.second, Lock(), Unlock()); \
@@ -343,21 +353,42 @@ void pmSubscriptionManager::DropScratchBufferIfNotRequiredPostSubtaskExec(pmExec
     
 bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType)
 {
+    if(pStub1 == pStub2)
+        return SubtasksHaveMatchingSubscriptionsCommonStub(pStub1, pSubtaskId1, pSubtaskId2, pSubscriptionType);
+
+    return SubtasksHaveMatchingSubscriptionsDifferentStubs(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pSubscriptionType);
+}
+    
+bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptionsCommonStub(pmExecutionStub* pStub, ulong pSubtaskId1, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType)
+{
+    GET_SUBTASKS(lSubtask1, lSubtask2, pStub, pSubtaskId1, pSubtaskId2);
+    
+    return SubtasksHaveMatchingSubscriptionsInternal(lSubtask1, lSubtask2, pSubscriptionType);
+}
+    
+bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptionsDifferentStubs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType)
+{
     GET_SUBTASK(lSubtask1, pStub1, pSubtaskId1);
     GET_SUBTASK2(lSubtask2, pStub2, pSubtaskId2);
+    
+    return SubtasksHaveMatchingSubscriptionsInternal(lSubtask1, lSubtask2, pSubscriptionType);
+}
 
+/* Must be called with mSubtaskMapVector stub's lock acquired for both subtasks */
+bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptionsInternal(pmSubtask& pSubtask1, pmSubtask& pSubtask2, pmSubscriptionType pSubscriptionType)
+{
     bool lIsInputMem = (pSubscriptionType == INPUT_MEM_READ_SUBSCRIPTION);
 	if((lIsInputMem && !mTask->GetMemSectionRO()) || (!lIsInputMem && !mTask->GetMemSectionRW()))
 		PMTHROW(pmFatalErrorException());
     
-	pmSubscriptionInfo& lConsolidatedSubscription1 = lIsInputMem ? lSubtask1.mConsolidatedInputMemSubscription : ((pSubscriptionType == OUTPUT_MEM_READ_SUBSCRIPTION) ? lSubtask1.mConsolidatedOutputMemReadSubscription : lSubtask1.mConsolidatedOutputMemWriteSubscription);
-	pmSubscriptionInfo& lConsolidatedSubscription2 = lIsInputMem ? lSubtask2.mConsolidatedInputMemSubscription : ((pSubscriptionType == OUTPUT_MEM_READ_SUBSCRIPTION) ? lSubtask2.mConsolidatedOutputMemReadSubscription : lSubtask2.mConsolidatedOutputMemWriteSubscription);
+	pmSubscriptionInfo& lConsolidatedSubscription1 = lIsInputMem ? pSubtask1.mConsolidatedInputMemSubscription : ((pSubscriptionType == OUTPUT_MEM_READ_SUBSCRIPTION) ? pSubtask1.mConsolidatedOutputMemReadSubscription : pSubtask1.mConsolidatedOutputMemWriteSubscription);
+	pmSubscriptionInfo& lConsolidatedSubscription2 = lIsInputMem ? pSubtask2.mConsolidatedInputMemSubscription : ((pSubscriptionType == OUTPUT_MEM_READ_SUBSCRIPTION) ? pSubtask2.mConsolidatedOutputMemReadSubscription : pSubtask2.mConsolidatedOutputMemWriteSubscription);
     
     if(lConsolidatedSubscription1 != lConsolidatedSubscription2)
         return false;
 
-    subscriptionRecordType& lSubscriptions1 = lIsInputMem ? lSubtask1.mInputMemSubscriptions : ((pSubscriptionType == OUTPUT_MEM_READ_SUBSCRIPTION) ? lSubtask1.mOutputMemReadSubscriptions : lSubtask1.mOutputMemWriteSubscriptions);
-    subscriptionRecordType& lSubscriptions2 = lIsInputMem ? lSubtask2.mInputMemSubscriptions : ((pSubscriptionType == OUTPUT_MEM_READ_SUBSCRIPTION) ? lSubtask2.mOutputMemReadSubscriptions : lSubtask2.mOutputMemWriteSubscriptions);
+    subscriptionRecordType& lSubscriptions1 = lIsInputMem ? pSubtask1.mInputMemSubscriptions : ((pSubscriptionType == OUTPUT_MEM_READ_SUBSCRIPTION) ? pSubtask1.mOutputMemReadSubscriptions : pSubtask1.mOutputMemWriteSubscriptions);
+    subscriptionRecordType& lSubscriptions2 = lIsInputMem ? pSubtask2.mInputMemSubscriptions : ((pSubscriptionType == OUTPUT_MEM_READ_SUBSCRIPTION) ? pSubtask2.mOutputMemReadSubscriptions : pSubtask2.mOutputMemWriteSubscriptions);
     
     if(lSubscriptions1.size() != lSubscriptions2.size())
         return false;

@@ -54,7 +54,7 @@ typedef enum eventIdentifier
 	, FREE_GPU_RESOURCES
     , POST_HANDLE_EXEC_COMPLETION
     , DEFERRED_SHADOW_MEM_COMMITS
-    , CHECK_REDUCTION_FINISH
+    , REDUCTION_FINISH
 #ifdef DUMP_EVENT_TIMELINE
     , INIT_EVENT_TIMELINE
 #endif
@@ -95,10 +95,10 @@ typedef struct deferredShadowMemCommits
     pmTask* task;
 } deferredShadowMemCommits;
     
-typedef struct checkReductionFinish
+typedef struct reductionFinish
 {
     pmTask* task;
-} checkReductionFinish;
+} reductionFinish;
     
 #ifdef DUMP_EVENT_TIMELINE
 typedef struct initTimeline
@@ -117,7 +117,7 @@ typedef struct stubEvent : public pmBasicThreadEvent
         negotiatedRange negotiatedRangeDetails;
         execCompletion execCompletionDetails;
         deferredShadowMemCommits deferredShadowMemCommitsDetails;
-        checkReductionFinish checkReductionFinishDetails;
+        reductionFinish reductionFinishDetails;
     #ifdef DUMP_EVENT_TIMELINE
         initTimeline initTimelineDetails;
     #endif
@@ -156,7 +156,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         pmStatus CancelSubtaskRange(pmSubtaskRange& pRange);
         pmStatus ProcessNegotiatedRange(pmSubtaskRange& pRange);
         void ProcessDeferredShadowMemCommits(pmTask* pTask);
-        void CheckReductionFinishEvent(pmTask* pTask);
+        void ReductionFinishEvent(pmTask* pTask);
 
         pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
 

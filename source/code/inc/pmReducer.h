@@ -40,6 +40,7 @@ class pmReducer : public pmBase
 		virtual ~pmReducer();
 
 		pmStatus CheckReductionFinish();
+        pmStatus HandleReductionFinish();
 		pmStatus AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
 
         pmStatus ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
@@ -52,6 +53,7 @@ class pmReducer : public pmBase
 		pmStatus PopulateExternalMachineList();
 		ulong GetMaxPossibleExternalReductionReceives(uint pFollowingMachineCount);
         pmStatus CheckReductionFinishInternal();
+        void AddReductionFinishEvent();
 
         template<typename datatype>
         pmStatus ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
@@ -64,6 +66,8 @@ class pmReducer : public pmBase
 
 		pmMachine* mSendToMachine;			// Machine to which this machine will send
 		pmTask* mTask;
+    
+        bool mAddedReductionFinishEvent;
 
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };

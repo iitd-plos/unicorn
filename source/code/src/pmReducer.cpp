@@ -1,4 +1,4 @@
-
+\
 /**
  * Copyright (c) 2011 Indian Institute of Technology, New Delhi
  * All Rights Reserved
@@ -37,6 +37,7 @@ pmReducer::pmReducer(pmTask* pTask)
 	, mReduceState(false)
 	, mSendToMachine(NULL)
     , mTask(pTask)
+    , mAddedReductionFinishEvent(false)
     , mResourceLock __LOCK_NAME__("pmReducer::mResourceLock")
 {
 	PopulateExternalMachineList();
@@ -160,7 +161,7 @@ pmStatus pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 pmStatus pmReducer::CheckReductionFinish()
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-    
+
     return CheckReductionFinishInternal();
 }
 
@@ -179,11 +180,26 @@ pmStatus pmReducer::CheckReductionFinishInternal()
 		}
 		else
 		{
-			(static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.first, mLastSubtask.second);
+            AddReductionFinishEvent();
 		}
 	}
 
 	return pmSuccess;
+}
+    
+/* This function must be called with mResourceLock acquired */
+void pmReducer::AddReductionFinishEvent()
+{
+    if(mAddedReductionFinishEvent)
+        return;
+    
+    mAddedReductionFinishEvent = true;
+    mLastSubtask.first->ReductionFinishEvent(mTask);
+}
+    
+pmStatus pmReducer::HandleReductionFinish()
+{
+    return (static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.first, mLastSubtask.second);
 }
 
 template<typename datatype>
@@ -246,7 +262,7 @@ pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, p
         if(lUnifiedSubscriptionInfo1.length != lUnifiedSubscriptionInfo2.length)
             PMTHROW(pmFatalErrorException());
         
-        size_t lDataCount = lUnifiedSubscriptionInfo1.length / sizeof(datatype);
+        size_t lDataCount = lUnifiedSubscriptionInfo1.length / lDataSize;
 
         switch(pReductionType)
         {
