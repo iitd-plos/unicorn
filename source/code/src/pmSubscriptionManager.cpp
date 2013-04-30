@@ -648,7 +648,7 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
 
     #ifdef DUMP_SHADOW_MEM
-        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem committed for device/subtask " << pStub << "/" << pSubtaskId << " " << (void*)(lSubtaskMap.mShadowMem.get_ptr()) << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem committed for device/subtask " << pStub << "/" << pSubtaskId << " " << (void*)(lSubtask.mShadowMem.get_ptr()) << std::endl;
     #endif
     
     char* lShadowMem = (char*)(lSubtask.mShadowMem.get_ptr());

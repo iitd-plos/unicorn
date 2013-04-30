@@ -40,6 +40,7 @@ static const char* profileName[] =
     (char*)"SUBTASK_EXECUTION",
     (char*)"DATA_REDUCTION",
     (char*)"DATA_REDISTRIBUTION",
+    (char*)"SHADOW_MEM_COMMIT",
     (char*)"SUBTASK_STEAL_WAIT",
     (char*)"SUBTASK_STEAL_SERVE",
     (char*)"UNIVERSAL"

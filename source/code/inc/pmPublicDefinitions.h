@@ -110,6 +110,8 @@ namespace pm
     typedef struct pmGpuContext
     {
         void* scratchBuffer;
+
+        pmGpuContext();
     } pmGpuContext;
 
 	/** Some utility typedefs */
@@ -125,6 +127,8 @@ namespace pm
         size_t outputMemReadLength;
         size_t outputMemWriteLength;
         pmGpuContext gpuContext;
+        
+        pmSubtaskInfo();
 	} pmSubtaskInfo;
 
 	typedef struct pmTaskInfo
@@ -136,6 +140,8 @@ namespace pm
 		unsigned long subtaskCount;
 		unsigned short priority;
 		unsigned int originatingHost;
+        
+        pmTaskInfo();
 	} pmTaskInfo;
 
 	typedef enum pmMemInfo
@@ -164,6 +170,8 @@ namespace pm
 		pmMemInfo memInfo;
 		unsigned int srcHost;
 		unsigned int destHost;
+        
+        pmDataTransferInfo();
 	} pmDataTransferInfo;
 
 	typedef enum pmDeviceType
@@ -182,6 +190,8 @@ namespace pm
 		char description[MAX_DESC_STR_LEN];
 		pmDeviceType deviceType;
 		unsigned int host;
+        
+        pmDeviceInfo();
 	} pmDeviceInfo;
     
     typedef enum pmSchedulingPolicy

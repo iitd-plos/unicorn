@@ -882,6 +882,10 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
     
 void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SHADOW_MEM_COMMIT);
+#endif
+
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     
     pmSubscriptionInfo lUnifiedSubscriptionInfo;

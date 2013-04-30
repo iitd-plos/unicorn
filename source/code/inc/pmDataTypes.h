@@ -80,6 +80,7 @@ namespace pm
             SUBTASK_EXECUTION,
             DATA_REDUCTION,
             DATA_REDISTRIBUTION,
+            SHADOW_MEM_COMMIT,
             SUBTASK_STEAL_WAIT,
             SUBTASK_STEAL_SERVE,
             UNIVERSAL, /* For internal use only */

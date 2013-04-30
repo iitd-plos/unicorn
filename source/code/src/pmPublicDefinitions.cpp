@@ -201,6 +201,55 @@ unsigned int pmGetHostCount()
 	return 0;
 }
 
+pmGpuContext::pmGpuContext()
+    : scratchBuffer(NULL)
+{
+}
+    
+pmSubtaskInfo::pmSubtaskInfo()
+    : subtaskId((unsigned long)-1)
+    , inputMem(NULL)
+    , outputMem(NULL)
+    , outputMemRead(NULL)
+    , outputMemWrite(NULL)
+	, inputMemLength(0)
+    , outputMemLength(0)
+    , outputMemReadLength(0)
+    , outputMemWriteLength(0)
+    , gpuContext()
+{
+}
+    
+pmTaskInfo::pmTaskInfo()
+    : taskHandle(NULL)
+	, taskConf(NULL)
+	, taskConfLength(0)
+	, taskId(0)
+	, subtaskCount(0)
+	, priority(0)
+	, originatingHost(0)
+{
+}
+
+pmDataTransferInfo::pmDataTransferInfo()
+    : memHandle(NULL)
+	, memLength(0)
+	, operatedMemLength(NULL)
+	, memInfo(MAX_MEM_INFO)
+	, srcHost((unsigned int)-1)
+	, destHost((unsigned int)-1)
+{
+}
+    
+pmDeviceInfo::pmDeviceInfo()
+    : deviceHandle(NULL)
+    , deviceType(MAX_DEVICE_TYPES)
+    , host((unsigned int)-1)
+{
+	name[0] = '\0';
+	description[0] = '\0';
+}
+
 void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
 void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize)
 {
@@ -339,12 +388,9 @@ pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHan
 }
 
 pmSubscriptionInfo::pmSubscriptionInfo()
+	: offset(0)
+	, length(0)
 {
-	offset = 0;
-	length = 0;
-	//blockLength = 0;
-	//jumpLength = 0;
-	//blockCount = 1;
 }
 
 pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo)
