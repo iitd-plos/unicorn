@@ -45,7 +45,7 @@ pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtas
         return pmSuccess;
     
 #ifdef ENABLE_TASK_PROFILING
-    pmRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
 
     pmSubscriptionInfo lOutputMemSubscriptionInfo;
@@ -86,7 +86,7 @@ pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pSubtask
         PMTHROW(pmFatalErrorException());
     
 #ifdef ENABLE_TASK_PROFILING
-    pmRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
 
 	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mGlobalRedistributionLock, Lock(), Unlock());

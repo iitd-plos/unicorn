@@ -50,6 +50,10 @@ pmDataDistributionCB::~pmDataDistributionCB()
 
 pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_PARTITIONING);
+#endif
+    
 	if(!mCallback)
 		return pmSuccess;
 
@@ -124,7 +128,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex)
 {
 #ifdef ENABLE_TASK_PROFILING
-    pmRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
 #endif
 
     bool lOutputMemWriteOnly = false;
@@ -200,7 +204,7 @@ pmDataReductionCB::~pmDataReductionCB()
 pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2)
 {
 #ifdef ENABLE_TASK_PROFILING
-    pmRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
 #endif
 
 	if(!mCallback)

@@ -1091,14 +1091,18 @@ pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 #ifdef ENABLE_TASK_PROFILING
     // Task Profiler Scope
     {
-        pmRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_PARTITIONING);
-
+        pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr1(pTask->GetTaskProfiler(), taskProfiler::PRE_SUBTASK_EXECUTION);
+        
         pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
-        INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
     }
 #else
     pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
+#endif
+    
     INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
+
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr2(pTask->GetTaskProfiler(), taskProfiler::PRE_SUBTASK_EXECUTION);
 #endif
 
     pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);

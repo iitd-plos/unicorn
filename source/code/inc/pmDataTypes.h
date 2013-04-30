@@ -76,6 +76,7 @@ namespace pm
             OUTPUT_MEMORY_TRANSFER,
             TOTAL_MEMORY_TRANSFER,    /* For internal use only */
             DATA_PARTITIONING,
+            PRE_SUBTASK_EXECUTION,
             SUBTASK_EXECUTION,
             DATA_REDUCTION,
             DATA_REDISTRIBUTION,

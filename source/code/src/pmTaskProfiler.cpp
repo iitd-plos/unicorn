@@ -36,6 +36,7 @@ static const char* profileName[] =
     (char*)"OUTPUT_MEMORY_TRANSFER",
     (char*)"TOTAL_MEMORY_TRANSFER",
     (char*)"DATA_PARTITIONING",
+    (char*)"PRE_SUBTASK_EXECUTION",
     (char*)"SUBTASK_EXECUTION",
     (char*)"DATA_REDUCTION",
     (char*)"DATA_REDISTRIBUTION",
@@ -88,9 +89,6 @@ void pmTaskProfiler::RecordProfileEvent(profileType pProfileType, bool pStart)
 {
     if(pProfileType == UNIVERSAL || pProfileType == TOTAL_MEMORY_TRANSFER)
         PMTHROW(pmFatalErrorException());
-	
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = mResourceLock[pProfileType];
-    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
 
     RecordProfileEventInternal(pProfileType, pStart);
     if(pProfileType == INPUT_MEMORY_TRANSFER || pProfileType == OUTPUT_MEMORY_TRANSFER)
@@ -101,6 +99,9 @@ void pmTaskProfiler::RecordProfileEvent(profileType pProfileType, bool pStart)
     
 void pmTaskProfiler::RecordProfileEventInternal(profileType pProfileType, bool pStart)
 {
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = mResourceLock[pProfileType];
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
+
     if(pStart)
     {
         if(mRecursionCount[pProfileType] == 0)
