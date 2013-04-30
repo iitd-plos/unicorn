@@ -1089,40 +1089,29 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
 pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
 #ifdef ENABLE_TASK_PROFILING
-    pmTaskProfiler* lTaskProfiler = pTask->GetTaskProfiler();
+    // Task Profiler Scope
+    {
+        pmRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_PARTITIONING);
 
-    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, true);
+        pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
+        INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
+    }
+#else
     pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
     INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
-    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::DATA_PARTITIONING, false);
+#endif
 
     pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
     pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
     
     if(pTask->DoSubtasksNeedShadowMemory())
         pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
-
-    lTaskProfiler->RecordProfileEvent(pmTaskProfiler::SUBTASK_EXECUTION, true);
-#else
-    pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
-    INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
-
-    pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
-    pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
-
-    if(pTask->DoSubtasksNeedShadowMemory())
-        pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
-#endif
 	
 	return pmSuccess;
 }
 
 pmStatus pmExecutionStub::CommonPostExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
 {
-#ifdef ENABLE_TASK_PROFILING
-    pTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_EXECUTION, false);
-#endif
-    
     return pmSuccess;
 }
     

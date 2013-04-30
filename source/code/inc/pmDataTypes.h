@@ -64,6 +64,39 @@ namespace pm
             ulong mSubtaskId;
             bool mHasJumped;
     };
+    
+#ifdef ENABLE_TASK_PROFILING
+    class pmTaskProfiler;
+
+    namespace taskProfiler
+    {
+        enum profileType
+        {
+            INPUT_MEMORY_TRANSFER,
+            OUTPUT_MEMORY_TRANSFER,
+            TOTAL_MEMORY_TRANSFER,    /* For internal use only */
+            DATA_PARTITIONING,
+            SUBTASK_EXECUTION,
+            DATA_REDUCTION,
+            DATA_REDISTRIBUTION,
+            SUBTASK_STEAL_WAIT,
+            SUBTASK_STEAL_SERVE,
+            UNIVERSAL, /* For internal use only */
+            MAX_PROFILE_TYPES
+        };
+    }
+
+    class pmRecordProfileEventAutoPtr
+    {
+        public:
+            pmRecordProfileEventAutoPtr(pmTaskProfiler* pTaskProfiler, taskProfiler::profileType pProfileType);
+            ~pmRecordProfileEventAutoPtr();
+        
+        private:
+            pmTaskProfiler* mTaskProfiler;
+            taskProfiler::profileType mProfileType;
+    };
+#endif
 
     typedef struct pmSubtaskRange
     {

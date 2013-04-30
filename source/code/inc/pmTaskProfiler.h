@@ -33,39 +33,24 @@ namespace pm
 /**
  * \brief The task profiler
  */
-
+    
 class pmTaskProfiler : public pmBase
 {
 public:
-    enum profileType
-    {
-        INPUT_MEMORY_TRANSFER,
-        OUTPUT_MEMORY_TRANSFER,
-        TOTAL_MEMORY_TRANSFER,    /* For internal use only */
-        DATA_PARTITIONING,
-        SUBTASK_EXECUTION,
-        DATA_REDUCTION,
-        DATA_REDISTRIBUTION,
-        SUBTASK_STEAL_WAIT,
-        SUBTASK_STEAL_SERVE,
-        UNIVERSAL, /* For internal use only */
-        MAX_PROFILE_TYPES
-    };
-    
     pmTaskProfiler();
     ~pmTaskProfiler();
 
-    void RecordProfileEvent(profileType pProfileType, bool pStart);
+    void RecordProfileEvent(taskProfiler::profileType pProfileType, bool pStart);
     
 private:
-    void RecordProfileEventInternal(profileType pProfileType, bool pStart);
-    void AccountForElapsedTime(profileType pProfileType);
+    void RecordProfileEventInternal(taskProfiler::profileType pProfileType, bool pStart);
+    void AccountForElapsedTime(taskProfiler::profileType pProfileType);
     
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock[MAX_PROFILE_TYPES];
-    TIMER_IMPLEMENTATION_CLASS mTimer[MAX_PROFILE_TYPES];
-    uint mRecursionCount[MAX_PROFILE_TYPES];
-    double mAccumulatedTime[MAX_PROFILE_TYPES];
-    double mActualTime[MAX_PROFILE_TYPES];
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock[taskProfiler::MAX_PROFILE_TYPES];
+    TIMER_IMPLEMENTATION_CLASS mTimer[taskProfiler::MAX_PROFILE_TYPES];
+    uint mRecursionCount[taskProfiler::MAX_PROFILE_TYPES];
+    double mAccumulatedTime[taskProfiler::MAX_PROFILE_TYPES];
+    double mActualTime[taskProfiler::MAX_PROFILE_TYPES];
 };
     
 } // end namespace pm

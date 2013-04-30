@@ -45,7 +45,7 @@ pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtas
         return pmSuccess;
     
 #ifdef ENABLE_TASK_PROFILING
-    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, true);
+    pmRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
 
     pmSubscriptionInfo lOutputMemSubscriptionInfo;
@@ -65,10 +65,6 @@ pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtas
 
     mLocalRedistributionData.push_back(lOrderData);
 
-#ifdef ENABLE_TASK_PROFILING
-    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, false);
-#endif
-    
     return pmSuccess;
 }
     
@@ -90,7 +86,7 @@ pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pSubtask
         PMTHROW(pmFatalErrorException());
     
 #ifdef ENABLE_TASK_PROFILING
-    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, true);
+    pmRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
 
 	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mGlobalRedistributionLock, Lock(), Unlock());
@@ -112,10 +108,6 @@ pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pSubtask
 
     if(mSubtasksAccounted == mTask->GetSubtaskCount())
         SetRedistributedOwnership();
-    
-#ifdef ENABLE_TASK_PROFILING
-    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDISTRIBUTION, false);
-#endif
 
     return pmSuccess;
 }

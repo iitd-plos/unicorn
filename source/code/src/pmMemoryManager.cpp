@@ -510,7 +510,7 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
 
 #ifdef ENABLE_TASK_PROFILING
     if(pMemSection->GetLockingTask())
-        pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput()?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, true);
+        pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, true);
 #endif
     
 	lFetchData.receiveCommand->MarkExecutionStart();
@@ -545,7 +545,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
     #ifdef ENABLE_TASK_PROFILING
         pmTask* lLockingTask = pMemSection->GetLockingTask();
         if(lLockingTask)
-            lLockingTask->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput()?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+            lLockingTask->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
     #endif
 
     #ifdef ENABLE_MEM_PROFILING
@@ -601,7 +601,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
         #ifdef ENABLE_TASK_PROFILING
             pmTask* lLockingTask = pMemSection->GetLockingTask();
             if(lLockingTask)
-                pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput()?pmTaskProfiler::INPUT_MEMORY_TRANSFER:pmTaskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+                pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
         #endif
 
         #ifdef ENABLE_MEM_PROFILING

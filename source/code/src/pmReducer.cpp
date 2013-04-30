@@ -129,10 +129,6 @@ ulong pmReducer::GetMaxPossibleExternalReductionReceives(uint pFollowingMachineC
 
 pmStatus pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 {
-#ifdef ENABLE_TASK_PROFILING
-    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDUCTION, true);
-#endif
-
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	if(mReduceState)
@@ -150,10 +146,6 @@ pmStatus pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 
 		CheckReductionFinishInternal();
 	}
-
-#ifdef ENABLE_TASK_PROFILING
-    mTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::DATA_REDUCTION, false);
-#endif
 
 	return pmSuccess;
 }

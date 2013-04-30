@@ -23,6 +23,7 @@
 #include "pmTimer.h"
 #include "pmResourceLock.h"
 #include "pmExecutionStub.h"
+#include "pmTaskProfiler.h"
 
 #include <iostream>
 #include <iomanip>
@@ -75,7 +76,23 @@ pmSubtaskTerminationCheckPointAutoPtr::~pmSubtaskTerminationCheckPointAutoPtr()
     mStub->MarkInsideUserCode(mSubtaskId);
 }
 
+
+#ifdef ENABLE_TASK_PROFILING
+/* class pmRecordProfileEventAutoPtr */
+pmRecordProfileEventAutoPtr::pmRecordProfileEventAutoPtr(pmTaskProfiler* pTaskProfiler, taskProfiler::profileType pProfileType)
+    : mTaskProfiler(pTaskProfiler)
+    , mProfileType(pProfileType)
+{
+    mTaskProfiler->RecordProfileEvent(pProfileType, true);
+}
     
+pmRecordProfileEventAutoPtr::~pmRecordProfileEventAutoPtr()
+{
+    mTaskProfiler->RecordProfileEvent(mProfileType, false);
+}
+#endif
+
+
 const uint MAX_FLOAT_WIDTH = 8;
 const uint MAX_INT_WIDTH = 8;
 const double MIN_ACCUMULATED_TIME = 0.001;

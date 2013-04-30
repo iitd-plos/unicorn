@@ -308,7 +308,7 @@ pmStatus pmScheduler::StealRequestEvent(pmProcessingElement* pStealingDevice, pm
         return pmSuccess;
 
 #ifdef ENABLE_TASK_PROFILING
-    pTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, true);
+    pTask->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_WAIT, true);
 #endif
     
 	schedulerEvent lEvent;
@@ -326,7 +326,7 @@ pmStatus pmScheduler::StealProcessEvent(pmProcessingElement* pStealingDevice, pm
         return pmSuccess;
     
 #ifdef ENABLE_TASK_PROFILING
-    pTask->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, true);
+    pTask->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_SERVE, true);
 #endif
     
 	schedulerEvent lEvent;
@@ -616,7 +616,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 lStatus = SendStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
             
 #ifdef ENABLE_TASK_PROFILING
-            lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, false);
+            lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_SERVE, false);
 #endif
             return lStatus;            
         }
@@ -630,7 +630,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 lStatus = SendFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);
             
 #ifdef ENABLE_TASK_PROFILING
-            lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_SERVE, false);
+            lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_SERVE, false);
 #endif
             return lStatus;
         }
@@ -640,7 +640,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             stealSuccessStealer& lEventDetails = pEvent.stealSuccessStealerDetails;
 
 #ifdef ENABLE_TASK_PROFILING
-            lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, false);
+            lEventDetails.range.task->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_WAIT, false);
 #endif            
             if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.range.task))
                 return ReceiveStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.range);
@@ -653,7 +653,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             stealFailStealer& lEventDetails = pEvent.stealFailStealerDetails;
 
 #ifdef ENABLE_TASK_PROFILING
-            lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(pmTaskProfiler::SUBTASK_STEAL_WAIT, false);
+            lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_WAIT, false);
 #endif
             if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.task))
                 return ReceiveFailedStealResponse(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task);

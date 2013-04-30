@@ -28,6 +28,8 @@
 namespace pm
 {
     
+using namespace taskProfiler;
+
 static const char* profileName[] =
 {
     (char*)"INPUT_MEMORY_TRANSFER",
