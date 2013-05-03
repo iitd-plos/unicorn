@@ -709,7 +709,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             taskFinish& lEventDetails = pEvent.taskFinishDetails;
             pmTask* lTask = lEventDetails.task;
         
-            if(lTask->GetMemSectionRW() && lTask->GetMemSectionRW()->IsReadWrite())
+            if(lTask->GetMemSectionRW() && lTask->GetMemSectionRW()->IsReadWrite() && !lTask->HasSameReadWriteSubscription())
             {
                 CommitShadowMemPendingOnAllStubs(lTask);
                 lTask->MarkAllStubsScannedForShadowMemCommitMessages();

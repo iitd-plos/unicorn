@@ -91,7 +91,7 @@ const unsigned short MIN_PRIORITY_LEVEL = __MAX(unsigned short);
 const unsigned short DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 
 const unsigned short TASK_MULTI_ASSIGN_FLAG_VAL = 0x0001;   // LSB
-const unsigned long MEMORY_TRANSFER_TIMEOUT = 3;    // in secs
+const unsigned short TASK_SAME_READ_WRITE_SUBSCRIPTION_FLAG_VAL = 0x0002;
 
 #define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
 

@@ -26,13 +26,14 @@
 #include "pmDevicePool.h"
 #include "pmCommand.h"
 #include "pmCallbackUnit.h"
-#include "pmReducer.h"
 #include "pmScheduler.h"
 #include "pmMemSection.h"
 #include "pmTaskManager.h"
 #include "pmTls.h"
 #include "pmLogger.h"
 #include "pmMemoryManager.h"
+#include "pmReducer.h"
+#include "pmRedistributor.h"
 
 #include <string>
 #include <sstream>
@@ -231,6 +232,16 @@ void pmExecutionStub::ReductionFinishEvent(pmTask* pTask)
     stubEvent lEvent;
     lEvent.reductionFinishDetails.task = pTask;
     lEvent.eventId = REDUCTION_FINISH;
+    
+    SwitchThread(lEvent, pTask->GetPriority());
+}
+    
+void pmExecutionStub::ProcessRedistributionBucket(pmTask* pTask, size_t pBucketIndex)
+{
+    stubEvent lEvent;
+    lEvent.processRedistributionBucketDetails.task = pTask;
+    lEvent.processRedistributionBucketDetails.bucketIndex = pBucketIndex;
+    lEvent.eventId = PROCESS_REDISTRIBUTION_BUCKET;
     
     SwitchThread(lEvent, pTask->GetPriority());
 }
@@ -723,7 +734,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                     mEventTimelineAutoPtr->RecordEvent(lEventName.str(), false);
                 #endif
                 
-                    CommonPostNegotiationOnCPU(lRange.task, lLastExecutedSubtaskId);
+                    CommonPostNegotiationOnCPU(lRange.task, lLastExecutedSubtaskId, false);
                 }
             
                 if(lForceAckFlag)
@@ -760,7 +771,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 mEventTimelineAutoPtr->RenameEvent(lEventName.str(), lNewName.str());
             #endif
 
-                CommonPostNegotiationOnCPU(lRange.task, subtaskId);
+                CommonPostNegotiationOnCPU(lRange.task, subtaskId, true);
             }
         
             if(lRange.task->GetSchedulingModel() == scheduler::PULL)
@@ -814,6 +825,15 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             pmTask* lTask = pEvent.reductionFinishDetails.task;
 
             lTask->GetReducer()->HandleReductionFinish();
+            
+            break;
+        }
+            
+        case PROCESS_REDISTRIBUTION_BUCKET:
+        {
+            pmTask* lTask = pEvent.processRedistributionBucketDetails.task;
+            
+            lTask->GetRedistributor()->ProcessRedistributionBucket(pEvent.processRedistributionBucketDetails.bucketIndex);
             
             break;
         }
@@ -1066,14 +1086,7 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
     try
     {
         UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
-        lStatus = Execute(pTask, pSubtaskId);
-
-    #if 0
-        size_t lUnprotectedPages = pTask->GetSubscriptionManager().GetWriteOnlyLazyUnprotectedPagesCount(this, pSubtaskId);
-        size_t lTotalPages = pTask->GetMemSectionRW()->GetAllocatedLength() / 4096;
-        
-        std::cout << "Subtask " << pSubtaskId << " pages " << ((double)lUnprotectedPages/lTotalPages) * 100.0 << "%" << std::endl;
-    #endif
+        lStatus = Execute(pTask, pSubtaskId, pIsMultiAssign);
     }
     catch(pmPrematureExitException& e)
     {
@@ -1090,7 +1103,7 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
     return lStatus;
 }
     
-pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
+pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign)
 {
 #ifdef ENABLE_TASK_PROFILING
     // Task Profiler Scope
@@ -1112,7 +1125,7 @@ pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId)
     pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
     pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
     
-    if(pTask->DoSubtasksNeedShadowMemory())
+    if(pTask->DoSubtasksNeedShadowMemory() || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
         pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
 	
 	return pmSuccess;
@@ -1122,8 +1135,8 @@ pmStatus pmExecutionStub::CommonPostExecuteOnCPU(pmTask* pTask, ulong pSubtaskId
 {
     return pmSuccess;
 }
-    
-pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId)
+
+pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign)
 {
 	pmCallbackUnit* lCallbackUnit = pTask->GetCallbackUnit();
 	pmDataReductionCB* lReduceCallback = lCallbackUnit->GetDataReductionCB();
@@ -1131,11 +1144,11 @@ pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubta
 	if(lReduceCallback)
 		pTask->GetReducer()->AddSubtask(this, pSubtaskId);
 	else
-		INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataRedistributionCB, pTask->GetCallbackUnit()->GetDataRedistributionCB(), Invoke, this, pTask, pSubtaskId);
+		INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataRedistributionCB, pTask->GetCallbackUnit()->GetDataRedistributionCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign);
     
-    if(!lReduceCallback && pTask->DoSubtasksNeedShadowMemory())
+    if(!lReduceCallback && (pTask->DoSubtasksNeedShadowMemory() || (pTask->IsMultiAssignEnabled() && pIsMultiAssign)))
     {
-        if(pTask->GetMemSectionRW()->IsReadWrite())
+        if(pTask->GetMemSectionRW()->IsReadWrite() && !pTask->HasSameReadWriteSubscription())
             DeferShadowMemCommit(pTask, pSubtaskId);
         else
             CommitSubtaskShadowMem(pTask, pSubtaskId);
@@ -1147,15 +1160,8 @@ pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubta
 pmStatus pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2)
 {
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &pSubtaskId1);
-	pmStatus lStatus = pTask->GetCallbackUnit()->GetDataReductionCB()->Invoke(pTask, this, pSubtaskId1, pStub2, pSubtaskId2);
+	pmStatus lStatus = pTask->GetCallbackUnit()->GetDataReductionCB()->Invoke(pTask, this, pSubtaskId1, true, pStub2, pSubtaskId2, true);
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
-
-#if 0
-    size_t lUnprotectedPages = pTask->GetSubscriptionManager().GetWriteOnlyLazyUnprotectedPagesCount(this, pSubtaskId1);
-    size_t lTotalPages = pTask->GetMemSectionRW()->GetAllocatedLength() / 4096;
-    
-    std::cout << "Subtask [" << pSubtaskId1 << " : " << pSubtaskId2 << "] pages " << ((double)lUnprotectedPages/lTotalPages) * 100.0 << "%" << std::endl;
-#endif
 
 	/* Handle Transactions */
 	switch(lStatus)
@@ -1261,10 +1267,10 @@ pmDeviceType pmStubCPU::GetType()
 	return CPU;
 }
 
-pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId)
+pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign)
 {
-	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId));
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, mCoreId);
+	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign));
+	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign, mCoreId);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
 	
 	return pmSuccess;
@@ -1351,11 +1357,11 @@ pmDeviceType pmStubCUDA::GetType()
 #endif
 }
 
-pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId)
+pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign)
 {
 #ifdef SUPPORT_CUDA
-	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId));
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, mDeviceIndex);
+	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign));
+	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign, mDeviceIndex);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
 #endif
 

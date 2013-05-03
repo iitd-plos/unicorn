@@ -55,6 +55,7 @@ typedef enum eventIdentifier
     , POST_HANDLE_EXEC_COMPLETION
     , DEFERRED_SHADOW_MEM_COMMITS
     , REDUCTION_FINISH
+    , PROCESS_REDISTRIBUTION_BUCKET
 #ifdef DUMP_EVENT_TIMELINE
     , INIT_EVENT_TIMELINE
 #endif
@@ -100,6 +101,12 @@ typedef struct reductionFinish
     pmTask* task;
 } reductionFinish;
     
+typedef struct processRedistributionBucket
+{
+    pmTask* task;
+    size_t bucketIndex;
+} processRedistributionBucket;
+    
 #ifdef DUMP_EVENT_TIMELINE
 typedef struct initTimeline
 {
@@ -118,6 +125,7 @@ typedef struct stubEvent : public pmBasicThreadEvent
         execCompletion execCompletionDetails;
         deferredShadowMemCommits deferredShadowMemCommitsDetails;
         reductionFinish reductionFinishDetails;
+        processRedistributionBucket processRedistributionBucketDetails;
     #ifdef DUMP_EVENT_TIMELINE
         initTimeline initTimelineDetails;
     #endif
@@ -157,6 +165,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         pmStatus ProcessNegotiatedRange(pmSubtaskRange& pRange);
         void ProcessDeferredShadowMemCommits(pmTask* pTask);
         void ReductionFinishEvent(pmTask* pTask);
+        void ProcessRedistributionBucket(pmTask* pTask, size_t pBucketIndex);
 
         pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
 
@@ -172,7 +181,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
-		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId);
+		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign);
 		pmStatus CommonPostExecuteOnCPU(pmTask* pTask, ulong pSubtaskId);
 
 		pmStatus FreeGpuResources();
@@ -215,12 +224,12 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         } currentSubtaskTerminus;
     
 		pmStatus ProcessEvent(execStub::stubEvent& pEvent);
-        virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
+        virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign) = 0;
         pmStatus ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination);
         pmStatus ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus);
         void PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
-        pmStatus CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId);
+        pmStatus CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign);
         void CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId);
         void DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId);
@@ -262,7 +271,7 @@ class pmStubGPU : public pmExecutionStub
 		virtual pmStatus FreeResources() = 0;
 		virtual pmStatus FreeExecutionResources() = 0;
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId) = 0;
+		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign) = 0;
 
 	private:
 };
@@ -281,7 +290,7 @@ class pmStubCPU : public pmExecutionStub
 
 		virtual pmDeviceType GetType();
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId);
+		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign);
 
 	private:
  		size_t mCoreId;
@@ -303,7 +312,7 @@ class pmStubCUDA : public pmStubGPU
 		virtual pmStatus FreeResources();
 		virtual pmStatus FreeExecutionResources();
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId);
+		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign);
 
     #ifdef SUPPORT_CUDA
         void* GetDeviceInfoCudaPtr();

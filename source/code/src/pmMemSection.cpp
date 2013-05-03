@@ -172,12 +172,14 @@ ulong pmMemSection::GetNextGenerationNumber()
 
 pmStatus pmMemSection::Update(size_t pOffset, size_t pLength, void* pSrcAddr)
 {
+#ifdef _DEBUG
     if(IsInput())
         PMTHROW(pmFatalErrorException());
+#endif
     
 	void* lDestAddr = (void*)((char*)GetMem() + pOffset);
 	memcpy(lDestAddr, pSrcAddr, pLength);
-
+    
 	return pmSuccess;
 }
 

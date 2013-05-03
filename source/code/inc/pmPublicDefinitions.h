@@ -159,7 +159,8 @@ namespace pm
     {
         INPUT_MEM_READ_SUBSCRIPTION,
         OUTPUT_MEM_READ_SUBSCRIPTION,
-        OUTPUT_MEM_WRITE_SUBSCRIPTION
+        OUTPUT_MEM_WRITE_SUBSCRIPTION,
+        OUTPUT_MEM_READ_WRITE_SUBSCRIPTION
     } pmSubscriptionType;
 
 	typedef struct pmDataTransferInfo
@@ -317,13 +318,13 @@ namespace pm
         pmMemInfo outputMemInfo;
 		pmCallbackHandle callbackHandle;
 		unsigned long subtaskCount;
-		unsigned long taskId;		/* Meant for application to assign and identify tasks */
-		unsigned short priority;	/* By default, this is set to max priority level (0) */
-        pmSchedulingPolicy policy;  /* By default, this is SLOW_START */
-        int timeOutInSecs;          /* By default, this is max possible value in signed int, negative values mean no timeout */
-        bool multiAssignEnabled;    /* By default, this is true */
-        bool autoFetchOutputMem;    /* By default, this is true */        
-		pmClusterHandle cluster;	/* Unused */
+		unsigned long taskId;                   /* Meant for application to assign and identify tasks */
+		unsigned short priority;                /* By default, this is set to max priority level (0) */
+        pmSchedulingPolicy policy;              /* By default, this is SLOW_START */
+        int timeOutInSecs;                      /* By default, this is max possible value in signed int, negative values mean no timeout */
+        bool multiAssignEnabled;                /* By default, this is true */
+        bool sameReadWriteSubscriptions;        /* By default, this is false. Applies only to output memory of the task. */
+		pmClusterHandle cluster;                /* Unused */
 
 		pmTaskDetails();
 	} pmTaskDetails;

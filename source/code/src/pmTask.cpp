@@ -48,7 +48,7 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
-pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pSameReadWriteSubscriptions)
 	: mTaskId(pTaskId)
 	, mMemRO(pMemRO)
 	, mCallbackUnit(pCallbackUnit)
@@ -62,6 +62,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     , mSubscriptionManager(this)
     , mSequenceNumber(0)
     , mMultiAssignEnabled(pMultiAssignEnabled)
+    , mSameReadWriteSubscription(pSameReadWriteSubscriptions)
     , mReadOnlyMemAddrForSubtasks(NULL)
 	, mSubtasksExecuted(0)
 	, mSubtaskExecutionFinished(false)
@@ -95,14 +96,16 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     
     if(pMemRW)
         pMemRW->Lock(this, pOutputMemInfo);
+    
+    BuildTaskInfo();
 }
 
 pmTask::~pmTask()
 {
+    mSubscriptionManager.DropAllSubscriptions();
+
     if(mCollectiveShadowMem)
         MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mCollectiveShadowMem);
-
-    mSubscriptionManager.DropAllSubscriptions();
 }
 
 pmStatus pmTask::FlushMemoryOwnerships()
@@ -230,13 +233,10 @@ pmStatus pmTask::BuildTaskInfo()
 
 pmTaskInfo& pmTask::GetTaskInfo()
 {
-	if(!mTaskInfo.taskHandle)
-		BuildTaskInfo();
-
 	return mTaskInfo;
 }
 
-pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly)
+pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool pMultiAssign, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly)
 {
 	pmSubscriptionInfo lInputMemSubscriptionInfo, lOutputMemSubscriptionInfo;
 	void* lOutputMem;
@@ -255,7 +255,7 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubt
 
 	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lOutputMemSubscriptionInfo))
 	{
-		if(DoSubtasksNeedShadowMemory())
+		if(DoSubtasksNeedShadowMemory() || pMultiAssign)
 			pSubtaskInfo.outputMem = mSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
 		else
 			pSubtaskInfo.outputMem = (reinterpret_cast<char*>(lOutputMem) + lOutputMemSubscriptionInfo.offset);
@@ -442,8 +442,7 @@ ulong pmTask::GetSubtasksExecuted()
 
 bool pmTask::DoSubtasksNeedShadowMemory()
 {
-    return (mMemRW != NULL);
-//	return (mMemRW && (mMultiAssignEnabled || mMemRW->IsLazy() || mMemRW->IsReadWrite() || (mCallbackUnit->GetDataReductionCB() != NULL)));
+	return (mMemRW && (mMemRW->IsLazy() || (mMemRW->IsReadWrite() && !HasSameReadWriteSubscription()) || (mCallbackUnit->GetDataReductionCB() != NULL)));
 }
     
 void pmTask::TerminateTask()
@@ -523,6 +522,11 @@ void pmTask::RegisterStubShadowMemCommitMessage()
     if(mOutstandingStubsForShadowMemCommitMessages == 0 && mAllStubsScannedForShadowMemCommitMessages)
         MarkLocalStubsFreeOfShadowMemCommits();
 }
+    
+bool pmTask::HasSameReadWriteSubscription()
+{
+    return mSameReadWriteSubscription;
+}
 
 void pmTask::MarkLocalStubsFreeOfCancellations()
 {
@@ -546,8 +550,8 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
 
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pSameReadWriteSubscriptions /* = false */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pSameReadWriteSubscriptions)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
     , mUserSideTaskCompleted(false)
@@ -623,7 +627,7 @@ void pmLocalTask::MarkLocalStubsFreeOfCancellations()
     
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted && (!GetMemSectionRW()->IsReadWrite() || mLocalStubsFreeOfShadowMemCommits))
+    if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
     
     mLocalStubsFreeOfCancellations = true;
@@ -632,7 +636,7 @@ void pmLocalTask::MarkLocalStubsFreeOfCancellations()
 void pmLocalTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
 #ifdef _DEBUG
-    if(!GetMemSectionRW()->IsReadWrite())
+    if(!GetMemSectionRW()->IsReadWrite() || HasSameReadWriteSubscription())
         PMTHROW(pmFatalErrorException());
 #endif
     
@@ -652,7 +656,7 @@ void pmLocalTask::MarkUserSideTaskCompletion()
     {
         FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!GetMemSectionRW()->IsReadWrite() || mLocalStubsFreeOfShadowMemCommits))
+        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
             pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
             
         mUserSideTaskCompleted = true;
@@ -835,8 +839,8 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 
 /* class pmRemoteTask */
-pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled)
+pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pSameReadWriteSubscriptions /* = false */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pSameReadWriteSubscriptions)
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)
@@ -883,7 +887,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted && (!GetMemSectionRW()->IsReadWrite() || mLocalStubsFreeOfShadowMemCommits))
+    if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
     {
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
         TerminateTask();
@@ -897,7 +901,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 void pmRemoteTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
 #ifdef _DEBUG
-    if(!GetMemSectionRW()->IsReadWrite())
+    if(!GetMemSectionRW()->IsReadWrite() || HasSameReadWriteSubscription())
         PMTHROW(pmFatalErrorException());
 #endif
 
@@ -920,13 +924,13 @@ void pmRemoteTask::MarkUserSideTaskCompletion()
     
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(!lIsMultiAssign && !GetMemSectionRW()->IsReadWrite())
+    if(!lIsMultiAssign && !(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()))
     {
         TerminateTask();
     }
     else
     {
-        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!GetMemSectionRW()->IsReadWrite() || mLocalStubsFreeOfShadowMemCommits))
+        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
         {
             pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
             TerminateTask();

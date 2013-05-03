@@ -117,7 +117,7 @@ void* pmLinuxMemoryManager::CreateMemoryMapping(int pSharedMemDescriptor, size_t
         lFlags |= PROT_READ;
     if(pWriteAllowed)
         lFlags |= PROT_WRITE;
-    
+
 	void* lMem = mmap(NULL, pLength, lFlags, MAP_SHARED, pSharedMemDescriptor, 0);
 	if(lMem == MAP_FAILED || !lMem)
 		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MMAP_FAILED));

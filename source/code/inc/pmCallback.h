@@ -63,7 +63,7 @@ class pmSubtaskCB : public pmCallback
 		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom);
 		virtual ~pmSubtaskCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, size_t pBoundHardwareDeviceIndex);
 
 		virtual bool IsCallbackDefinedForDevice(pmDeviceType pDeviceType);
 
@@ -79,7 +79,7 @@ class pmDataReductionCB : public pmCallback
 		pmDataReductionCB(pmDataReductionCallback pCallback);
 		virtual ~pmDataReductionCB();
 
-		virtual pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2);
+		virtual pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, bool pMultiAssign2);
 
 	private:
 		pmDataReductionCallback mCallback;
@@ -91,7 +91,7 @@ class pmDataRedistributionCB : public pmCallback
 		pmDataRedistributionCB(pmDataRedistributionCallback pCallback);
 		virtual ~pmDataRedistributionCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign);
 
 	private:
 		pmDataRedistributionCallback mCallback;

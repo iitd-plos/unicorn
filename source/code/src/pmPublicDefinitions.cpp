@@ -337,7 +337,7 @@ pmTaskDetails::pmTaskDetails()
     , policy(SLOW_START)
     , timeOutInSecs(__MAX(int))
     , multiAssignEnabled(true)
-    , autoFetchOutputMem(true)
+    , sameReadWriteSubscriptions(false)
 	, cluster(NULL)
 {
 }

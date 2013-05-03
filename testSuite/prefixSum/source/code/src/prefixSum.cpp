@@ -79,8 +79,7 @@ pmStatus elemAddDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem
     lSubscriptionInfo.offset = (pSubtaskId+1) * ELEMS_PER_SUBTASK * sizeof(PREFIX_SUM_DATA_TYPE);
     lSubscriptionInfo.length = lSubtaskElems * sizeof(PREFIX_SUM_DATA_TYPE);
 
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
 
 #ifdef BUILD_CUDA
 	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
@@ -179,6 +178,7 @@ bool ParallelAddAuxArray(pmMemHandle pSrcMemHandle, pmMemHandle pAuxMemHandle, u
 	lTaskDetails.outputMemHandle = pSrcMemHandle;
     lTaskDetails.inputMemInfo = INPUT_MEM_READ_ONLY;
     lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE;
+    lTaskDetails.sameReadWriteSubscriptions = true;
 
 	prefixSumTaskConf lTaskConf;
 	lTaskConf.arrayLen = pArrayLength;

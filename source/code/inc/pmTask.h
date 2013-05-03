@@ -56,7 +56,7 @@ extern pmCluster* PM_GLOBAL_CLUSTER;
 class pmTask : public pmBase
 {
 	protected:
-		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled);
+		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pSameReadWriteSubscriptions);
 
 	public:
 		virtual ~pmTask();
@@ -75,7 +75,7 @@ class pmTask : public pmBase
 		scheduler::schedulingModel GetSchedulingModel();
 		pmTaskExecStats& GetTaskExecStats();
 		pmTaskInfo& GetTaskInfo();
-		pmStatus GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly);
+		pmStatus GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool pMultiAssign, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly);
 		pmSubscriptionManager& GetSubscriptionManager();
         pmReducer* GetReducer();
         pmRedistributor* GetRedistributor();
@@ -109,6 +109,8 @@ class pmTask : public pmBase
     
         pmStatus FlushMemoryOwnerships();
         bool IsMultiAssignEnabled();
+    
+        bool HasSameReadWriteSubscription();
 
 #ifdef ENABLE_TASK_PROFILING
         pmTaskProfiler* GetTaskProfiler();
@@ -134,6 +136,7 @@ class pmTask : public pmBase
 		pmTaskExecStats mTaskExecStats;
         ulong mSequenceNumber;  // Sequence Id of task on originating host (This along with originating machine is the global unique identifier for a task)
         bool mMultiAssignEnabled;
+        bool mSameReadWriteSubscription;  // for RW memory
         void* mReadOnlyMemAddrForSubtasks;  // Stores the read only lazy memory address (if present)
     
 #ifdef ENABLE_TASK_PROFILING
@@ -163,7 +166,7 @@ class pmTask : public pmBase
         size_t mIndividualShadowMemAllocationLength;
         size_t mShadowMemCount;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCollectiveShadowMemLock;
-    
+
     protected:
 		pmMemSection* mMemRW;
 		uint mAssignedDeviceCount;
@@ -172,7 +175,7 @@ class pmTask : public pmBase
 class pmLocalTask : public pmTask
 {
 	public:
-		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true);
+		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true, bool pSameReadWriteSubscriptions = false);
 
 		pmStatus FindCandidateProcessingElements(std::set<pmProcessingElement*>& pDevices);
 
@@ -225,7 +228,7 @@ class pmLocalTask : public pmTask
 class pmRemoteTask : public pmTask
 {
 	public:
-		pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true);
+		pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true, bool pSameReadWriteSubscriptions = false);
 
 		pmStatus AddAssignedDevice(pmProcessingElement* pDevice);
 		std::vector<pmProcessingElement*>& GetAssignedDevices();

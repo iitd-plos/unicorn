@@ -63,13 +63,12 @@ void commonFinish();
 		CREATE_MEM(outputMemSize, lOutputMemHandle); \
 	lTaskDetails.inputMemHandle = lInputMemHandle; \
 	lTaskDetails.outputMemHandle = lOutputMemHandle; \
-	lTaskDetails.inputMemInfo = INPUT_MEM_READ_ONLY_LAZY; \
+	lTaskDetails.inputMemInfo = INPUT_MEM_READ_ONLY; \
 	lTaskDetails.outputMemInfo = OUTPUT_MEM_WRITE_ONLY; \
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \
-	lTaskDetails.multiAssignEnabled = true; \
-	lTaskDetails.autoFetchOutputMem = false;
+	lTaskDetails.multiAssignEnabled = false;
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \

@@ -440,6 +440,9 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
     flags = 0;
     if(pLocalTask->IsMultiAssignEnabled())
         flags |= TASK_MULTI_ASSIGN_FLAG_VAL;
+    
+    if(pLocalTask->HasSameReadWriteSubscription())
+        flags |= TASK_SAME_READ_WRITE_SUBSCRIPTION_FLAG_VAL;
 
 	strncpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN-1);
 	callbackKey[MAX_CB_KEY_LEN-1] = '\0';
@@ -455,7 +458,6 @@ pmCommunicatorCommand::remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTas
 	if(!pLocalTask)
 	{
         memset(this, 0, sizeof(*this));
-
 		return;
 	}
 

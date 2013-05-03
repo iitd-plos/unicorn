@@ -125,7 +125,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 	return false;
 }
 
-pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, size_t pBoundHardwareDeviceIndex)
+pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, size_t pBoundHardwareDeviceIndex)
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
@@ -134,7 +134,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
     bool lOutputMemWriteOnly = false;
     
     pmSubtaskInfo lSubtaskInfo;
-    pTask->GetSubtaskInfo(pStub, pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
+    pTask->GetSubtaskInfo(pStub, pSubtaskId, pMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
     
     pmStatus lStatus = pmStatusUnavailable;
 
@@ -201,7 +201,7 @@ pmDataReductionCB::~pmDataReductionCB()
 {
 }
 
-pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2)
+pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, bool pMultiAssign2)
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
@@ -213,8 +213,8 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong
     bool lOutputMemWriteOnly = false;
 
 	pmSubtaskInfo lSubtaskInfo1, lSubtaskInfo2;
-	pTask->GetSubtaskInfo(pStub1, pSubtaskId1, lSubtaskInfo1, lOutputMemWriteOnly);
-	pTask->GetSubtaskInfo(pStub2, pSubtaskId2, lSubtaskInfo2, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pStub1, pSubtaskId1, pMultiAssign1, lSubtaskInfo1, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pStub2, pSubtaskId2, pMultiAssign2, lSubtaskInfo2, lOutputMemWriteOnly);
     
 	return mCallback(pTask->GetTaskInfo(), pStub1->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo1, pStub2->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo2);
 }
@@ -230,7 +230,7 @@ pmDataRedistributionCB::~pmDataRedistributionCB()
 {
 }
 
-pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId)
+pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign)
 {
 	if(!mCallback)
 		return pmSuccess;
@@ -238,7 +238,7 @@ pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, u
     bool lOutputMemWriteOnly = false;
 
 	pmSubtaskInfo lSubtaskInfo;
-	pTask->GetSubtaskInfo(pStub, pSubtaskId, lSubtaskInfo, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pStub, pSubtaskId, pMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
 
 	pmStatus lStatus = mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
     

@@ -33,6 +33,7 @@ namespace pm
 
 class pmTask;
 class pmMachine;
+class pmMemSection;
 
 class pmRedistributor : public pmBase
 {
@@ -44,27 +45,57 @@ class pmRedistributor : public pmBase
         pmStatus PerformRedistribution(pmMachine* pHost, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector);
     
         pmStatus SendRedistributionInfo();
+    
+        void ProcessRedistributionBucket(size_t pBucketIndex);
 	
 	private:
+        typedef struct orderMetaData
+        {
+            size_t totalLength;
+            
+            orderMetaData()
+            : totalLength(0)
+            {}
+        } orderMetaData;
+    
         typedef struct orderData
         {
             pmMachine* host;
-            ulong offset;
-            ulong length;
+            size_t offset;
+            size_t length;
         } orderData;
     
-        void SetRedistributedOwnership();
+        typedef std::map<uint, std::pair<orderMetaData, std::vector<orderData> > > globalRedistributionMapType;
+
+        typedef struct redistributionBucket
+        {
+            size_t bucketOffset;
+            globalRedistributionMapType::iterator startIter;
+            globalRedistributionMapType::iterator endIter;
+        } redistributionBucket;
     
+        void ComputeRedistributionBuckets();
+        void DoParallelRedistribution();
+    
+        void DoPreParallelRedistribution();
+        void DoPostParallelRedistribution();
+
 		pmTask* mTask;
         ulong mTotalLengthAccounted;
         ulong mSubtasksAccounted;
+        pmMemSection* mRedistributedMemSection;
     
-        std::map<uint, std::vector<orderData> > mGlobalRedistributionMap;
+        std::vector<redistributionBucket> mRedistributionBucketsVector;
+    
+        globalRedistributionMapType mGlobalRedistributionMap;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mGlobalRedistributionLock;
 
         std::vector<pmCommunicatorCommand::redistributionOrderStruct> mLocalRedistributionData;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mLocalRedistributionLock;
-};
+    
+        size_t mPendingBucketsCount;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mPendingBucketsCountLock;
+    };
 
 } // end namespace pm
 

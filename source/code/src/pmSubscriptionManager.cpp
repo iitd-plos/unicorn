@@ -489,6 +489,9 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
         PMTHROW(pmFatalErrorException());
 
 #ifdef _DEBUG
+    if(mTask->GetMemSectionRW()->IsReadWrite() && mTask->HasSameReadWriteSubscription())
+        PMTHROW(pmFatalErrorException());
+    
     // Auto lock/unlock scope
     {
         GET_SUBTASK(lSubtask, pStub, pSubtaskId);
@@ -507,7 +510,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
     if(!lShadowMem)
     {
 #if 0
-        std::cout << "Abnormal shadow mem allocation for " << lUnifiedSubscriptionInfo.length << " bytes" << std::endl;
+        std::cout << "Additional shadow mem allocation for " << lUnifiedSubscriptionInfo.length << " bytes" << std::endl;
 #endif
 
         lShadowMem = reinterpret_cast<char*>(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(lUnifiedSubscriptionInfo.length, lIsLazyMem));
@@ -616,7 +619,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
 void* pmSubscriptionManager::GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
-    
+
     #ifdef DUMP_SHADOW_MEM
         std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem accessed for device/subtask " << pStub << "/" << pSubtaskId << " " << (void*)(lSubtask.mShadowMem.get_ptr)() << std::endl;
     #endif
@@ -655,7 +658,7 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
     
     if(!lShadowMem)
         PMTHROW(pmFatalErrorException());
-    
+
     pmMemSection* lMemSection = mTask->GetMemSectionRW();
     char* lMem = (char*)(lMemSection->GetMem());
     
