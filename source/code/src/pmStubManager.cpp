@@ -22,6 +22,10 @@
 #include "pmExecutionStub.h"
 #include "pmDispatcherGPU.h"
 
+#ifdef MACOS
+#include <sys/sysctl.h>
+#endif
+
 #include SYSTEM_CONFIGURATION_HEADER	// For sysconf function
 
 namespace pm
@@ -73,17 +77,35 @@ pmExecutionStub* pmStubManager::GetStub(uint pIndex)
 	return mStubVector[pIndex];
 }
 
+void pmStubManager::GetCpuIdInfo(uint pRegA, uint pRegC, uint& pEAX, uint& pEBX, uint& pECX, uint& pEDX)
+{
+    asm volatile ("cpuid" : "=a" (pEAX), "=b" (pEBX), "=c" (pECX), "=d" (pEDX) : "a" (pRegA), "c" (pRegC));
+}
+    
 pmStatus pmStubManager::CreateExecutionStubs()
 {
-	/* WIN 32 Code
-	SYSTEM_INFO sysinfo;
-	GetSystemInfo(&sysinfo);
-	numCPU = sysinfo.dwNumberOfProcessors;
-	*/
+#if defined(MACOS)
+    size_t lBufferLen = sizeof(mProcessingElementsCPU);
+    if(sysctlbyname("hw.physicalcpu", &mProcessingElementsCPU, &lBufferLen, NULL, 0) != 0)
+        mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
+#elif defined(LINUX)
+    uint lA, lB, lC, lD;
     
-    // sysconf(_SC_HT_CAPABLE) && sysconf(_SC_HT_ENABLED);
-
+#if 0
+    GetCpuIdInfo(0, 0, lA, lB, lC, lD);
+    std::string lVendor((char*)(&lB), 4);
+    lVendor.append(std::string((char*)(&lD), 4));
+    lVendor.append(std::string((char*)(&lC), 4));
+#endif
+    
+    GetCpuIdInfo(1, 0, lA, lB, lC, lD);
+    bool lHyperThreadingEnabled = (lD & (0x1 << 28));
+    
+    mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN) / (lHyperThreadingEnabled ? 2 : 1);
+#else
 	mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    
 	for(size_t i=0; i<mProcessingElementsCPU; ++i)
 		mStubVector.push_back(new pmStubCPU(i, (uint)(mStubVector.size())));
 

@@ -56,6 +56,8 @@ class pmStubManager : public pmBase
 		pmStubManager();
 		virtual ~pmStubManager();
 
+        void GetCpuIdInfo(uint pRegA, uint pRegC, uint& pEAX, uint& pEBX, uint& pECX, uint& pEDX);
+    
 		pmStatus CreateExecutionStubs();
 		pmStatus DestroyExecutionStubs();
 
