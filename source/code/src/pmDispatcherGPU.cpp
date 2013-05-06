@@ -53,7 +53,7 @@ pmDispatcherGPU::pmDispatcherGPU()
 	{
 		mDispatcherCUDA = new pmDispatcherCUDA();
 	}
-	catch(pmExceptionGPU e)
+	catch(pmExceptionGPU& e)
 	{
 		mDispatcherCUDA = NULL;
 		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "One or more CUDA libraries could not be loaded");
@@ -119,7 +119,7 @@ pmDispatcherCUDA::~pmDispatcherCUDA()
 		//CloseLibrary(mCutilHandle);
 		CloseLibrary(mRuntimeHandle);
 	}
-	catch(pmIgnorableException e)
+	catch(pmIgnorableException& e)
 	{
 		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "One or more CUDA libraries could not be closed properly");
 	}

@@ -68,7 +68,7 @@ void commonFinish();
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \
-	lTaskDetails.multiAssignEnabled = false;
+	lTaskDetails.multiAssignEnabled = true;
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \

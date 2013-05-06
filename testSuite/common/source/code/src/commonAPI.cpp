@@ -7,7 +7,7 @@
 
 /** Common Arguments:
  *	1. Run Mode - [0: Don't compare to serial execution; 1: Compare to serial execution (default); 2: Only run serial]
- *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default)]
+ *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default); 7: (4, 5, 6)]
  *	3. Scheduling Policy - [0: Push (default); 1: Pull; 2: Equal_Static; 3: Proportional_Static]
  */
 #define COMMON_ARGS 3
@@ -117,7 +117,7 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 	if(lRunMode < 0 || lRunMode > 2)
 		lRunMode = DEFAULT_RUN_MODE;
 
-	if(lParallelMode < 0 || lParallelMode > 6)
+	if(lParallelMode < 0 || lParallelMode > 7)
 		lParallelMode = DEFAULT_PARALLEL_MODE;
 
 	if(lSchedulingPolicy < 0 || lSchedulingPolicy > 3)
@@ -145,9 +145,9 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 		if(lRunMode != 2)
 		{
 			// Six Parallel Execution Modes
-			for(int i=1; i<=6; ++i)
+			for(int i = 1; i <= 6; ++i)
 			{
-				if(lParallelMode == 0 || lParallelMode == i)
+				if(lParallelMode == 0 || lParallelMode == i || (lParallelMode == 7 && (i == 4 || i == 5 || i == 6)))
 				{
 					pmSchedulingPolicy lPolicy = SLOW_START;
 					if(lSchedulingPolicy == 1)

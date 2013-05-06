@@ -212,7 +212,7 @@ pmStatus pmHeavyOperationsThread::ThreadSwitchCallback(heavyOperationsEvent& pEv
 	{
 		return ProcessEvent(pEvent);
 	}
-	catch(pmException e)
+	catch(pmException& e)
 	{
 		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from heavy operations thread");
 	}

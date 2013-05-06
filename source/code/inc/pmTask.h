@@ -238,6 +238,7 @@ class pmRemoteTask : public pmTask
         virtual void MarkLocalStubsFreeOfCancellations();
         virtual void MarkLocalStubsFreeOfShadowMemCommits();
     
+        void DoPostInternalCompletion();
         void MarkUserSideTaskCompletion();
         void MarkReductionFinished();
         void MarkRedistributionFinished(pmMemSection* pRedistributedMemSection = NULL);

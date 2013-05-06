@@ -586,7 +586,7 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(void* pPackedData, int pDataLength)
                     pmCallbackUnit* lCallbackUnit = pmCallbackUnit::FindCallbackUnit(lPackedData->taskStruct.callbackKey);	// throws exception if key unregistered
                     
                     lReductionCB = (lCallbackUnit && lCallbackUnit->GetDataReductionCB());
-                } catch(pmException e) {}
+                } catch(pmException& e) {}
                 
                 
                 if(lPackedData->taskStruct.schedModel == scheduler::PULL || lReductionCB)
@@ -1712,7 +1712,7 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 					mProgressiveSleepTime = MAX_PROGRESSIVE_SLEEP_TIME_MILLI_SECS;
 			}
         }
-        catch(pmException e)
+        catch(pmException& e)
         {
             pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from primary network thread");
         }
@@ -1838,7 +1838,7 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
 				}
 			}
 		}
-		catch(pmException e)
+		catch(pmException& e)
 		{
 			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from primary network thread");
 		}
@@ -2007,7 +2007,7 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::ThreadSwitchCallback(networkEvent&
 
             pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->UnpackDataEvent(lPackedData, lLength, MAX_CONTROL_PRIORITY);
 		}
-		catch(pmException e)
+		catch(pmException& e)
 		{
 			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from secondary network thread");
 		}

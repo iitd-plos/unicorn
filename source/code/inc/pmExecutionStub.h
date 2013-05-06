@@ -189,8 +189,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		virtual pmStatus DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2);
 
 	private:
-        void MarkInsideLibraryCodeInternal(ulong pSubtaskId);
-        void MarkInsideUserCodeInternal(ulong pSubtaskId);
+        void CheckTermination(ulong pSubtaskId);
     
         typedef struct currentSubtaskStats
         {
@@ -201,7 +200,6 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
             double startTime;
             bool reassigned;    // the current subtask has been negotiated
             bool forceAckFlag;  // send acknowledgement for the entire parent range after current subtask is stolen/negotiated
-            bool executingLibraryCode;
             bool prematureTermination;
             bool taskListeningOnCancellation;
             sigjmp_buf* jmpBuf;
@@ -243,6 +241,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     
 		uint mDeviceIndexOnMachine;
 
+        volatile sig_atomic_t mExecutingLibraryCode;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCurrentSubtaskLock;
         currentSubtaskStats* mCurrentSubtaskStats;  // Subtask currently being executed
         std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> > mSecondaryAllotteeMap;  // PULL model: secondary allottees of a subtask

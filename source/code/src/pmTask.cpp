@@ -819,14 +819,11 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
         std::set<pmMachine*> lMachines;
         pmProcessingElement::GetMachines(mDevices, lMachines);
         
-        if(IsMultiAssignEnabled() || GetCallbackUnit()->GetDataRedistributionCB())
-        {
-            FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
+        FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-            mPendingCompletions = lMachines.size();
-            if(lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
-                ++mPendingCompletions;
-        }
+        mPendingCompletions = lMachines.size();
+        if(lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
+            ++mPendingCompletions;
     }
 
 	return pmSuccess;
@@ -851,8 +848,12 @@ pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId,
 
 pmRemoteTask::~pmRemoteTask()
 {
+}
+    
+void pmRemoteTask::DoPostInternalCompletion()
+{
     FlushMemoryOwnerships();
-    UnlockMemories();
+    UnlockMemories();    
 }
 
 pmStatus pmRemoteTask::AddAssignedDevice(pmProcessingElement* pDevice)
@@ -889,6 +890,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 
     if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
     {
+        DoPostInternalCompletion();
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
         TerminateTask();
     }
@@ -909,6 +911,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfShadowMemCommits()
 
     if(mUserSideTaskCompleted && (!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations))
     {
+        DoPostInternalCompletion();
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
         TerminateTask();
     }
@@ -920,26 +923,17 @@ void pmRemoteTask::MarkLocalStubsFreeOfShadowMemCommits()
 
 void pmRemoteTask::MarkUserSideTaskCompletion()
 {
-    bool lIsMultiAssign = IsMultiAssignEnabled();
-    bool lRedistribution = (GetCallbackUnit()->GetDataRedistributionCB() != NULL);
-    
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(!lIsMultiAssign && !lRedistribution && !(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()))
+    if((!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
     {
+        DoPostInternalCompletion();
+        pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
         TerminateTask();
     }
     else
     {
-        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
-        {
-            pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
-            TerminateTask();
-        }
-        else
-        {
-            mUserSideTaskCompleted = true;
-        }
+        mUserSideTaskCompleted = true;
     }
 }
 

@@ -147,6 +147,7 @@ public:
         if(mCudaPtr)
         {
             SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, mCudaPtr );
+            mCudaPtr = NULL;
         }
     }
     
@@ -155,9 +156,13 @@ public:
         if(mCudaPtr)
         {
             SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, mCudaPtr );
+            mCudaPtr = NULL;
         }
 
-        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&mCudaPtr, pAllocationSize );
+        if(pAllocationSize)
+        {
+            SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&mCudaPtr, pAllocationSize );
+        }
     }
     
     void release()

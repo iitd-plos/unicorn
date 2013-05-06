@@ -59,6 +59,7 @@ using namespace execStub;
 /* class pmExecutionStub */
 pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
     : mDeviceIndexOnMachine(pDeviceIndexOnMachine)
+    , mExecutingLibraryCode(1)
     , mCurrentSubtaskLock __LOCK_NAME__("pmExecutionStub::mCurrentSubtaskLock")
     , mCurrentSubtaskStats(NULL)
     , mDeferredShadowMemCommitsLock __LOCK_NAME__("pmExecutionStub::mDeferredShadowMemCommitsLock")
@@ -598,7 +599,7 @@ pmStatus pmExecutionStub::ThreadSwitchCallback(stubEvent& pEvent)
 	{
 		return ProcessEvent(pEvent);
 	}
-    catch(pmException e)
+    catch(pmException& e)
     {
             pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from stub thread");
     }
@@ -940,7 +941,7 @@ void pmExecutionStub::CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCance
     {
         mCurrentSubtaskStats->prematureTermination = true;
         
-        if(!mCurrentSubtaskStats->executingLibraryCode)
+        if(!mExecutingLibraryCode)
         {
             RaiseCurrentSubtaskTerminationSignalInThread();
         }
@@ -954,40 +955,52 @@ void pmExecutionStub::CancelCurrentlyExecutingSubtask(bool pTaskListeningOnCance
 
 void pmExecutionStub::MarkInsideLibraryCode(ulong pSubtaskId)
 {
+    mExecutingLibraryCode = 1;
+
     FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
 
-    MarkInsideLibraryCodeInternal(pSubtaskId);
+    CheckTermination(pSubtaskId);
 }
 
 void pmExecutionStub::MarkInsideUserCode(ulong pSubtaskId)
 {
-    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
 
-    MarkInsideUserCodeInternal(pSubtaskId);
+        CheckTermination(pSubtaskId);
+    }
+    
+    mExecutingLibraryCode = 0;
 }
     
 void pmExecutionStub::SetupJmpBuf(sigjmp_buf* pJmpBuf, ulong pSubtaskId)
 {
-    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskLock, Lock(), Unlock());
 
-    if(mCurrentSubtaskStats->jmpBuf)
-        PMTHROW(pmFatalErrorException());
+        if(mCurrentSubtaskStats->jmpBuf)
+            PMTHROW(pmFatalErrorException());
+        
+        mCurrentSubtaskStats->jmpBuf = pJmpBuf;
+
+        CheckTermination(pSubtaskId);
+    }
     
-    mCurrentSubtaskStats->jmpBuf = pJmpBuf;
-
-    MarkInsideUserCodeInternal(pSubtaskId);
+    mExecutingLibraryCode = 0;
 }
     
 void pmExecutionStub::UnsetupJmpBuf(ulong pSubtaskId, bool pHasJumped)
 {
+    mExecutingLibraryCode = 1;
+
     if(pHasJumped)
     {
         if(!mCurrentSubtaskStats->jmpBuf)
             PMTHROW(pmFatalErrorException());
         
         mCurrentSubtaskStats->jmpBuf = NULL;
-
-        mCurrentSubtaskStats->executingLibraryCode = true;
     }
     else
     {
@@ -997,37 +1010,18 @@ void pmExecutionStub::UnsetupJmpBuf(ulong pSubtaskId, bool pHasJumped)
             PMTHROW(pmFatalErrorException());
         
         mCurrentSubtaskStats->jmpBuf = NULL;
-
-        mCurrentSubtaskStats->executingLibraryCode = true;
     }
 }
 
 // This method must be called with mCurrentSubtaskLock acquired
-void pmExecutionStub::MarkInsideLibraryCodeInternal(ulong pSubtaskId)
+void pmExecutionStub::CheckTermination(ulong pSubtaskId)
 {
     if(!mCurrentSubtaskStats)
         return;
 
-    if(mCurrentSubtaskStats->subtaskId != pSubtaskId || mCurrentSubtaskStats->executingLibraryCode)
+    if(mCurrentSubtaskStats->subtaskId != pSubtaskId)
         PMTHROW(pmFatalErrorException());
     
-    mCurrentSubtaskStats->executingLibraryCode = true;
-
-    if(mCurrentSubtaskStats->prematureTermination)
-        TerminateCurrentSubtask();
-}
-
-// This method must be called with mCurrentSubtaskLock acquired
-void pmExecutionStub::MarkInsideUserCodeInternal(ulong pSubtaskId)
-{
-    if(!mCurrentSubtaskStats)
-        return;
-
-    if(mCurrentSubtaskStats->subtaskId != pSubtaskId || !mCurrentSubtaskStats->executingLibraryCode)
-        PMTHROW(pmFatalErrorException());
-    
-    mCurrentSubtaskStats->executingLibraryCode = false;
-
     if(mCurrentSubtaskStats->prematureTermination)
         TerminateCurrentSubtask();
 }
@@ -1039,14 +1033,16 @@ void pmExecutionStub::TerminateCurrentSubtask()
     if(!mCurrentSubtaskStats->jmpBuf)
         PMTHROW(pmFatalErrorException());
 #endif
-    
+
+    mExecutingLibraryCode = 1;
     siglongjmp(*(mCurrentSubtaskStats->jmpBuf), 1);
 }
 
 // This method must be called with mCurrentSubtaskLock acquired
 void pmExecutionStub::RaiseCurrentSubtaskTerminationSignalInThread()
 {
-    InterruptThread();
+    if(!dynamic_cast<pmStubCUDA*>(this))
+        InterruptThread();
 }
 
 bool pmExecutionStub::RequiresPrematureExit(ulong pSubtaskId)
@@ -1099,7 +1095,7 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
         ((pmLinuxMemoryManager*)MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager())->InstallSegFaultHandler();
     #endif
     }
-    
+
     return lStatus;
 }
     
@@ -1220,7 +1216,6 @@ pmExecutionStub::currentSubtaskStats::currentSubtaskStats(pmTask* pTask, ulong p
     , startTime(pStartTime)
     , reassigned(false)
     , forceAckFlag(false)
-    , executingLibraryCode(true)
     , prematureTermination(false)
     , taskListeningOnCancellation(false)
     , jmpBuf(pJmpBuf)

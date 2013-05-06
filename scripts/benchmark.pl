@@ -235,7 +235,7 @@ sub execute
 sub getInputs
 {
     $runLevel = getIntegralInput(1, "\nSelect Run Level ... \n0. Don't compare to serial execution\n1. Compare to serial execution\n2. Only run serial\n", "Invalid Run Level", 0, 2);
-    $parallelTaskMode = getIntegralInput(2, "\nSelect Parallel Task Mode ... \n0. All\n1. Local CPU\n2. Local GPU\n3. Local CPU + GPU\n4. Global CPU\n5. Global GPU\n6. Global CPU + GPU\n", "Invalid Parallel Task Mode", 0, 6);
+    $parallelTaskMode = getIntegralInput(2, "\nSelect Parallel Task Mode ... \n0. All\n1. Local CPU\n2. Local GPU\n3. Local CPU + GPU\n4. Global CPU\n5. Global GPU\n6. Global CPU + GPU\n7. All Globals\n", "Invalid Parallel Task Mode", 0, 7);
     $schedulingModel = getIntegralInput(3, "\nSelect Scheduling Model ... \n0. Push (Slow Start)\n1. Pull (Random Steal)\n2. Equal Static\n3. Proportional Static\n4. All\n", "Invalid Scheduling Model", 0, 4);
     $samples = getIntegralInput(4, "\nSamples ... ", "Invalid Samples", 1, 5);
     $minProcs = getIntegralInput(5, "Min Procs ... ", "Invalid Min Procs", 1, 10000);
@@ -445,14 +445,14 @@ format HEADER =
 MPI Cluster Hosts: @<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
 $clusterHosts
 Benchmark: @<<<<<<<<<<<<<<<<<<<<<<     Samples: @<<<<<<<<<
-$benchmarkName $samples
+$benchmarkName, $samples
 ====================================================================================
 .
  
 format SUBHEADER =
 ====================================================================================
            Scheduling Model: @<<<<<<<<<<<<<<<<<<       Hosts: @<<<<<<       
-$schedulingModelName $hosts
+$schedulingModelName, $hosts
 ====================================================================================
                     |                  Execution Time (in secs)                    |
        Varying      | Serial | Local | Local |  Local  | Global | Global | Global  |
@@ -464,11 +464,11 @@ format DATA =
 @<<<<<<<<<<<<<<<<<<< 
 $varying_str
      Mean            @<<<<<<< @<<<<<< @<<<<<< @<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<<
-$serial_time_mean $parallel1_time_mean $parallel2_time_mean $parallel3_time_mean $parallel4_time_mean $parallel5_time_mean $parallel6_time_mean
+$serial_time_mean, $parallel1_time_mean, $parallel2_time_mean, $parallel3_time_mean, $parallel4_time_mean, $parallel5_time_mean, $parallel6_time_mean
      Median          @<<<<<<< @<<<<<< @<<<<<< @<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<<
-$serial_time_median $parallel1_time_median $parallel2_time_median $parallel3_time_median $parallel4_time_median $parallel5_time_median $parallel6_time_median
+$serial_time_median, $parallel1_time_median, $parallel2_time_median, $parallel3_time_median, $parallel4_time_median, $parallel5_time_median, $parallel6_time_median
      Std. Dev.       @<<<<<<< @<<<<<< @<<<<<< @<<<<<<<< @<<<<<<< @<<<<<<< @<<<<<<<<
-$serial_time_sd $parallel1_time_sd $parallel2_time_sd $parallel3_time_sd $parallel4_time_sd $parallel5_time_sd $parallel6_time_sd
+$serial_time_sd, $parallel1_time_sd, $parallel2_time_sd, $parallel3_time_sd, $parallel4_time_sd, $parallel5_time_sd, $parallel6_time_sd
 
 .
  

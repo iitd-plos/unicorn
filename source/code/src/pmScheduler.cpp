@@ -572,7 +572,7 @@ pmStatus pmScheduler::ThreadSwitchCallback(schedulerEvent& pEvent)
 	{
 		return ProcessEvent(pEvent);
 	}
-	catch(pmException e)
+	catch(pmException& e)
 	{
 		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from scheduler thread");
 	}
