@@ -240,7 +240,7 @@ class pmRemoteTask : public pmTask
     
         void MarkUserSideTaskCompletion();
         void MarkReductionFinished();
-        void MarkRedistributionFinished();
+        void MarkRedistributionFinished(pmMemSection* pRedistributedMemSection = NULL);
 
 	private:
         virtual ~pmRemoteTask();

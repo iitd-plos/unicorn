@@ -819,7 +819,7 @@ pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingEleme
         std::set<pmMachine*> lMachines;
         pmProcessingElement::GetMachines(mDevices, lMachines);
         
-        if(IsMultiAssignEnabled())
+        if(IsMultiAssignEnabled() || GetCallbackUnit()->GetDataRedistributionCB())
         {
             FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
@@ -921,10 +921,11 @@ void pmRemoteTask::MarkLocalStubsFreeOfShadowMemCommits()
 void pmRemoteTask::MarkUserSideTaskCompletion()
 {
     bool lIsMultiAssign = IsMultiAssignEnabled();
+    bool lRedistribution = (GetCallbackUnit()->GetDataRedistributionCB() != NULL);
     
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(!lIsMultiAssign && !(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()))
+    if(!lIsMultiAssign && !lRedistribution && !(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()))
     {
         TerminateTask();
     }
@@ -947,15 +948,18 @@ void pmRemoteTask::MarkReductionFinished()
     MarkUserSideTaskCompletion();
 }
     
-void pmRemoteTask::MarkRedistributionFinished()
+void pmRemoteTask::MarkRedistributionFinished(pmMemSection* pRedistributedMemSection /* = NULL */)
 {
+    if(pRedistributedMemSection)
+        mMemRW = pRedistributedMemSection;
+
     MarkUserSideTaskCompletion();
 }
     
 pmStatus pmRemoteTask::MarkSubtaskExecutionFinished()
 {
     pmTask::MarkSubtaskExecutionFinished();
-    
+
     pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
     if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
         MarkUserSideTaskCompletion();

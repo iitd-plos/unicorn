@@ -86,6 +86,7 @@ typedef enum eventIdentifier
     HOST_FINALIZATION,
     SUBTASK_RANGE_CANCEL,
     REDISTRIBUTION_METADATA_EVENT,
+    REDISTRIBUTION_OFFSETS_EVENT,
     RANGE_NEGOTIATION_EVENT,
     RANGE_NEGOTIATION_SUCCESS_EVENT,
     TERMINATE_TASK
@@ -213,6 +214,15 @@ typedef struct redistributionMetaData
     std::vector<pmCommunicatorCommand::redistributionOrderStruct>* redistributionData;
     uint count;
 } redistributionMetaData;
+
+typedef struct redistributionOffsets
+{
+    pmTask* task;
+    std::vector<ulong>* offsetsData;
+    uint count;
+    uint destHostId;
+    pmMemSection* redistributedMemSection;
+} redistributionOffsets;
     
 typedef struct rangeNegotiation
 {
@@ -249,6 +259,7 @@ typedef struct schedulerEvent : public pmBasicThreadEvent
         hostFinalization hostFinalizationDetails;
         subtaskRangeCancel subtaskRangeCancelDetails;
         redistributionMetaData redistributionMetaDataDetails;
+        redistributionOffsets redistributionOffsetsDetails;
         rangeNegotiation rangeNegotiationDetails;
         rangeNegotiationSuccess rangeNegotiationSuccessDetails;
 	};
@@ -273,7 +284,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 
 		static pmScheduler* GetScheduler();
 
-		pmStatus SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap);
+		pmStatus SendAcknowledgement(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap);
 		pmStatus ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements);
 
 		virtual pmStatus ThreadSwitchCallback(scheduler::schedulerEvent& pEvent);
@@ -299,6 +310,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
         pmStatus RangeCancellationEvent(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
         pmStatus RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
+        pmStatus RedistributionOffsetsEvent(pmTask* pTask, pmMemSection* pRedistributedMemSection, uint pDestHostId, std::vector<ulong>* pOffsetsData, uint pCount);
         pmStatus RangeNegotiationEvent(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
         pmStatus RangeNegotiationSuccessEvent(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pNegotiatedRange);
         pmStatus TerminateTaskEvent(pmTask* pTask);
@@ -322,6 +334,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         pmStatus NegotiateSubtaskRangeWithOriginalAllottee(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
         pmStatus SendRangeNegotiationSuccess(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pNegotiatedRange);
         pmStatus SendRedistributionData(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
+        pmStatus SendRedistributionOffsets(pmTask* pTask, std::vector<ulong>* pOffsetsData, uint pCount, pmMemSection* pRedistributedMemSection, uint pDestHostId);
+
 
         pmStatus SendTaskCompleteToTaskOwner(pmTask* pTask);
 

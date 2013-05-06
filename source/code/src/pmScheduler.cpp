@@ -146,6 +146,7 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REDISTRIBUTION_OFFSETS_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_STRUCT);
 
 	SetupPersistentCommunicationCommands();
@@ -167,6 +168,8 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::REDISTRIBUTION_ORDER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::DATA_REDISTRIBUTION_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::REDISTRIBUTION_OFFSETS_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::SUBTASK_RANGE_CANCEL_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
@@ -503,6 +506,19 @@ pmStatus pmScheduler::RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmC
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
     
+pmStatus pmScheduler::RedistributionOffsetsEvent(pmTask* pTask, pmMemSection* pRedistributedMemSection, uint pDestHostId, std::vector<ulong>* pOffsetsData, uint pCount)
+{
+	schedulerEvent lEvent;
+	lEvent.eventId = REDISTRIBUTION_OFFSETS_EVENT;
+	lEvent.redistributionOffsetsDetails.task = pTask;
+	lEvent.redistributionOffsetsDetails.offsetsData = pOffsetsData;
+	lEvent.redistributionOffsetsDetails.count = pCount;
+	lEvent.redistributionOffsetsDetails.destHostId = pDestHostId;
+	lEvent.redistributionOffsetsDetails.redistributedMemSection = pRedistributedMemSection;
+
+	return SwitchThread(lEvent, pTask->GetPriority());
+}
+    
 pmStatus pmScheduler::RangeNegotiationEvent(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange)
 {
     schedulerEvent lEvent;
@@ -778,6 +794,14 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             
             break;
         }
+            
+        case REDISTRIBUTION_OFFSETS_EVENT:
+        {
+            redistributionOffsets& lEventDetails = pEvent.redistributionOffsetsDetails;
+            SendRedistributionOffsets(lEventDetails.task, lEventDetails.offsetsData, lEventDetails.count, lEventDetails.redistributedMemSection, lEventDetails.destHostId);
+            
+            break;
+        }
 
 		case HOST_FINALIZATION:
         {
@@ -992,7 +1016,7 @@ pmStatus pmScheduler::SendRedistributionData(pmTask* pTask, std::vector<pmCommun
     }
     else
     {
-        if((*pRedistributionData).empty())
+        if((*pRedistributionData).empty() || (pCount == 0))
         {
             (static_cast<pmRemoteTask*>(pTask))->MarkRedistributionFinished();
         }
@@ -1007,6 +1031,25 @@ pmStatus pmScheduler::SendRedistributionData(pmTask* pTask, std::vector<pmCommun
     return pmSuccess;
 }
 
+pmStatus pmScheduler::SendRedistributionOffsets(pmTask* pTask, std::vector<ulong>* pOffsetsData, uint pCount, pmMemSection* pRedistributedMemSection, uint pDestHostId)
+{
+    if(!pOffsetsData || (pCount == 0) || (*pOffsetsData).empty())
+        PMTHROW(pmFatalErrorException());
+
+    pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(pDestHostId);
+    if(lMachine == PM_LOCAL_MACHINE)
+    {
+        pTask->GetRedistributor()->ReceiveGlobalOffsets(*pOffsetsData, pRedistributedMemSection->GetGenerationNumber());
+    }
+    else
+    {
+        pmCommunicatorCommand::redistributionOffsetsPacked* lPackedData = new pmCommunicatorCommand::redistributionOffsetsPacked(pTask, &(*pOffsetsData)[0], pCount, pRedistributedMemSection);
+        
+        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(pmCommunicatorCommand::REDISTRIBUTION_OFFSETS_TAG, pmCommunicatorCommand::REDISTRIBUTION_OFFSETS_PACKED, lMachine, lPackedData, pTask->GetPriority());
+    }
+    
+    return pmSuccess;
+}
 
 pmStatus pmScheduler::AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLocalTask* pLocalTask)
 {
@@ -1412,7 +1455,7 @@ pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessi
 	return pmSuccess;
 }
 
-pmStatus pmScheduler::SendAcknowledment(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap)
+pmStatus pmScheduler::SendAcknowledgement(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap)
 {
     std::map<size_t, size_t> lEmptyMap;
 	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, (pRange.task->GetCallbackUnit()->GetDataRedistributionCB()) ? lEmptyMap : pOwnershipMap);
@@ -1501,18 +1544,18 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                 delete lInfo->allocatedSubtaskMem;
                 delete lInfo->packedData;
 			}
-			else if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG)
-			{
-				pmCommunicatorCommand::dataRedistributionPacked* lData = (pmCommunicatorCommand::dataRedistributionPacked*)(lCommunicatorCommand->GetData());
-                
-				pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->redistributionStruct.originatingHost);
-				pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->redistributionStruct.sequenceNumber);
-                
-                if(lOriginatingHost == PM_LOCAL_MACHINE)
-                    PMTHROW(pmFatalErrorException());
-
-                (static_cast<pmRemoteTask*>(lTask))->MarkRedistributionFinished();
-			}
+//			else if(lCommunicatorCommand->GetTag() == pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG)
+//			{
+//				pmCommunicatorCommand::dataRedistributionPacked* lData = (pmCommunicatorCommand::dataRedistributionPacked*)(lCommunicatorCommand->GetData());
+//                
+//				pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->redistributionStruct.originatingHost);
+//				pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->redistributionStruct.sequenceNumber);
+//                
+//                if(lOriginatingHost == PM_LOCAL_MACHINE)
+//                    PMTHROW(pmFatalErrorException());
+//
+//                (static_cast<pmRemoteTask*>(lTask))->MarkRedistributionFinished();
+//			}
 
 			switch(lCommunicatorCommand->GetTag())
 			{
@@ -1554,6 +1597,10 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					break;
 				case pmCommunicatorCommand::DATA_REDISTRIBUTION_TAG:
 					delete (pmCommunicatorCommand::dataRedistributionPacked*)(lCommunicatorCommand->GetData());
+					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
+					break;
+				case pmCommunicatorCommand::REDISTRIBUTION_OFFSETS_TAG:
+					delete (pmCommunicatorCommand::redistributionOffsetsPacked*)(lCommunicatorCommand->GetData());
 					delete[] (char*)(lCommunicatorCommand->GetSecondaryData());
 					break;
 				case pmCommunicatorCommand::HOST_FINALIZATION_TAG:
@@ -1774,6 +1821,25 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					break;
 				}
                 
+				case pmCommunicatorCommand::REDISTRIBUTION_OFFSETS_TAG:
+				{
+					pmCommunicatorCommand::redistributionOffsetsPacked* lData = (pmCommunicatorCommand::redistributionOffsetsPacked*)(lCommunicatorCommand->GetData());
+                    
+					pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->redistributionStruct.originatingHost);
+					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->redistributionStruct.sequenceNumber);
+                    
+                    if(lOriginatingHost == PM_LOCAL_MACHINE)
+                        PMTHROW(pmFatalErrorException());
+
+                    lTask->GetRedistributor()->ReceiveGlobalOffsets(std::vector<ulong>(lData->offsetsData, lData->offsetsData + lData->redistributionStruct.offsetsDataCount), lData->redistributionStruct.redistributedMemGenerationNumber);
+                    
+					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
+					delete[] (pmCommunicatorCommand::redistributionOffsetsStruct*)(lData->offsetsData);
+					delete (pmCommunicatorCommand::redistributionOffsetsPacked*)(lData);
+                    
+					break;
+				}
+
 				case pmCommunicatorCommand::MEMORY_RECEIVE_TAG:
 				{
 					pmCommunicatorCommand::memoryReceivePacked* lData = (pmCommunicatorCommand::memoryReceivePacked*)(lCommunicatorCommand->GetData());
@@ -1879,7 +1945,10 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					pmMemSection* lMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lData->sourceMemIdentifier.memOwnerHost), lData->sourceMemIdentifier.generationNumber);
 					if(!lMemSection)
+                    {
+                        std::cout << pmGetHostId() << " " << lData->sourceMemIdentifier.generationNumber << std::endl;
 						PMTHROW(pmFatalErrorException());
+                    }
             
                     pmTask* lLockingTask = lMemSection->GetLockingTask();
                     ushort lPriority = lLockingTask ? lLockingTask->GetPriority() : MAX_CONTROL_PRIORITY;

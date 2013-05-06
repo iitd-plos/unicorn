@@ -90,7 +90,7 @@ pmStatus pmStubManager::CreateExecutionStubs()
         mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
 #elif defined(LINUX)
     uint lA, lB, lC, lD;
-    
+
 #if 0
     GetCpuIdInfo(0, 0, lA, lB, lC, lD);
     std::string lVendor((char*)(&lB), 4);

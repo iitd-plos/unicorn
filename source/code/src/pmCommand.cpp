@@ -719,7 +719,27 @@ pmCommunicatorCommand::dataRedistributionPacked::~dataRedistributionPacked()
 {
 }
 
+
+/* struct pmCommunicatorCommand::redistributionOffsetsPacked */
+pmCommunicatorCommand::redistributionOffsetsPacked::redistributionOffsetsPacked()
+{
+    memset(this, 0, sizeof(*this));
+}
     
+pmCommunicatorCommand::redistributionOffsetsPacked::redistributionOffsetsPacked(pmTask* pTask, ulong* pOffsetsData, uint pCount, pmMemSection* pRedistributedMemSection)
+{
+    this->redistributionStruct.originatingHost = *(pTask->GetOriginatingHost());
+    this->redistributionStruct.sequenceNumber = pTask->GetSequenceNumber();
+    this->redistributionStruct.redistributedMemGenerationNumber = pRedistributedMemSection->GetGenerationNumber();
+    this->redistributionStruct.offsetsDataCount = pCount;
+    this->offsetsData = pOffsetsData;
+}
+    
+pmCommunicatorCommand::redistributionOffsetsPacked::~redistributionOffsetsPacked()
+{
+}
+
+
 /* struct memoryIdebtifierStruct */
 bool operator==(pmCommunicatorCommand::memoryIdentifierStruct& pIdentifier1, pmCommunicatorCommand::memoryIdentifierStruct& pIdentifier2)
 {

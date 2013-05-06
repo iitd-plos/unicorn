@@ -443,12 +443,11 @@ class pmCommunicatorCommand : public pmCommand
         typedef struct redistributionOrderStruct
         {
             uint order;
-            ulong offset;
             ulong length;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 3
+				FIELD_COUNT_VALUE = 2
 			} fieldCount;            
             
         } redistributionOrderStruct;
@@ -478,6 +477,30 @@ class pmCommunicatorCommand : public pmCommand
             redistributionOrderStruct* redistributionData;
         } dataRedistributionPacked;
     
+        typedef struct redistributionOffsetsStruct
+        {
+			uint originatingHost;
+			ulong sequenceNumber;	// sequence number of local task object (on originating host)
+			ulong redistributedMemGenerationNumber;
+			uint offsetsDataCount;
+            
+			typedef enum fieldCount
+			{
+				FIELD_COUNT_VALUE = 4
+			} fieldCount;            
+            
+        } redistributionOffsetsStruct;
+
+        typedef struct redistributionOffsetsPacked
+        {
+            redistributionOffsetsPacked();
+            redistributionOffsetsPacked(pmTask* pTask, ulong* pOffsetsData, uint pCount, pmMemSection* pRedistributedMemSection);
+            ~redistributionOffsetsPacked();
+            
+            redistributionOffsetsStruct redistributionStruct;
+            ulong* offsetsData;
+        } redistributionOffsetsPacked;
+
         typedef struct subtaskRangeCancelStruct
         {
 			uint targetDeviceGlobalIndex;
@@ -541,6 +564,7 @@ class pmCommunicatorCommand : public pmCommand
 			UNKNOWN_LENGTH_TAG,
 			HOST_FINALIZATION_TAG,
             DATA_REDISTRIBUTION_TAG,
+            REDISTRIBUTION_OFFSETS_TAG,
             SUBTASK_RANGE_CANCEL_TAG,
             FILE_OPERATIONS_TAG,
 			MAX_COMMUNICATOR_COMMAND_TAGS
@@ -574,6 +598,8 @@ class pmCommunicatorCommand : public pmCommand
             REDISTRIBUTION_ORDER_STRUCT,
             DATA_REDISTRIBUTION_STRUCT,
             DATA_REDISTRIBUTION_PACKED,
+            REDISTRIBUTION_OFFSETS_STRUCT,
+            REDISTRIBUTION_OFFSETS_PACKED,
             SUBTASK_RANGE_CANCEL_STRUCT,
             FILE_OPERATIONS_STRUCT,
 			MAX_COMMUNICATOR_DATA_TYPES

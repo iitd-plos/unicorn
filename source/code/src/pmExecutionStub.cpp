@@ -882,7 +882,7 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
     std::map<size_t, size_t> lOwnershipMap;
     pmMemSection* lMemSection = pRange.task->GetMemSectionRW();    
 
-	if(lMemSection && !pRange.task->GetCallbackUnit()->GetDataReductionCB())
+	if(lMemSection && !(pRange.task->GetCallbackUnit()->GetDataReductionCB() || pRange.task->GetCallbackUnit()->GetDataRedistributionCB()))
     {
         subscription::subscriptionRecordType::const_iterator lIter, lBeginIter, lEndIter;
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
@@ -897,7 +897,7 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
         }
     }
 
-    pmScheduler::GetScheduler()->SendAcknowledment(GetProcessingElement(), pRange, pExecStatus, lOwnershipMap);
+    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, lOwnershipMap);
 }
     
 void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId)

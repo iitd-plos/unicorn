@@ -391,7 +391,6 @@ void pmMemSection::Unlock(pmTask* pTask)
         if(!mOwnershipTransferVector.empty())
         {
             std::cout << IsInput() << " " << (uint)(*GetMemOwnerHost()) << " " << GetGenerationNumber() << std::endl;
-            abort();
             PMTHROW(pmFatalErrorException());
         }
     }
@@ -687,7 +686,7 @@ pmStatus pmMemSection::TransferOwnershipPostTaskCompletion(vmRangeOwner& pRangeO
     if(IsInput())
         PMTHROW(pmFatalErrorException());
 #endif
-    
+
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
     
     pmMemTransferData lTransferData;

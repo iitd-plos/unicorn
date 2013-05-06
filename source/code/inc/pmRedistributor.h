@@ -44,57 +44,58 @@ class pmRedistributor : public pmBase
         pmStatus RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder);
         pmStatus PerformRedistribution(pmMachine* pHost, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector);
     
-        pmStatus SendRedistributionInfo();
+        void SendRedistributionInfo();
     
         void ProcessRedistributionBucket(size_t pBucketIndex);
+        void ReceiveGlobalOffsets(const std::vector<ulong>& pGlobalOffsetsVector, ulong pGenerationNumber);
 	
 	private:
-        typedef struct orderMetaData
-        {
-            size_t totalLength;
-            
-            orderMetaData()
-            : totalLength(0)
-            {}
-        } orderMetaData;
-    
-        typedef struct orderData
-        {
-            pmMachine* host;
-            size_t offset;
-            size_t length;
-        } orderData;
-    
-        typedef std::map<uint, std::pair<orderMetaData, std::vector<orderData> > > globalRedistributionMapType;
+        typedef std::map<std::pair<uint, uint>, size_t> globalRedistributionMapType;
+        typedef std::map<uint, std::vector<size_t> > localRedistributionMapType;
 
-        typedef struct redistributionBucket
+        typedef struct localRedistributionBucket
+        {
+            localRedistributionMapType::iterator startIter;
+            localRedistributionMapType::iterator endIter;
+        } localRedistributionBucket;
+    
+        typedef struct globalRedistributionBucket
         {
             size_t bucketOffset;
             globalRedistributionMapType::iterator startIter;
             globalRedistributionMapType::iterator endIter;
-        } redistributionBucket;
+        } globalRedistributionBucket;
     
         void ComputeRedistributionBuckets();
+        void CreateRedistributedMemSection(ulong pGenerationNumber = ((ulong)-1));
+
         void DoParallelRedistribution();
-    
-        void DoPreParallelRedistribution();
         void DoPostParallelRedistribution();
+    
+        void ComputeGlobalOffsets();
+        void SendGlobalOffsets();
 
 		pmTask* mTask;
         ulong mTotalLengthAccounted;
         ulong mSubtasksAccounted;
         pmMemSection* mRedistributedMemSection;
     
-        std::vector<redistributionBucket> mRedistributionBucketsVector;
+        std::vector<localRedistributionBucket> mLocalRedistributionBucketsVector;
     
-        globalRedistributionMapType mGlobalRedistributionMap;
+        globalRedistributionMapType mGlobalRedistributionMap;   // Pair of Order no. and Machine id vs. length
+        std::map<uint, std::vector<ulong> > mGlobalOffsetsMap;  // Machine Id vs. vector of offsets for each order in the host's mLocalRedistributionMap
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mGlobalRedistributionLock;
 
-        std::vector<pmCommunicatorCommand::redistributionOrderStruct> mLocalRedistributionData;
+        std::vector<pmCommunicatorCommand::redistributionOrderStruct> mLocalRedistributionVector;
+        std::vector<size_t> mLocalRedistributionOffsets;
+        localRedistributionMapType mLocalRedistributionMap;   // Order vs. vector of mLocalRedistributionVector indices
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mLocalRedistributionLock;
     
         size_t mPendingBucketsCount;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mPendingBucketsCountLock;
+    
+        std::vector<ulong> mGlobalOffsetsVector;
+        size_t mOrdersPerBucket;
     };
 
 } // end namespace pm
