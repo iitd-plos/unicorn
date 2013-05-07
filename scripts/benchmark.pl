@@ -113,7 +113,7 @@ sub execute
     $varying_str = "$iter1";
     if($iter2 !~ /^\s*$/)
     {
-        $varying_str .= ":$iter2";
+        $varying_str .= " $iter2";
     }
     
     my($cmd) = "mpirun ";

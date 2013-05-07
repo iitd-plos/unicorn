@@ -5,7 +5,7 @@ namespace fft
 #define DEFAULT_POW_X 10
 #define DEFAULT_POW_Y 10
 
-#define ROWS_PER_FFT_SUBTASK 1024  // must be a power of 2
+#define ROWS_PER_FFT_SUBTASK 128  // must be a power of 2
     
 #ifndef FFT_DATA_TYPE
 #error "FFT_DATA_TYPE not defined"

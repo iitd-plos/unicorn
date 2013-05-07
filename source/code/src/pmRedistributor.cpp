@@ -86,7 +86,7 @@ void pmRedistributor::SendRedistributionInfo()
 	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLocalRedistributionLock, Lock(), Unlock());
 
     pmScheduler::GetScheduler()->RedistributionMetaDataEvent(mTask, &mLocalRedistributionVector, (uint)mLocalRedistributionVector.size());
-std::cout << "SENDING" << std::endl;
+
     ComputeRedistributionBuckets();
 }
 
@@ -120,7 +120,7 @@ pmStatus pmRedistributor::PerformRedistribution(pmMachine* pHost, ulong pSubtask
     }
 
     mSubtasksAccounted += pSubtasksAccounted;
-std::cout << "PERF" << std::endl;
+
     if(mSubtasksAccounted == mTask->GetSubtaskCount())
     {
         CreateRedistributedMemSection();
@@ -171,7 +171,7 @@ void pmRedistributor::ReceiveGlobalOffsets(const std::vector<ulong>& pGlobalOffs
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
-std::cout << "RGO" << std::endl;
+
     mGlobalOffsetsVector = pGlobalOffsetsVector;
 
     if(mTask->GetOriginatingHost() != PM_LOCAL_MACHINE)
@@ -272,7 +272,7 @@ void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
         FINALIZE_RESOURCE_PTR(dPendingBucketsCountLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mPendingBucketsCountLock, Lock(), Unlock());
         
         --mPendingBucketsCount;
-std::cout << "PROCESS " << mPendingBucketsCount << std::endl;
+
         if(mPendingBucketsCount == 0)
             DoPostParallelRedistribution();
     }
@@ -284,7 +284,6 @@ void pmRedistributor::DoPostParallelRedistribution()
 
     if(mTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
     {
-std::cout << "DON" << std::endl;
         lMemSection->GetUserMemHandle()->Reset(mRedistributedMemSection);
 
         lMemSection->Unlock(mTask);

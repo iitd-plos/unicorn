@@ -104,7 +104,7 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
                     callbacksFunc pCallbacksFunc2, std::string pCallbackKey2)
 {
 	double lSerialExecTime = (double)0;
-	double lParallelExecTime = (double)0;
+	double lParallelExecTime[6] = {};
 
 	int lRunMode = DEFAULT_RUN_MODE;
 	int lParallelMode = DEFAULT_PARALLEL_MODE;
@@ -136,6 +136,26 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 			exit(1);
 		}
 
+		if(lRunMode != 2)
+		{
+            pmSchedulingPolicy lPolicy = SLOW_START;
+            if(lSchedulingPolicy == 1)
+                lPolicy = RANDOM_STEAL;
+            else if(lSchedulingPolicy == 2)
+                lPolicy = EQUAL_STATIC;
+            else if(lSchedulingPolicy == 3)
+                lPolicy = PROPORTIONAL_STATIC;
+
+			// Six Parallel Execution Modes
+			for(int i = 1; i <= 6; ++i)
+			{
+				if(lParallelMode == 0 || lParallelMode == i || (lParallelMode == 7 && (i == 4 || i == 5 || i == 6)))
+				{
+                    lParallelExecTime[i] = ExecuteParallelTask(argc, argv, i, pParallelFunc, lPolicy);
+                }
+			}
+		}
+
 		if(lRunMode != 0)
 		{
 			lSerialExecTime = pSerialFunc(argc, argv, COMMON_ARGS);
@@ -149,23 +169,13 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 			{
 				if(lParallelMode == 0 || lParallelMode == i || (lParallelMode == 7 && (i == 4 || i == 5 || i == 6)))
 				{
-					pmSchedulingPolicy lPolicy = SLOW_START;
-					if(lSchedulingPolicy == 1)
-						lPolicy = RANDOM_STEAL;
-					else if(lSchedulingPolicy == 2)
-						lPolicy = EQUAL_STATIC;
-					else if(lSchedulingPolicy == 3)
-						lPolicy = PROPORTIONAL_STATIC;
-
-                    lParallelExecTime = ExecuteParallelTask(argc, argv, i, pParallelFunc, lPolicy);
-                
-                    if(lParallelExecTime < 0.0)
+                    if(lParallelExecTime[i] < 0.0)
                     {
                         std::cout << "Parallel Task " << i << " Failed" << std::endl;                        
                     }
                     else
                     {
-                        std::cout << "Parallel Task " << i << " Execution Time = " << lParallelExecTime << std::endl;
+                        std::cout << "Parallel Task " << i << " Execution Time = " << lParallelExecTime[i] << std::endl;
 
                         if(lRunMode == 1)
                         {
