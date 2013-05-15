@@ -2,13 +2,14 @@
 #include <iostream>
 #include <sys/time.h>
 #include <string>
+#include <vector>
 
 #include "commonAPI.h"
 
 /** Common Arguments:
  *	1. Run Mode - [0: Don't compare to serial execution; 1: Compare to serial execution (default); 2: Only run serial]
  *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default); 7: (4, 5, 6)]
- *	3. Scheduling Policy - [0: Push (default); 1: Pull; 2: Equal_Static; 3: Proportional_Static]
+ *	3. Scheduling Policy - [0: Push (default); 1: Pull; 2: Equal_Static; 3: Proportional_Static, 4: All]
  */
 #define COMMON_ARGS 3
 #define DEFAULT_RUN_MODE 1
@@ -18,6 +19,17 @@
 pmCallbackHandle gCallbackHandleArray1[6];
 pmCallbackHandle gCallbackHandleArray2[6];
 int gCallbackHandleArrayCount;
+
+struct Result
+{
+    size_t schedulingPolicy;
+    size_t parallelMode;
+    double execTime;
+    bool serialComparisonResult;
+};
+
+std::vector<Result> gResultVector;
+bool gSerialResultsCompared;
 
 double ExecuteParallelTask(int argc, char** argv, int pParallelMode, void* pParallelFunc, pmSchedulingPolicy pSchedulingPolicy)
 {
@@ -104,7 +116,6 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
                     callbacksFunc pCallbacksFunc2, std::string pCallbackKey2)
 {
 	double lSerialExecTime = (double)0;
-	double lParallelExecTime[6] = {};
 
 	int lRunMode = DEFAULT_RUN_MODE;
 	int lParallelMode = DEFAULT_PARALLEL_MODE;
@@ -120,8 +131,10 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 	if(lParallelMode < 0 || lParallelMode > 7)
 		lParallelMode = DEFAULT_PARALLEL_MODE;
 
-	if(lSchedulingPolicy < 0 || lSchedulingPolicy > 3)
+	if(lSchedulingPolicy < 0 || lSchedulingPolicy > 4)
 		lSchedulingPolicy = DEFAULT_SCHEDULING_POLICY;
+    
+    gSerialResultsCompared = (lRunMode == 1);
 
 	SAFE_PM_EXEC( pmInitialize() );
     
@@ -136,26 +149,6 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 			exit(1);
 		}
 
-		if(lRunMode != 2)
-		{
-            pmSchedulingPolicy lPolicy = SLOW_START;
-            if(lSchedulingPolicy == 1)
-                lPolicy = RANDOM_STEAL;
-            else if(lSchedulingPolicy == 2)
-                lPolicy = EQUAL_STATIC;
-            else if(lSchedulingPolicy == 3)
-                lPolicy = PROPORTIONAL_STATIC;
-
-			// Six Parallel Execution Modes
-			for(int i = 1; i <= 6; ++i)
-			{
-				if(lParallelMode == 0 || lParallelMode == i || (lParallelMode == 7 && (i == 4 || i == 5 || i == 6)))
-				{
-                    lParallelExecTime[i] = ExecuteParallelTask(argc, argv, i, pParallelFunc, lPolicy);
-                }
-			}
-		}
-
 		if(lRunMode != 0)
 		{
 			lSerialExecTime = pSerialFunc(argc, argv, COMMON_ARGS);
@@ -164,30 +157,39 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 
 		if(lRunMode != 2)
 		{
-			// Six Parallel Execution Modes
-			for(int i = 1; i <= 6; ++i)
-			{
-				if(lParallelMode == 0 || lParallelMode == i || (lParallelMode == 7 && (i == 4 || i == 5 || i == 6)))
-				{
-                    if(lParallelExecTime[i] < 0.0)
-                    {
-                        std::cout << "Parallel Task " << i << " Failed" << std::endl;                        
-                    }
-                    else
-                    {
-                        std::cout << "Parallel Task " << i << " Execution Time = " << lParallelExecTime[i] << std::endl;
+            for(int policy = 0; policy <= 2; ++policy)
+            {
+                if(lSchedulingPolicy == policy || lSchedulingPolicy == 4)
+                {
+                    pmSchedulingPolicy lPolicy = SLOW_START;
+                    if(policy == 1)
+                        lPolicy = RANDOM_STEAL;
+                    else if(policy == 2)
+                        lPolicy = EQUAL_STATIC;
+                    else if(policy == 3)
+                        lPolicy = PROPORTIONAL_STATIC;
 
-                        if(lRunMode == 1)
+                    // Six Parallel Execution Modes
+                    for(int i = 1; i <= 6; ++i)
+                    {
+                        if(lParallelMode == 0 || lParallelMode == i || (lParallelMode == 7 && (i == 4 || i == 5 || i == 6)))
                         {
-                            if(pCompareFunc(argc, argv, COMMON_ARGS))
-                                std::cout << "Parallel Task " << i << " Test Failed" << std::endl;
-                            else
-                                std::cout << "Parallel Task " << i << " Test Passed" << std::endl;
+                            Result lResult;
+                            lResult.execTime = ExecuteParallelTask(argc, argv, i, pParallelFunc, lPolicy);
+
+                            lResult.parallelMode = i;
+                            lResult.schedulingPolicy = policy;
+                            lResult.serialComparisonResult = false;
+                            
+                            if(lResult.execTime > 0.0 && lRunMode == 1)
+                                lResult.serialComparisonResult = (pCompareFunc(argc, argv, COMMON_ARGS) ? false : true);
+                            
+                            gResultVector.push_back(lResult);
                         }
                     }
-				}
-			}
-
+                }
+            }
+            
             ReleaseLibraryCallbacks();
 		}
 
@@ -215,6 +217,26 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 void commonFinish()
 {
 	SAFE_PM_EXEC( pmFinalize() );
+    
+    std::cout << std::endl;
+
+    std::vector<Result>::iterator lIter = gResultVector.begin(), lEndIter = gResultVector.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        if((*lIter).execTime < 0.0)
+        {
+            std::cout << "Parallel Task " << (*lIter).parallelMode << " Failed [Scheduling Policy: " << (*lIter).schedulingPolicy << "]" << std::endl;
+        }
+        else
+        {
+            std::cout << "Parallel Task " << (*lIter).parallelMode << " Execution Time = " << (*lIter).execTime << " [Scheduling Policy: " << (*lIter).schedulingPolicy << "]";
+            
+            if(gSerialResultsCompared)
+                std::cout << " [Serial Comparison Test " << ((*lIter).serialComparisonResult ? "Passed" : "Failed") << "]";
+            
+            std::cout << std::endl;
+        }
+    }
 }
 
 bool localDeviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo)

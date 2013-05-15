@@ -418,7 +418,6 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 #endif
     }
 
-	std::cout << "Perfect match against serial execution" << std::endl;
 	return 0;
 }
 

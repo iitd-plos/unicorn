@@ -34,9 +34,6 @@ namespace pm
 pmSubtaskManager::pmSubtaskManager(pmLocalTask* pLocalTask)
     : mLocalTask(pLocalTask)
 	, mTaskStatus(pmStatusUnavailable)
-#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
-    , mExecutionProfilePrinted(false)
-#endif
     , mExecCountSorter(mDeviceExecutionProfile)
     , mOrderedDevices(mExecCountSorter)
 {
@@ -44,6 +41,9 @@ pmSubtaskManager::pmSubtaskManager(pmLocalTask* pLocalTask)
 
 pmSubtaskManager::~pmSubtaskManager()
 {
+#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
+    PrintExecutionProfile();
+#endif
 }
 
 // Returns last failure status or pmSuccess
@@ -129,17 +129,14 @@ pmStatus pmSubtaskManager::UpdateExecutionProfile(pmProcessingElement* pDevice, 
 #ifdef DUMP_SUBTASK_EXECUTION_PROFILE
 pmStatus pmSubtaskManager::PrintExecutionProfile()
 {
-    if(mExecutionProfilePrinted)
-        return pmSuccess;
-    
-    mExecutionProfilePrinted = true;
-
     std::vector<ulong> lCpuSubtasks(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount(), 0);
     
     std::map<uint, ulong>::iterator lStart, lEnd;
     lStart = mDeviceExecutionProfile.begin();
     lEnd = mDeviceExecutionProfile.end();
     
+    std::cout << std::endl << "Subtask distribution for task [" << (uint)(*PM_LOCAL_MACHINE) << ", " << mLocalTask->GetSequenceNumber() << "] under scheduling policy " << mLocalTask->GetSchedulingModel() << " ... " << std::endl << std::endl;
+
     std::cout << "Device Subtask Execution Profile ... " << std::endl;
     for(; lStart != lEnd; ++lStart)
     {
@@ -226,13 +223,7 @@ bool pmPushSchedulingManager::HasTaskFinished()
 	FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	if(mSortedUnassignedPartitions.empty() && mAssignedPartitions.empty())
-    {
-#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
-        PrintExecutionProfile();
-#endif
-
         return true;
-    }
     
     return false;
 }
@@ -692,13 +683,7 @@ bool pmSingleAssignmentSchedulingManager::HasTaskFinished()
     FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     if(HasTaskFinished_Internal())
-    {
-#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
-        PrintExecutionProfile();
-#endif
-        
         return true;
-    }
     
     return false;
 }

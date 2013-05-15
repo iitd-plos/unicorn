@@ -47,4 +47,7 @@
          location = "group:ImageFiltering/ImageFiltering.xcodeproj">
       </FileRef>
    </Group>
+   <FileRef
+      location = "group:analyzer/analyzer/Analyzer.xcodeproj">
+   </FileRef>
 </Workspace>

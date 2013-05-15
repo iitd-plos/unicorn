@@ -81,10 +81,6 @@ class pmSubtaskManager : public pmBase
         std::map<uint, ulong> mDeviceExecutionProfile;    // Global Device Index versus Subtasks Executed
         std::map<uint, ulong> mMachineExecutionProfile;    // Machine Index versus Subtasks Executed
     
-#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
-        bool mExecutionProfilePrinted;
-#endif
-
     protected:
         typedef struct execCountSorter : std::binary_function<pmProcessingElement*, pmProcessingElement*, bool>
         {
