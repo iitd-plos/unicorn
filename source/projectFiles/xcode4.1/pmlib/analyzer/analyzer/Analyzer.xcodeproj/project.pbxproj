@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		2BBFA61E174C0A7A0008292D /* graph.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BBFA61C174C0A7A0008292D /* graph.cpp */; };
 		2BC68D94173ABF6400A3D6BF /* analyzer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC68D93173ABF6400A3D6BF /* analyzer.cpp */; };
 		2BC68D98173AC20F00A3D6BF /* benchmark.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC68D96173AC20F00A3D6BF /* benchmark.cpp */; };
 /* End PBXBuildFile section */
@@ -24,6 +25,8 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		2BBFA61B174C0A690008292D /* graph.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = graph.h; sourceTree = "<group>"; };
+		2BBFA61C174C0A7A0008292D /* graph.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = graph.cpp; sourceTree = "<group>"; };
 		2BC68D91173ABF6400A3D6BF /* analyzer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = analyzer.h; sourceTree = "<group>"; };
 		2BC68D93173ABF6400A3D6BF /* analyzer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = analyzer.cpp; sourceTree = "<group>"; };
 		2BC68D95173AC1F700A3D6BF /* benchmark.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = benchmark.h; sourceTree = "<group>"; };
@@ -47,6 +50,7 @@
 			children = (
 				2BC68D91173ABF6400A3D6BF /* analyzer.h */,
 				2BC68D95173AC1F700A3D6BF /* benchmark.h */,
+				2BBFA61B174C0A690008292D /* graph.h */,
 			);
 			name = inc;
 			path = ../../../../../../analyzers/inc;
@@ -57,6 +61,7 @@
 			children = (
 				2BC68D93173ABF6400A3D6BF /* analyzer.cpp */,
 				2BC68D96173AC20F00A3D6BF /* benchmark.cpp */,
+				2BBFA61C174C0A7A0008292D /* graph.cpp */,
 			);
 			name = src;
 			path = ../../../../../../analyzers/src;
@@ -132,6 +137,7 @@
 			files = (
 				2BC68D94173ABF6400A3D6BF /* analyzer.cpp in Sources */,
 				2BC68D98173AC20F00A3D6BF /* benchmark.cpp in Sources */,
+				2BBFA61E174C0A7A0008292D /* graph.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

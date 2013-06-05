@@ -22,9 +22,45 @@
 #define __ANALYZER_BENCHMARK__
 
 #include <map>
-#include <set>
 #include <vector>
 #include <string>
+
+class Graph;
+struct Axis;
+
+struct StandardCurve
+{
+    std::string name;
+    std::vector<std::pair<double, double> > points;     // For rect graphs, the first member of pair is the group number
+    
+    StandardCurve(const std::string& pName)
+    : name(pName)
+    {}
+};
+
+struct StandardChart
+{
+    std::auto_ptr<Axis> xAxis;
+    std::auto_ptr<Axis> yAxis;
+    
+    std::vector<std::string> groups;    // Only used for rect graphs
+    std::vector<StandardCurve> curves;
+    
+    StandardChart(std::auto_ptr<Axis> pXAxis, std::auto_ptr<Axis> pYAxis)
+    : xAxis(pXAxis)
+    , yAxis(pYAxis)
+    {}
+    
+    void SetCurves(size_t pCurveCount, const char** pCurveNames)
+    {
+        curves.clear();
+        
+        for(size_t i = 0; i < pCurveCount; ++i)
+            curves.push_back(StandardCurve(pCurveNames[i]));
+    }
+    
+    std::auto_ptr<Graph> graph;
+};
 
 struct DeviceStats
 {
@@ -33,7 +69,7 @@ struct DeviceStats
     size_t stealAttempts;   // Only valid in PULL policy
     size_t stealSuccesses;  // Only valid in PULL policy
     size_t stealFailures;   // Only valid in PULL policy
-    
+
     std::map<size_t, std::pair<double, double> > eventTimeline; // Subtask Id versus pair of subtask start and end time
     
     DeviceStats()
@@ -56,28 +92,6 @@ struct MachineStats
     {}
 };
 
-struct ExecutionInstanceStats
-{
-    double execTimeCpu;
-    double execTimeGpu;
-    double execTimeCpuPlusGpu;
-
-    size_t subtaskCount;
-    bool serialComparisonResult;
-   
-    std::map<std::string, std::pair<double, double> > workTimeStats;
-    std::map<size_t, DeviceStats> deviceStats;
-    std::map<size_t, MachineStats> machineStats;
-    
-    ExecutionInstanceStats()
-    : execTimeCpu(0)
-    , execTimeGpu(0)
-    , execTimeCpuPlusGpu(0)
-    , subtaskCount(0)
-    , serialComparisonResult(false)
-    {}
-};
-
 enum SchedulingPolicy
 {
     PUSH,
@@ -87,31 +101,96 @@ enum SchedulingPolicy
     MAX_SCHEDULING_POLICY
 };
 
-struct ExecutionInstanceKey
+enum clusterType
 {
-    size_t hosts;
-    enum SchedulingPolicy policy;
+    CPU,
+    GPU,
+    CPU_PLUS_GPU,
+    MAX_CLUSTER_TYPE
+};
+
+struct Level1Key
+{
     size_t varying1;
     size_t varying2;
     
-    ExecutionInstanceKey(size_t pHosts, enum SchedulingPolicy pPolicy, size_t pVarying1, size_t pVarying2 = 0)
+    Level1Key()
+    : varying1(0)
+    , varying2(0)
+    {}
+
+    friend bool operator< (const Level1Key& pFirst, const Level1Key& pSecond)
+    {
+        if(pFirst.varying1 < pSecond.varying1)
+            return true;
+        
+        return (pFirst.varying2 < pSecond.varying2);
+    }
+};
+
+struct Level1Value
+{
+    double sequentialTime;
+    double singleGpuTime;
+};
+
+struct Level2Key
+{
+    size_t hosts;
+    enum SchedulingPolicy policy;
+    enum clusterType cluster;
+    bool multiAssign;
+    bool lazyMem;
+    
+    Level2Key(size_t pHosts, enum SchedulingPolicy pPolicy, enum clusterType pCluster, bool pMultiAssign, bool pLazyMem)
     : hosts(pHosts)
     , policy(pPolicy)
-    , varying1(pVarying1)
-    , varying2(pVarying2)
+    , cluster(pCluster)
+    , multiAssign(pMultiAssign)
+    , lazyMem(pLazyMem)
     {}
+
+    friend bool operator< (const Level2Key& pFirst, const Level2Key& pSecond)
+    {
+        if(pFirst.hosts < pSecond.hosts)
+            return true;
+        
+        if(pFirst.policy < pSecond.policy)
+            return true;
+        
+        if(pFirst.cluster < pSecond.cluster)
+            return true;
+        
+        if(pFirst.multiAssign < pSecond.multiAssign)
+            return true;
+        
+        return (pFirst.lazyMem < pSecond.lazyMem);
+    }
+};
+
+struct Level2Value
+{
+    double execTime;
+
+    size_t subtaskCount;
+    bool serialComparisonResult;
+   
+    std::map<std::string, std::pair<double, double> > workTimeStats;
+    std::map<size_t, DeviceStats> deviceStats;
+    std::map<size_t, MachineStats> machineStats;
     
-    friend bool operator< (const ExecutionInstanceKey& pKey1, const ExecutionInstanceKey& pKey2);
+    Level2Value()
+    : subtaskCount(0)
+    , serialComparisonResult(false)
+    {}
 };
 
 struct BenchmarkResults
 {
-    double serialExecTime;
-    std::map<ExecutionInstanceKey, ExecutionInstanceStats> parallelStats;
+    typedef std::map<Level1Key, std::pair<Level1Value, std::map<Level2Key, Level2Value> > > mapType;
+    mapType results;
 
-    BenchmarkResults()
-    : serialExecTime(0)
-    {}
+    std::map<size_t, size_t> hostsMap;  // Maps no. of hosts used in the benchmark to a sequential order e.g. 1, 2, 4, 8 to 1, 2, 3, 4
 };
 
 class Benchmark
@@ -139,8 +218,21 @@ private:
     static void LoadKeyValuePairs(const std::string& pFilePath, keyValuePairs& pPairs);
     static void CreateDir(const std::string& pPath);
     
-    void ParseResultsFile(const std::string& pResultsFile);
+    void ParseResultsFile(const Level1Key& pLevel1Key, const std::string& pResultsFile);
+    
+    void BeginHtmlSection(std::ofstream &pHtmlStream, const std::string& pSectionName);
+
     void GenerateAnalysis();
+    void GenerateTable(std::ofstream& pHtmlStream);
+    void GeneratePlots(std::ofstream& pHtmlStream);
+    Graph& GenerateStandardChart(size_t pPlotWidth, size_t pPlotHeight, StandardChart& pChart);
+
+    void GeneratePerformanceGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, SchedulingPolicy pPolicy);
+    void GenerateSchedulingModelsGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
+    void GenerateLoadBalancingGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
+    void GenerateWorkTimeGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, SchedulingPolicy pPolicy);
+
+    void EmbedPlot(std::ofstream& pHtmlStream, Graph& pGraph, const std::string& pGraphTitle);
     
     static keyValuePairs& GetGlobalConfiguration();
     static std::string& GetBasePath();
