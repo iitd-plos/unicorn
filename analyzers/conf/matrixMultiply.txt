@@ -1,0 +1,3 @@
+Varying_1 = 300 500 700
+Benchmark_Name = Square Matrix Multiplication
+Varying1_Name = Matrix Dimension

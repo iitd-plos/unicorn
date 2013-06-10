@@ -1,0 +1,3 @@
+Hosts = 1
+Host_File = hosts.txt
+Benchmarks = matrixMultiply
