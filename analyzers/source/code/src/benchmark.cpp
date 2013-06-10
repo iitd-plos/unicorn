@@ -33,7 +33,6 @@
 #include <iomanip>
 
 #include "benchmark.h"
-#include "graph.h"
 
 #ifdef _WIN32
     const char PATH_SEPARATOR = '\\';

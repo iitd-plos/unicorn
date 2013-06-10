@@ -25,8 +25,7 @@
 #include <vector>
 #include <string>
 
-class Graph;
-struct Axis;
+#include "graph.h"
 
 struct StandardCurve
 {
