@@ -1,3 +1,4 @@
 Hosts = 1
 Host_File = hosts.txt
+Mpi_Options =
 Benchmarks = matrixMultiply

@@ -1239,6 +1239,11 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
 //    {
 //        lSingleGpuFileStream.close();
 //    }
+    
+    const std::string lMpiOptionsStr("Mpi_Options");
+    std::vector<std::string>& lMpiOptionsVector = GetGlobalConfiguration()[lMpiOptionsStr];
+    
+    const std::string& lMpiOptions = lMpiOptionsVector.empty() ? std::string("") : lMpiOptionsVector[0];
 
     /* Generate PMLIB tasks output */
     for(size_t i = 0; i < (size_t)MAX_SCHEDULING_POLICY; ++i)
@@ -1262,7 +1267,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                     {
                         std::stringstream lStream;
                         lStream << "source ~/.pmlibrc; ";
-                        lStream << "mpirun -n " << pHosts << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
+                        lStream << "mpirun -n " << pHosts << " " << lMpiOptions << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
                         lStream << " 2>&1 > " << lOutputFile.str().c_str();
 
                         system(lStream.str().c_str());
@@ -1428,7 +1433,8 @@ void Benchmark::LoadKeyValuePairs(const std::string& pFilePath, keyValuePairs& p
                 
                 std::string lValueStr = boost::regex_replace(lValue, lExp5, std::string(" "));
                 
-                if(lKey == std::string("Benchmark_Name") || lKey == std::string("Varying1_Name") || lKey == std::string("Varying2_Name"))
+                if(lKey == std::string("Mpi_Options") || lKey == std::string("Benchmark_Name")
+                || lKey == std::string("Varying1_Name") || lKey == std::string("Varying2_Name"))
                 {
                     pPairs[lKey].push_back(lValueStr);
                 }
