@@ -153,19 +153,25 @@ struct Level2Key
 
     friend bool operator< (const Level2Key& pFirst, const Level2Key& pSecond)
     {
-        if(pFirst.hosts < pSecond.hosts)
-            return true;
+        if(pFirst.hosts == pSecond.hosts)
+        {
+            if(pFirst.policy == pSecond.policy)
+            {
+                if(pFirst.cluster == pSecond.cluster)
+                {
+                    if(pFirst.multiAssign == pSecond.multiAssign)
+                        return (pFirst.lazyMem < pSecond.lazyMem);
+                    
+                    return (pFirst.multiAssign < pSecond.multiAssign);
+                }
+                
+                return (pFirst.cluster < pSecond.cluster);
+            }
+            
+            return (pFirst.policy < pSecond.policy);
+        }
         
-        if(pFirst.policy < pSecond.policy)
-            return true;
-        
-        if(pFirst.cluster < pSecond.cluster)
-            return true;
-        
-        if(pFirst.multiAssign < pSecond.multiAssign)
-            return true;
-        
-        return (pFirst.lazyMem < pSecond.lazyMem);
+        return (pFirst.hosts < pSecond.hosts);
     }
 };
 
@@ -249,7 +255,7 @@ private:
     std::string mName;
     std::string mExecPath;
     keyValuePairs mConfiguration;
-    
+
     std::vector<BenchmarkResults> mSamples;
     BenchmarkResults mResults;
 };

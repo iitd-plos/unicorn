@@ -23,6 +23,7 @@
 
 #include <string>
 #include <vector>
+#include <memory>
 
 struct Axis
 {
@@ -76,12 +77,12 @@ protected:
     void GetPreSvg();
     void GetPostSvg(size_t pMaxDataPoints);
 
-    std::auto_ptr<Axis> mAxisX;
-    std::auto_ptr<Axis> mAxisY;
-
     double mWidth, mHeight;
     double mLeftMargin, mRightMargin, mTopMargin, mBottomMargin;
     double mUsableWidth, mUsableHeight;
+
+    std::auto_ptr<Axis> mAxisX;
+    std::auto_ptr<Axis> mAxisY;
 
     double mMinX, mMinY, mMaxX, mMaxY;
     double mMinPlottedX, mMinPlottedY;

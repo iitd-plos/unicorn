@@ -21,16 +21,22 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <unistd.h>
+#include <string.h>
+
+#include <sys/stat.h>
+#include <sys/types.h>
+
 #include <iostream>
+#include <iomanip>
 #include <fstream>
+
 #include <sstream>
-#include <regex>
 #include <set>
 #include <algorithm>
+#include <limits>
 
-#include <unistd.h>
-#include <sys/stat.h>
-#include <iomanip>
+#include <boost/regex.hpp>
 
 #include "benchmark.h"
 
@@ -182,10 +188,10 @@ void Benchmark::ProcessResults()
     lFolderPath.append(lSeparator);
     lFolderPath.append(mName);
 
-    std::cmatch lResults;
-    std::regex lVarying1Exp("([0-9]+)$");
-    std::regex lVarying2Exp("([0-9]+)_([0-9]+)$");
-    std::regex lSampleExp("sample_[0-9]+$");
+    boost::cmatch lResults;
+    boost::regex lVarying1Exp("([0-9]+)$");
+    boost::regex lVarying2Exp("([0-9]+)_([0-9]+)$");
+    boost::regex lSampleExp("sample_([0-9]+)$");
     
     DIR* lDir = opendir(lFolderPath.c_str());
     if(lDir)
@@ -193,16 +199,16 @@ void Benchmark::ProcessResults()
         struct dirent* lEntry;
         while((lEntry = readdir(lDir)) != NULL)
         {
-            if(lEntry->d_type == DT_DIR && lEntry->d_namlen && strcmp(lEntry->d_name, ".") && strcmp(lEntry->d_name, ".."))
+            if(lEntry->d_type == DT_DIR && strlen(lEntry->d_name) && strcmp(lEntry->d_name, ".") && strcmp(lEntry->d_name, ".."))
             {
                 std::string lDirPath(lFolderPath);
                 lDirPath.append(lSeparator);
-                lDirPath.append(std::string(lEntry->d_name, lEntry->d_namlen));
+                lDirPath.append(std::string(lEntry->d_name));
 
                 Level1Key lLevel1Key;
-                if(std::regex_search(lDirPath.c_str(), lResults, lVarying2Exp))
+                if(boost::regex_search(lDirPath.c_str(), lResults, lVarying2Exp))
                     lLevel1Key.varying2 = atoi(std::string(lResults[2]).c_str());
-                else if(!std::regex_search(lDirPath.c_str(), lResults, lVarying1Exp))
+                else if(!boost::regex_search(lDirPath.c_str(), lResults, lVarying1Exp))
                     throw std::exception();
                 
                 lLevel1Key.varying1 = atoi(std::string(lResults[1]).c_str());
@@ -213,13 +219,13 @@ void Benchmark::ProcessResults()
                     struct dirent* lSamplesEntry;
                     while((lSamplesEntry = readdir(lSamplesDir)) != NULL)
                     {
-                        if(lSamplesEntry->d_type == DT_DIR && lSamplesEntry->d_namlen && strcmp(lSamplesEntry->d_name, ".") && strcmp(lSamplesEntry->d_name, ".."))
+                        if(lSamplesEntry->d_type == DT_DIR && strlen(lSamplesEntry->d_name) && strcmp(lSamplesEntry->d_name, ".") && strcmp(lSamplesEntry->d_name, ".."))
                         {
                             std::string lSamplePath(lDirPath);
                             lSamplePath.append(lSeparator);
-                            lSamplePath.append(std::string(lEntry->d_name, lEntry->d_namlen));
+                            lSamplePath.append(std::string(lSamplesEntry->d_name));
                             
-                            if(!std::regex_search(lSamplePath.c_str(), lResults, lSampleExp))
+                            if(!boost::regex_search(lSamplePath.c_str(), lResults, lSampleExp))
                                 throw std::exception();
                             
                             size_t lSampleIndex = atoi(std::string(lResults[1]).c_str());
@@ -230,11 +236,11 @@ void Benchmark::ProcessResults()
                                 struct dirent* lDirEntry;
                                 while((lDirEntry = readdir(lResultsDir)) != NULL)
                                 {
-                                    if(lDirEntry->d_type != DT_DIR && lDirEntry->d_namlen)
+                                    if(lDirEntry->d_type != DT_DIR && strlen(lDirEntry->d_name))
                                     {
                                         std::string lFilePath(lSamplePath);
                                         lFilePath.append(lSeparator);
-                                        lFilePath.append(std::string(lDirEntry->d_name, lDirEntry->d_namlen));
+                                        lFilePath.append(std::string(lDirEntry->d_name));
 
                                         ParseResultsFile(lLevel1Key, lFilePath, lSampleIndex);
                                     }
@@ -272,7 +278,31 @@ void Benchmark::SelectMedianSample()
             throw std::exception();
     }
     
-    BenchmarkResults::mapType::const_iterator lIter = mSamples[0].results.begin(), lEndIter = mSamples[1].results.end();
+#if 0
+    for(size_t i = 0; i < SAMPLE_COUNT; ++i)
+    {
+        std::cout << "Sample " << i << std::endl;
+
+        BenchmarkResults::mapType::const_iterator lIter = mSamples[i].results.begin(), lEndIter = mSamples[i].results.end();
+        for(; lIter != lEndIter; ++lIter)
+        {
+            const Level1Key& lLevel1Key = lIter->first;
+            const std::map<Level2Key, Level2Value>& lMap = lIter->second.second;
+            
+            std::cout << lLevel1Key.varying1 << " " << lLevel1Key.varying2 << std::endl;
+
+            std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
+            for(; lInnerIter != lInnerEndIter; ++lInnerIter)
+            {
+                const Level2Key& lLevel2Key = lInnerIter->first;
+
+                std::cout << lLevel2Key.hosts << " " << lLevel2Key.policy << " " << lLevel2Key.cluster << " " << lLevel2Key.multiAssign << " " << lLevel2Key.lazyMem << std::endl;
+            }
+        }
+    }
+#endif
+
+    BenchmarkResults::mapType::const_iterator lIter = mSamples[0].results.begin(), lEndIter = mSamples[0].results.end();
     for(; lIter != lEndIter; ++lIter)
     {
         const Level1Key& lLevel1Key = lIter->first;
@@ -372,17 +402,17 @@ void Benchmark::GenerateTable(std::ofstream& pHtmlStream)
     
     if(lVarying2Defined)
     {
-        std::regex lSpaceExp("[ \t]");
-        std::string lVarying1Name = std::regex_replace(mConfiguration["Varying1_Name"][0], lSpaceExp, std::string("<br>"));
-        std::string lVarying2Name = std::regex_replace(mConfiguration["Varying2_Name"][0], lSpaceExp, std::string("<br>"));
+        boost::regex lSpaceExp("[ \t]");
+        std::string lVarying1Name = boost::regex_replace(mConfiguration["Varying1_Name"][0], lSpaceExp, std::string("<br>"));
+        std::string lVarying2Name = boost::regex_replace(mConfiguration["Varying2_Name"][0], lSpaceExp, std::string("<br>"));
         
         pHtmlStream << "<th rowSpan=3>" << lVarying1Name << "</th>" << std::endl;
         pHtmlStream << "<th rowSpan=3>" << lVarying2Name << "</th>" << std::endl;
     }
     else
     {
-        std::regex lSpaceExp("[ \t]");
-        std::string lVarying1Name = std::regex_replace(mConfiguration["Varying1_Name"][0], lSpaceExp, std::string("<br>"));
+        boost::regex lSpaceExp("[ \t]");
+        std::string lVarying1Name = boost::regex_replace(mConfiguration["Varying1_Name"][0], lSpaceExp, std::string("<br>"));
         
         pHtmlStream << "<th rowSpan=3>" << lVarying1Name << "</th>" << std::endl;
     }
@@ -592,7 +622,7 @@ void Benchmark::GeneratePerformanceGraphs(size_t pPlotWidth, size_t pPlotHeight,
                             lOneHostSvpGraph.curves[1].points.push_back(std::make_pair(lIter->first.varying1, lInnerIter->second.execTime));
                             lOneHostParallelGraph.curves[0].points.push_back(std::make_pair(lIter->first.varying1, lInnerIter->second.execTime));
                         }
-                        
+
                         lCpusAllHostsGraph.curves[mResults.hostsMap[lInnerIter->first.hosts]].points.push_back(std::make_pair(lIter->first.varying1, lInnerIter->second.execTime));
                         break;
                         
@@ -990,14 +1020,14 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
         throw std::exception();
 
     std::string lLine;
-    std::cmatch lResults;
+    boost::cmatch lResults;
 
     if(!strcmp(pResultsFile.c_str() + strlen(pResultsFile.c_str()) - strlen(SEQUENTIAL_FILE_NAME), SEQUENTIAL_FILE_NAME))
     {
-        std::regex lExp("^Serial Task Execution Time = ([0-9.]+)");
+        boost::regex lExp("^Serial Task Execution Time = ([0-9.]+)");
         while(std::getline(lFileStream, lLine))
         {
-            if(std::regex_search(lLine.c_str(), lResults, lExp))
+            if(boost::regex_search(lLine.c_str(), lResults, lExp))
             {
                 mSamples[pSampleIndex].results[pLevel1Key].first.sequentialTime = atof(std::string(lResults[1]).c_str());
                 break;
@@ -1022,31 +1052,34 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
 //        return;
 //    }
 
-    std::regex lKeyExp("([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)$");
-    if(!std::regex_search(pResultsFile.c_str(), lResults, lKeyExp))
+    boost::regex lKeyExp("([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)$");
+    if(!boost::regex_search(pResultsFile.c_str(), lResults, lKeyExp))
         throw std::exception();
 
     Level2Key lLevel2Key((size_t)(atoi(std::string(lResults[1]).c_str())), (enum SchedulingPolicy)(atoi(std::string(lResults[2]).c_str())), (enum clusterType)(atoi(std::string(lResults[3]).c_str())), (bool)(atoi(std::string(lResults[4]).c_str())), (bool)(atoi(std::string(lResults[5]).c_str())));
 
     if(mSamples[pSampleIndex].hostsMap.find(lLevel2Key.hosts) == mSamples[pSampleIndex].hostsMap.end())
-        mSamples[pSampleIndex].hostsMap[lLevel2Key.hosts] = mSamples[pSampleIndex].hostsMap.size();
+    {
+        size_t lSize = mSamples[pSampleIndex].hostsMap.size();
+        mSamples[pSampleIndex].hostsMap[lLevel2Key.hosts] = lSize;
+    }
     
     size_t lCurrentDevice = 0;
     std::pair<size_t, size_t> lCurrentTask(std::numeric_limits<size_t>::infinity(), std::numeric_limits<size_t>::infinity());  // task originating host and sequence id
 
-    std::regex lExp2("^Subtask distribution for task \\[([0-9]+), ([0-9]+)\\] under scheduling policy ([0-9]+) ... ");
-    std::regex lExp3("^Device ([0-9]+) Subtasks ([0-9]+)");
-    std::regex lExp4("^Machine ([0-9]+) Subtasks ([0-9]+) CPU-Subtasks ([0-9]+)");
-    std::regex lExp5("^Total Acknowledgements Received ([0-9]+)");
-    std::regex lExp6("^([^ ]+) => Accumulated Time: ([0-9.]+)s; Actual Time = ([0-9.]+)s; Overlapped Time = ([0-9.]+)s");
-    std::regex lExp7("^Device ([0-9]+) - Subtask execution rate = ([0-9.]+); Steal attemps = ([0-9]+); Successful steals = ([0-9]+); Failed steals = ([0-9]+)");
-    std::regex lExp8("^Parallel Task ([0-9]+) Execution Time = ([0-9.]+) \\[Scheduling Policy: ([0-9]+)\\]");
-    std::regex lExp9("^PMLIB \\[Host ([0-9]+)\\] Event Timeline Device ([0-9]+)");
-    std::regex lExp10("^Task \\[([0-9]+), ([0-9]+)\\] Subtask ([0-9]+) ([0-9.]+) ([0-9.]+)");
+    boost::regex lExp2("^Subtask distribution for task \\[([0-9]+), ([0-9]+)\\] under scheduling policy ([0-9]+) ... ");
+    boost::regex lExp3("^Device ([0-9]+) Subtasks ([0-9]+)");
+    boost::regex lExp4("^Machine ([0-9]+) Subtasks ([0-9]+) CPU-Subtasks ([0-9]+)");
+    boost::regex lExp5("^Total Acknowledgements Received ([0-9]+)");
+    boost::regex lExp6("^([^ ]+) => Accumulated Time: ([0-9.]+)s; Actual Time = ([0-9.]+)s; Overlapped Time = ([0-9.]+)s");
+    boost::regex lExp7("^Device ([0-9]+) - Subtask execution rate = ([0-9.]+); Steal attemps = ([0-9]+); Successful steals = ([0-9]+); Failed steals = ([0-9]+)");
+    boost::regex lExp8("^Parallel Task ([0-9]+) Execution Time = ([0-9.]+) \\[Scheduling Policy: ([0-9]+)\\]");
+    boost::regex lExp9("^PMLIB \\[Host ([0-9]+)\\] Event Timeline Device ([0-9]+)");
+    boost::regex lExp10("^Task \\[([0-9]+), ([0-9]+)\\] Subtask ([0-9]+) ([0-9.]+) ([0-9.]+)");
     
     while(std::getline(lFileStream, lLine))
     {
-        if(std::regex_search(lLine.c_str(), lResults, lExp10))
+        if(boost::regex_search(lLine.c_str(), lResults, lExp10))
         {
             size_t lSubtaskId = atoi(std::string(lResults[3]).c_str());
             double lStartTime = atof(std::string(lResults[4]).c_str());
@@ -1056,7 +1089,7 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
             if(lEndTime > mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lCurrentDevice].lastEventTimings.second)
                 mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lCurrentDevice].lastEventTimings = std::make_pair(lStartTime, lEndTime);
         }
-        else if(std::regex_search(lLine.c_str(), lResults, lExp2))
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp2))
         {
             if(lLevel2Key.policy != (enum SchedulingPolicy)(atoi(std::string(lResults[3]).c_str())))
                 throw std::exception();
@@ -1064,29 +1097,29 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
             lCurrentTask.first = atoi(std::string(lResults[1]).c_str());
             lCurrentTask.second = atoi(std::string(lResults[2]).c_str());
         }
-        else if(std::regex_search(lLine.c_str(), lResults, lExp3))
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp3))
         {
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[atoi(std::string(lResults[1]).c_str())].subtasksExecuted = atoi(std::string(lResults[2]).c_str());
         }
-        else if(std::regex_search(lLine.c_str(), lResults, lExp4))
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp4))
         {
             size_t lMachine = atoi(std::string(lResults[1]).c_str());
             
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].machineStats[lMachine].subtasksExecuted = atoi(std::string(lResults[2]).c_str());
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].machineStats[lMachine].cpuSubtasks = atoi(std::string(lResults[3]).c_str());
         }
-        else if(std::regex_search(lLine.c_str(), lResults, lExp5))
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp5))
         {
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].subtaskCount = atoi(std::string(lResults[1]).c_str());
         }
-        else if(std::regex_search(lLine.c_str(), lResults, lExp6))
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp6))
         {
             std::string lCriterion(lResults[1]);
 
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].workTimeStats[lCriterion].first = atof(std::string(lResults[2]).c_str());
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].workTimeStats[lCriterion].second = atof(std::string(lResults[3]).c_str());
         }
-        else if(std::regex_search(lLine.c_str(), lResults, lExp7))
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp7))
         {
             size_t lDevice = atoi(std::string(lResults[1]).c_str());
             
@@ -1097,18 +1130,18 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
             
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].totalExecutionRate += atoi(std::string(lResults[2]).c_str());
         }
-        else if(std::regex_search(lLine.c_str(), lResults, lExp8))
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp8))
         {
             if(lLevel2Key.policy != (enum SchedulingPolicy)(atoi(std::string(lResults[3]).c_str())))
                 throw std::exception();
 
-            if(4 + (size_t)lLevel2Key.cluster != (atoi(std::string(lResults[1]).c_str())))
+            if(4 + (size_t)lLevel2Key.cluster != (size_t)(atoi(std::string(lResults[1]).c_str())))
                 throw std::exception();
 
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].serialComparisonResult = true;  //(bool)(!strcmp(std::string(lResults[4]).c_str(), "Passed"));
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].execTime = atof(std::string(lResults[2]).c_str());
         }
-        else if(std::regex_search(lLine.c_str(), lResults, lExp9))
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp9))
         {
             lCurrentDevice = atoi(std::string(lResults[2]).c_str());
         }
@@ -1281,9 +1314,9 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
         struct dirent* lEntry;
         while((lEntry = readdir(lDir)) != NULL)
         {
-            if(lEntry->d_type == DT_DIR && lEntry->d_namlen)
+            if(lEntry->d_type == DT_DIR && strlen(lEntry->d_name))
             {
-                std::string lName(lEntry->d_name, lEntry->d_namlen);
+                std::string lName(lEntry->d_name);
                 
                 if(lSelectiveBenchmarks.empty() || std::find(lSelectiveBenchmarks.begin(), lSelectiveBenchmarks.end(), lName) != lSelectiveBenchmarks.end())
                 {
@@ -1374,26 +1407,26 @@ void Benchmark::LoadKeyValuePairs(const std::string& pFilePath, keyValuePairs& p
     }
 
     std::string lLine;
-    std::regex lExp1("^[ \t]*#");
-    std::regex lExp2("^[ \t]*$");
-    std::regex lExp3("^[ \t]*(.*)=[ \t]*(.*)$");
-    std::regex lExp4("[ \t]+$");
-    std::regex lExp5("[ \t]+");
-    std::cmatch lResults;
+    boost::regex lExp1("^[ \t]*#");
+    boost::regex lExp2("^[ \t]*$");
+    boost::regex lExp3("^[ \t]*(.*)=[ \t]*(.*)$");
+    boost::regex lExp4("[ \t]+$");
+    boost::regex lExp5("[ \t]+");
+    boost::cmatch lResults;
 
     while(std::getline(lFileStream, lLine))
     {
-        if(!std::regex_search(lLine.begin(), lLine.end(), lExp1) && !std::regex_search(lLine.begin(), lLine.end(), lExp2))
+        if(!boost::regex_search(lLine.begin(), lLine.end(), lExp1) && !boost::regex_search(lLine.begin(), lLine.end(), lExp2))
         {
-            if(std::regex_search(lLine.c_str(), lResults, lExp3))
+            if(boost::regex_search(lLine.c_str(), lResults, lExp3))
             {
                 std::string lKey(lResults[1]);
                 std::string lValue(lResults[2]);
                 
-                lKey = std::regex_replace(lKey, lExp4, std::string(""));
-                lValue = std::regex_replace(lValue, lExp4, std::string(""));
+                lKey = boost::regex_replace(lKey, lExp4, std::string(""));
+                lValue = boost::regex_replace(lValue, lExp4, std::string(""));
                 
-                std::string lValueStr = std::regex_replace(lValue, lExp5, std::string(" "));
+                std::string lValueStr = boost::regex_replace(lValue, lExp5, std::string(" "));
                 
                 if(lKey == std::string("Benchmark_Name") || lKey == std::string("Varying1_Name") || lKey == std::string("Varying2_Name"))
                 {

@@ -18,9 +18,11 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
-#include <sstream>
-#include <iomanip>
 #include <iostream>
+#include <iomanip>
+
+#include <sstream>
+#include <limits>
 
 #include "graph.h"
 
@@ -131,6 +133,12 @@ Graph::Graph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX, std::au
 , mMinY(std::numeric_limits<double>::infinity())
 , mMaxX(0.0)
 , mMaxY(0.0)
+, mMinPlottedX(0.0)
+, mMinPlottedY(0.0)
+, mPlottedSpaceX(0.0)
+, mPlottedSpaceY(0.0)
+, mPixelsPerUnitX(0.0)
+, mPixelsPerUnitY(0.0)
 {
 }
 
