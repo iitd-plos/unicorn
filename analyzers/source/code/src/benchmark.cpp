@@ -1308,7 +1308,7 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
 
     std::string lTestSuitePath(GetBasePath());
     lTestSuitePath.append(lSeparator);
-    lTestSuitePath.append("testsuite");
+    lTestSuitePath.append("testSuite");
 
     DIR* lDir = opendir(lTestSuitePath.c_str());
     if(lDir)
