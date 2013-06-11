@@ -23,6 +23,7 @@
 
 #include <sstream>
 #include <limits>
+#include <cstdlib>
 
 #include "graph.h"
 
