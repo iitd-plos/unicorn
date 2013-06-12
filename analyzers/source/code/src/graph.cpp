@@ -24,6 +24,7 @@
 #include <sstream>
 #include <limits>
 #include <cstdlib>
+#include <time.h>
 
 #include "graph.h"
 
@@ -84,7 +85,6 @@ const char* const gColors[] =
 
 /* struct Color */
 Color::Color()
-: htmlRep(gColors[std::rand() % (sizeof(gColors) / sizeof(gColors[0]))])
 {
 }
 
@@ -267,6 +267,8 @@ LineGraph::LineGraph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX,
 : Graph(pWidth, pHeight, pAxisX, pAxisY)
 {
     mLines.resize(pLineCount);
+    for(size_t i = 0; i < pLineCount; ++i)
+        mLines[i].color.htmlRep = std::string(gColors[std::rand() % (sizeof(gColors) / sizeof(gColors[0]))]);
 }
 
 void LineGraph::SetLineName(size_t pLineIndex, const std::string &pName)
@@ -411,7 +413,12 @@ const std::string& RectGraph::GetSvg()
     std::stringstream lStream;
 
     std::vector<Color> lRectColors;
-    lRectColors.resize(mRectsPerGroup);
+    for(size_t i = 0; i < mRectsPerGroup; ++i)
+    {
+        Color lColor;
+        lColor.htmlRep = std::string(gColors[std::rand() % (sizeof(gColors) / sizeof(gColors[0]))]);
+        lRectColors.push_back(lColor);
+    }
     
     if(mGroupsOnXAxis)
     {
