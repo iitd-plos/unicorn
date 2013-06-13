@@ -71,7 +71,7 @@ bool isLazyMemEnabled();    /* by default, it's diabled */
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \
-	lTaskDetails.multiAssignEnabled = isMutiAssignEnabled();
+	lTaskDetails.multiAssignEnabled = isMultiAssignEnabled();
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \
