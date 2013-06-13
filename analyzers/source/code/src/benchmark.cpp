@@ -1264,16 +1264,18 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     lSequentialFile.append(lSeparator);
     lSequentialFile.append(SEQUENTIAL_FILE_NAME);
     
-    std::ifstream lSequentialFileStream(lSequentialFile.c_str());
+    const std::string& lTempFile = GetTempOutputFileName();
     
+    std::ifstream lSequentialFileStream(lSequentialFile.c_str());
+
     if(lSequentialFileStream.fail())
     {
         std::stringstream lStream;
         lStream << "source ~/.pmlibrc; ";
         lStream << "mpirun -n " << 1 << " " << mExecPath << " 2 0 0 " << pSpaceSeparatedVaryingsStr;
-        lStream << " 2>&1 > " << lSequentialFile.c_str();
+        lStream << " 2>&1 > " << lTempFile.c_str();
 
-        ExecuteShellCommand(lStream.str(), "sequential");
+        ExecuteShellCommand(lStream.str(), "sequential", lSequentialFile);
     }
     else
     {
@@ -1292,9 +1294,9 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
 //        std::stringstream lStream;
 //        lStream << "source ~/.pmlibrc; ";
 //        lStream << "mpirun -n " << 1 << " " << mExecPath << " 3 0 0 " << pSpaceSeparatedVaryingsStr;
-//        lStream << " 2>&1 > " << lSequentialFile.c_str();
+//        lStream << " 2>&1 > " << lTempFile.c_str();
 //        
-//        ExecuteShellCommand(lStream.str(), "single gpu");
+//        ExecuteShellCommand(lStream.str(), "single gpu", lSingleGpuFile);
 //    }
 //    else
 //    {
@@ -1306,8 +1308,8 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     
     const std::string& lMpiOptions = lMpiOptionsVector.empty() ? std::string("") : lMpiOptionsVector[0];
     
-    const char* lSchedulingModelNames[] = {"Push", "Pull", "Static Equal", "Static Best"};
-    const char* lClusterTypeNames[] = {"CPU", "GPU", "CPU + GPU"};
+    const char* lSchedulingModelNames[] = {"Push", "Pull", "StaticEqual", "StaticBest"};
+    const char* lClusterTypeNames[] = {"CPU", "GPU", "CPU+GPU"};
 
     /* Generate PMLIB tasks output */
     for(size_t i = 0; i < (size_t)MAX_SCHEDULING_POLICY; ++i)
@@ -1336,9 +1338,9 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                         std::stringstream lStream;
                         lStream << "source ~/.pmlibrc; ";
                         lStream << "mpirun -n " << pHosts << " " << lMpiOptions << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
-                        lStream << " 2>&1 > " << lOutputFile.str().c_str();
+                        lStream << " 2>&1 > " << lTempFile.c_str();
 
-                        ExecuteShellCommand(lStream.str(), lDisplayName.str());
+                        ExecuteShellCommand(lStream.str(), lDisplayName.str(), lOutputFile.str());
                     }
                     else
                     {
@@ -1350,19 +1352,48 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     }
 }
 
-void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName)
+void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName, const std::string& pOutputFile)
 {
-    std::cout << "      " << pDisplayName << " ..." << std::endl;
+    std::cout << "      " << pDisplayName << "..." << std::endl;
 
     int lRetVal = system(pCmd.c_str());
     if(lRetVal != -1 && lRetVal != 127)
     {
-        if(!WIFEXITED(lRetVal))
+        if(WIFSIGNALED(lRetVal) || !WIFEXITED(lRetVal))
         {
             std::cerr << "[ERROR]: Command abnormally exited - " << pCmd << std::endl;
-            ExecuteShellCommand(pCmd, pDisplayName);
+            ExecuteShellCommand(pCmd, pDisplayName, pOutputFile);
+        }
+        else
+        {
+            const std::string& lTempFile = GetTempOutputFileName();
+            if(std::rename(lTempFile.c_str(), pOutputFile.c_str()) != 0)
+                std::cout << "Failed to move file " << lTempFile.c_str() << " to " << pOutputFile.c_str() << std::endl;
         }
     }
+}
+
+const std::string& Benchmark::GetTempOutputFileName()
+{
+    static std::string lTempFileName;
+    if(lTempFileName.empty())
+    {
+        std::stringstream lPid;
+        lPid << getpid();
+        
+        char* lTempName = tempnam(NULL, lPid.str().c_str());
+        if(!lTempName)
+        {
+            std::cout << "Failed to generate a temporary file name" << std::endl;
+            throw std::exception();
+        }
+        
+        lTempFileName = std::string(lTempName);
+        
+        free(lTempName);
+    }
+    
+    return lTempFileName;
 }
 
 void Benchmark::CreateDir(const std::string& pPath)

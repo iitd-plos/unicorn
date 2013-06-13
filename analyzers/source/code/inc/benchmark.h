@@ -250,7 +250,8 @@ private:
     
     void SelectSample(bool pMedianSample);
     
-    void ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName);
+    void ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName, const std::string& pOutputFile);
+    const std::string& GetTempOutputFileName();
     
     static keyValuePairs& GetGlobalConfiguration();
     static std::string& GetBasePath();
