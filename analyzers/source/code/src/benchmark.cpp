@@ -1359,7 +1359,7 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
     int lRetVal = system(pCmd.c_str());
     if(lRetVal != -1 && lRetVal != 127)
     {
-        if(WIFSIGNALED(lRetVal) || !WIFEXITED(lRetVal))
+        if(lRetVal != 0 || WIFSIGNALED(lRetVal) || !WIFEXITED(lRetVal))
         {
             std::cerr << "[ERROR]: Command abnormally exited - " << pCmd << std::endl;
             ExecuteShellCommand(pCmd, pDisplayName, pOutputFile);
