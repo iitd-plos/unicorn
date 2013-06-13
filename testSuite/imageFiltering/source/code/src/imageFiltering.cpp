@@ -12,7 +12,7 @@ namespace imageFiltering
 void* gSampleInput;
 void* gSerialOutput;
 void* gParallelOutput;
-char gFilter[FILTER_DIM][FILTER_DIM];
+char gFilter[MAX_FILTER_DIM][MAX_FILTER_DIM];
     
 int gImageWidth, gImageHeight, gImageOffset, gImageBytesPerLine;
 
@@ -94,7 +94,7 @@ void readImage(char* pImagePath, void* pImageData)
 	fclose(fp);
 }
     
-void serialImageFilter(void* pImageData)
+void serialImageFilter(void* pImageData, int pFilterRadius)
 {
     char* lImageData = (char*)pImageData;
     char* lSerialOutput = (char*)gSerialOutput;
@@ -105,10 +105,10 @@ void serialImageFilter(void* pImageData)
     {
         for(int j = 0; j < gImageWidth; ++j)
         {
-            lDimMinX = j - FILTER_RADIUS;
-            lDimMaxX = j + FILTER_RADIUS;
-            lDimMinY = i - FILTER_RADIUS;
-            lDimMaxY = i + FILTER_RADIUS;
+            lDimMinX = j - pFilterRadius;
+            lDimMaxX = j + pFilterRadius;
+            lDimMinY = i - pFilterRadius;
+            lDimMaxY = i + pFilterRadius;
             
             char lRedVal = 0, lGreenVal = 0, lBlueVal = 0;
             for(int k = lDimMinY; k <= lDimMaxY; ++k)
@@ -193,10 +193,10 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
     {
         for(int j = lSubscriptionStartCol; j < lSubscriptionEndCol; ++j)
         {
-            lDimMinX = j - FILTER_RADIUS;
-            lDimMaxX = j + FILTER_RADIUS;
-            lDimMinY = i - FILTER_RADIUS;
-            lDimMaxY = i + FILTER_RADIUS;
+            lDimMinX = j - lTaskConf->filterRadius;
+            lDimMaxX = j + lTaskConf->filterRadius;
+            lDimMinY = i - lTaskConf->filterRadius;
+            lDimMaxY = i + lTaskConf->filterRadius;
             
             char lRedVal = 0, lGreenVal = 0, lBlueVal = 0;
             for(int k = lDimMinY; k <= lDimMaxY; ++k)
@@ -226,7 +226,9 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
 
 #define READ_NON_COMMON_ARGS \
 	char* lImagePath = DEFAULT_IMAGE_PATH; \
-	FETCH_STR_ARG(lImagePath, pCommonArgs, argc, argv);
+    int lFilterRadius = DEFAULT_FILTER_RADIUS; \
+	FETCH_STR_ARG(lImagePath, pCommonArgs, argc, argv); \
+    FETCH_INT_ARG(lFilterRadius, pCommonArgs + 1, argc, argv);
 
 // Returns execution time on success; 0 on error
 double DoSerialProcess(int argc, char** argv, int pCommonArgs)
@@ -238,7 +240,7 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
     
 	double lStartTime = getCurrentTimeInSecs();
 
-	serialImageFilter(lImageData);
+	serialImageFilter(lImageData, lFilterRadius);
 
 	double lEndTime = getCurrentTimeInSecs();
 
@@ -265,9 +267,11 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.imageHeight = gImageHeight;
     lTaskConf.imageOffset = gImageOffset;
     lTaskConf.imageBytesPerLine = gImageBytesPerLine;
+    lTaskConf.filterRadius = lFilterRadius;
     
-    for(int i = 0; i < FILTER_DIM; ++i)
-        for(int j = 0;  j < FILTER_DIM; ++j)
+    int lFilterDim = 2 * lFilterRadius + 1;
+    for(int i = 0; i < lFilterDim; ++i)
+        for(int j = 0;  j < lFilterDim; ++j)
             lTaskConf.filter[i][j] = gFilter[i][j];
 
 	lTaskDetails.taskConf = (void*)(&lTaskConf);
@@ -318,6 +322,12 @@ pmCallbacks DoSetDefaultCallbacks()
 int DoInit(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
+    
+    if(lFilterRadius < MIN_FILTER_RADIUS || lFilterRadius > MAX_FILTER_RADIUS)
+    {
+        std::cout << "Filter radius must be between " << MIN_FILTER_RADIUS << " and " << MAX_FILTER_RADIUS << std::endl;
+        exit(1);
+    }
 
     if(strlen(lImagePath) >= MAX_IMAGE_PATH_LENGTH)
     {
@@ -330,27 +340,12 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 	gSerialOutput = malloc(IMAGE_SIZE);
 	gParallelOutput = malloc(IMAGE_SIZE);
 
-#if defined(SOBEL_FILTER)
-    gFilter[0][0] = (char)-1;
-    gFilter[0][1] = (char)0;
-    gFilter[0][2] = (char)1;
-    gFilter[1][0] = (char)-2;
-    gFilter[1][1] = (char)0;
-    gFilter[1][2] = (char)2;
-    gFilter[2][0] = (char)-1;
-    gFilter[2][1] = (char)0;
-    gFilter[2][2] = (char)1;
-#elif defined(AVERAGE_FILTER_3) || defined(AVERAGE_FILTER_5)
-    for(int i = 0; i < FILTER_DIM; ++i)
-        for(int j = 0; j < FILTER_DIM; ++j)
-            gFilter[i][j] = (char)((int)1);
-#elif defined(RANDOM_FILTER)
     srand((unsigned int)time(NULL));
     
-    for(int i = 0; i < FILTER_DIM; ++i)
-        for(int j = 0; j < FILTER_DIM; ++j)
+    int lFilterDim = 2 * lFilterRadius + 1;
+    for(int i = 0; i < lFilterDim; ++i)
+        for(int j = 0; j < lFilterDim; ++j)
             gFilter[i][j] = (char)(((rand() % 2) ? 1 : -1) * rand());
-#endif
 
 	return 0;
 }

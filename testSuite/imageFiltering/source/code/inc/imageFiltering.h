@@ -7,27 +7,13 @@ namespace imageFiltering
 #define PIXEL_COUNT 3    // assumes 24-bit RGB
 #define IMAGE_SIZE (gImageWidth * gImageHeight * PIXEL_COUNT)
     
-#define TILE_DIM 2048
+#define TILE_DIM 4096
 #define GPU_BLOCK_DIM 32
-    
-#define SOBEL_FILTER
-//#define AVERAGE_FILTER_3
-//#define AVERAGE_FILTER_5
-//#define RANDOM_FILTER
 
-#if defined(SOBEL_FILTER) || defined(AVERAGE_FILTER_3)
-#define FILTER_RADIUS 1
-#elif defined(AVERAGE_FILTER_5) || defined(RANDOM_FILTER)
-#define FILTER_RADIUS 2
-#else
-#error "No Filter Defined"
-#endif
-    
-#define FILTER_DIM ((2 * FILTER_RADIUS) + 1)
-    
-#if FILTER_DIM >= GPU_BLOCK_DIM
-#error "Too large filter"
-#endif
+#define DEFAULT_FILTER_RADIUS 1
+#define MIN_FILTER_RADIUS 1
+#define MAX_FILTER_RADIUS 15
+#define MAX_FILTER_DIM 32
 
 using namespace pm;
 
@@ -44,8 +30,9 @@ typedef struct imageFilterTaskConf
     int imageHeight;
     int imageOffset;
     int imageBytesPerLine;
+    int filterRadius;
     char imagePath[MAX_IMAGE_PATH_LENGTH];
-    char filter[FILTER_DIM][FILTER_DIM];
+    char filter[MAX_FILTER_DIM][MAX_FILTER_DIM];
 } imageFilterTaskConf;
 
 #pragma pack(push)
