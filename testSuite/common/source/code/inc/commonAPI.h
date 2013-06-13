@@ -50,6 +50,9 @@ void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc p
 
 void commonFinish();
 
+bool isMultiAssignEnabled();    /* by default, it's enabled */
+bool isLazyMemEnabled();    /* by default, it's diabled */
+
 #define CREATE_MEM(memSize, memHandle) SAFE_PM_EXEC( pmCreateMemory(memSize, &memHandle) )
 
 #define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
@@ -68,7 +71,7 @@ void commonFinish();
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \
-	lTaskDetails.multiAssignEnabled = true;
+	lTaskDetails.multiAssignEnabled = isMutiAssignEnabled();
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \

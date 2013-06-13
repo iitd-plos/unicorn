@@ -45,6 +45,8 @@ void Analyzer::Analyze()
         lIter->CollectResults();
         lIter->ProcessResults();
     }
+    
+    Benchmark::WriteTopLevelHtmlPage(lBenchmarks);
 }
 
 int main(int argc, const char* argv[])

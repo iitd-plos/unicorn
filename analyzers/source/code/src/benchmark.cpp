@@ -26,6 +26,7 @@
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include <iostream>
 #include <iomanip>
@@ -108,10 +109,11 @@ private:
     const std::string& mHosts;
 };
 
-class MedianFinder
+class SampleFinder
 {
 public:
-    MedianFinder()
+    SampleFinder(bool pMedianSample)
+    : mMedianSample(pMedianSample)
     {}
     
     void AddData(double pData)
@@ -119,17 +121,23 @@ public:
         mData.insert(std::make_pair(pData, mData.size()));
     }
     
-    size_t GetMedianIndex()
+    size_t GetSampleIndex()
     {
-        size_t lMedian = mData.size() / 2;
+        if(mMedianSample)
+        {
+            size_t lMedian = mData.size() / 2;
+            
+            std::set<std::pair<double, size_t> >::iterator lIter = mData.begin();
+            std::advance(lIter, lMedian);
+            
+            return (*lIter).second;
+        }
         
-        std::set<std::pair<double, size_t> >::iterator lIter = mData.begin();
-        std::advance(lIter, lMedian);
-        
-        return (*lIter).second;
+        return mData.begin()->second;   // best sample
     }
     
 private:
+    bool mMedianSample;
     std::set<std::pair<double, size_t> > mData;
 };
 
@@ -259,12 +267,13 @@ void Benchmark::ProcessResults()
         closedir(lDir);
     }
     
-    SelectMedianSample();
+    SelectSample(false);
 
     GenerateAnalysis();
 }
 
-void Benchmark::SelectMedianSample()
+/* If pMedianSample is false, then it selects best sample */
+void Benchmark::SelectSample(bool pMedianSample)
 {
     if(mSamples.size() != SAMPLE_COUNT)
         throw std::exception();
@@ -308,35 +317,35 @@ void Benchmark::SelectMedianSample()
         const Level1Key& lLevel1Key = lIter->first;
         const std::map<Level2Key, Level2Value>& lMap = lIter->second.second;
 
-        MedianFinder lSequentialMedianFinder, lSingleGpuMedianFinder;
+        SampleFinder lSequentialSampleFinder(pMedianSample), lSingleGpuSampleFinder(pMedianSample);
         
         for(size_t i = 0; i < SAMPLE_COUNT; ++i)
         {
             if(mSamples[i].results.find(lLevel1Key) == mSamples[i].results.end())
                 throw std::exception();
 
-            lSequentialMedianFinder.AddData(mSamples[i].results[lLevel1Key].first.sequentialTime);
-            lSingleGpuMedianFinder.AddData(mSamples[i].results[lLevel1Key].first.singleGpuTime);
+            lSequentialSampleFinder.AddData(mSamples[i].results[lLevel1Key].first.sequentialTime);
+            lSingleGpuSampleFinder.AddData(mSamples[i].results[lLevel1Key].first.singleGpuTime);
         }
         
-        mResults.results[lLevel1Key].first.sequentialTime = mSamples[lSequentialMedianFinder.GetMedianIndex()].results[lLevel1Key].first.sequentialTime;
-        mResults.results[lLevel1Key].first.singleGpuTime = mSamples[lSingleGpuMedianFinder.GetMedianIndex()].results[lLevel1Key].first.singleGpuTime;
+        mResults.results[lLevel1Key].first.sequentialTime = mSamples[lSequentialSampleFinder.GetSampleIndex()].results[lLevel1Key].first.sequentialTime;
+        mResults.results[lLevel1Key].first.singleGpuTime = mSamples[lSingleGpuSampleFinder.GetSampleIndex()].results[lLevel1Key].first.singleGpuTime;
         
         std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
         {
             const Level2Key& lLevel2Key = lInnerIter->first;
             
-            MedianFinder lParallelMedianFinder;
+            SampleFinder lParallelSampleFinder(pMedianSample);
             for(size_t i = 0; i < SAMPLE_COUNT; ++i)
             {
                 if(mSamples[i].results[lLevel1Key].second.find(lLevel2Key) == mSamples[i].results[lLevel1Key].second.end())
                     throw std::exception();
 
-                lParallelMedianFinder.AddData(mSamples[i].results[lLevel1Key].second[lLevel2Key].execTime);
+                lParallelSampleFinder.AddData(mSamples[i].results[lLevel1Key].second[lLevel2Key].execTime);
             }
             
-            mResults.results[lLevel1Key].second[lLevel2Key] = mSamples[lParallelMedianFinder.GetMedianIndex()].results[lLevel1Key].second[lLevel2Key];
+            mResults.results[lLevel1Key].second[lLevel2Key] = mSamples[lParallelSampleFinder.GetSampleIndex()].results[lLevel1Key].second[lLevel2Key];
         }
     }
     
@@ -381,8 +390,60 @@ void Benchmark::GenerateAnalysis()
     
     lHtmlStream << "</body>" << std::endl;
     lHtmlStream << "</html>" << std::endl;
-    
+
     lHtmlStream.close();
+}
+
+void Benchmark::WriteTopLevelHtmlPage(const std::vector<Benchmark>& pBenchmarks)
+{
+    std::cout << "Writing top level html page ..." << std::endl;
+    
+    char lPathSeparator[1];
+    lPathSeparator[0] = PATH_SEPARATOR;
+    std::string lSeparator(lPathSeparator, 1);
+
+    std::string lDirPath(GetBasePath());
+    lDirPath.append(lSeparator);
+    lDirPath.append("analyzers");
+    lDirPath.append(lSeparator);
+    lDirPath.append("results");
+    lDirPath.append(lSeparator);
+    lDirPath.append("htmls");
+    
+    CreateDir(lDirPath);
+    
+    std::string lHtmlPath(lDirPath);
+    lHtmlPath += lSeparator + std::string("pmlibResults.html");
+    
+    std::ofstream lHtmlStream;
+
+    lHtmlStream.open(lHtmlPath.c_str());
+    if(lHtmlStream.fail())
+        throw std::exception();
+
+    lHtmlStream << "<html>" << std::endl;
+    lHtmlStream << "<head><center><b><u> PMLIB Results </u></b></center></head>" << std::endl;
+    lHtmlStream << "<body><br><br>" << std::endl;
+
+    lHtmlStream << "<table align=center border=1>" << std::endl;
+    std::vector<Benchmark>::const_iterator lIter = pBenchmarks.begin(), lEndIter = pBenchmarks.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        lHtmlStream << "<tr>" << std::endl;
+        
+        lHtmlStream << "<td>" << std::endl;
+        lHtmlStream << "<a href=\"" << (*lIter).mName << ".html\">" << const_cast<Benchmark&>(*lIter).mConfiguration["Benchmark_Name"][0] << "</a>" << std::endl;
+        lHtmlStream << "</td>" << std::endl;
+        
+        lHtmlStream << "</tr>" << std::endl;
+    }
+    
+    lHtmlStream << "</table>" << std::endl;
+    
+    lHtmlStream << "</body>" << std::endl;
+    lHtmlStream << "</html>" << std::endl;
+
+    lHtmlStream.close();    
 }
 
 void Benchmark::BeginHtmlSection(std::ofstream &pHtmlStream, const std::string& pSectionName)
@@ -1212,7 +1273,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
         lStream << "mpirun -n " << 1 << " " << mExecPath << " 2 0 0 " << pSpaceSeparatedVaryingsStr;
         lStream << " 2>&1 > " << lSequentialFile.c_str();
 
-        system(lStream.str().c_str());
+        ExecuteShellCommand(lStream.str(), "sequential");
     }
     else
     {
@@ -1233,7 +1294,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
 //        lStream << "mpirun -n " << 1 << " " << mExecPath << " 3 0 0 " << pSpaceSeparatedVaryingsStr;
 //        lStream << " 2>&1 > " << lSequentialFile.c_str();
 //        
-//        system(lStream.str().c_str());
+//        ExecuteShellCommand(lStream.str(), "single gpu");
 //    }
 //    else
 //    {
@@ -1244,6 +1305,9 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     std::vector<std::string>& lMpiOptionsVector = GetGlobalConfiguration()[lMpiOptionsStr];
     
     const std::string& lMpiOptions = lMpiOptionsVector.empty() ? std::string("") : lMpiOptionsVector[0];
+    
+    const char* lSchedulingModelNames[] = {"Push", "Pull", "Static Equal", "Static Best"};
+    const char* lClusterTypeNames[] = {"CPU", "GPU", "CPU + GPU"};
 
     /* Generate PMLIB tasks output */
     for(size_t i = 0; i < (size_t)MAX_SCHEDULING_POLICY; ++i)
@@ -1254,12 +1318,16 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
             {
                 for(size_t l = 0; l <= 1; ++l)  // Lazy Mem
                 {
-                    if(k == 1 || l == 1)
+                    if(l == 1)
                         continue;
                     
-                    std::stringstream lOutputFile;
+                    setenv("PMLIB_DISABLE_MA", ((k == 0) ? "1" : "0"), 1);
+                    setenv("PMLIB_ENABLE_LAZY_MEM", ((l == 0) ? "0" : "1"), 1);
+                    
+                    std::stringstream lOutputFile, lDisplayName;
                     
                     lOutputFile << pOutputFolder << lSeparator << pHosts << "_" << i << "_" << j << "_" << k << "_" << l;
+                    lDisplayName << lSchedulingModelNames[i] << "_" << lClusterTypeNames[j] << "_" << ((k == 0) ? "NonMA" : "MA") << "_" << ((l == 0) ? "NonLazy" : "Lazy") << std::endl;
 
                     std::ifstream lFileStream(lOutputFile.str().c_str());
 
@@ -1270,7 +1338,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                         lStream << "mpirun -n " << pHosts << " " << lMpiOptions << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
                         lStream << " 2>&1 > " << lOutputFile.str().c_str();
 
-                        system(lStream.str().c_str());
+                        ExecuteShellCommand(lStream.str(), lDisplayName.str());
                     }
                     else
                     {
@@ -1278,6 +1346,21 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                     }
                 }
             }
+        }
+    }
+}
+
+void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName)
+{
+    std::cout << "      " << pDisplayName << " ..." << std::endl;
+
+    int lRetVal = system(pCmd.c_str());
+    if(lRetVal != -1 && lRetVal != 127)
+    {
+        if(!WIFEXITED(lRetVal))
+        {
+            std::cerr << "[ERROR]: Command abnormally exited - " << pCmd << std::endl;
+            ExecuteShellCommand(pCmd, pDisplayName);
         }
     }
 }

@@ -218,6 +218,7 @@ public:
     static void RegisterBasePath(const std::string& pBasePath);
     static void LoadGlobalConfiguration();
     static void GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks);
+    static void WriteTopLevelHtmlPage(const std::vector<Benchmark>& pBenchmarks);
     
     void ExecuteInstance(const std::string& pHosts, const std::string& pSpaceSeparatedVaryingsStr, const std::string& pUnderscoreSeparatedVaryingsStr, size_t pSampleIndex);
     void ExecuteSample(const std::string& pHosts, const std::string& pSpaceSeparatedVaryingsStr, const std::string& pOutputFolder);
@@ -247,7 +248,9 @@ private:
 
     void EmbedPlot(std::ofstream& pHtmlStream, Graph& pGraph, const std::string& pGraphTitle);
     
-    void SelectMedianSample();
+    void SelectSample(bool pMedianSample);
+    
+    void ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName);
     
     static keyValuePairs& GetGlobalConfiguration();
     static std::string& GetBasePath();

@@ -1,6 +1,8 @@
 
 #include <iostream>
+#include <stdlib.h>
 #include <sys/time.h>
+
 #include <string>
 #include <vector>
 
@@ -245,6 +247,24 @@ bool localDeviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo
 		return false;
 
 	return true;
+}
+
+bool isMultiAssignEnabled()
+{
+    const char* lVal = getenv("PMLIB_DISABLE_MA");
+    if(lVal && atoi(lVal) != 0)
+        return false;
+    
+    return true;
+}
+
+bool isLazyMemEnabled()
+{
+    const char* lVal = getenv("PMLIB_ENABLE_LAZY_MEM");
+    if(lVal && atoi(lVal) != 0)
+        return true;
+    
+    return false;
 }
 
 double getCurrentTimeInSecs()
