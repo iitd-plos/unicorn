@@ -1371,6 +1371,8 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
                 std::cout << "Failed to move file " << lTempFile.c_str() << " to " << pOutputFile.c_str() << std::endl;
         }
     }
+    
+    unlink(GetTempOutputFileName().c_str());
 }
 
 const std::string& Benchmark::GetTempOutputFileName()
@@ -1379,18 +1381,11 @@ const std::string& Benchmark::GetTempOutputFileName()
     if(lTempFileName.empty())
     {
         std::stringstream lPid;
-        lPid << getpid();
+        srand((unsigned int)time(NULL));
+
+        lPid << "../../../.pmlib_" << getpid() << "_" << rand();
         
-        char* lTempName = tempnam(NULL, lPid.str().c_str());
-        if(!lTempName)
-        {
-            std::cout << "Failed to generate a temporary file name" << std::endl;
-            throw std::exception();
-        }
-        
-        lTempFileName = std::string(lTempName);
-        
-        free(lTempName);
+        lTempFileName = std::string(lPid.str());
     }
     
     return lTempFileName;
