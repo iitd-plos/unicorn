@@ -1327,7 +1327,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                     std::stringstream lOutputFile, lDisplayName;
                     
                     lOutputFile << pOutputFolder << lSeparator << pHosts << "_" << i << "_" << j << "_" << k << "_" << l;
-                    lDisplayName << lSchedulingModelNames[i] << "_" << lClusterTypeNames[j] << "_" << ((k == 0) ? "NonMA" : "MA") << "_" << ((l == 0) ? "NonLazy" : "Lazy") << std::endl;
+                    lDisplayName << lSchedulingModelNames[i] << "_" << lClusterTypeNames[j] << "_" << ((k == 0) ? "NonMA" : "MA") << "_" << ((l == 0) ? "NonLazy" : "Lazy");
 
                     std::ifstream lFileStream(lOutputFile.str().c_str());
 
