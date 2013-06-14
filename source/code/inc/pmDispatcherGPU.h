@@ -41,25 +41,7 @@ class pmMemSection;
  * \brief The class responsible for all GPU related operations on various graphics cards
  */
 
-class pmGraphicsBase : public pmBase
-{
-};
-
-#ifdef SUPPORT_CUDA
-namespace dispatcherCUDA
-{
-    typedef struct lastExecutionRecord
-    {
-        uint taskOriginatingMachineIndex;
-        ulong taskSequenceNumber;
-        ulong lastSubtaskId;
-        void* inputMemCudaPtr;
-        void* taskConfCudaPtr;
-    } lastExecutionRecord;
-}
-#endif
-    
-class pmDispatcherCUDA : public pmGraphicsBase
+class pmDispatcherCUDA : public pmBase
 {
 	public:
 		pmDispatcherCUDA();
@@ -77,9 +59,9 @@ class pmDispatcherCUDA : public pmGraphicsBase
         void* GetDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo);
         void FreeDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr);
 
-		pmStatus InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem);
+		pmStatus InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastExecutionRecord, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem);
 
-		pmStatus FreeLastExecutionResources(size_t pBoundDeviceIndex);
+        pmStatus FreeLastExecutionResources(pmLastCudaExecutionRecord& pLastExecutionRecord);
 #endif
     
 	private:
@@ -105,13 +87,10 @@ class pmDispatcherCUDA : public pmGraphicsBase
 
 #ifdef SUPPORT_CUDA
 		std::vector<std::pair<int, cudaDeviceProp> > mDeviceVector;
-        
-		std::map<size_t, dispatcherCUDA::lastExecutionRecord> mLastExecutionMap;  // CUDA Device Index vs. last execution details
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mLastExecutionLock;
 #endif
 };
 
-class pmDispatcherGPU : public pmGraphicsBase
+class pmDispatcherGPU : public pmBase
 {
 	public:
 		static pmDispatcherGPU* GetDispatcherGPU();

@@ -31,8 +31,6 @@
 namespace pm
 {
 
-using namespace dispatcherCUDA;
-
 #ifdef SUPPORT_CUDA
 
 cudaError_t (*gFuncPtr_cudaGetDeviceCount)(int* count);
@@ -180,30 +178,22 @@ private:
     void* mCudaPtr;
 };
 
-pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem)
+pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem)
 {
     pmCudaAutoPtr lInputMemAutoPtr(mRuntimeHandle), lOutputMemAutoPtr(mRuntimeHandle);
     pmCudaAutoPtr lScratchBufferAutoPtr(mRuntimeHandle), lTaskConfAutoPtr(mRuntimeHandle), lStatusAutoPtr(mRuntimeHandle);
 
     bool lMatchingLastExecutionRecord = false;
-    lastExecutionRecord* lLastRecord = NULL;
 
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dLastExecutionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLastExecutionLock, Lock(), Unlock());
-        if(mLastExecutionMap.find(pBoundDeviceIndex) != mLastExecutionMap.end())
-            lLastRecord = &(mLastExecutionMap[pBoundDeviceIndex]);
-    }
-
-    if(lLastRecord && lLastRecord->taskOriginatingMachineIndex == pOriginatingMachineIndex && lLastRecord->taskSequenceNumber == pSequenceNumber)
+    if(pLastRecord.valid && pLastRecord.taskOriginatingMachineIndex == pOriginatingMachineIndex && pLastRecord.taskSequenceNumber == pSequenceNumber)
         lMatchingLastExecutionRecord = true;
     
     void* lTaskConfCudaPtr = NULL;
     if(pTaskInfo.taskConf && pTaskInfo.taskConfLength != 0)
     {
-        if(lMatchingLastExecutionRecord && lLastRecord->taskConfCudaPtr)
+        if(lMatchingLastExecutionRecord && pLastRecord.taskConfCudaPtr)
         {
-            lTaskConfCudaPtr = lLastRecord->taskConfCudaPtr;
+            lTaskConfCudaPtr = pLastRecord.taskConfCudaPtr;
         }
         else
         {
@@ -219,9 +209,9 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 
     if(pSubtaskInfo.inputMem && pSubtaskInfo.inputMemLength != 0)
     {
-        if(lMatchingLastExecutionRecord && SubtasksHaveMatchingSubscriptions(pStub, pOriginatingMachineIndex, pSequenceNumber, lLastRecord->lastSubtaskId, pSubtaskInfo.subtaskId, INPUT_MEM_READ_SUBSCRIPTION))
+        if(lMatchingLastExecutionRecord && SubtasksHaveMatchingSubscriptions(pStub, pOriginatingMachineIndex, pSequenceNumber, pLastRecord.lastSubtaskId, pSubtaskInfo.subtaskId, INPUT_MEM_READ_SUBSCRIPTION))
         {
-            lInputMemCudaPtr = lLastRecord->inputMemCudaPtr;
+            lInputMemCudaPtr = pLastRecord.inputMemCudaPtr;
         }
         else
         {
@@ -244,24 +234,27 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
         }
     }
         
-    if(lLastRecord && lLastRecord->inputMemCudaPtr && lLastRecord->inputMemCudaPtr != lInputMemCudaPtr)
-        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, lLastRecord->inputMemCudaPtr );
+    if(pLastRecord.valid && pLastRecord.inputMemCudaPtr && pLastRecord.inputMemCudaPtr != lInputMemCudaPtr)
+    {
+        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pLastRecord.inputMemCudaPtr );
+        pLastRecord.inputMemCudaPtr = NULL;
+    }
         
-    if(lLastRecord && lLastRecord->taskConfCudaPtr && lLastRecord->taskConfCudaPtr != lTaskConfCudaPtr)
-        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, lLastRecord->taskConfCudaPtr );
+    if(pLastRecord.valid && pLastRecord.taskConfCudaPtr && pLastRecord.taskConfCudaPtr != lTaskConfCudaPtr)
+    {
+        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pLastRecord.taskConfCudaPtr );
+        pLastRecord.taskConfCudaPtr = NULL;
+    }
 
     lInputMemAutoPtr.release();
     lTaskConfAutoPtr.release();
 
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dLastExecutionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLastExecutionLock, Lock(), Unlock());
-        mLastExecutionMap[pBoundDeviceIndex].taskOriginatingMachineIndex = pOriginatingMachineIndex;
-        mLastExecutionMap[pBoundDeviceIndex].taskSequenceNumber = pSequenceNumber;
-        mLastExecutionMap[pBoundDeviceIndex].lastSubtaskId = pSubtaskInfo.subtaskId;
-        mLastExecutionMap[pBoundDeviceIndex].inputMemCudaPtr = lInputMemCudaPtr;
-        mLastExecutionMap[pBoundDeviceIndex].taskConfCudaPtr = lTaskConfCudaPtr;
-    }
+    pLastRecord.taskOriginatingMachineIndex = pOriginatingMachineIndex;
+    pLastRecord.taskSequenceNumber = pSequenceNumber;
+    pLastRecord.lastSubtaskId = pSubtaskInfo.subtaskId;
+    pLastRecord.inputMemCudaPtr = lInputMemCudaPtr;
+    pLastRecord.taskConfCudaPtr = lTaskConfCudaPtr;
+    pLastRecord.valid = true;
     
     pmSubscriptionInfo lUnifiedSubscriptionInfo;
     GetUnifiedOutputMemSubscriptionForSubtask(pStub, pOriginatingMachineIndex, pSequenceNumber, pSubtaskInfo, lUnifiedSubscriptionInfo);
@@ -403,22 +396,24 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 	return lStatus;
 }
 
-pmStatus pmDispatcherCUDA::FreeLastExecutionResources(size_t pBoundDeviceIndex)
+pmStatus pmDispatcherCUDA::FreeLastExecutionResources(pmLastCudaExecutionRecord& pLastExecutionRecord)
 {
-    FINALIZE_RESOURCE_PTR(dLastExecutionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLastExecutionLock, Lock(), Unlock());
-
-    if(mLastExecutionMap.find(pBoundDeviceIndex) == mLastExecutionMap.end())
-        return pmSuccess;
+    if(pLastExecutionRecord.valid)
+    {
+        if(pLastExecutionRecord.inputMemCudaPtr)
+        {
+            SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pLastExecutionRecord.inputMemCudaPtr );
+            pLastExecutionRecord.inputMemCudaPtr = NULL;
+        }
+            
+        if(pLastExecutionRecord.taskConfCudaPtr)
+        {
+            SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pLastExecutionRecord.taskConfCudaPtr );
+            pLastExecutionRecord.taskConfCudaPtr = NULL;
+        }
         
-    lastExecutionRecord& lLastRecord = mLastExecutionMap[pBoundDeviceIndex];
-	
-    if(lLastRecord.inputMemCudaPtr)
-        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, lLastRecord.inputMemCudaPtr );
-        
-    if(lLastRecord.taskConfCudaPtr)
-        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, lLastRecord.taskConfCudaPtr );
-    
-    mLastExecutionMap.erase(pBoundDeviceIndex);
+        pLastExecutionRecord.valid = false;
+    }
     
     return pmSuccess;
 }

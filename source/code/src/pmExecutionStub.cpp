@@ -1310,7 +1310,7 @@ pmStatus pmStubCUDA::FreeExecutionResources()
     if(mDeviceInfoCudaPtr)
         pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeDeviceInfoCudaPtr(mDeviceInfoCudaPtr);
 
-    pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeLastExecutionResources(mDeviceIndex);
+    pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeLastExecutionResources(mLastExecutionRecord);
 #endif
     return pmSuccess;
 }
@@ -1370,6 +1370,11 @@ void* pmStubCUDA::GetDeviceInfoCudaPtr()
         mDeviceInfoCudaPtr = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetDeviceInfoCudaPtr(GetProcessingElement()->GetDeviceInfo());
         
     return mDeviceInfoCudaPtr;
+}
+
+pmLastCudaExecutionRecord& pmStubCUDA::GetLastExecutionRecord()
+{
+    return mLastExecutionRecord;
 }
 #endif
 

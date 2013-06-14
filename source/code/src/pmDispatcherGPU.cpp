@@ -136,11 +136,12 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
 	pmTask* lTask = (pmTask*)(pTaskInfo.taskHandle);
 	uint lOriginatingMachineIndex = (uint)(*(lTask->GetOriginatingHost()));
 	ulong lSequenceNumber = lTask->GetSequenceNumber();
-    
+
     void* lDeviceInfoCudaPtr = dynamic_cast<pmStubCUDA*>(pStub)->GetDeviceInfoCudaPtr();
+    pmLastCudaExecutionRecord& lLastExecutionRecord = dynamic_cast<pmStubCUDA*>(pStub)->GetLastExecutionRecord();
 
     pmMemSection* lMemSection = lTask->GetMemSectionRW();
-	return InvokeKernel(pStub, pBoundDeviceIndex, pTaskInfo, pStub->GetProcessingElement()->GetDeviceInfo(), lDeviceInfoCudaPtr, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, pCustomKernelPtr, lOriginatingMachineIndex, lSequenceNumber, (lMemSection ? lMemSection->GetMem() : NULL));
+	return InvokeKernel(pStub, lLastExecutionRecord, pBoundDeviceIndex, pTaskInfo, pStub->GetProcessingElement()->GetDeviceInfo(), lDeviceInfoCudaPtr, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, pCustomKernelPtr, lOriginatingMachineIndex, lSequenceNumber, (lMemSection ? lMemSection->GetMem() : NULL));
 #else	
         return pmSuccess;
 #endif

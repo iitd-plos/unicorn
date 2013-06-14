@@ -65,6 +65,27 @@ namespace pm
             bool mHasJumped;
     };
     
+#ifdef SUPPORT_CUDA
+    typedef struct pmLastCudaExecutionRecord
+    {
+        uint taskOriginatingMachineIndex;
+        ulong taskSequenceNumber;
+        ulong lastSubtaskId;
+        void* inputMemCudaPtr;
+        void* taskConfCudaPtr;
+        bool valid;
+        
+        pmLastCudaExecutionRecord()
+        : taskOriginatingMachineIndex(0)
+        , taskSequenceNumber(0)
+        , lastSubtaskId(0)
+        , inputMemCudaPtr(NULL)
+        , taskConfCudaPtr(NULL)
+        , valid(false)
+        {}
+    } pmLastCudaExecutionRecord;
+#endif
+    
 #ifdef ENABLE_TASK_PROFILING
     class pmTaskProfiler;
 

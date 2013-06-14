@@ -297,8 +297,8 @@ class pmStubCPU : public pmExecutionStub
 
 class pmStubCUDA : public pmStubGPU
 {
-	public:
-		pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine);
+    public:
+        pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine);
 		virtual ~pmStubCUDA();
 
 		virtual pmStatus BindToProcessingElement();
@@ -315,6 +315,7 @@ class pmStubCUDA : public pmStubGPU
 
     #ifdef SUPPORT_CUDA
         void* GetDeviceInfoCudaPtr();
+        pmLastCudaExecutionRecord& GetLastExecutionRecord();
     #endif
 
 	private:
@@ -322,6 +323,7 @@ class pmStubCUDA : public pmStubGPU
 
     #ifdef SUPPORT_CUDA
         void* mDeviceInfoCudaPtr;
+        pmLastCudaExecutionRecord mLastExecutionRecord;
     #endif
 };
 
