@@ -24,6 +24,9 @@
 #include "pmDevicePool.h"
 #include "pmHardware.h"
 #include "pmNetwork.h"
+#include "pmLogger.h"
+
+#include <sstream>
 
 #include <string.h>
 
@@ -129,39 +132,43 @@ pmStatus pmSubtaskManager::UpdateExecutionProfile(pmProcessingElement* pDevice, 
 #ifdef DUMP_SUBTASK_EXECUTION_PROFILE
 pmStatus pmSubtaskManager::PrintExecutionProfile()
 {
+    std::stringstream lStream;
+
     std::vector<ulong> lCpuSubtasks(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount(), 0);
     
     std::map<uint, ulong>::iterator lStart, lEnd;
     lStart = mDeviceExecutionProfile.begin();
     lEnd = mDeviceExecutionProfile.end();
     
-    std::cout << std::endl << "Subtask distribution for task [" << (uint)(*PM_LOCAL_MACHINE) << ", " << mLocalTask->GetSequenceNumber() << "] under scheduling policy " << mLocalTask->GetSchedulingModel() << " ... " << std::endl << std::endl;
+    lStream << std::endl << "Subtask distribution for task [" << (uint)(*PM_LOCAL_MACHINE) << ", " << mLocalTask->GetSequenceNumber() << "] under scheduling policy " << mLocalTask->GetSchedulingModel() << " ... " << std::endl << std::endl;
 
-    std::cout << "Device Subtask Execution Profile ... " << std::endl;
+    lStream << "Device Subtask Execution Profile ... " << std::endl;
     for(; lStart != lEnd; ++lStart)
     {
-        std::cout << "Device " << lStart->first << " Subtasks " << lStart->second << std::endl;
+        lStream << "Device " << lStart->first << " Subtasks " << lStart->second << std::endl;
 
         pmProcessingElement* lDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lStart->first);
         if(lDevice->GetType() == CPU)
             lCpuSubtasks[(uint)(*(lDevice->GetMachine()))] += lStart->second;
     }
 
-    std::cout << std::endl;
+    lStream << std::endl;
     
-    std::cout << "Machine Subtask Execution Profile ... " << std::endl;
+    lStream << "Machine Subtask Execution Profile ... " << std::endl;
     ulong lTotal = 0;
     lStart = mMachineExecutionProfile.begin();
     lEnd = mMachineExecutionProfile.end();
     for(; lStart != lEnd; ++lStart)
     {
-        std::cout << "Machine " << lStart->first << " Subtasks " << lStart->second << " CPU-Subtasks " << lCpuSubtasks[lStart->first] << std::endl;
+        lStream << "Machine " << lStart->first << " Subtasks " << lStart->second << " CPU-Subtasks " << lCpuSubtasks[lStart->first] << std::endl;
         lTotal += lStart->second;
     }
     
-    std::cout << std::endl;
+    lStream << std::endl;
     
-    std::cout << "Total Acknowledgements Received " << lTotal << std::endl; 
+    lStream << "Total Acknowledgements Received " << lTotal << std::endl; 
+    
+    pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str());
     
     return pmSuccess;
 }

@@ -55,8 +55,11 @@ public:
     pmStatus SetHostId(uint pHostId);
 
     void PrintDeferredLog();
-    pmStatus LogDeferred(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine = false);
+    pmStatus LogDeferred(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pPrependHostName = false);
     pmStatus Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine = false);
+    
+    const std::stringstream& GetDeferredLogStream();
+    void ClearDeferredLog();
 
 private:
     pmLogger(logLevel pLogLevel);

@@ -222,20 +222,54 @@ pmMPI::pmMPI()
 pmMPI::~pmMPI()
 {
 #ifdef SERIALIZE_DEFERRED_LOGS
-    uint lMachines = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
-    for(uint i=0; i<lMachines; ++i)
-    {
-        NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();
+    #ifdef ENABLE_ACCUMULATED_TIMINGS
+        pmAccumulatedTimesSorter::GetAccumulatedTimesSorter()->FlushLogs();
+    #endif
     
-        if(i == NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId())
+    if(GetHostId() == 0)
+    {
+        MPI_Status lStatus;
+
+        pmLogger::GetLogger()->PrintDeferredLog();
+
+        uint lMachines = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
+        for(uint i = 1; i < lMachines; ++i)
         {
-        #ifdef ENABLE_ACCUMULATED_TIMINGS
-            pmAccumulatedTimesSorter::GetAccumulatedTimesSorter()->FlushLogs();
-        #endif
+            uint lLogLength = 0;
+            if( MPI_CALL("MPI_Recv", (MPI_Recv(&lLogLength, 1, MPI_UNSIGNED, i, pmCommunicatorCommand::DEFERRED_LOG_LENGTH_TAG, MPI_COMM_WORLD, &lStatus) != MPI_SUCCESS)) )
+                PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
         
-            pmLogger::GetLogger()->PrintDeferredLog();
+            if(lLogLength && ((lLogLength + 1) > lLogLength))   // Check for overflow and wrap around
+            {
+                std::auto_ptr<char> lLogAutoPtr(new char[lLogLength + 1]);
+                
+                if( MPI_CALL("MPI_Recv", (MPI_Recv(lLogAutoPtr.get(), lLogLength, MPI_CHAR, i, pmCommunicatorCommand::DEFERRED_LOG_TAG, MPI_COMM_WORLD, &lStatus) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
+                
+                (lLogAutoPtr.get())[lLogLength] = '\0';
+                std::cout << lLogAutoPtr.get() << std::endl;
+            }
         }
     }
+    else
+    {
+        const std::string& lDeferredLog = pmLogger::GetLogger()->GetDeferredLogStream().str();
+        uint lLogLength = (uint)lDeferredLog.size();
+
+        if( MPI_CALL("MPI_Send", (MPI_Send(&lLogLength, 1, MPI_UNSIGNED, 0, pmCommunicatorCommand::DEFERRED_LOG_LENGTH_TAG, MPI_COMM_WORLD) != MPI_SUCCESS)) )
+            PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
+
+        if(lLogLength && ((lLogLength + 1) > lLogLength))   // Check for overflow and wrap around
+        {
+            char* lLog = const_cast<char*>(lDeferredLog.c_str());
+            if( MPI_CALL("MPI_Send", (MPI_Send(lLog, lLogLength, MPI_CHAR, 0, pmCommunicatorCommand::DEFERRED_LOG_TAG, MPI_COMM_WORLD) != MPI_SUCCESS)) )
+                PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
+        }
+        
+        pmLogger::GetLogger()->ClearDeferredLog();
+    }
+    
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();
 #endif
 
 	StopThreadExecution();

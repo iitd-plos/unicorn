@@ -21,6 +21,7 @@
 #include "pmTaskExecStats.h"
 #include "pmExecutionStub.h"
 #include "pmHardware.h"
+#include "pmLogger.h"
 
 #ifdef DUMP_TASK_EXEC_STATS
 #include <sstream>
@@ -47,7 +48,7 @@ pmTaskExecStats::~pmTaskExecStats()
         lStream << "Device " << lDevice->GetGlobalDeviceIndex() << " - Subtask execution rate = " << GetStubExecutionRate(lIter->first) << "; Steal attemps = " << GetStealAttempts(lIter->first) << "; Successful steals = " << GetSuccessfulStealAttempts(lIter->first) << "; Failed steals = " << GetFailedStealAttempts(lIter->first) << std::endl;
     }
 
-    std::cout << lStream.str();
+    pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str());
 #endif
 }
 

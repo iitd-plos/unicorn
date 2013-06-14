@@ -45,7 +45,7 @@ pmEventTimeline::~pmEventTimeline()
     for(; lIter != lEnd; ++lIter)
         lStream << std::endl << lIter->first << " " << lIter->second.first - mZeroTime << " " << lIter->second.second - mZeroTime;
 
-    pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::WARNING, lStream.str().c_str(), true);
+    pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str(), true);
 }
 
 void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)
@@ -68,14 +68,17 @@ void pmEventTimeline::RenameEvent(const std::string& pEventName, const std::stri
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-    if(mEventMap.find(pEventName) == mEventMap.end())
+    std::map<std::string, std::pair<double, double> >::iterator lIter = mEventMap.find(pEventName);
+    if(lIter == mEventMap.end())
         PMTHROW(pmFatalErrorException());
     
     if(mEventMap.find(pNewName) != mEventMap.end())
         PMTHROW(pmFatalErrorException());
     
-    mEventMap[pNewName] = mEventMap[pEventName];
-    mEventMap.erase(pEventName);
+    std::pair<double, double> lPair = lIter->second;
+    mEventMap.erase(lIter);
+
+    mEventMap[pNewName] = lPair;
 }
 
 } // end namespace pm

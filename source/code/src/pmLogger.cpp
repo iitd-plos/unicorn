@@ -59,20 +59,32 @@ void pmLogger::PrintDeferredLog()
     if(!mDeferredStream.str().empty())
         std::cout << mDeferredStream.str().c_str() << std::endl;
     
+    ClearDeferredLog();
+}
+    
+const std::stringstream& pmLogger::GetDeferredLogStream()
+{
+    return mDeferredStream;
+}
+    
+void pmLogger::ClearDeferredLog()
+{
     mDeferredStream.str(std::string()); // clear stream
 }
 
-pmStatus pmLogger::LogDeferred(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pLeadingBlankLine /* = false */)
+pmStatus pmLogger::LogDeferred(logLevel pMsgLevel, logType pMsgType, const char* pMsg, bool pPrependHostName /* = false */)
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	if(pMsgLevel <= mLogLevel)
-	{
-        if(pLeadingBlankLine)
-            mDeferredStream << std::endl;
-
+    if(pPrependHostName)
+    {
+        mDeferredStream << std::endl;
         mDeferredStream << "PMLIB [Host " << mHostId << "] " << pMsg << std::endl;
-	}
+    }
+    else
+    {
+        mDeferredStream << pMsg << std::endl;
+    }
 
 	return pmSuccess;
 }

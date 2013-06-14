@@ -567,6 +567,10 @@ class pmCommunicatorCommand : public pmCommand
             REDISTRIBUTION_OFFSETS_TAG,
             SUBTASK_RANGE_CANCEL_TAG,
             FILE_OPERATIONS_TAG,
+        #ifdef SERIALIZE_DEFERRED_LOGS
+            DEFERRED_LOG_LENGTH_TAG,
+            DEFERRED_LOG_TAG,
+        #endif
 			MAX_COMMUNICATOR_COMMAND_TAGS
 		} communicatorCommandTags;
 

@@ -20,6 +20,8 @@
 
 #include "pmTaskProfiler.h"
 #include "pmStubManager.h"
+#include "pmLogger.h"
+
 #include <string>
 #include <sstream>
 
@@ -75,7 +77,7 @@ pmTaskProfiler::~pmTaskProfiler()
     
     lStream << std::endl;
     
-    std::cout << lStream.str();
+    pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str());
 }
 
 void pmTaskProfiler::AccountForElapsedTime(profileType pProfileType)

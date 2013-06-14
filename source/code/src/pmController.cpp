@@ -63,7 +63,7 @@ pmController::pmController()
     pmScheduler::GetScheduler();
     pmTimedEventManager::GetTimedEventManager();
     pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
-    
+
 #ifdef DUMP_EVENT_TIMELINE
     pmStubManager::GetStubManager()->InitializeEventTimelines();
 #endif
