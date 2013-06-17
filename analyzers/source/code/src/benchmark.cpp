@@ -581,11 +581,17 @@ void Benchmark::GenerateTable(std::ofstream& pHtmlStream)
     std::vector<std::string>& lStaticBestVector = GetGlobalConfiguration()[lStaticBestStr];
     bool lGenerateStaticBest = (!lStaticBestVector.empty() && !lStaticBestVector[0].compare(std::string("false"))) ? false : true;
 
+    size_t lLastVarying1Value = 0;
+    
     BenchmarkResults::mapType::iterator lLevel1Iter = mResults.results.begin(), lLevel1EndIter = mResults.results.end();
     for(; lLevel1Iter != lLevel1EndIter; ++lLevel1Iter)
     {
         pHtmlStream << "<tr>" << std::endl;
-        pHtmlStream << "<td align=center rowspan = " << ((lVarying2Count == 0) ? 1 : lVarying2Count) << ">" << lLevel1Iter->first.varying1 << "</td>" << std::endl;
+        
+        if(!lVarying2Defined || lLevel1Iter->first.varying1 != lLastVarying1Value)
+            pHtmlStream << "<td align=center rowspan = " << ((lVarying2Count == 0) ? 1 : lVarying2Count) << ">" << lLevel1Iter->first.varying1 << "</td>" << std::endl;
+        
+        lLastVarying1Value = lLevel1Iter->first.varying1;
         
         if(lVarying2Defined)
             pHtmlStream << "<td align=center>" << lLevel1Iter->first.varying2 << "</td>" << std::endl;
@@ -721,13 +727,8 @@ void Benchmark::GeneratePlots(std::ofstream& pHtmlStream)
     BeginHtmlSection(pHtmlStream, "Load Balancing Graphs");
     lRadioSetCount.push_back( GenerateLoadBalancingGraphs(3, lPlotWidth, lPlotHeight, pHtmlStream) );
 
-#if 0
-    BeginHtmlSection(pHtmlStream, "Execution Rate Graphs");
-    lRadioSetCount.push_back( GenerateOverheadGraphs(4, lPlotWidth, lPlotHeight, pHtmlStream) );
-
-    BeginHtmlSection(pHtmlStream, "Work Time Graphs");
-    lRadioSetCount.push_back( GenerateWorkTimeGraphs(5, lPlotWidth, lPlotHeight, pHtmlStream) );
-#endif
+    BeginHtmlSection(pHtmlStream, "Multi Assign Comparison Graphs");
+    lRadioSetCount.push_back( GenerateMultiAssignComparisonGraphs(4, lPlotWidth, lPlotHeight, pHtmlStream) );
 
     pHtmlStream << "<script>" << std::endl;
     pHtmlStream << "$(function() {" << std::endl;
@@ -1028,6 +1029,53 @@ size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWi
     return lPanelConf.size();
 }
 
+size_t Benchmark::GenerateMultiAssignComparisonGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream)
+{
+    panelConfigurationType lPanelConf;
+
+    std::string lVarying1Str("Varying_1");
+    std::string lVarying2Str("Varying_2");
+    
+    lPanelConf.push_back(std::make_pair(mConfiguration["Varying1_Name"][0], mConfiguration[lVarying1Str]));
+    
+    if(!mConfiguration[lVarying2Str].empty())
+        lPanelConf.push_back(std::make_pair(mConfiguration["Varying2_Name"][0], mConfiguration[lVarying2Str]));
+    
+    pHtmlStream << "<div id='p" << pPanelIndex << "' value='" << lPanelConf.size() << "'>" << std::endl;
+    
+    GenerateSelectionGroup(pPanelIndex, lPanelConf, pHtmlStream);
+    
+    if(!mConfiguration[lVarying2Str].empty())
+    {
+        std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying1Str].begin(), lEndIter = mConfiguration[lVarying1Str].end();
+        for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+        {
+            std::vector<std::string>::const_iterator lInnerIter = mConfiguration[lVarying2Str].begin(), lInnerEndIter = mConfiguration[lVarying2Str].end();
+            for(size_t lInnerIndex = 1; lInnerIter != lInnerEndIter; ++lInnerIter, ++lInnerIndex)
+            {
+                pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lIndex << "_" << lInnerIndex << "' style='display:none'>" << std::endl;
+                
+                GenerateMultiAssignComparisonGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())));
+                pHtmlStream << "</div>" << std::endl;
+            }
+        }
+    }
+    else
+    {
+        std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying1Str].begin(), lEndIter = mConfiguration[lVarying1Str].end();
+        for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+        {
+            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lIndex << "' style='display:none'>" << std::endl;
+            GenerateMultiAssignComparisonGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (size_t)atoi((*lIter).c_str()), 0);
+            pHtmlStream << "</div>" << std::endl;
+        }
+    }
+    
+    pHtmlStream << "</div>" << std::endl;
+    
+    return lPanelConf.size();    
+}
+
 void Benchmark::GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, SchedulingPolicy pPolicy, size_t pVarying2Val /* = 0 */)
 {
     std::string lVarying1DisplayName = mConfiguration["Varying1_Name"][0];
@@ -1303,6 +1351,101 @@ void Benchmark::GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pP
     pHtmlStream << "</table>" << std::endl;
 }
 
+void Benchmark::GenerateMultiAssignComparisonGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, size_t pVarying1Val, size_t pVarying2Val)
+{
+    BenchmarkResults::mapType::iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
+    
+    std::stringstream lGraphDisplayNameStream;
+    lGraphDisplayNameStream << mConfiguration["Varying1_Name"][0] << "=" << pVarying1Val;
+
+    if(!mConfiguration["Varying_2"].empty())
+        lGraphDisplayNameStream << ", " << mConfiguration["Varying2_Name"][0] << "=" << pVarying2Val;
+
+    bool lFirst = true;
+    for(; lIter != lEndIter; ++lIter)
+    {
+        if(lIter->first.varying1 != pVarying1Val || lIter->first.varying2 != pVarying2Val)
+            continue;
+
+        if(lFirst)
+            lFirst = false;
+        else
+            pHtmlStream << "<br>" << std::endl;
+        
+        StandardChart lCpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusPlusGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+
+        const char* lCurveNames[] = {"Push", "Push_MA", "Pull", "Pull_MA"};
+        lCpusGraph.SetCurves(4, lCurveNames);
+        lGpusGraph.SetCurves(4, lCurveNames);
+        lCpusPlusGpusGraph.SetCurves(4, lCurveNames);
+
+        std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
+        for(size_t lHostIndex = 0; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
+        {
+            std::stringstream lHostStrStream;
+            lHostStrStream << lHostsIter->first << ((lHostsIter->first == 1) ? " Host" : " Hosts") << std::endl;
+            
+            lCpusGraph.groups.push_back(lHostStrStream.str());
+            lGpusGraph.groups.push_back(lHostStrStream.str());
+            lCpusPlusGpusGraph.groups.push_back(lHostStrStream.str());
+        }
+
+        const std::map<Level2Key, Level2Value>& lMap = lIter->second.second;
+        std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
+        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
+        {
+            if(lInnerIter->first.policy != PUSH && lInnerIter->first.policy != PULL)
+                continue;
+            
+            if(!lInnerIter->first.lazyMem)
+            {
+                size_t lCurveIndex = 0;
+                switch(lInnerIter->first.policy)
+                {
+                    case PUSH:
+                        lCurveIndex = ((lInnerIter->first.multiAssign) ? 1 : 0);
+                        break;
+                        
+                    case PULL:
+                        lCurveIndex = ((lInnerIter->first.multiAssign) ? 3 : 2);
+                        break;
+                        
+                    default:
+                        throw std::exception();
+                }
+                
+                switch(lInnerIter->first.cluster)
+                {
+                    case CPU:
+                        lCpusGraph.curves[lCurveIndex].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
+                        break;
+                        
+                    case GPU:
+                        lGpusGraph.curves[lCurveIndex].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
+                        break;
+
+                    case CPU_PLUS_GPU:
+                        lCpusPlusGpusGraph.curves[lCurveIndex].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
+                        break;
+                        
+                    default:
+                        throw std::exception();
+                }
+            }
+        }
+                
+        pHtmlStream << "<table align=center>" << std::endl;
+        pHtmlStream << "<tr class=horizSpacing>" << std::endl;
+        EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lCpusGraph), "CPUs");
+        EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lGpusGraph), "GPUs");
+        EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lCpusPlusGpusGraph), "CPUs+GPUs");
+        pHtmlStream << "</tr>" << std::endl;
+        pHtmlStream << "</table>" << std::endl;
+    }    
+}
+
 void Benchmark::EmbedPlot(std::ofstream& pHtmlStream, Graph& pGraph, const std::string& pGraphTitle)
 {
     pHtmlStream << "<td>" << std::endl;
@@ -1500,6 +1643,8 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     char lPathSeparator[1];
     lPathSeparator[0] = PATH_SEPARATOR;
     std::string lSeparator(lPathSeparator, 1);
+    
+    const std::string& lFixedArgs = (mConfiguration["Fixed_Args"].empty() ? std::string("") : std::string(" ").append(mConfiguration["Fixed_Args"][0]));
 
     /* Generate sequential task output */
     std::string lSequentialFile(pOutputFolder);
@@ -1514,7 +1659,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     {
         std::stringstream lStream;
         lStream << "source ~/.pmlibrc; ";
-        lStream << "mpirun -n " << 1 << " " << mExecPath << " 2 0 0 " << pSpaceSeparatedVaryingsStr;
+        lStream << "mpirun -n " << 1 << " " << mExecPath << " 2 0 0 " << pSpaceSeparatedVaryingsStr << lFixedArgs;
         lStream << " > " << lTempFile.c_str() << " 2>&1";
 
         ExecuteShellCommand(lStream.str(), "sequential", lSequentialFile);
@@ -1535,7 +1680,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
 //    {
 //        std::stringstream lStream;
 //        lStream << "source ~/.pmlibrc; ";
-//        lStream << "mpirun -n " << 1 << " " << mExecPath << " 3 0 0 " << pSpaceSeparatedVaryingsStr;
+//        lStream << "mpirun -n " << 1 << " " << mExecPath << " 3 0 0 " << pSpaceSeparatedVaryingsStr << lFixedArgs;
 //        lStream << " > " << lTempFile.c_str() << " 2>&1";
 //        
 //        ExecuteShellCommand(lStream.str(), "single gpu", lSingleGpuFile);
@@ -1587,6 +1732,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                         std::stringstream lStream;
                         lStream << "source ~/.pmlibrc; ";
                         lStream << "mpirun -n " << pHosts << " " << lMpiOptions << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
+                        lStream << lFixedArgs;
                         lStream << " > " << lTempFile.c_str() << " 2>&1";
 
                         ExecuteShellCommand(lStream.str(), lDisplayName.str(), lOutputFile.str());
@@ -1792,7 +1938,8 @@ void Benchmark::LoadKeyValuePairs(const std::string& pFilePath, keyValuePairs& p
                 std::string lValueStr = boost::regex_replace(lValue, lExp5, std::string(" "));
                 
                 if(lKey == std::string("Mpi_Options") || lKey == std::string("Benchmark_Name")
-                || lKey == std::string("Varying1_Name") || lKey == std::string("Varying2_Name"))
+                || lKey == std::string("Varying1_Name") || lKey == std::string("Varying2_Name")
+                || lKey == std::string("Fixed_Args"))
                 {
                     pPairs[lKey].push_back(lValueStr);
                 }

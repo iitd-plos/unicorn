@@ -114,7 +114,7 @@ struct Level1Key
 {
     size_t varying1;
     size_t varying2;
-    
+
     Level1Key()
     : varying1(0)
     , varying2(0)
@@ -122,10 +122,10 @@ struct Level1Key
 
     friend bool operator< (const Level1Key& pFirst, const Level1Key& pSecond)
     {
-        if(pFirst.varying1 < pSecond.varying1)
-            return true;
+        if(pFirst.varying1 == pSecond.varying1)
+            return (pFirst.varying2 < pSecond.varying2);
         
-        return (pFirst.varying2 < pSecond.varying2);
+        return(pFirst.varying1 < pSecond.varying1);
     }
 };
 
@@ -245,10 +245,12 @@ private:
     size_t GeneratePerformanceGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     size_t GenerateSchedulingModelsGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     size_t GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
+    size_t GenerateMultiAssignComparisonGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     
     void GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, SchedulingPolicy pPolicy, size_t pVarying2Val = 0);
     void GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pVarying1Val, size_t pVarying2Val);
     void GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy);
+    void GenerateMultiAssignComparisonGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, size_t pVarying1Val, size_t pVarying2Val);
     
     void GenerateSelectionGroup(size_t pPanelIndex, const panelConfigurationType& pPanelConf, std::ofstream& pHtmlStream);
 
