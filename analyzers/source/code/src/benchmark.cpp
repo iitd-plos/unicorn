@@ -499,8 +499,8 @@ void Benchmark::CopyResourceFiles()
 
 void Benchmark::CopyFile(const std::string& pSrcFile, const std::string& pDestFile)
 {
-    std::ifstream lSrcStream(pSrcFile);
-    std::ofstream lDestStream(pDestFile);
+    std::ifstream lSrcStream(pSrcFile.c_str());
+    std::ofstream lDestStream(pDestFile.c_str());
     
     if(lSrcStream.fail())
         throw std::exception();
