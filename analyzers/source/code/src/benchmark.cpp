@@ -145,6 +145,7 @@ Benchmark::Benchmark(const std::string& pName, const std::string& pExecPath)
 : mName(pName)
 , mExecPath(pExecPath)
 {
+    mHostsSetVector.resize(SAMPLE_COUNT);
 }
 
 void Benchmark::CollectResults()
@@ -265,6 +266,13 @@ void Benchmark::ProcessResults()
         }
         
         closedir(lDir);
+    }
+    
+    for(size_t i = 0; i < SAMPLE_COUNT; ++i)
+    {
+        std::set<size_t>::iterator lIter = mHostsSetVector[i].begin(), lEndIter = mHostsSetVector[i].end();
+        for(; lIter != lEndIter; ++lIter)
+            mSamples[i].hostsMap[(*lIter)] = mSamples[i].hostsMap.size();
     }
     
     SelectSample(false);
@@ -1504,11 +1512,8 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
 
     Level2Key lLevel2Key((size_t)(atoi(std::string(lResults[1]).c_str())), (enum SchedulingPolicy)(atoi(std::string(lResults[2]).c_str())), (enum clusterType)(atoi(std::string(lResults[3]).c_str())), (bool)(atoi(std::string(lResults[4]).c_str())), (bool)(atoi(std::string(lResults[5]).c_str())));
 
-    if(mSamples[pSampleIndex].hostsMap.find(lLevel2Key.hosts) == mSamples[pSampleIndex].hostsMap.end())
-    {
-        size_t lSize = mSamples[pSampleIndex].hostsMap.size();
-        mSamples[pSampleIndex].hostsMap[lLevel2Key.hosts] = lSize;
-    }
+    if(mHostsSetVector[pSampleIndex].find(lLevel2Key.hosts) == mHostsSetVector[pSampleIndex].end())
+        mHostsSetVector[pSampleIndex].insert(lLevel2Key.hosts);
     
     size_t lCurrentDevice = 0;
     std::pair<size_t, size_t> lCurrentTask(std::numeric_limits<size_t>::infinity(), std::numeric_limits<size_t>::infinity());  // task originating host and sequence id

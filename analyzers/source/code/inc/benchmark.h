@@ -22,6 +22,7 @@
 #define __ANALYZER_BENCHMARK__
 
 #include <map>
+#include <set>
 #include <vector>
 #include <string>
 
@@ -271,6 +272,8 @@ private:
     keyValuePairs mConfiguration;
 
     std::vector<BenchmarkResults> mSamples;
+    std::vector<std::set<size_t> > mHostsSetVector;
+    
     BenchmarkResults mResults;
 };
 
