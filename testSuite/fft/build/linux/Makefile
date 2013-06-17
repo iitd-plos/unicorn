@@ -28,7 +28,9 @@ CUDAFLAGS += -DFFT_DATA_TYPE=complex -DMATRIX_DATA_TYPE=complex
 LIBRARIES += -lcufft
 endif
 
-INCLUDES += -I$(PATH_PREFIX)../../../matrixTranspose/source/code/inc
+LIBRARIES += -L$(PATH_PREFIX)../../../fft/thirdparty/fftw-3.3.3/installation/lib -lfftw3f
+
+INCLUDES += -I$(PATH_PREFIX)../../../matrixTranspose/source/code/inc -I$(PATH_PREFIX)../../../fft/thirdparty/fftw-3.3.3/installation/include
 
 include ../../../common/build/linux/Makefile.common
 

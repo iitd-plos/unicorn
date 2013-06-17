@@ -33,16 +33,8 @@ struct Axis
     Axis(const std::string& pLabel, bool pShowMajorTicks = true);
 };
 
-struct Color
-{
-    std::string htmlRep; // #00FFCC
-
-    Color();
-};
-
 struct Line
 {
-    Color color;
     std::string name;
     std::vector<std::pair<double, double> > dataPoints;
 };

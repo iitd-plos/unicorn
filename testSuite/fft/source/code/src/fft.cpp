@@ -5,6 +5,7 @@
 #include "commonAPI.h"
 #include "fft.h"
 
+#include <fftw3.h>
 #include <math.h>
 
 namespace fft
@@ -13,130 +14,79 @@ namespace fft
 FFT_DATA_TYPE* gSerialOutput;
 FFT_DATA_TYPE* gParallelOutput;
 
-/*-------------------------------------------------------------------------
-FFT Code taken from http://local.wasp.uwa.edu.au/~pbourke/miscellaneous/dft/
-
-This computes an in-place complex-to-complex FFT
-x and y are the real and imaginary arrays of 2^m points.
-dir =  1 gives forward transform
-dir = -1 gives reverse transform
-
-Formula: forward
-N-1
----
-1   \          - j k 2 pi n / N
-X(n) = ---   >   x(k) e                    = forward transform
-N   /                                n=0..N-1
----
-k=0
-
-Formula: reverse
-N-1
----
-\          j k 2 pi n / N
-X(n) =       >   x(k) e                    = forward transform
-/                                n=0..N-1
----
-k=0
-*/
-void fftSerial1D(int dir, unsigned long m, unsigned long nn, complex* data)
+struct fftwPlanner
 {
-	unsigned long i, i1, j, k, i2, l, l1, l2;
-	float c1, c2, tx, ty, t1, t2, u1, u2, z;
+    fftwPlanner()
+    : mPlan(NULL)
+    {}
+    
+    void CreateDummyPlan(int dir, size_t N)
+    {
+        complex* lDummyData = new complex[N];
+        fftwf_complex* data = (fftwf_complex*)lDummyData;
 
-	/* Do the bit reversal */
-	i2 = nn >> 1;
-	j = 0;
-	for(i=0; i<nn-1; i++)
-	{
-		if (i < j)
-		{
-			tx = data[i].x;
-			ty = data[i].y;
-			data[i].x = data[j].x;
-			data[i].y = data[j].y;
-			data[j].x = tx;
-			data[j].y = ty;
-		}
-
-		k = i2;
-		while (k <= j)
-		{
-			j -= k;
-			k >>= 1;
-		}
-
-		j += k;
-	}
-
-	/* Compute the FFT */
-	c1 = -1.0;
-	c2 = 0.0;
-	l2 = 1;
-	for(l=0; l<m; l++)
-	{
-		l1 = l2;
-		l2 <<= 1;
-		u1 = 1.0;
-		u2 = 0.0;
-
-		for(j=0; j<l1; j++)
-		{
-			for(i=j;i<nn;i+=l2)
-			{
-				i1 = i + l1;
-				t1 = u1 * data[i1].x - u2 * data[i1].y;
-				t2 = u1 * data[i1].y + u2 * data[i1].x;
-				data[i1].x = data[i].x - t1;
-				data[i1].y = data[i].y - t2;
-				data[i].x += t1;
-				data[i].y += t2;
-			}
-
-			z =  u1 * c1 - u2 * c2;
-			u2 = u1 * c2 + u2 * c1;
-			u1 = z;
-		}
-
-		c2 = (float)sqrt((1.0 - c1) / 2.0);
-
-		if(dir == 1)
-			c2 = -c2;
-
-		c1 = (float)sqrt((1.0 + c1) / 2.0);
-	}
-
-	/* Scaling for forward transform */
-//	if(dir == 1)
-//	{
-//		for(i = 0; i < nn; ++i)
-//		{
-//			data[i].x /= (float)nn;
-//			data[i].y /= (float)nn;
-//		}
-//	}
-}
-
-/*-------------------------------------------------------------------------
-Perform a 2D FFT inplace given a complex 2D array
-The direction dir, 1 for forward, -1 for reverse
-The size of the array (nx, ny)
-Return false if there are memory problems or
-the dimensions are not powers of 2
-*/
-void fftSerial2D(complex* input, unsigned long powx, unsigned long nx, unsigned long powy, unsigned long ny, int dir)
-{
-	size_t i;
-	for(i=0; i<nx; ++i)
-		fftSerial1D(dir, powy, ny, input+i*ny);
+        mPlan = fftwf_plan_dft_1d((int)N, data, data, ((dir == FORWARD_TRANSFORM_DIRECTION) ? FFTW_FORWARD : FFTW_BACKWARD), FFTW_ESTIMATE | FFTW_UNALIGNED);
+        
+        delete[] lDummyData;
+    }
+    
+    ~fftwPlanner()
+    {
+        if(mPlan)
+            fftwf_destroy_plan(mPlan);
+    }
+    
+    fftwf_plan mPlan;
+};
+    
+fftwPlanner gRowPlanner;
 
 #ifdef FFT_2D
-    matrixTranspose::serialmatrixTranspose(input, nx, ny);
-	
-    for(i=0; i<ny; ++i)
-		fftSerial1D(dir, powx, nx, input+i*nx);
+    fftwPlanner gColPlanner;
+#endif
 
-    matrixTranspose::serialmatrixTranspose(input, ny, nx);
+void fftSerial1D(int dir, size_t pown, size_t N, complex* input, bool rowPlanner)
+{
+    fftwf_complex* data = (fftwf_complex*)input;
+
+#ifdef FFT_2D
+    fftwf_execute_dft(rowPlanner ? gRowPlanner.mPlan : gColPlanner.mPlan, data, data);
+#else
+    fftwf_execute_dft(gRowPlanner.mPlan, data, data);
+#endif
+}
+
+void fftSerial2D(complex* input, size_t powx, size_t nx, size_t powy, size_t ny, int dir)
+{
+#if 1
+
+    size_t i;
+    for(i = 0; i < nx; ++i)
+       fftSerial1D(dir, powy, ny, input + i * ny, true);
+
+    #ifdef FFT_2D
+        matrixTranspose::serialmatrixTranspose(input, nx, ny);
+        
+        for(i = 0; i < ny; ++i)
+           fftSerial1D(dir, powx, nx, input + i * nx, false);
+
+        matrixTranspose::serialmatrixTranspose(input, ny, nx);
+    #endif
+    
+#else
+    
+    #ifdef FFT_2D
+        fftwf_complex* data = (fftwf_complex*)input;
+        fftwf_plan lPlan = fftwf_plan_dft_2d((int)ny, (int)nx, data, data, ((dir == FORWARD_TRANSFORM_DIRECTION) ? FFTW_FORWARD : FFTW_BACKWARD), FFTW_ESTIMATE | FFTW_UNALIGNED);
+
+        fftwf_execute(lPlan);
+        fftwf_destroy_plan(lPlan);
+    #else
+        size_t i;
+        for(i = 0; i < nx; ++i)
+           fftSerial1D(dir, powy, ny, input + i * ny, true);    
+    #endif
+    
 #endif
 }
 
@@ -158,7 +108,7 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
     for(unsigned int i = 0; i < ROWS_PER_FFT_SUBTASK; ++i)
-        fftSerial1D(FORWARD_TRANSFORM_DIRECTION, lTaskConf->powY, lTaskConf->elemsY, (FFT_DATA_TYPE*)pSubtaskInfo.outputMem + (i * lTaskConf->elemsY));
+        fftSerial1D(FORWARD_TRANSFORM_DIRECTION, lTaskConf->powY, lTaskConf->elemsY, (FFT_DATA_TYPE*)pSubtaskInfo.outputMem + (i * lTaskConf->elemsY), lTaskConf->rowPlanner);
 
 	return pmSuccess;
 }
@@ -243,6 +193,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.elemsY = lElemsY;
     lTaskConf.powX = lPowX;
     lTaskConf.powY = lPowY;
+    lTaskConf.rowPlanner = true;
 
     pmMemInfo lOutputMemInfo = OUTPUT_MEM_READ_WRITE;
     
@@ -259,6 +210,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.elemsY = lElemsX;
     lTaskConf.powX = lPowY;
     lTaskConf.powY = lPowX;
+    lTaskConf.rowPlanner = false;
     
     if(!Parallel_FFT_1D(lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle1, pSchedulingPolicy))
         return (double)-1.0;
@@ -369,6 +321,19 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 
 	return 0;
 }
+    
+int DoPreSetupPostMpiInit(int argc, char** argv, int pCommonArgs)
+{
+    READ_NON_COMMON_ARGS
+    
+    gRowPlanner.CreateDummyPlan(FORWARD_TRANSFORM_DIRECTION, lElemsY);
+
+#ifdef FFT_2D
+    gColPlanner.CreateDummyPlan(FORWARD_TRANSFORM_DIRECTION, lElemsX);
+#endif
+    
+    return 0;
+}
 
 /**	Non-common args
  *	1. log 2 nx
@@ -376,7 +341,9 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
-	// All the five functions pointers passed here are executed only on the host submitting the task
+    RequestPreSetupCallbackPostMpiInit(DoPreSetupPostMpiInit);
+    
+	// All the functions pointers passed here are executed only on the host submitting the task
 	commonStart2(argc, argv, DoInit, DoSerialProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "FFT", DoSetDefaultCallbacks2, "MatrixTranspose");
 
 	commonFinish();

@@ -586,7 +586,7 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
             }
         }
     }
-    
+
     if(!lStealSuccess)
         pmScheduler::GetScheduler()->StealFailedEvent(pRequestingDevice, lLocalDevice, pTask);
     

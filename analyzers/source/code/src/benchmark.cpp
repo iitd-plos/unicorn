@@ -171,7 +171,7 @@ void Benchmark::CollectResults()
             ConfIterator<ExecuteConf> lVarying2Iter(mConfiguration[lVarying2Str], lExecuteConf);
             ConfIterator<ConfIterator<ExecuteConf> > lVarying1Iter(mConfiguration[lVarying1Str], lVarying2Iter);
 
-            lVarying2Iter(std::string(""), std::string(""));
+            lVarying1Iter(std::string(""), std::string(""));
         }
     }
 }
@@ -382,7 +382,10 @@ void Benchmark::GenerateAnalysis()
     lHtmlStream << std::fixed << std::setprecision(2);
 
     lHtmlStream << "<html>" << std::endl;
-    lHtmlStream << "<head><center><b><u>" << mConfiguration["Benchmark_Name"][0] << "</u></b></center></head>" << std::endl;
+    lHtmlStream << "<head><center>" << std::endl;
+    lHtmlStream << "<b><u>" << mConfiguration["Benchmark_Name"][0] << "</u></b><br><br><a href=\"pmlibResults.html\">Home</a>" << std::endl;
+    lHtmlStream << "</center></head>" << std::endl;
+
     lHtmlStream << "<body>" << std::endl;
     
     GenerateTable(lHtmlStream);
@@ -431,7 +434,7 @@ void Benchmark::WriteTopLevelHtmlPage(const std::vector<Benchmark>& pBenchmarks)
     {
         lHtmlStream << "<tr>" << std::endl;
         
-        lHtmlStream << "<td>" << std::endl;
+        lHtmlStream << "<td align=center>" << std::endl;
         lHtmlStream << "<a href=\"" << (*lIter).mName << ".html\">" << const_cast<Benchmark&>(*lIter).mConfiguration["Benchmark_Name"][0] << "</a>" << std::endl;
         lHtmlStream << "</td>" << std::endl;
         
@@ -446,9 +449,69 @@ void Benchmark::WriteTopLevelHtmlPage(const std::vector<Benchmark>& pBenchmarks)
     lHtmlStream.close();    
 }
 
+void Benchmark::CopyResourceFiles()
+{
+    std::cout << "Copying resource files ..." << std::endl;
+
+    char lPathSeparator[1];
+    lPathSeparator[0] = PATH_SEPARATOR;
+    std::string lSeparator(lPathSeparator, 1);
+
+    std::string lDirPath(GetBasePath());
+    lDirPath.append(lSeparator);
+    lDirPath.append("analyzers");
+    lDirPath.append(lSeparator);
+    lDirPath.append("thirdparty");
+    lDirPath.append(lSeparator);
+    lDirPath.append("jquery");
+
+    std::string lDestDirPath(GetBasePath());
+    lDestDirPath.append(lSeparator);
+    lDestDirPath.append("analyzers");
+    lDestDirPath.append(lSeparator);
+    lDestDirPath.append("results");
+    lDestDirPath.append(lSeparator);
+    lDestDirPath.append("htmls");
+
+    DIR* lSrcDir = opendir(lDirPath.c_str());
+    if(!lSrcDir)
+        throw std::exception();
+    
+    struct dirent* lDirEntry;
+    while((lDirEntry = readdir(lSrcDir)) != NULL)
+    {
+        if(lDirEntry->d_type != DT_DIR && strlen(lDirEntry->d_name))
+        {
+            std::string lSrcFilePath(lDirPath);
+            lSrcFilePath.append(lSeparator);
+            lSrcFilePath.append(std::string(lDirEntry->d_name));
+
+            std::string lDestFilePath(lDestDirPath);
+            lDestFilePath.append(lSeparator);
+            lDestFilePath.append(std::string(lDirEntry->d_name));
+            
+            CopyFile(lSrcFilePath, lDestFilePath);
+        }
+    }
+    
+    closedir(lSrcDir);
+}
+
+void Benchmark::CopyFile(const std::string& pSrcFile, const std::string& pDestFile)
+{
+    std::ifstream lSrcStream(pSrcFile);
+    std::ofstream lDestStream(pDestFile);
+    
+    if(lSrcStream.fail())
+        throw std::exception();
+
+    lDestStream << lSrcStream.rdbuf();
+}
+
 void Benchmark::BeginHtmlSection(std::ofstream &pHtmlStream, const std::string& pSectionName)
 {
-    pHtmlStream << "<br><br><hr><div style='text-align:center'><b>" << pSectionName << "</b></div><hr>" << std::endl;
+    pHtmlStream << std::endl << "<br><br><hr><div style='text-align:center'><b>" << pSectionName << "</b></div><hr>" << std::endl;
+    pHtmlStream << std::endl;
 }
 
 void Benchmark::GenerateTable(std::ofstream& pHtmlStream)
@@ -467,39 +530,56 @@ void Benchmark::GenerateTable(std::ofstream& pHtmlStream)
         std::string lVarying1Name = boost::regex_replace(mConfiguration["Varying1_Name"][0], lSpaceExp, std::string("<br>"));
         std::string lVarying2Name = boost::regex_replace(mConfiguration["Varying2_Name"][0], lSpaceExp, std::string("<br>"));
         
-        pHtmlStream << "<th rowSpan=3>" << lVarying1Name << "</th>" << std::endl;
-        pHtmlStream << "<th rowSpan=3>" << lVarying2Name << "</th>" << std::endl;
+        pHtmlStream << "<th rowSpan=4>" << lVarying1Name << "</th>" << std::endl;
+        pHtmlStream << "<th rowSpan=4>" << lVarying2Name << "</th>" << std::endl;
     }
     else
     {
         boost::regex lSpaceExp("[ \t]");
         std::string lVarying1Name = boost::regex_replace(mConfiguration["Varying1_Name"][0], lSpaceExp, std::string("<br>"));
         
-        pHtmlStream << "<th rowSpan=3>" << lVarying1Name << "</th>" << std::endl;
+        pHtmlStream << "<th rowSpan=4>" << lVarying1Name << "</th>" << std::endl;
     }
     
     size_t lVarying2Count = (lVarying2Defined ? mConfiguration[lVarying2Str].size() : 0);
     
-    pHtmlStream << "<th rowSpan=3>Sequential<br>Time<br>(in s)</th>" << std::endl;
+    pHtmlStream << "<th rowSpan=4>Sequential<br>Time<br>(in s)</th>" << std::endl;
+    pHtmlStream << "<th rowSpan=4>Parallel<br>Scheduling<br>Policy</th>" << std::endl;
 
-    pHtmlStream << "<th colSpan=" << 3 * mResults.hostsMap.size() << ">Parallel Time (in s)</th>" << std::endl;
+    pHtmlStream << "<th colSpan=" << 6 * mResults.hostsMap.size() << ">Parallel Time (in s)</th>" << std::endl;
     pHtmlStream << "</tr>" << std::endl << "<tr>" << std::endl;
     
     std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
     for(; lHostsIter != lHostsEndIter; ++lHostsIter)
-        pHtmlStream << "<th colSpan=3>" << lHostsIter->first << "&nbsp;" << ((lHostsIter->first == 1) ? "Host" : "Hosts") << "</th>" << std::endl;
+        pHtmlStream << "<th colSpan=6>" << lHostsIter->first << "&nbsp;" << ((lHostsIter->first == 1) ? "Host" : "Hosts") << "</th>" << std::endl;
 
-    pHtmlStream << "</tr>" << std::endl << "<tr>" << std::endl;
-    
-    lHostsIter = mResults.hostsMap.begin();
-    for(; lHostsIter != lHostsEndIter; ++lHostsIter)
-    {
-        pHtmlStream << "<th>CPUs</th>" << std::endl;
-        pHtmlStream << "<th>GPUs</th>" << std::endl;
-        pHtmlStream << "<th>CPUs+GPUs</th>" << std::endl;
-    }
-    
     pHtmlStream << "</tr>" << std::endl;
+    pHtmlStream << "<tr>" << std::endl;
+
+    for(lHostsIter = mResults.hostsMap.begin(); lHostsIter != lHostsEndIter; ++lHostsIter)
+    {
+        pHtmlStream << "<th colspan=3>No Multi Assign</th>" << std::endl;
+        pHtmlStream << "<th colspan=3>Multi Assign</th>" << std::endl;
+    }
+
+    pHtmlStream << "</tr>" << std::endl;
+    pHtmlStream << "<tr>" << std::endl;
+    
+    for(lHostsIter = mResults.hostsMap.begin(); lHostsIter != lHostsEndIter; ++lHostsIter)
+    {
+        for(size_t i = 0; i < 2; ++i)
+        {
+            pHtmlStream << "<th>CPUs</th>" << std::endl;
+            pHtmlStream << "<th>GPUs</th>" << std::endl;
+            pHtmlStream << "<th>Both</th>" << std::endl;
+        }
+    }
+
+    pHtmlStream << "</tr>" << std::endl;
+
+    const std::string lStaticBestStr("Generate_Static_Best");
+    std::vector<std::string>& lStaticBestVector = GetGlobalConfiguration()[lStaticBestStr];
+    bool lGenerateStaticBest = (!lStaticBestVector.empty() && !lStaticBestVector[0].compare(std::string("false"))) ? false : true;
 
     BenchmarkResults::mapType::iterator lLevel1Iter = mResults.results.begin(), lLevel1EndIter = mResults.results.end();
     for(; lLevel1Iter != lLevel1EndIter; ++lLevel1Iter)
@@ -512,45 +592,17 @@ void Benchmark::GenerateTable(std::ofstream& pHtmlStream)
 
         pHtmlStream << "<td align=center>" << lLevel1Iter->second.first.sequentialTime << "</td>" << std::endl;
 
-        std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
-        for(; lHostsIter != lHostsEndIter; ++lHostsIter)
-        {
-            Level2Key lKey1(lHostsIter->first, PUSH, CPU, false, false);
-            Level2Key lKey2(lHostsIter->first, PULL, CPU, false, false);
-            Level2Key lKey3(lHostsIter->first, STATIC_EQUAL, CPU, false, false);
-            Level2Key lKey4(lHostsIter->first, STATIC_BEST, CPU, false, false);
-            
-            Level2Key lKey5(lHostsIter->first, PUSH, GPU, false, false);
-            Level2Key lKey6(lHostsIter->first, PULL, GPU, false, false);
-            Level2Key lKey7(lHostsIter->first, STATIC_EQUAL, GPU, false, false);
-            Level2Key lKey8(lHostsIter->first, STATIC_BEST, GPU, false, false);
+        pHtmlStream << "<td><table align=center>" << std::endl;
+        pHtmlStream << "<tr bgcolor=lightgray><td align=center>Push</td></tr>" << std::endl;
+        pHtmlStream << "<tr bgcolor=lightgray><td align=center>Pull</td></tr>" << std::endl;
+        pHtmlStream << "<tr bgcolor=lightgray><td align=center>Static&nbsp;Equal</td></tr>" << std::endl;
+        if(lGenerateStaticBest)
+            pHtmlStream << "<th><td>Static&nbsp;Best</td></th>" << std::endl;
 
-            Level2Key lKey9(lHostsIter->first, PUSH, CPU_PLUS_GPU, false, false);
-            Level2Key lKey10(lHostsIter->first, PULL, CPU_PLUS_GPU, false, false);
-            Level2Key lKey11(lHostsIter->first, STATIC_EQUAL, CPU_PLUS_GPU, false, false);
-            Level2Key lKey12(lHostsIter->first, STATIC_BEST, CPU_PLUS_GPU, false, false);
+        pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
 
-            pHtmlStream << "<td><table align = center>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey1].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey2].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey3].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey4].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
-
-            pHtmlStream << "<td><table align = center>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey5].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey6].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey7].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey8].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
-
-            pHtmlStream << "<td><table align = center>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey9].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey10].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey11].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "<tr><td>" << lLevel1Iter->second.second[lKey12].execTime << "</td></tr>" << std::endl;
-            pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
-        }
+        EmbedResultsInTable(pHtmlStream, lLevel1Iter, false, lGenerateStaticBest);
+        EmbedResultsInTable(pHtmlStream, lLevel1Iter, true, lGenerateStaticBest);
 
         pHtmlStream << "</tr>" << std::endl;
     }
@@ -558,42 +610,140 @@ void Benchmark::GenerateTable(std::ofstream& pHtmlStream)
     pHtmlStream << "</table>" << std::endl;
 }
 
+void Benchmark::EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults::mapType::iterator pLevel1Iter, bool pMultiAssign, bool pGenerateStaticBest)
+{
+    std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
+    for(; lHostsIter != lHostsEndIter; ++lHostsIter)
+    {
+        Level2Key lKey1(lHostsIter->first, PUSH, CPU, pMultiAssign, false);
+        Level2Key lKey2(lHostsIter->first, PULL, CPU, pMultiAssign, false);
+        Level2Key lKey3(lHostsIter->first, STATIC_EQUAL, CPU, pMultiAssign, false);
+        Level2Key lKey4(lHostsIter->first, STATIC_BEST, CPU, pMultiAssign, false);
+        
+        Level2Key lKey5(lHostsIter->first, PUSH, GPU, pMultiAssign, false);
+        Level2Key lKey6(lHostsIter->first, PULL, GPU, pMultiAssign, false);
+        Level2Key lKey7(lHostsIter->first, STATIC_EQUAL, GPU, pMultiAssign, false);
+        Level2Key lKey8(lHostsIter->first, STATIC_BEST, GPU, pMultiAssign, false);
+
+        Level2Key lKey9(lHostsIter->first, PUSH, CPU_PLUS_GPU, pMultiAssign, false);
+        Level2Key lKey10(lHostsIter->first, PULL, CPU_PLUS_GPU, pMultiAssign, false);
+        Level2Key lKey11(lHostsIter->first, STATIC_EQUAL, CPU_PLUS_GPU, pMultiAssign, false);
+        Level2Key lKey12(lHostsIter->first, STATIC_BEST, CPU_PLUS_GPU, pMultiAssign, false);
+
+        pHtmlStream << "<td><table align=center>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey1].execTime << "</td></tr>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey2].execTime << "</td></tr>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey3].execTime << "</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey4].execTime << "</td></tr>" << std::endl;
+
+        pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
+
+        pHtmlStream << "<td><table align=center>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey5].execTime << "</td></tr>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey6].execTime << "</td></tr>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey7].execTime << "</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey8].execTime << "</td></tr>" << std::endl;
+
+        pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
+
+        pHtmlStream << "<td><table align=center>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey9].execTime << "</td></tr>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey10].execTime << "</td></tr>" << std::endl;
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey11].execTime << "</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey12].execTime << "</td></tr>" << std::endl;
+
+        pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
+    }
+}
+
 void Benchmark::GeneratePlots(std::ofstream& pHtmlStream)
 {
     size_t lPlotWidth = 400;
     size_t lPlotHeight = 400;
     
+    pHtmlStream << std::endl;
+    pHtmlStream << "<link rel='stylesheet' href='jquery-ui-1.10.1.css' />" << std::endl;
+    pHtmlStream << "<script src='jquery-1.10.1.js'></script>" << std::endl;
+    pHtmlStream << "<script src='jquery-ui-1.10.1.js'></script>" << std::endl;
+
+    pHtmlStream << std::endl;
+    pHtmlStream << "<script>" << std::endl;
+    pHtmlStream << "\
+        function checkPanelState(panelName) \n\
+        { \n\
+            var className = '.' + panelName + '_toggler'; \n\
+            $(className).hide(); \n\
+            \n\
+            var panelIdName = '#' + panelName; \n\
+            var radioSetCount = $(panelIdName).attr('value'); \n\
+            \n\
+            var tableIdName = '#' + panelName + '_table'; \n\
+            for(var i = 0; i < radioSetCount; ++i) \n\
+            { \n\
+                var radioSetIdName = '#' + panelName + '_rs' + (i+1) + ' input:radio:checked'; \n\
+                var selectedId = $(radioSetIdName).attr('id'); \n\
+                var selectedIndex = selectedId.substr(selectedId.lastIndexOf('_') + 1); \n\
+            \n\
+                tableIdName += '_' + selectedIndex; \n\
+            } \n\
+            \n\
+            $(tableIdName).show(); \n\
+        } \n\
+        \n\
+        function checkState(radioButton) \n\
+        { \n\
+            var buttonName = radioButton.id; \n\
+            var panelName = buttonName.substring(0, buttonName.indexOf('_')); \n\
+            \n\
+            checkPanelState(panelName); \n\
+        }\n" << std::endl;
+
+    pHtmlStream << "</script>" << std::endl;
+    pHtmlStream << std::endl;
+
+    pHtmlStream << "<style type='text/css'> .selectionGroup { border:2px solid #000; display:inline-block; } </style>" << std::endl;
+    pHtmlStream << "<style type='text/css'> .selectionName { background:#564; color:#FFF; display:inline-block; margin-left:6px; margin-right:4px; } </style>" << std::endl;
+    pHtmlStream << "<style type='text/css'> .selectionBox { margin-top: 4px; margin-bottom: 4px; } </style>" << std::endl;
     pHtmlStream << "<style type='text/css'> div.plotTitle { border-width:1px; border-style:solid; border-color:gray; background:lightgray; text-align:center; } </style>" << std::endl;
     pHtmlStream << "<style type='text/css'> tr.horizSpacing > td { padding-left: 2em; padding-right: 2em; } </style>" << std::endl;
     
-    BeginHtmlSection(pHtmlStream, "Performance Graphs - PUSH Model");
-    GeneratePerformanceGraphs(lPlotWidth, lPlotHeight, pHtmlStream, PUSH);
-
-    BeginHtmlSection(pHtmlStream, "Performance Graphs - PULL Model");
-    GeneratePerformanceGraphs(lPlotWidth, lPlotHeight, pHtmlStream, PULL);
+    std::vector<size_t> lRadioSetCount;
+    
+    BeginHtmlSection(pHtmlStream, "Performance Graphs");
+    lRadioSetCount.push_back( GeneratePerformanceGraphs(1, lPlotWidth, lPlotHeight, pHtmlStream) );
 
     BeginHtmlSection(pHtmlStream, "Scheduling Models Comparison");
-    GenerateSchedulingModelsGraphs(lPlotWidth, lPlotHeight, pHtmlStream);
+    lRadioSetCount.push_back( GenerateSchedulingModelsGraphs(2, lPlotWidth, lPlotHeight, pHtmlStream) );
 
     BeginHtmlSection(pHtmlStream, "Load Balancing Graphs");
-    GenerateLoadBalancingGraphs(lPlotWidth, lPlotHeight, pHtmlStream);
+    lRadioSetCount.push_back( GenerateLoadBalancingGraphs(3, lPlotWidth, lPlotHeight, pHtmlStream) );
 
-    BeginHtmlSection(pHtmlStream, "Overhead Graphs - PUSH Model");
-    GenerateOverheadGraphs(lPlotWidth, lPlotHeight, pHtmlStream, PUSH);
+#if 0
+    BeginHtmlSection(pHtmlStream, "Execution Rate Graphs");
+    lRadioSetCount.push_back( GenerateOverheadGraphs(4, lPlotWidth, lPlotHeight, pHtmlStream) );
 
-    BeginHtmlSection(pHtmlStream, "Overhead Graphs - PULL Model");
-    GenerateOverheadGraphs(lPlotWidth, lPlotHeight, pHtmlStream, PULL);
+    BeginHtmlSection(pHtmlStream, "Work Time Graphs");
+    lRadioSetCount.push_back( GenerateWorkTimeGraphs(5, lPlotWidth, lPlotHeight, pHtmlStream) );
+#endif
 
-    BeginHtmlSection(pHtmlStream, "Work Time Graphs - PUSH Model");
-    GenerateWorkTimeGraphs(lPlotWidth, lPlotHeight, pHtmlStream, PUSH);
+    pHtmlStream << "<script>" << std::endl;
+    pHtmlStream << "$(function() {" << std::endl;
+    
+    std::vector<size_t>::iterator lIter = lRadioSetCount.begin(), lEndIter = lRadioSetCount.end();
+    for(size_t lPanelIndex = 1; lIter != lEndIter; ++lIter, ++lPanelIndex)
+    {
+        for(size_t i = 1; i <= (*lIter); ++i)
+            pHtmlStream << "    $(\"#p" << lPanelIndex << "_rs" << i << "\").buttonset();" << std::endl;
 
-    BeginHtmlSection(pHtmlStream, "Work Time Graphs - PULL Model");
-    GenerateWorkTimeGraphs(lPlotWidth, lPlotHeight, pHtmlStream, PULL);
+        if((*lIter))
+            pHtmlStream << "    checkPanelState('p" << lPanelIndex << "');" << std::endl;
+    }
 
-    pHtmlStream << "<table align=center>" << std::endl;
-    pHtmlStream << "<tr class=horizSpacing>" << std::endl;
-    pHtmlStream << "</tr>" << std::endl;
-    pHtmlStream << "</table>" << std::endl;
+    pHtmlStream << "});" << std::endl;
+    pHtmlStream << "</script>" << std::endl;
 }
 
 Graph& Benchmark::GenerateStandardChart(size_t pPlotWidth, size_t pPlotHeight, StandardChart& pChart)
@@ -636,22 +786,272 @@ Graph& Benchmark::GenerateStandardChart(size_t pPlotWidth, size_t pPlotHeight, S
     return *lGraph;
 }
 
-void Benchmark::GeneratePerformanceGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, SchedulingPolicy pPolicy)
+void Benchmark::GenerateSelectionGroup(size_t pPanelIndex, const panelConfigurationType& pPanelConf, std::ofstream& pHtmlStream)
 {
-    std::string lVarying1Name = mConfiguration["Varying1_Name"][0];
-    lVarying1Name.append(" --->");
+    pHtmlStream << "<center>" << std::endl;
+    pHtmlStream << "<div align=center class=selectionGroup>" << std::endl;
+    pHtmlStream << std::endl;
+
+    panelConfigurationType::const_iterator lIter = pPanelConf.begin(), lEndIter = pPanelConf.end();
+    for(size_t lRadioSetIndex = 1; lIter != lEndIter; ++lIter, ++lRadioSetIndex)
+    {
+        pHtmlStream << "<div align=left id='p" << pPanelIndex << "_rs" << lRadioSetIndex << "' class=selectionBox>" << std::endl;
+        pHtmlStream << "<div class=selectionName>" << std::endl;
+        pHtmlStream << "<div style='display:inline-block; width:130px;'>&nbsp;&nbsp;" << (*lIter).first << "</div>" << std::endl;
+        pHtmlStream << "<small style='margin-left: 40px;'>" << std::endl;
+        
+        std::vector<std::string>::const_iterator lInnerIter = (*lIter).second.begin(), lInnerEndIter = (*lIter).second.end(), lPenultimateInnerIter = lInnerEndIter;
+        --lPenultimateInnerIter;
+        for(size_t lRadioIndex = 1; lInnerIter != lInnerEndIter; ++lInnerIter, ++lRadioIndex)
+        {
+            pHtmlStream << "<input type='radio' id='p" << pPanelIndex << "_rs" << lRadioSetIndex << "_" << lRadioIndex << "' name='p" << pPanelIndex << "_rs" << lRadioSetIndex << "_button'" << ((lInnerIter == lPenultimateInnerIter) ? " checked='checked'" : "") << " onClick='checkState(this)' />" << std::endl;
+            pHtmlStream << "<label for='p" << pPanelIndex << "_rs" << lRadioSetIndex << "_" << lRadioIndex << "'>" << (*lInnerIter) << "</label>" << std::endl;
+        }
+
+        pHtmlStream << "</small>" << std::endl;
+        pHtmlStream << "</div>" << std::endl;
+        pHtmlStream << "</div>" << std::endl;
+        pHtmlStream << std::endl;
+    }
+    
+    pHtmlStream << "</div>" << std::endl;
+    pHtmlStream << "</center>" << std::endl;
+    pHtmlStream << "<br>" << std::endl;
+    pHtmlStream << std::endl;
+}
+
+size_t Benchmark::GeneratePerformanceGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream)
+{
+    panelConfigurationType lPanelConf;
+    
+    const char* lPolicies[] = {"PUSH", "PULL"};
+    lPanelConf.push_back(std::make_pair("Scheduling&nbsp;Policy", std::vector<std::string>(lPolicies, lPolicies + sizeof(lPolicies)/sizeof(lPolicies[0]))));
+    
+    std::string lVarying2Str("Varying_2");
+    if(!mConfiguration[lVarying2Str].empty())
+        lPanelConf.push_back(std::make_pair(mConfiguration["Varying2_Name"][0], mConfiguration[lVarying2Str]));
+    
+    const char* lMaOptions[] = {"Yes", "No"};
+    lPanelConf.push_back(std::make_pair("Multi&nbsp;Assign", std::vector<std::string>(lMaOptions, lMaOptions + (sizeof(lMaOptions)/sizeof(lMaOptions[0])))));
+    
+    pHtmlStream << "<div id='p" << pPanelIndex << "' value='" << lPanelConf.size() << "'>" << std::endl;
+    
+    GenerateSelectionGroup(pPanelIndex, lPanelConf, pHtmlStream);
+
+    if(!mConfiguration[lVarying2Str].empty())
+    {
+        std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying2Str].begin(), lEndIter = mConfiguration[lVarying2Str].end();
+        for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+        {
+            size_t lVarying2Val = (size_t)atoi((*lIter).c_str());
+         
+            for(int maVal = 1; maVal >= 0; --maVal)   // Multi Assign
+            {
+                std::string lMaStr((maVal == 0) ? "2" : "1");
+                
+                pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << 1 << "_" << lIndex << "_" << lMaStr << "' style='display:none'>" << std::endl;
+
+                GeneratePerformanceGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, PUSH, lVarying2Val);
+                pHtmlStream << "</div>" << std::endl;
+
+                pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << 2 << "_" << lIndex << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                GeneratePerformanceGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, PULL, lVarying2Val);
+                pHtmlStream << "</div>" << std::endl;
+            }
+        }
+    }
+    else
+    {
+        for(int maVal = 1; maVal >= 0; --maVal)   // Multi Assign
+        {
+            std::string lMaStr((maVal == 0) ? "2" : "1");
+            
+            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << 1 << "_" << lMaStr << "' style='display:none'>" << std::endl;
+            GeneratePerformanceGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, PUSH);
+            pHtmlStream << "</div>" << std::endl;
+
+            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << 2 << "_" << lMaStr << "' style='display:none'>" << std::endl;
+            GeneratePerformanceGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, PULL);
+            pHtmlStream << "</div>" << std::endl;
+        }
+    }
+    
+    pHtmlStream << "</div>" << std::endl;
+    
+    return lPanelConf.size();
+}
+
+size_t Benchmark::GenerateSchedulingModelsGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream)
+{
+    panelConfigurationType lPanelConf;
+
+    std::string lVarying1Str("Varying_1");
+    std::string lVarying2Str("Varying_2");
+    
+    lPanelConf.push_back(std::make_pair(mConfiguration["Varying1_Name"][0], mConfiguration[lVarying1Str]));
+    
+    if(!mConfiguration[lVarying2Str].empty())
+        lPanelConf.push_back(std::make_pair(mConfiguration["Varying2_Name"][0], mConfiguration[lVarying2Str]));
+    
+    const char* lMaOptions[] = {"Yes", "No"};
+    lPanelConf.push_back(std::make_pair("Multi&nbsp;Assign", std::vector<std::string>(lMaOptions, lMaOptions + (sizeof(lMaOptions)/sizeof(lMaOptions[0])))));
+
+    pHtmlStream << "<div id='p" << pPanelIndex << "' value='" << lPanelConf.size() << "'>" << std::endl;
+    
+    GenerateSelectionGroup(pPanelIndex, lPanelConf, pHtmlStream);
+    
+    if(!mConfiguration[lVarying2Str].empty())
+    {
+        std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying1Str].begin(), lEndIter = mConfiguration[lVarying1Str].end();
+        for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+        {
+            std::vector<std::string>::const_iterator lInnerIter = mConfiguration[lVarying2Str].begin(), lInnerEndIter = mConfiguration[lVarying2Str].end();
+            for(size_t lInnerIndex = 1; lInnerIter != lInnerEndIter; ++lInnerIter, ++lInnerIndex)
+            {
+                for(int maVal = 1; maVal >= 0; --maVal)   // Multi Assign
+                {
+                    std::string lMaStr((maVal == 0) ? "2" : "1");
+                
+                    pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lIndex << "_" << lInnerIndex << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                    
+                    GenerateSchedulingModelsGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())));
+                    pHtmlStream << "</div>" << std::endl;
+                }
+            }
+        }
+    }
+    else
+    {
+        std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying1Str].begin(), lEndIter = mConfiguration[lVarying1Str].end();
+        for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+        {
+            for(int maVal = 1; maVal >= 0; --maVal)   // Multi Assign
+            {
+                std::string lMaStr((maVal == 0) ? "2" : "1");
+                
+                pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lIndex << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                GenerateSchedulingModelsGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (size_t)atoi((*lIter).c_str()), 0);
+                pHtmlStream << "</div>" << std::endl;
+            }
+        }
+    }
+    
+    pHtmlStream << "</div>" << std::endl;
+    
+    return lPanelConf.size();
+}
+
+size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream)
+{
+    panelConfigurationType lPanelConf;
+    
+    std::vector<std::string> lHostsVector;
+    std::map<size_t, size_t>::const_iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
+    for(; lHostsIter != lHostsEndIter; ++lHostsIter)
+    {
+        std::stringstream lHostsStream;
+        lHostsStream << lHostsIter->first;
+        
+        lHostsVector.push_back(lHostsStream.str());
+    }
+
+    std::string lVarying1Str("Varying_1");
+    std::string lVarying2Str("Varying_2");
+    
+    lPanelConf.push_back(std::make_pair("Hosts", lHostsVector));
+    lPanelConf.push_back(std::make_pair(mConfiguration["Varying1_Name"][0], mConfiguration[lVarying1Str]));
+    
+    if(!mConfiguration[lVarying2Str].empty())
+        lPanelConf.push_back(std::make_pair(mConfiguration["Varying2_Name"][0], mConfiguration[lVarying2Str]));
+
+    const char* lPolicies[] = {"PUSH", "PULL"};
+    lPanelConf.push_back(std::make_pair("Scheduling&nbsp;Policy", std::vector<std::string>(lPolicies, lPolicies + sizeof(lPolicies)/sizeof(lPolicies[0]))));
+
+    const char* lMaOptions[] = {"Yes", "No"};
+    lPanelConf.push_back(std::make_pair("Multi&nbsp;Assign", std::vector<std::string>(lMaOptions, lMaOptions + (sizeof(lMaOptions)/sizeof(lMaOptions[0])))));
+
+    pHtmlStream << "<div id='p" << pPanelIndex << "' value='" << lPanelConf.size() << "'>" << std::endl;
+    
+    GenerateSelectionGroup(pPanelIndex, lPanelConf, pHtmlStream);
+
+    lHostsIter = mResults.hostsMap.begin();
+    for(size_t lHostIndex = 1; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
+    {
+        if(!mConfiguration[lVarying2Str].empty())
+        {
+            std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying1Str].begin(), lEndIter = mConfiguration[lVarying1Str].end();
+            for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+            {
+                std::vector<std::string>::const_iterator lInnerIter = mConfiguration[lVarying2Str].begin(), lInnerEndIter = mConfiguration[lVarying2Str].end();
+                for(size_t lInnerIndex = 1; lInnerIter != lInnerEndIter; ++lInnerIter, ++lInnerIndex)
+                {
+                    for(int maVal = 1; maVal >= 0; --maVal)   // Multi Assign
+                    {
+                        std::string lMaStr((maVal == 0) ? "2" : "1");
+                        
+                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 1 << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                        
+                        GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PUSH);
+                        pHtmlStream << "</div>" << std::endl;
+
+                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 2 << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                        
+                        GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PULL);
+                        pHtmlStream << "</div>" << std::endl;
+                    }
+                }
+            }
+        }
+        else
+        {
+            std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying1Str].begin(), lEndIter = mConfiguration[lVarying1Str].end();
+            for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+            {
+                for(int maVal = 1; maVal >= 0; --maVal)   // Multi Assign
+                {
+                    std::string lMaStr((maVal == 0) ? "2" : "1");
+                
+                    pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 1 << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                    GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PUSH);
+                    pHtmlStream << "</div>" << std::endl;
+
+                    pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 2 << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                    GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PULL);
+                    pHtmlStream << "</div>" << std::endl;
+                }
+            }
+        }
+    }
+    
+    pHtmlStream << "</div>" << std::endl;
+    
+    return lPanelConf.size();
+}
+
+void Benchmark::GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, SchedulingPolicy pPolicy, size_t pVarying2Val /* = 0 */)
+{
+    std::string lVarying1DisplayName = mConfiguration["Varying1_Name"][0];
+
+    std::stringstream lVarying2Stream;
+    if(!mConfiguration["Varying_2"].empty())
+        lVarying2Stream << mConfiguration["Varying2_Name"][0] << "=" << pVarying2Val << ", ";
+    
+    std::stringstream lGraphDisplayNameStream;
+    lGraphDisplayNameStream << lVarying1DisplayName << "&nbsp;&nbsp;[" << lVarying2Stream.str() << ((pPolicy == PUSH) ? "Push" : "Pull") << (pMA ? ", MA" : "") << "] --->";
+    
+    const std::string& lGraphDisplayName = lGraphDisplayNameStream.str();
 
     const char* lOneHostSvpCurveNames[] = {"Sequential", "CPUs", "GPUs", "CPUs+GPUs"};
-    StandardChart lOneHostSvpGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->"))); // Svp means Sequential versus Parallel
+    StandardChart lOneHostSvpGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->"))); // Svp means Sequential versus Parallel
     lOneHostSvpGraph.SetCurves(4, lOneHostSvpCurveNames);
     
     const char* lOneHostParallelCurveNames[] = {"CPUs", "GPUs", "CPUs+GPUs"};
-    StandardChart lOneHostParallelGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+    StandardChart lOneHostParallelGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
     lOneHostParallelGraph.SetCurves(3, lOneHostParallelCurveNames);
 
-    StandardChart lCpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-    StandardChart lGpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-    StandardChart lCpgAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));   // Cpg means CPUs+GPUs
+    StandardChart lCpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+    StandardChart lGpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+    StandardChart lCpgAllHostsGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));   // Cpg means CPUs+GPUs
 
     std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
     for(size_t lHostIndex = 0; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
@@ -667,13 +1067,19 @@ void Benchmark::GeneratePerformanceGraphs(size_t pPlotWidth, size_t pPlotHeight,
     BenchmarkResults::mapType::iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
     for(; lIter != lEndIter; ++lIter)
     {
+        if(lIter->first.varying2 != pVarying2Val)
+            continue;
+
         lOneHostSvpGraph.curves[0].points.push_back(std::make_pair(lIter->first.varying1, lIter->second.first.sequentialTime));
         
         const std::map<Level2Key, Level2Value>& lMap = lIter->second.second;
         std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
         {
-            if(lInnerIter->first.policy == pPolicy && !lInnerIter->first.multiAssign && !lInnerIter->first.lazyMem)
+            if(lInnerIter->first.multiAssign != pMA)
+                continue;
+
+            if(lInnerIter->first.policy == pPolicy && !lInnerIter->first.lazyMem)
             {
                 switch(lInnerIter->first.cluster)
                 {
@@ -734,29 +1140,42 @@ void Benchmark::GeneratePerformanceGraphs(size_t pPlotWidth, size_t pPlotHeight,
     pHtmlStream << "</table>" << std::endl;
 }
 
-void Benchmark::GenerateSchedulingModelsGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream)
+void Benchmark::GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pVarying1Val, size_t pVarying2Val)
 {
+    const std::string lStaticBestStr("Generate_Static_Best");
+    std::vector<std::string>& lStaticBestVector = GetGlobalConfiguration()[lStaticBestStr];
+    bool lGenerateStaticBest = (!lStaticBestVector.empty() && !lStaticBestVector[0].compare(std::string("false"))) ? false : true;
+
     BenchmarkResults::mapType::iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
     
+    std::stringstream lGraphDisplayNameStream;
+    lGraphDisplayNameStream << mConfiguration["Varying1_Name"][0] << "=" << pVarying1Val;
+
+    if(!mConfiguration["Varying_2"].empty())
+        lGraphDisplayNameStream << ", " << mConfiguration["Varying2_Name"][0] << "=" << pVarying2Val;
+
+    if(pMA)
+        lGraphDisplayNameStream << ", MA";
+
     bool lFirst = true;
     for(; lIter != lEndIter; ++lIter)
     {
+        if(lIter->first.varying1 != pVarying1Val || lIter->first.varying2 != pVarying2Val)
+            continue;
+
         if(lFirst)
             lFirst = false;
         else
             pHtmlStream << "<br>" << std::endl;
-
-        std::stringstream lVaryingStr;
-        lVaryingStr << mConfiguration["Varying1_Name"][0] << " = " << lIter->first.varying1;
         
-        StandardChart lCpusGraph(std::auto_ptr<Axis>(new Axis(lVaryingStr.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-        StandardChart lGpusGraph(std::auto_ptr<Axis>(new Axis(lVaryingStr.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-        StandardChart lCpusPlusGpusGraph(std::auto_ptr<Axis>(new Axis(lVaryingStr.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusPlusGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
 
         const char* lCurveNames[] = {"Push", "Pull", "Static Equal", "Static Best"};
-        lCpusGraph.SetCurves(4, lCurveNames);
-        lGpusGraph.SetCurves(4, lCurveNames);
-        lCpusPlusGpusGraph.SetCurves(4, lCurveNames);
+        lCpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, lCurveNames);
+        lGpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, lCurveNames);
+        lCpusPlusGpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, lCurveNames);
 
         std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
         for(size_t lHostIndex = 0; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
@@ -773,7 +1192,13 @@ void Benchmark::GenerateSchedulingModelsGraphs(size_t pPlotWidth, size_t pPlotHe
         std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
         {
-            if(!lInnerIter->first.multiAssign && !lInnerIter->first.lazyMem)
+            if(!lGenerateStaticBest && lInnerIter->first.policy == STATIC_BEST)
+                continue;
+            
+            if(lInnerIter->first.multiAssign != pMA)
+                continue;
+
+            if(!lInnerIter->first.lazyMem)
             {
                 switch(lInnerIter->first.cluster)
                 {
@@ -808,7 +1233,7 @@ void Benchmark::GenerateSchedulingModelsGraphs(size_t pPlotWidth, size_t pPlotHe
     }
 }
 
-void Benchmark::GenerateLoadBalancingGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream)
+void Benchmark::GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy)
 {
     size_t lCount = 0;
 
@@ -817,22 +1242,34 @@ void Benchmark::GenerateLoadBalancingGraphs(size_t pPlotWidth, size_t pPlotHeigh
     pHtmlStream << "<table align=center>" << std::endl;
     pHtmlStream << "<tr class=horizSpacing>" << std::endl;
 
-    BenchmarkResults::mapType::iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end(), lPenultimateIter = lEndIter;
-    --lPenultimateIter;
+    std::stringstream lGraphDisplayNameStream;
+    lGraphDisplayNameStream << mConfiguration["Varying1_Name"][0] << "=" << pVarying1Val;
+
+    if(!mConfiguration["Varying_2"].empty())
+        lGraphDisplayNameStream << ", " << mConfiguration["Varying2_Name"][0] << "=" << pVarying2Val;
+
+    if(pMA)
+        lGraphDisplayNameStream << ", MA";
     
-    for(lIter = lPenultimateIter; lIter != lEndIter; ++lIter)
-//    for(; lIter != lEndIter; ++lIter)
+    lGraphDisplayNameStream << ", Hosts=" << pHosts;
+    lGraphDisplayNameStream << ", " << ((pPolicy == PUSH) ? "Push" : "Pull") << std::endl;
+
+    BenchmarkResults::mapType::iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
+    for(; lIter != lEndIter; ++lIter)
     {
+        if(lIter->first.varying1 != pVarying1Val || lIter->first.varying2 != pVarying2Val)
+            continue;
+
         const std::map<Level2Key, Level2Value>& lMap = lIter->second.second;
         std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
         {
-            if(lInnerIter->first.multiAssign || lInnerIter->first.lazyMem)
+            if(lInnerIter->first.lazyMem)
                 continue;
             
-            if(lInnerIter->first.policy != PUSH && lInnerIter->first.policy != PULL)
+            if(lInnerIter->first.hosts != pHosts || lInnerIter->first.policy != pPolicy || lInnerIter->first.multiAssign != pMA)
                 continue;
-    
+
             if(lCount && (lCount % 3 == 0))
             {
                 pHtmlStream << "</tr>" << std::endl;
@@ -842,14 +1279,7 @@ void Benchmark::GenerateLoadBalancingGraphs(size_t pPlotWidth, size_t pPlotHeigh
                 pHtmlStream << "<tr class=horizSpacing>" << std::endl;
             }
             
-            std::stringstream lStr;
-            
-            if(lInnerIter->first.policy == PUSH)
-                lStr << mConfiguration["Varying1_Name"][0] << " = " << lIter->first.varying1 << "; Hosts = " << lInnerIter->first.hosts << " [Push]";
-            else
-                lStr << mConfiguration["Varying1_Name"][0] << " = " << lIter->first.varying1 << "; Hosts = " << lInnerIter->first.hosts << " [Pull]";                
-            
-            StandardChart lGraph(std::auto_ptr<Axis>(new Axis(lStr.str(), false)), std::auto_ptr<Axis>(new Axis("Time (in s) --->")));
+            StandardChart lGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Time (in s) --->")));
 
             std::map<size_t, DeviceStats>::const_iterator lDeviceIter = lInnerIter->second.deviceStats.begin(), lDeviceEndIter = lInnerIter->second.deviceStats.end();
             for(; lDeviceIter != lDeviceEndIter; ++lDeviceIter)
@@ -869,194 +1299,6 @@ void Benchmark::GenerateLoadBalancingGraphs(size_t pPlotWidth, size_t pPlotHeigh
         }
     }
 
-    pHtmlStream << "</tr>" << std::endl;
-    pHtmlStream << "</table>" << std::endl;
-}
-
-void Benchmark::GenerateOverheadGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, SchedulingPolicy pPolicy)
-{
-    std::string lVarying1Name = mConfiguration["Varying1_Name"][0];
-    lVarying1Name.append(" --->");
-
-    const char* lOneHostSvpCurveNames[] = {"Sequential", "CPUs", "GPUs", "CPUs+GPUs"};  // Svp means sequential versus parallel
-    StandardChart lOneHostSvpGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Relative Execution Rate (subtasks/s) --->")));
-    lOneHostSvpGraph.SetCurves(4, lOneHostSvpCurveNames);
-    
-    StandardChart lCpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Execution Rate (in subtasks/s) --->")));
-    StandardChart lGpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Execution Rate (in subtasks/s) --->")));
-    StandardChart lCpgAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Execution Rate (in subtasks/s) --->")));   // Cpg means CPUs+GPUs
-
-    std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
-    for(size_t lHostIndex = 0; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
-    {
-        std::stringstream lHostStrStream;
-        lHostStrStream << lHostsIter->first << ((lHostsIter->first == 1) ? " Host" : " Hosts") << std::endl;
-        
-        lCpusAllHostsGraph.curves.push_back(lHostStrStream.str());
-        lGpusAllHostsGraph.curves.push_back(lHostStrStream.str());
-        lCpgAllHostsGraph.curves.push_back(lHostStrStream.str());
-    }
-    
-    BenchmarkResults::mapType::iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
-    for(; lIter != lEndIter; ++lIter)
-    {
-        lOneHostSvpGraph.curves[0].points.push_back(std::make_pair(lIter->first.varying1, 1.0));
-
-        const std::map<Level2Key, Level2Value>& lMap = lIter->second.second;
-        std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
-        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
-        {
-            if(lInnerIter->first.policy == pPolicy && !lInnerIter->first.multiAssign && !lInnerIter->first.lazyMem)
-            {
-                double lVal = lInnerIter->second.totalExecutionRate / (lInnerIter->second.subtaskCount / lIter->second.first.sequentialTime);
-
-                switch(lInnerIter->first.cluster)
-                {
-                    case CPU:
-                        if(lInnerIter->first.hosts == 1)
-                            lOneHostSvpGraph.curves[1].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        
-                        lCpusAllHostsGraph.curves[mResults.hostsMap[lInnerIter->first.hosts]].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        break;
-                        
-                    case GPU:
-                        if(lInnerIter->first.hosts == 1)
-                            lOneHostSvpGraph.curves[2].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        
-                        lGpusAllHostsGraph.curves[mResults.hostsMap[lInnerIter->first.hosts]].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-
-                        break;
-                        
-                    case CPU_PLUS_GPU:
-                        if(lInnerIter->first.hosts == 1)
-                            lOneHostSvpGraph.curves[3].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        
-                        lCpgAllHostsGraph.curves[mResults.hostsMap[lInnerIter->first.hosts]].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        
-                        break;
-                        
-                    default:
-                        throw std::exception();
-                }
-            }
-        }
-    }
-    
-    pHtmlStream << "<table align=center>" << std::endl;
-    pHtmlStream << "<tr class=horizSpacing>" << std::endl;
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lOneHostSvpGraph), "Sequential vs. PMLIB - 1 Host");
-    pHtmlStream << "</tr>" << std::endl;
-    pHtmlStream << "</table>" << std::endl;
-
-    pHtmlStream << "<br>" << std::endl;
-
-    pHtmlStream << "<table align=center>" << std::endl;
-    pHtmlStream << "<tr class=horizSpacing>" << std::endl;
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lCpusAllHostsGraph), "PMLIB CPUs - All Hosts");
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lGpusAllHostsGraph), "PMLIB GPUs - All Hosts");
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lCpgAllHostsGraph), "PMLIB CPUs+GPUs - All Hosts");
-    pHtmlStream << "</tr>" << std::endl;
-    pHtmlStream << "</table>" << std::endl;
-}
-
-void Benchmark::GenerateWorkTimeGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, SchedulingPolicy pPolicy)
-{
-    std::string lStat("SUBTASK_EXECUTION");
-
-    std::string lVarying1Name = mConfiguration["Varying1_Name"][0];
-    lVarying1Name.append(" --->");
-
-    const char* lOneHostSvpCurveNames[] = {"Sequential", "CPUs", "GPUs", "CPUs+GPUs"};
-    StandardChart lOneHostSvpGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Work Time (in s) --->"))); // Svp means Sequential versus Parallel
-    lOneHostSvpGraph.SetCurves(4, lOneHostSvpCurveNames);
-    
-    const char* lOneHostParallelCurveNames[] = {"CPUs", "GPUs", "CPUs+GPUs"};
-    StandardChart lOneHostParallelGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Work Time (in s) --->")));
-    lOneHostParallelGraph.SetCurves(3, lOneHostParallelCurveNames);
-
-    StandardChart lCpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Work Time (in s) --->")));
-    StandardChart lGpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Work Time (in s) --->")));
-    StandardChart lCpgAllHostsGraph(std::auto_ptr<Axis>(new Axis(lVarying1Name)), std::auto_ptr<Axis>(new Axis("Work Time (in s) --->")));   // Cpg means CPUs+GPUs
-
-    std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
-    for(size_t lHostIndex = 0; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
-    {
-        std::stringstream lHostStrStream;
-        lHostStrStream << lHostsIter->first << ((lHostsIter->first == 1) ? " Host" : " Hosts") << std::endl;
-        
-        lCpusAllHostsGraph.curves.push_back(lHostStrStream.str());
-        lGpusAllHostsGraph.curves.push_back(lHostStrStream.str());
-        lCpgAllHostsGraph.curves.push_back(lHostStrStream.str());
-    }
-
-    BenchmarkResults::mapType::iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
-    for(; lIter != lEndIter; ++lIter)
-    {
-        lOneHostSvpGraph.curves[0].points.push_back(std::make_pair(lIter->first.varying1, lIter->second.first.sequentialTime));
-        
-        const std::map<Level2Key, Level2Value>& lMap = lIter->second.second;
-        std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
-        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
-        {
-            if(lInnerIter->first.policy == pPolicy && !lInnerIter->first.multiAssign && !lInnerIter->first.lazyMem)
-            {
-                double lVal = lInnerIter->second.workTimeStats.find(lStat)->second.first;
-
-                switch(lInnerIter->first.cluster)
-                {
-                    case CPU:
-                        if(lInnerIter->first.hosts == 1)
-                        {
-                            lOneHostSvpGraph.curves[1].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                            lOneHostParallelGraph.curves[0].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        }
-                        
-                        lCpusAllHostsGraph.curves[mResults.hostsMap[lInnerIter->first.hosts]].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        break;
-                        
-                    case GPU:
-                        if(lInnerIter->first.hosts == 1)
-                        {
-                            lOneHostSvpGraph.curves[2].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                            lOneHostParallelGraph.curves[1].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        }
-                        
-                        lGpusAllHostsGraph.curves[mResults.hostsMap[lInnerIter->first.hosts]].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-
-                        break;
-                        
-                    case CPU_PLUS_GPU:
-                        if(lInnerIter->first.hosts == 1)
-                        {
-                            lOneHostSvpGraph.curves[3].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                            lOneHostParallelGraph.curves[2].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        }
-                        
-                        lCpgAllHostsGraph.curves[mResults.hostsMap[lInnerIter->first.hosts]].points.push_back(std::make_pair(lIter->first.varying1, lVal));
-                        
-                        break;
-                        
-                    default:
-                        throw std::exception();
-                }
-            }
-        }
-    }
-    
-    pHtmlStream << "<table align=center>" << std::endl;
-    pHtmlStream << "<tr class=horizSpacing>" << std::endl;
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lOneHostSvpGraph), "Sequential vs. PMLIB - 1 Host");
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lOneHostParallelGraph), "PMLIB Tasks - 1 Host");
-    pHtmlStream << "</tr>" << std::endl;
-    pHtmlStream << "</table>" << std::endl;
-
-    pHtmlStream << "<br>" << std::endl;
-
-    pHtmlStream << "<table align=center>" << std::endl;
-    pHtmlStream << "<tr class=horizSpacing>" << std::endl;
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lCpusAllHostsGraph), "PMLIB CPUs - All Hosts");
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lGpusAllHostsGraph), "PMLIB GPUs - All Hosts");
-    EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lCpgAllHostsGraph), "PMLIB CPUs+GPUs - All Hosts");
     pHtmlStream << "</tr>" << std::endl;
     pHtmlStream << "</table>" << std::endl;
 }
@@ -1273,7 +1515,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
         std::stringstream lStream;
         lStream << "source ~/.pmlibrc; ";
         lStream << "mpirun -n " << 1 << " " << mExecPath << " 2 0 0 " << pSpaceSeparatedVaryingsStr;
-        lStream << " 2>&1 > " << lTempFile.c_str();
+        lStream << " > " << lTempFile.c_str() << " 2>&1";
 
         ExecuteShellCommand(lStream.str(), "sequential", lSequentialFile);
     }
@@ -1294,7 +1536,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
 //        std::stringstream lStream;
 //        lStream << "source ~/.pmlibrc; ";
 //        lStream << "mpirun -n " << 1 << " " << mExecPath << " 3 0 0 " << pSpaceSeparatedVaryingsStr;
-//        lStream << " 2>&1 > " << lTempFile.c_str();
+//        lStream << " > " << lTempFile.c_str() << " 2>&1";
 //        
 //        ExecuteShellCommand(lStream.str(), "single gpu", lSingleGpuFile);
 //    }
@@ -1302,6 +1544,10 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
 //    {
 //        lSingleGpuFileStream.close();
 //    }
+    
+    const std::string lStaticBestStr("Generate_Static_Best");
+    std::vector<std::string>& lStaticBestVector = GetGlobalConfiguration()[lStaticBestStr];
+    bool lGenerateStaticBest = (!lStaticBestVector.empty() && !lStaticBestVector[0].compare(std::string("false"))) ? false : true;
     
     const std::string lMpiOptionsStr("Mpi_Options");
     std::vector<std::string>& lMpiOptionsVector = GetGlobalConfiguration()[lMpiOptionsStr];
@@ -1314,6 +1560,9 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     /* Generate PMLIB tasks output */
     for(size_t i = 0; i < (size_t)MAX_SCHEDULING_POLICY; ++i)
     {
+        if(!lGenerateStaticBest && ((enum SchedulingPolicy)i == STATIC_BEST))
+            continue;
+        
         for(size_t j = 0; j < (size_t)MAX_CLUSTER_TYPE; ++j)
         {
             for(size_t k = 0; k <= 1; ++k) // Multi Assign
@@ -1338,7 +1587,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                         std::stringstream lStream;
                         lStream << "source ~/.pmlibrc; ";
                         lStream << "mpirun -n " << pHosts << " " << lMpiOptions << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
-                        lStream << " 2>&1 > " << lTempFile.c_str();
+                        lStream << " > " << lTempFile.c_str() << " 2>&1";
 
                         ExecuteShellCommand(lStream.str(), lDisplayName.str(), lOutputFile.str());
                     }

@@ -1,4 +1,5 @@
 Hosts = 1
 Host_File = hosts.txt
 Mpi_Options =
-Benchmarks = matrixMultiply
+Generate_Static_Best = false
+Benchmarks = matrixMultiply matrixTranspose

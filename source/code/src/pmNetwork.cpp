@@ -247,7 +247,7 @@ pmMPI::~pmMPI()
                     PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
                 
                 (lLogAutoPtr.get())[lLogLength] = '\0';
-                std::cout << lLogAutoPtr.get() << std::endl;
+                std::cerr << lLogAutoPtr.get() << std::endl;
             }
         }
     }

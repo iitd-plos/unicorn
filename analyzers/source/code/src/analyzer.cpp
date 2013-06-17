@@ -47,6 +47,7 @@ void Analyzer::Analyze()
     }
     
     Benchmark::WriteTopLevelHtmlPage(lBenchmarks);
+    Benchmark::CopyResourceFiles();
 }
 
 int main(int argc, const char* argv[])

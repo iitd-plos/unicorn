@@ -28,6 +28,7 @@ typedef struct fftTaskConf
     size_t elemsY;  // cols
     size_t powX;
     size_t powY;
+    bool rowPlanner; 
 } fftTaskConf;
 
 #ifdef BUILD_CUDA

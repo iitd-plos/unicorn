@@ -282,12 +282,13 @@ namespace pm
 				UNDEFINED_SYMBOL
 			} failureTypes;
 
-			pmExceptionGPU(gpuTypes pIdGPU, failureTypes pFailureId) {mIdGPU = pIdGPU; mFailureId = pFailureId;}
+            pmExceptionGPU(gpuTypes pIdGPU, failureTypes pFailureId, int cudaError = 0) {mIdGPU = pIdGPU; mFailureId = pFailureId; mCudaError = cudaError;}
 			pmStatus GetStatusCode() {return pmGraphicsCardError;}
 
 		private:
 			gpuTypes mIdGPU;
 			failureTypes mFailureId;
+            int mCudaError;
 	};
 
 	class pmBeyondComputationalLimitsException : public pmException

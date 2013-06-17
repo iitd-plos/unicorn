@@ -40,6 +40,7 @@ typedef pmCallbacks (*callbacksFunc)();
 typedef int (*initFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*destroyFunc)();
 typedef int (*compareFunc)(int argc, char** argv, int pCommonArgs);
+typedef int (*preSetupPostMpiInitFunc)(int argc, char** argv, int pCommonArgs);
 
 void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc pParallelFunc, 
 	callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey);
@@ -49,6 +50,8 @@ void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc p
                     callbacksFunc pCallbacksFunc2, std::string pCallbackKey2);
 
 void commonFinish();
+
+void RequestPreSetupCallbackPostMpiInit(preSetupPostMpiInitFunc pFunc);
 
 bool isMultiAssignEnabled();    /* by default, it's enabled */
 bool isLazyMemEnabled();    /* by default, it's diabled */

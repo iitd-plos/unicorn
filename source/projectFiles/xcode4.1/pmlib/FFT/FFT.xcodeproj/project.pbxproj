@@ -219,8 +219,10 @@
 					$SRCROOT/../../../../../source/code/inc/,
 					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
 					$SRCROOT/../../../../../testsuite/matrixTranspose/source/code/inc/,
+					"$SRCROOT/../../../../../testsuite/fft/thirdparty/fftw-3.3.3/installation/include",
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "$SRCROOT/../../../../../testsuite/fft/thirdparty/fftw-3.3.3/installation/lib";
+				OTHER_LDFLAGS = "-lfftw3f";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -237,8 +239,10 @@
 					$SRCROOT/../../../../../source/code/inc/,
 					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
 					$SRCROOT/../../../../../testsuite/matrixTranspose/source/code/inc/,
+					"$SRCROOT/../../../../../testsuite/fft/thirdparty/fftw-3.3.3/installation/include",
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = "$SRCROOT/../../../../../testsuite/fft/thirdparty/fftw-3.3.3/installation/lib";
+				OTHER_LDFLAGS = "-lfftw3f";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;

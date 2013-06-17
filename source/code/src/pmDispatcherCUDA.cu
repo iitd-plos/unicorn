@@ -63,7 +63,7 @@ cudaError_t (*gFuncPtr_cudaDeviceSynchronize)();
 		if(dErrorCUDA != cudaSuccess) \
 		{ \
 			pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::ERROR, cudaGetErrorString(dErrorCUDA)); \
-			PMTHROW(pmExceptionGPU(pmExceptionGPU::NVIDIA_CUDA, pmExceptionGPU::RUNTIME_ERROR)); \
+			PMTHROW(pmExceptionGPU(pmExceptionGPU::NVIDIA_CUDA, pmExceptionGPU::RUNTIME_ERROR, dErrorCUDA)); \
 		} \
 	}
 
@@ -383,7 +383,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecut
             {
                 // Check if the kernel is compiled for a different architecture and the GPU card has a different compute capability
                 //std::cout << "CUDA Error: " << cudaGetLastError(lLastError) << std::endl;
-                PMTHROW(pmExceptionGPU(pmExceptionGPU::NVIDIA_CUDA, pmExceptionGPU::RUNTIME_ERROR));
+                PMTHROW(pmExceptionGPU(pmExceptionGPU::NVIDIA_CUDA, pmExceptionGPU::RUNTIME_ERROR, lLastError));
             }
         }
         else

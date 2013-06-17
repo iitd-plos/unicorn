@@ -208,6 +208,7 @@ class Benchmark
 {
 public:
     typedef std::map<std::string, std::vector<std::string> > keyValuePairs;
+    typedef std::vector<std::pair<std::string, std::vector<std::string> > > panelConfigurationType;
 
     void CollectResults();
     void ProcessResults();
@@ -219,6 +220,7 @@ public:
     static void LoadGlobalConfiguration();
     static void GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks);
     static void WriteTopLevelHtmlPage(const std::vector<Benchmark>& pBenchmarks);
+    static void CopyResourceFiles();
     
     void ExecuteInstance(const std::string& pHosts, const std::string& pSpaceSeparatedVaryingsStr, const std::string& pUnderscoreSeparatedVaryingsStr, size_t pSampleIndex);
     void ExecuteSample(const std::string& pHosts, const std::string& pSpaceSeparatedVaryingsStr, const std::string& pOutputFolder);
@@ -240,12 +242,17 @@ private:
     void GeneratePlots(std::ofstream& pHtmlStream);
     Graph& GenerateStandardChart(size_t pPlotWidth, size_t pPlotHeight, StandardChart& pChart);
 
-    void GeneratePerformanceGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, SchedulingPolicy pPolicy);
-    void GenerateSchedulingModelsGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
-    void GenerateLoadBalancingGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
-    void GenerateOverheadGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, SchedulingPolicy pPolicy);
-    void GenerateWorkTimeGraphs(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, SchedulingPolicy pPolicy);
+    size_t GeneratePerformanceGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
+    size_t GenerateSchedulingModelsGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
+    size_t GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
+    
+    void GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, SchedulingPolicy pPolicy, size_t pVarying2Val = 0);
+    void GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pVarying1Val, size_t pVarying2Val);
+    void GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy);
+    
+    void GenerateSelectionGroup(size_t pPanelIndex, const panelConfigurationType& pPanelConf, std::ofstream& pHtmlStream);
 
+    void EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults::mapType::iterator pLevel1Iter, bool pMultiAssign, bool pGenerateStaticBest);
     void EmbedPlot(std::ofstream& pHtmlStream, Graph& pGraph, const std::string& pGraphTitle);
     
     void SelectSample(bool pMedianSample);
@@ -253,6 +260,7 @@ private:
     void ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName, const std::string& pOutputFile);
     const std::string& GetTempOutputFileName();
     
+    static void CopyFile(const std::string& pSrcFile, const std::string& pDestFile);
     static keyValuePairs& GetGlobalConfiguration();
     static std::string& GetBasePath();
     

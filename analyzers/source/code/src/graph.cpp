@@ -21,9 +21,11 @@
 #include <iostream>
 #include <iomanip>
 
+#include <map>
 #include <sstream>
 #include <limits>
 #include <cstdlib>
+
 #include <time.h>
 
 #include "graph.h"
@@ -31,7 +33,7 @@
 #define LEFT_MARGIN_PERCENTAGE 18
 #define RIGHT_MARGIN_PERCENTAGE 5
 #define TOP_MARGIN_PERCENTAGE 5
-#define BOTTOM_MARGIN_PERCENTAGE 20
+#define BOTTOM_MARGIN_PERCENTAGE 24
 #define MAX_MAJOR_TICKS_X 10
 #define MAX_MAJOR_TICKS_Y 10
 #define LEGEND_MARGIN_PERCENTAGE 2
@@ -84,8 +86,17 @@ const char* const gColors[] =
 
 
 /* struct Color */
-Color::Color()
+const char* const GetColor(const std::string& pName)
 {
+    static std::map<std::string, size_t> sColorMap;
+
+    if(pName.empty())
+        return gColors[(std::rand() % (sizeof(gColors) / sizeof(gColors[0])))];
+    
+    if(sColorMap.find(pName) == sColorMap.end())
+        sColorMap[pName] = (std::rand() % (sizeof(gColors) / sizeof(gColors[0])));
+    
+    return gColors[sColorMap[pName]];
 }
 
 
@@ -267,8 +278,6 @@ LineGraph::LineGraph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX,
 : Graph(pWidth, pHeight, pAxisX, pAxisY)
 {
     mLines.resize(pLineCount);
-    for(size_t i = 0; i < pLineCount; ++i)
-        mLines[i].color.htmlRep = std::string(gColors[std::rand() % (sizeof(gColors) / sizeof(gColors[0]))]);
 }
 
 void LineGraph::SetLineName(size_t pLineIndex, const std::string &pName)
@@ -320,7 +329,7 @@ const std::string& LineGraph::GetSvg()
             ++lDataPoints;
         }
         
-        lStream << "' style='fill:none; stroke:" << (*lIter).color.htmlRep << "; stroke-width:1' />" << std::endl;
+        lStream << "' style='fill:none; stroke:" << GetColor((*lIter).name) << "; stroke-width:1' />" << std::endl;
         lMaxDataPoints = std::max(lMaxDataPoints, lDataPoints);
 
         if(lIndex < MAX_LEGEND_ROWS * MAX_LEGEND_COLS)
@@ -336,7 +345,7 @@ const std::string& LineGraph::GetSvg()
             double lY = 100.0 - LEGEND_MARGIN_PERCENTAGE - INTER_LEGEND_VERTICAL_SPACING_PERCENTAGE * lLegendRow;
             double lX2 = lX1 + lSpacePerLegend/4.0; // one-fourth space for line and three-fourth for label
 
-            lStream << "<line x1='" << lX1 << "%' y1='" << lY << "%' x2='" << lX2 << "%' y2='" << lY << "%' style='stroke:" << (*lIter).color.htmlRep << "; stroke-width:1' />" << std::endl;
+            lStream << "<line x1='" << lX1 << "%' y1='" << lY << "%' x2='" << lX2 << "%' y2='" << lY << "%' style='stroke:" << GetColor((*lIter).name) << "; stroke-width:1' />" << std::endl;
             lStream << "<text font-size='60%' x='" << lX2 + lLegendAdjustmentPercentage << "%' y='" << lY + lLegendAdjustmentPercentage << "%'>" << (*lIter).name << "</text>" << std::endl;
         }
     }
@@ -411,14 +420,6 @@ const std::string& RectGraph::GetSvg()
     Graph::GetPreSvg();
     
     std::stringstream lStream;
-
-    std::vector<Color> lRectColors;
-    for(size_t i = 0; i < mRectsPerGroup; ++i)
-    {
-        Color lColor;
-        lColor.htmlRep = std::string(gColors[std::rand() % (sizeof(gColors) / sizeof(gColors[0]))]);
-        lRectColors.push_back(lColor);
-    }
     
     if(mGroupsOnXAxis)
     {
@@ -444,7 +445,7 @@ const std::string& RectGraph::GetSvg()
                 double lY1 = mHeight - (lGroupY + (lRect.minY - mMinPlottedY) * mPixelsPerUnitY);
                 double lY2 = mHeight - (lGroupY + (lRect.maxY - mMinPlottedY) * mPixelsPerUnitY);
                 
-                lStream << "<rect x='" << lX1 << "' y='" << lY2 << "' width='" << lX2 - lX1 << "' height='" << lY1 - lY2 << "' fill='" << lRectColors[lRectIndex].htmlRep << "' />" << std::endl;
+                lStream << "<rect x='" << lX1 << "' y='" << lY2 << "' width='" << lX2 - lX1 << "' height='" << lY1 - lY2 << "' fill='" << GetColor(mRectNames[lRectIndex]) << "' />" << std::endl;
             }
 
             double lLength = AXIS_STROKE_WIDTH + 2.5 * TICK_LENGTH;
@@ -479,7 +480,7 @@ const std::string& RectGraph::GetSvg()
                 double lY1 = mHeight - (lGroupY + (lPixelsPerGroup * lRect.minY / lSpanY));
                 double lY2 = mHeight - (lGroupY + (lPixelsPerGroup * lRect.maxY / lSpanY));
 
-                lStream << "<rect x='" << lX1 << "' y='" << lY2 << "' width='" << lX2 - lX1 << "' height='" << lY1 - lY2 << "' fill='" << lRectColors[lRectIndex].htmlRep << "' />" << std::endl;
+                lStream << "<rect x='" << lX1 << "' y='" << lY2 << "' width='" << lX2 - lX1 << "' height='" << lY1 - lY2 << "' fill='" << GetColor(mRectNames[lRectIndex]) << "' />" << std::endl;
             }
 
             double lLength = AXIS_STROKE_WIDTH + TICK_LENGTH;
@@ -491,12 +492,12 @@ const std::string& RectGraph::GetSvg()
         }        
     }
 
-    std::vector<Color>::iterator lColorIter = lRectColors.begin(), lColorEndIter = lRectColors.end();
-    for(size_t lLegendIndex = 0; lColorIter != lColorEndIter; ++lColorIter, ++lLegendIndex)
+    std::vector<std::string>::iterator lNameIter = mRectNames.begin(), lNameEndIter = mRectNames.end();
+    for(size_t lLegendIndex = 0; lNameIter != lNameEndIter; ++lNameIter, ++lLegendIndex)
     {
         if(lLegendIndex < MAX_LEGEND_ROWS * MAX_LEGEND_COLS)
         {
-            size_t lLegendCountPerRow = std::min((size_t)MAX_LEGEND_COLS, lRectColors.size());
+            size_t lLegendCountPerRow = std::min((size_t)MAX_LEGEND_COLS, mRectNames.size());
             double lLegendAdjustmentPercentage = 0.75;
             double lLegendSpace = (100.0 - 2.0 * LEGEND_MARGIN_PERCENTAGE - (lLegendCountPerRow - 1) * INTER_LEGEND_HORIZONTAL_SPACING_PERCENTAGE);
             double lSpacePerLegend = lLegendSpace / lLegendCountPerRow;
@@ -510,7 +511,7 @@ const std::string& RectGraph::GetSvg()
             double lHorizLegendAdjustment = mWidth/100.0 * lLegendAdjustmentPercentage;
             double lVerticalLegendAdjustment = mHeight/100.0 * lLegendAdjustmentPercentage;
 
-            lStream << "<rect x='" << lX1 << "' y='" << lY - lVerticalLegendAdjustment/2.0 << "' width='" << lWidth << "' height='" << lVerticalLegendAdjustment << "' fill='" << (*lColorIter).htmlRep << "' />" << std::endl;
+            lStream << "<rect x='" << lX1 << "' y='" << lY - lVerticalLegendAdjustment/2.0 << "' width='" << lWidth << "' height='" << lVerticalLegendAdjustment << "' fill='" << GetColor(*lNameIter) << "' />" << std::endl;
             lStream << "<text font-size='60%' x='" << lX1 + lWidth + lHorizLegendAdjustment << "' y='" << lY + lVerticalLegendAdjustment << "'>" << mRectNames[lLegendIndex] << "</text>" << std::endl;
         }
     }

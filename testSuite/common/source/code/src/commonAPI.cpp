@@ -32,6 +32,7 @@ struct Result
 
 std::vector<Result> gResultVector;
 bool gSerialResultsCompared;
+preSetupPostMpiInitFunc gPreSetupPostMpiInitFunc = NULL;
 
 double ExecuteParallelTask(int argc, char** argv, int pParallelMode, void* pParallelFunc, pmSchedulingPolicy pSchedulingPolicy)
 {
@@ -140,6 +141,15 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 
 	SAFE_PM_EXEC( pmInitialize() );
     
+    if(gPreSetupPostMpiInitFunc)
+    {
+        if(gPreSetupPostMpiInitFunc(argc, argv, COMMON_ARGS) != 0)
+        {
+			std::cout << "Presetup Error" << std::endl;
+			exit(1);
+        }
+    }
+    
     if(lRunMode != 2)
         RegisterLibraryCallbacks(pCallbackKey1, pCallbacksFunc1, pCallbackKey2, pCallbacksFunc2);
 
@@ -220,8 +230,6 @@ void commonFinish()
 {
 	SAFE_PM_EXEC( pmFinalize() );
     
-    std::cout << std::endl;
-
     std::vector<Result>::iterator lIter = gResultVector.begin(), lEndIter = gResultVector.end();
     for(; lIter != lEndIter; ++lIter)
     {
@@ -240,6 +248,12 @@ void commonFinish()
         }
     }
 }
+
+void RequestPreSetupCallbackPostMpiInit(preSetupPostMpiInitFunc pFunc)
+{
+    gPreSetupPostMpiInitFunc = pFunc;
+}
+
 
 bool localDeviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo)
 {

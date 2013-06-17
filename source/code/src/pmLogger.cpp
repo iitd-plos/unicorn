@@ -42,7 +42,7 @@ pmLogger::pmLogger(logLevel pLogLevel)
 pmLogger::~pmLogger()
 {
     if(!mDeferredStream.str().empty())
-        std::cout << mDeferredStream.str().c_str() << std::endl;
+        std::cerr << mDeferredStream.str().c_str() << std::endl;
 }
 
 pmStatus pmLogger::SetHostId(uint pHostId)
@@ -57,7 +57,7 @@ void pmLogger::PrintDeferredLog()
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     if(!mDeferredStream.str().empty())
-        std::cout << mDeferredStream.str().c_str() << std::endl;
+        std::cerr << mDeferredStream.str().c_str() << std::endl;
     
     ClearDeferredLog();
 }
