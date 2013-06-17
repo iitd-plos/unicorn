@@ -1,0 +1,7 @@
+Build steps (for PMLIB testsuite)
+---------------------------------
+* Go to the directory fftw-3.3.3
+* Run the following commands
+./configure --enable-float --prefix=`pwd`/installation
+make
+make install

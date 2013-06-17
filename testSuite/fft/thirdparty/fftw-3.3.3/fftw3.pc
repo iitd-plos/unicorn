@@ -1,0 +1,10 @@
+prefix=/Users/tberi/Development/git-repositories/pmlib/testSuite/fft/thirdparty/fftw-3.3.3/installation
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: FFTW
+Description: fast Fourier transform library
+Version: 3.3.3
+Libs: -L${libdir} -lfftw3  -lm
+Cflags: -I${includedir}
