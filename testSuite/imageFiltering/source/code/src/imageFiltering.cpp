@@ -35,11 +35,11 @@ void readImageMetaData(char* pImagePath)
     
     if(fileHeader.reserved[0] != 0 || fileHeader.reserved[1] != 0)
         exit(1);
-    
+
+#if 0
     if(fileHeader.headersize != 54 || fileHeader.infoSize != 40)
         exit(1);
 
-#if 0
     if(fileHeader.imageSize + fileHeader.headersize != fileHeader.filesize)
         exit(1);
 #endif
@@ -225,10 +225,10 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
 }
 
 #define READ_NON_COMMON_ARGS \
-	char* lImagePath = DEFAULT_IMAGE_PATH; \
     int lFilterRadius = DEFAULT_FILTER_RADIUS; \
-	FETCH_STR_ARG(lImagePath, pCommonArgs, argc, argv); \
-    FETCH_INT_ARG(lFilterRadius, pCommonArgs + 1, argc, argv);
+	char* lImagePath = DEFAULT_IMAGE_PATH; \
+    FETCH_INT_ARG(lFilterRadius, pCommonArgs, argc, argv); \
+	FETCH_STR_ARG(lImagePath, pCommonArgs + 1, argc, argv);
 
 // Returns execution time on success; 0 on error
 double DoSerialProcess(int argc, char** argv, int pCommonArgs)

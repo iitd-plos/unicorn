@@ -1,0 +1,4 @@
+Varying_1 = 3 5
+Benchmark_Name = Image Convolution
+Varying1_Name = Filter Dimension
+Fixed_Args = ../../../testSuite/imageFiltering/images/hubble.bmp

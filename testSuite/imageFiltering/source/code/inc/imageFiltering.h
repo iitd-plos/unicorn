@@ -2,12 +2,12 @@
 namespace imageFiltering
 {
 
-//#define DEFAULT_IMAGE_PATH (char*)"../../images/default.bmp"
-#define DEFAULT_IMAGE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/imageFiltering/images/default.bmp"
+#define DEFAULT_IMAGE_PATH (char*)"../../images/default.bmp"
+//#define DEFAULT_IMAGE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/imageFiltering/images/default.bmp"
 #define PIXEL_COUNT 3    // assumes 24-bit RGB
 #define IMAGE_SIZE (gImageWidth * gImageHeight * PIXEL_COUNT)
     
-#define TILE_DIM 4096
+#define TILE_DIM 2048
 #define GPU_BLOCK_DIM 32
 
 #define DEFAULT_FILTER_RADIUS 1
