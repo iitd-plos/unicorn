@@ -1,0 +1,5 @@
+arying_1 = 11 12 13 14 15
+Varying_2 = 11 12 13 14
+Benchmark_Name = Inplace Non-Square Matrix Transpose
+Varying1_Name = log(rows)
+Varying2_Name = log(cols)
