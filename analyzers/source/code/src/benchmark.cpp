@@ -272,7 +272,10 @@ void Benchmark::ProcessResults()
     {
         std::set<size_t>::iterator lIter = mHostsSetVector[i].begin(), lEndIter = mHostsSetVector[i].end();
         for(; lIter != lEndIter; ++lIter)
-            mSamples[i].hostsMap[(*lIter)] = mSamples[i].hostsMap.size();
+        {
+            size_t lSize = mSamples[i].hostsMap.size();
+            mSamples[i].hostsMap[(*lIter)] = lSize;
+        }
     }
     
     SelectSample(false);
