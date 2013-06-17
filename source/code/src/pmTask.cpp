@@ -297,6 +297,9 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool p
 
 void* pmTask::CheckOutSubtaskMemory(size_t pLength, bool pForceNonLazy)
 {
+    if(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription())
+        return NULL;    // In this case, system might not have enough memory as memory for all individual subtasks need to be held till the end
+    
     bool lIsLazy = (!pForceNonLazy && GetMemSectionRW()->IsLazy());
 
     FINALIZE_RESOURCE_PTR(dCollectiveShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCollectiveShadowMemLock, Lock(), Unlock());
