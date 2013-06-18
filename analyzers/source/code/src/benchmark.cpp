@@ -650,27 +650,57 @@ void Benchmark::EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults
         pHtmlStream << "<td><table align=center>" << std::endl;
         pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey1].execTime << "</td></tr>" << std::endl;
         pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey2].execTime << "</td></tr>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey3].execTime << "</td></tr>" << std::endl;
-        if(pGenerateStaticBest)
-            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey4].execTime << "</td></tr>" << std::endl;
+        
+        if(pMultiAssign)
+        {
+            pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+            if(pGenerateStaticBest)
+                pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+        }
+        else
+        {
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey3].execTime << "</td></tr>" << std::endl;
+            if(pGenerateStaticBest)
+                pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey4].execTime << "</td></tr>" << std::endl;
+        }
 
         pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
 
         pHtmlStream << "<td><table align=center>" << std::endl;
         pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey5].execTime << "</td></tr>" << std::endl;
         pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey6].execTime << "</td></tr>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey7].execTime << "</td></tr>" << std::endl;
-        if(pGenerateStaticBest)
-            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey8].execTime << "</td></tr>" << std::endl;
+
+        if(pMultiAssign)
+        {
+            pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+            if(pGenerateStaticBest)
+                pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+        }
+        else
+        {
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey7].execTime << "</td></tr>" << std::endl;
+            if(pGenerateStaticBest)
+                pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey8].execTime << "</td></tr>" << std::endl;
+        }
 
         pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
 
         pHtmlStream << "<td><table align=center>" << std::endl;
         pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey9].execTime << "</td></tr>" << std::endl;
         pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey10].execTime << "</td></tr>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey11].execTime << "</td></tr>" << std::endl;
-        if(pGenerateStaticBest)
-            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey12].execTime << "</td></tr>" << std::endl;
+
+        if(pMultiAssign)
+        {
+            pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+            if(pGenerateStaticBest)
+                pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+        }
+        else
+        {
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey11].execTime << "</td></tr>" << std::endl;
+            if(pGenerateStaticBest)
+                pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey12].execTime << "</td></tr>" << std::endl;
+        }
 
         pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
     }
@@ -1720,6 +1750,9 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
         {
             for(size_t k = 0; k <= 1; ++k) // Multi Assign
             {
+                if((k == 1) && (((SchedulingPolicy)i == STATIC_BEST) || ((SchedulingPolicy)i == STATIC_EQUAL)))
+                    continue;
+                
                 for(size_t l = 0; l <= 1; ++l)  // Lazy Mem
                 {
                     if(l == 1)
@@ -1822,12 +1855,15 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
     lTestSuitePath.append(lSeparator);
     lTestSuitePath.append("testSuite");
 
+    std::string lBenchmarksStr("Benchmarks");
+    const std::vector<std::string>& lSelectiveBenchmarks = GetGlobalConfiguration()[lBenchmarksStr];
+
+    std::set<std::string> lChosenBenchmarks;
+    std::vector<std::string> lReorderedBenchmarks;
+    
     DIR* lDir = opendir(lTestSuitePath.c_str());
     if(lDir)
     {
-        std::string lBenchmarksStr("Benchmarks");
-        const std::vector<std::string>& lSelectiveBenchmarks = GetGlobalConfiguration()[lBenchmarksStr];
-        
         struct dirent* lEntry;
         while((lEntry = readdir(lDir)) != NULL)
         {
@@ -1836,40 +1872,61 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
                 std::string lName(lEntry->d_name);
                 
                 if(lSelectiveBenchmarks.empty() || std::find(lSelectiveBenchmarks.begin(), lSelectiveBenchmarks.end(), lName) != lSelectiveBenchmarks.end())
-                {
-                    std::string lExecPath(lTestSuitePath);
-                    lExecPath.append(lSeparator);
-                    lExecPath += lName;
-                    lExecPath.append(lSeparator);
-                    lExecPath.append(gIntermediatePath);
-                    lExecPath.append(lSeparator);
-                    lExecPath.append(lName);
-                    lExecPath.append(".exe");
-                    
-                    FILE* lExecFile = fopen(lExecPath.c_str(), "rb");
-                    if(lExecFile)
-                    {
-                        fclose(lExecFile);
-                        
-                        Benchmark b(lName, lExecPath);
-                        
-                        try
-                        {
-                            b.LoadConfiguration();
-                        }
-                        catch(...)
-                        {
-                            continue;
-                        }
-
-                        pBenchmarks.push_back(b);
-                    }
-                }
+                    lChosenBenchmarks.insert(lName);
             }
         }
 
         closedir(lDir);
     }
+
+    if(lSelectiveBenchmarks.empty())
+    {
+        lReorderedBenchmarks.insert(lReorderedBenchmarks.end(), lChosenBenchmarks.begin(), lChosenBenchmarks.end());
+    }
+    else
+    {
+        std::vector<std::string>::const_iterator lSelectionIter = lSelectiveBenchmarks.begin(), lSelectionEndIter = lSelectiveBenchmarks.end();
+        for(; lSelectionIter != lSelectionEndIter; ++lSelectionIter)
+        {
+            if(lChosenBenchmarks.find((*lSelectionIter)) != lChosenBenchmarks.end())
+                lReorderedBenchmarks.push_back((*lSelectionIter));
+        }
+    }
+    
+    std::vector<std::string>::iterator lIter = lReorderedBenchmarks.begin(), lEndIter = lReorderedBenchmarks.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        const std::string& lName = (*lIter);
+
+        std::string lExecPath(lTestSuitePath);
+        lExecPath.append(lSeparator);
+        lExecPath += lName;
+        lExecPath.append(lSeparator);
+        lExecPath.append(gIntermediatePath);
+        lExecPath.append(lSeparator);
+        lExecPath.append(lName);
+        lExecPath.append(".exe");
+        
+        FILE* lExecFile = fopen(lExecPath.c_str(), "rb");
+        if(lExecFile)
+        {
+            fclose(lExecFile);
+            
+            Benchmark b(lName, lExecPath);
+            
+            try
+            {
+                b.LoadConfiguration();
+            }
+            catch(...)
+            {
+                continue;
+            }
+            
+            pBenchmarks.push_back(b);
+        }
+    }
+
 }
 
 void Benchmark::LoadGlobalConfiguration()

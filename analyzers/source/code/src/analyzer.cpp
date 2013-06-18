@@ -41,11 +41,11 @@ void Analyzer::Analyze()
     
     std::vector<Benchmark>::iterator lIter = lBenchmarks.begin(), lEndIter = lBenchmarks.end();
     for(; lIter != lEndIter; ++lIter)
-    {
         lIter->CollectResults();
-        lIter->ProcessResults();
-    }
     
+    for(lIter = lBenchmarks.begin(); lIter != lEndIter; ++lIter)
+        lIter->ProcessResults();
+
     Benchmark::WriteTopLevelHtmlPage(lBenchmarks);
     Benchmark::CopyResourceFiles();
 }

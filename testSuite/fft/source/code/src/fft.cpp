@@ -162,6 +162,7 @@ bool Parallel_FFT_1D(pmMemHandle pOutputMemHandle, pmMemInfo pOutputMemInfo, fft
 	return true;
 }
 
+#ifdef FFT_2D
 bool Parallel_Transpose(void* pOutputMemHandle, pmMemInfo pOutputMemInfo, fftTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
     if(matrixTranspose::parallelMatrixTranspose(pTaskConf->powX, pTaskConf->powY, pTaskConf->elemsX, pTaskConf->elemsY, pOutputMemHandle, pCallbackHandle, pSchedulingPolicy, pOutputMemInfo) == -1.0)
@@ -169,7 +170,8 @@ bool Parallel_Transpose(void* pOutputMemHandle, pmMemInfo pOutputMemInfo, fftTas
 
 	return true;
 }
-
+#endif
+    
 // Returns execution time on success; 0 on error
 double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle1, pmCallbackHandle pCallbackHandle2, pmSchedulingPolicy pSchedulingPolicy)
 {
@@ -250,6 +252,7 @@ pmCallbacks DoSetDefaultCallbacks2()
 {
 	pmCallbacks lCallbacks;
 
+#ifdef FFT_2D
 	lCallbacks.dataDistribution = matrixTranspose::matrixTransposeDataDistribution;
 	lCallbacks.deviceSelection = NULL;
 	lCallbacks.subtask_cpu = matrixTranspose::matrixTranspose_cpu;
@@ -257,7 +260,7 @@ pmCallbacks DoSetDefaultCallbacks2()
 #ifdef BUILD_CUDA
 	lCallbacks.subtask_gpu_custom = matrixTranspose::matrixTranspose_cudaLaunchFunc;
 #endif
-
+#endif
 	return lCallbacks;
 }
 
