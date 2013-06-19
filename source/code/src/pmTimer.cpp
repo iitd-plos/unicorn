@@ -80,6 +80,9 @@ pmStatus pmLinuxTimer::Stop()
 
 	if(lState == pmTimer::NOT_STARTED)
 		PMTHROW(pmTimerException(pmTimerException::NOT_STARTED));
+    
+    if(lState == pmTimer::STOPPED)
+		PMTHROW(pmTimerException(pmTimerException::ALREADY_STOPPED));
 
 	if(lState == pmTimer::PAUSED)
     {

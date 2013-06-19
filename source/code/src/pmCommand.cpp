@@ -373,15 +373,16 @@ pmAccumulatorCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<
 {
     pmAccumulatorCommandPtr lSharedPtr(new pmAccumulatorCommand());
 
+    FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lSharedPtr->mAccumulatorResourceLock, Lock(), Unlock());
+
     std::vector<pmCommunicatorCommandPtr>::const_iterator lIter = pVector.begin(), lEndIter = pVector.end();
     for(; lIter !=lEndIter; ++lIter)
     {
         if(std::tr1::static_pointer_cast<pmCommand>((*lIter))->AddDependentIfPending(lSharedPtr))
             ++lSharedPtr->mCommandCount;
     }
-    
+
     lSharedPtr->MarkExecutionStart();
-    
     lSharedPtr->CheckFinish(lSharedPtr);
 
     return lSharedPtr;

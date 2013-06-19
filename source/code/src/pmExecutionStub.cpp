@@ -1193,6 +1193,7 @@ void pmExecutionStub::WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>&
 
         lSubtaskId = mCurrentSubtaskStats->subtaskId;
         lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
+        mCurrentSubtaskStats->accumulatorCommandPtr = &lAccumulatorCommand;
     }
     
     guarded_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, pmAccumulatorCommandPtr> lGuardedPtr(&mCurrentSubtaskLock, &(mCurrentSubtaskStats->accumulatorCommandPtr), &lAccumulatorCommand);

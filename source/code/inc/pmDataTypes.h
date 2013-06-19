@@ -497,10 +497,13 @@ namespace pm
         public:
             guarded_ptr(G* pGuard, T** pPtr, T* pMem = NULL) : mGuard(pGuard), mPtr(pPtr)
             {
-                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
-                
-                if(mPtr)
-                    *mPtr = pMem;
+                if((*mPtr) != pMem)
+                {
+                    FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+                    
+                    if(mPtr)
+                        *mPtr = pMem;
+                }
             }
 
             ~guarded_ptr()
