@@ -56,7 +56,7 @@ void readImageMetaData(char* pImagePath)
 	fclose(fp);
 }
 
-void readImage(char* pImagePath, void* pImageData)
+void readImage(char* pImagePath, void* pImageData, bool pInverted)
 {
 	FILE* fp = fopen(pImagePath, "rb");
 	if(fp == NULL)
@@ -73,15 +73,15 @@ void readImage(char* pImagePath, void* pImageData)
 
     for(int i = 0; i < gImageHeight; ++i)
     {
-        char* lRow = ((char*)pImageData) + ((gImageHeight - i - 1) * gImageWidth * PIXEL_COUNT);
+        char* lRow = ((char*)pImageData) + ((pInverted ? i : (gImageHeight - i - 1)) * gImageWidth * PIXEL_COUNT);
         for(int j = 0; j < gImageWidth; ++j)
         {
             if(fread((void*)(&lColor), sizeof(lColor), 1, fp) != 1)
                 exit(1);
         
-            lRow[PIXEL_COUNT * j] = lColor[2];
+            lRow[PIXEL_COUNT * j] = (pInverted ? lColor[0] : lColor[2]);
             lRow[PIXEL_COUNT * j + 1] = lColor[1];
-            lRow[PIXEL_COUNT * j + 2] = lColor[0];
+            lRow[PIXEL_COUNT * j + 2] = (pInverted ? lColor[2] : lColor[0]);
         }
 
         if(lSeekOffset)
@@ -236,7 +236,7 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 	READ_NON_COMMON_ARGS
 
     void* lImageData = malloc(IMAGE_SIZE);
-    readImage(lImagePath, lImageData);
+    readImage(lImagePath, lImageData, false);
     
 	double lStartTime = getCurrentTimeInSecs();
 
@@ -246,6 +246,29 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 
     free(lImageData);
 	return (lEndTime - lStartTime);
+}
+
+// Returns execution time on success; 0 on error
+double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
+{
+#ifdef BUILD_CUDA
+	READ_NON_COMMON_ARGS
+
+    void* lImageData = malloc(IMAGE_SIZE);
+    readImage(lImagePath, lImageData, true);
+    
+	double lStartTime = getCurrentTimeInSecs();
+
+	if(singleGpuImageFilter(lImageData, gImageWidth, gImageHeight, gFilter, lFilterRadius, gImageBytesPerLine, gParallelOutput) != 0)
+        return 0;
+
+	double lEndTime = getCurrentTimeInSecs();
+
+    free(lImageData);
+	return (lEndTime - lStartTime);
+#else
+    return 0;
+#endif
 }
 
 // Returns execution time on success; 0 on error
@@ -345,8 +368,8 @@ int DoInit(int argc, char** argv, int pCommonArgs)
     int lFilterDim = 2 * lFilterRadius + 1;
     for(int i = 0; i < lFilterDim; ++i)
         for(int j = 0; j < lFilterDim; ++j)
-            gFilter[i][j] = (char)(((rand() % 2) ? 1 : -1) * rand());
-
+            gFilter[i][j] = (((rand() % 2) ? 1 : -1) * rand());
+    
 	return 0;
 }
 
@@ -386,7 +409,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 int main(int argc, char** argv)
 {
 	// All the five functions pointers passed here are executed only on the host submitting the task
-	commonStart(argc, argv, DoInit, DoSerialProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "IMAGEFILTER");
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "IMAGEFILTER");
 
 	commonFinish();
 

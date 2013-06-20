@@ -9,7 +9,7 @@
 #include "commonAPI.h"
 
 /** Common Arguments:
- *	1. Run Mode - [0: Don't compare to serial execution; 1: Compare to serial execution (default); 2: Only run serial]
+ *	1. Run Mode - [0: Don't compare to sequential execution; 1: Compare to sequential execution (default); 2: Only run sequential; 3: Only run single GPU; 4: Compare Single GPU to sequential]
  *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default); 7: (4, 5, 6)]
  *	3. Scheduling Policy - [0: Push (default); 1: Pull; 2: Equal_Static; 3: Proportional_Static, 4: All]
  */
@@ -114,11 +114,12 @@ void ReleaseLibraryCallbacks()
     }
 }
 
-void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, void* pParallelFunc,
-                    callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey1,
+void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc,
+                    void* pParallelFunc, callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey1,
                     callbacksFunc pCallbacksFunc2, std::string pCallbackKey2)
 {
 	double lSerialExecTime = (double)0;
+	double lSingleGpuExecTime = (double)0;
 
 	int lRunMode = DEFAULT_RUN_MODE;
 	int lParallelMode = DEFAULT_PARALLEL_MODE;
@@ -128,8 +129,13 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 	FETCH_INT_ARG(lParallelMode, 1, argc, argv);
 	FETCH_INT_ARG(lSchedulingPolicy, 2, argc, argv);
 
+#ifdef BUILD_CUDA
+	if(lRunMode < 0 || lRunMode > 4)
+		lRunMode = DEFAULT_RUN_MODE;
+#else
 	if(lRunMode < 0 || lRunMode > 2)
 		lRunMode = DEFAULT_RUN_MODE;
+#endif
 
 	if(lParallelMode < 0 || lParallelMode > 7)
 		lParallelMode = DEFAULT_PARALLEL_MODE;
@@ -150,7 +156,7 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
         }
     }
     
-    if(lRunMode != 2)
+    if(lRunMode == 0 || lRunMode == 1)
         RegisterLibraryCallbacks(pCallbackKey1, pCallbacksFunc1, pCallbackKey2, pCallbacksFunc2);
 
 	if(pmGetHostId() == SUBMITTING_HOST_ID)
@@ -161,13 +167,30 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 			exit(1);
 		}
 
-		if(lRunMode != 0)
+		if(lRunMode == 1 || lRunMode == 2 || lRunMode == 4)
 		{
 			lSerialExecTime = pSerialFunc(argc, argv, COMMON_ARGS);
 			std::cout << "Serial Task Execution Time = " << lSerialExecTime << std::endl;
 		}
 
-		if(lRunMode != 2)
+        if(lRunMode == 3 || lRunMode == 4)
+        {
+            lSingleGpuExecTime = pSingleGpuFunc(argc, argv, COMMON_ARGS);
+            if(lSingleGpuExecTime)
+                std::cout << "Single GPU Task Execution Time = " << lSingleGpuExecTime << std::endl;
+            else
+                std::cout << "Single GPU Task Failed" << std::endl;
+        }
+        
+        if(lRunMode == 4 && lSingleGpuExecTime > 0.0)
+        {
+            if(pCompareFunc(argc, argv, COMMON_ARGS) == 0)
+                std::cout << "Single GPU Task's Sequential Comparison Test Passed" << std::endl;
+            else
+                std::cout << "Single GPU Task's Sequential Comparison Test Failed" << std::endl;
+        }
+
+		if(lRunMode == 0 || lRunMode == 1)
 		{
             for(int policy = 0; policy <= 2; ++policy)
             {
@@ -213,17 +236,17 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 	}
 }
 
-void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc2 pParallelFunc,
-                    callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey1,
-                    callbacksFunc pCallbacksFunc2, std::string pCallbackKey2)
+void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc,
+                    parallelProcessFunc2 pParallelFunc, callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc,
+                    std::string pCallbackKey1, callbacksFunc pCallbacksFunc2, std::string pCallbackKey2)
 {
-    commonStartInternal(argc, argv, pInitFunc, pSerialFunc, &pParallelFunc, pCallbacksFunc1, pCompareFunc, pDestroyFunc, pCallbackKey1, pCallbacksFunc2, pCallbackKey2);
+    commonStartInternal(argc, argv, pInitFunc, pSerialFunc, pSingleGpuFunc, &pParallelFunc, pCallbacksFunc1, pCompareFunc, pDestroyFunc, pCallbackKey1, pCallbacksFunc2, pCallbackKey2);
 }
 
-void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc pParallelFunc,
+void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc, parallelProcessFunc pParallelFunc,
                  callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey)
 {
-    commonStartInternal(argc, argv, pInitFunc, pSerialFunc, &pParallelFunc, pCallbacksFunc, pCompareFunc, pDestroyFunc, pCallbackKey, NULL, std::string());
+    commonStartInternal(argc, argv, pInitFunc, pSerialFunc, pSingleGpuFunc, &pParallelFunc, pCallbacksFunc, pCompareFunc, pDestroyFunc, pCallbackKey, NULL, std::string());
 }
 
 void commonFinish()

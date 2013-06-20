@@ -34,6 +34,7 @@ double getCurrentTimeInSecs();
 #define FETCH_STR_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = argArray[argIndex+1]; }
 
 typedef double (*serialProcessFunc)(int argc, char** argv, int pCommonArgs);
+typedef double (*singleGpuProcessFunc)(int argc, char** argv, int pCommonArgs);
 typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy);
 typedef double (*parallelProcessFunc2)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle1, pmCallbackHandle pCallbackHandle2, pmSchedulingPolicy pSchedulingPolicy);
 typedef pmCallbacks (*callbacksFunc)();
@@ -42,10 +43,10 @@ typedef int (*destroyFunc)();
 typedef int (*compareFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*preSetupPostMpiInitFunc)(int argc, char** argv, int pCommonArgs);
 
-void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc pParallelFunc, 
+void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc, parallelProcessFunc pParallelFunc,
 	callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey);
 
-void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, parallelProcessFunc2 pParallelFunc,
+void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc, parallelProcessFunc2 pParallelFunc,
                     callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey1,
                     callbacksFunc pCallbacksFunc2, std::string pCallbackKey2);
 

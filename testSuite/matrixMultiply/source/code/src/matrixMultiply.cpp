@@ -92,6 +92,18 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 
 	return (lEndTime - lStartTime);
 }
+    
+// Returns execution time on success; 0 on error
+double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
+{
+#ifdef BUILD_CUDA
+	READ_NON_COMMON_ARGS
+
+	return 0;
+#else
+    return 0;
+#endif
+}
 
 // Returns execution time on success; 0 on error
 double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
@@ -213,7 +225,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 int main(int argc, char** argv)
 {
 	// All the five functions pointers passed here are executed only on the host submitting the task
-	commonStart(argc, argv, DoInit, DoSerialProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "MATRIXMUL");
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "MATRIXMUL");
 
 	commonFinish();
 
