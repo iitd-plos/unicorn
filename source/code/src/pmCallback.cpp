@@ -77,7 +77,7 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
     else
     {
         lJmpBufAutoPtr.SetHasJumped();
-        PMTHROW_NODUMP(pmPrematureExitException());
+        PMTHROW_NODUMP(pmPrematureExitException(true));
     }
     
     return lStatus;
@@ -161,7 +161,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
             else
             {
                 lJmpBufAutoPtr.SetHasJumped();
-                PMTHROW_NODUMP(pmPrematureExitException());
+                PMTHROW_NODUMP(pmPrematureExitException(true));
             }
 
 			break;

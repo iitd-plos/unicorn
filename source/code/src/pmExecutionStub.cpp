@@ -1079,14 +1079,16 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
 
     guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskTerminus, currentSubtaskStats> lScopedPtr(&mCurrentSubtaskLock, &pTerminus, &mCurrentSubtaskStats, new currentSubtaskStats(pTask, pSubtaskId, !pIsMultiAssign, pParentRangeStartSubtask, NULL, pmBase::GetCurrentTimeInSecs()));
 
+    UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
+
     try
     {
-        UnblockSecondaryCommands(); // Allows external operations (steal & range negotiation) on priority queue
         lStatus = Execute(pTask, pSubtaskId, pIsMultiAssign);
     }
     catch(pmPrematureExitException& e)
     {
-        lScopedPtr.SetLockAcquired();
+        if(e.IsSubtaskLockAcquired())
+            lScopedPtr.SetLockAcquired();
 
         pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
         lSubscriptionManager.DestroySubtaskShadowMem(this, pSubtaskId);
@@ -1201,7 +1203,7 @@ void pmExecutionStub::WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>&
     pmStatus lStatus = lAccumulatorCommand->WaitForFinish();
     
     if(RequiresPrematureExit(lSubtaskId))
-        PMTHROW_NODUMP(pmPrematureExitException());
+        PMTHROW_NODUMP(pmPrematureExitException(false));
 
     if(lStatus != pmSuccess)
         PMTHROW(pmMemoryFetchException());

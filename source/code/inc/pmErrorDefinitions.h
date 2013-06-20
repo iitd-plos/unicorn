@@ -351,8 +351,17 @@ namespace pm
     class pmPrematureExitException : public pmException
     {
     public:
+        pmPrematureExitException(bool pSubtaskLockAcquired)
+        : mSubtaskLockAcquired(pSubtaskLockAcquired)
+        {}
+        
+        bool IsSubtaskLockAcquired()
+        {
+            return mSubtaskLockAcquired;
+        }
         
     private:
+        bool mSubtaskLockAcquired;
     };
 
 } // end namespace pm

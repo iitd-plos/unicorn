@@ -389,7 +389,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecut
         else
         {
             lJmpBufAutoPtr.SetHasJumped();
-            PMTHROW_NODUMP(pmPrematureExitException());
+            PMTHROW_NODUMP(pmPrematureExitException(true));
         }
     }
 
