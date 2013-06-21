@@ -618,8 +618,12 @@ void Benchmark::GenerateTable(std::ofstream& pHtmlStream)
 
         pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
 
-        EmbedResultsInTable(pHtmlStream, lLevel1Iter, false, lGenerateStaticBest);
-        EmbedResultsInTable(pHtmlStream, lLevel1Iter, true, lGenerateStaticBest);
+        std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
+        for(; lHostsIter != lHostsEndIter; ++lHostsIter)
+        {
+            EmbedResultsInTable(pHtmlStream, lLevel1Iter, lHostsIter->first, false, lGenerateStaticBest);
+            EmbedResultsInTable(pHtmlStream, lLevel1Iter, lHostsIter->first, true, lGenerateStaticBest);
+        }
 
         pHtmlStream << "</tr>" << std::endl;
     }
@@ -627,83 +631,79 @@ void Benchmark::GenerateTable(std::ofstream& pHtmlStream)
     pHtmlStream << "</table>" << std::endl;
 }
 
-void Benchmark::EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults::mapType::iterator pLevel1Iter, bool pMultiAssign, bool pGenerateStaticBest)
+void Benchmark::EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults::mapType::iterator pLevel1Iter, size_t pHosts, bool pMultiAssign, bool pGenerateStaticBest)
 {
-    std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
-    for(; lHostsIter != lHostsEndIter; ++lHostsIter)
+    Level2Key lKey1(pHosts, PUSH, CPU, pMultiAssign, false);
+    Level2Key lKey2(pHosts, PULL, CPU, pMultiAssign, false);
+    Level2Key lKey3(pHosts, STATIC_EQUAL, CPU, pMultiAssign, false);
+    Level2Key lKey4(pHosts, STATIC_BEST, CPU, pMultiAssign, false);
+    
+    Level2Key lKey5(pHosts, PUSH, GPU, pMultiAssign, false);
+    Level2Key lKey6(pHosts, PULL, GPU, pMultiAssign, false);
+    Level2Key lKey7(pHosts, STATIC_EQUAL, GPU, pMultiAssign, false);
+    Level2Key lKey8(pHosts, STATIC_BEST, GPU, pMultiAssign, false);
+
+    Level2Key lKey9(pHosts, PUSH, CPU_PLUS_GPU, pMultiAssign, false);
+    Level2Key lKey10(pHosts, PULL, CPU_PLUS_GPU, pMultiAssign, false);
+    Level2Key lKey11(pHosts, STATIC_EQUAL, CPU_PLUS_GPU, pMultiAssign, false);
+    Level2Key lKey12(pHosts, STATIC_BEST, CPU_PLUS_GPU, pMultiAssign, false);
+
+    pHtmlStream << "<td><table align=center>" << std::endl;
+    pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey1].execTime << "</td></tr>" << std::endl;
+    pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey2].execTime << "</td></tr>" << std::endl;
+    
+    if(pMultiAssign)
     {
-        Level2Key lKey1(lHostsIter->first, PUSH, CPU, pMultiAssign, false);
-        Level2Key lKey2(lHostsIter->first, PULL, CPU, pMultiAssign, false);
-        Level2Key lKey3(lHostsIter->first, STATIC_EQUAL, CPU, pMultiAssign, false);
-        Level2Key lKey4(lHostsIter->first, STATIC_BEST, CPU, pMultiAssign, false);
-        
-        Level2Key lKey5(lHostsIter->first, PUSH, GPU, pMultiAssign, false);
-        Level2Key lKey6(lHostsIter->first, PULL, GPU, pMultiAssign, false);
-        Level2Key lKey7(lHostsIter->first, STATIC_EQUAL, GPU, pMultiAssign, false);
-        Level2Key lKey8(lHostsIter->first, STATIC_BEST, GPU, pMultiAssign, false);
-
-        Level2Key lKey9(lHostsIter->first, PUSH, CPU_PLUS_GPU, pMultiAssign, false);
-        Level2Key lKey10(lHostsIter->first, PULL, CPU_PLUS_GPU, pMultiAssign, false);
-        Level2Key lKey11(lHostsIter->first, STATIC_EQUAL, CPU_PLUS_GPU, pMultiAssign, false);
-        Level2Key lKey12(lHostsIter->first, STATIC_BEST, CPU_PLUS_GPU, pMultiAssign, false);
-
-        pHtmlStream << "<td><table align=center>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey1].execTime << "</td></tr>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey2].execTime << "</td></tr>" << std::endl;
-        
-        if(pMultiAssign)
-        {
+        pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
             pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
-            if(pGenerateStaticBest)
-                pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
-        }
-        else
-        {
-            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey3].execTime << "</td></tr>" << std::endl;
-            if(pGenerateStaticBest)
-                pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey4].execTime << "</td></tr>" << std::endl;
-        }
-
-        pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
-
-        pHtmlStream << "<td><table align=center>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey5].execTime << "</td></tr>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey6].execTime << "</td></tr>" << std::endl;
-
-        if(pMultiAssign)
-        {
-            pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
-            if(pGenerateStaticBest)
-                pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
-        }
-        else
-        {
-            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey7].execTime << "</td></tr>" << std::endl;
-            if(pGenerateStaticBest)
-                pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey8].execTime << "</td></tr>" << std::endl;
-        }
-
-        pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
-
-        pHtmlStream << "<td><table align=center>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey9].execTime << "</td></tr>" << std::endl;
-        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey10].execTime << "</td></tr>" << std::endl;
-
-        if(pMultiAssign)
-        {
-            pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
-            if(pGenerateStaticBest)
-                pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
-        }
-        else
-        {
-            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey11].execTime << "</td></tr>" << std::endl;
-            if(pGenerateStaticBest)
-                pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey12].execTime << "</td></tr>" << std::endl;
-        }
-
-        pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
     }
+    else
+    {
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey3].execTime << "</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey4].execTime << "</td></tr>" << std::endl;
+    }
+
+    pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
+
+    pHtmlStream << "<td><table align=center>" << std::endl;
+    pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey5].execTime << "</td></tr>" << std::endl;
+    pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey6].execTime << "</td></tr>" << std::endl;
+
+    if(pMultiAssign)
+    {
+        pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
+            pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+    }
+    else
+    {
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey7].execTime << "</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey8].execTime << "</td></tr>" << std::endl;
+    }
+
+    pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
+
+    pHtmlStream << "<td><table align=center>" << std::endl;
+    pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey9].execTime << "</td></tr>" << std::endl;
+    pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey10].execTime << "</td></tr>" << std::endl;
+
+    if(pMultiAssign)
+    {
+        pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
+            pHtmlStream << "<tr><td>N.A.</td></tr>" << std::endl;
+    }
+    else
+    {
+        pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey11].execTime << "</td></tr>" << std::endl;
+        if(pGenerateStaticBest)
+            pHtmlStream << "<tr><td>" << pLevel1Iter->second.second[lKey12].execTime << "</td></tr>" << std::endl;
+    }
+
+    pHtmlStream << "</table>" << std::endl << "</td>" << std::endl;
 }
 
 void Benchmark::GeneratePlots(std::ofstream& pHtmlStream)
@@ -1262,9 +1262,10 @@ void Benchmark::GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t
         StandardChart lCpusPlusGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
 
         const char* lCurveNames[] = {"Push", "Pull", "Static Equal", "Static Best"};
-        lCpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, lCurveNames);
-        lGpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, lCurveNames);
-        lCpusPlusGpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, lCurveNames);
+        const char* lCurveNamesMA[] = {"Push_MA", "Pull_MA", "Static Equal", "Static Best"};
+        lCpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, pMA ? lCurveNamesMA : lCurveNames);
+        lGpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, pMA ? lCurveNamesMA : lCurveNames);
+        lCpusPlusGpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, pMA ? lCurveNamesMA : lCurveNames);
 
         std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
         for(size_t lHostIndex = 0; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
@@ -1284,7 +1285,7 @@ void Benchmark::GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t
             if(!lGenerateStaticBest && lInnerIter->first.policy == STATIC_BEST)
                 continue;
             
-            if(lInnerIter->first.multiAssign != pMA)
+            if((lInnerIter->first.multiAssign != pMA) && (lInnerIter->first.policy == PUSH || lInnerIter->first.policy == PULL))
                 continue;
 
             if(!lInnerIter->first.lazyMem)
