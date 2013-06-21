@@ -400,8 +400,11 @@ void pmAccumulatorCommand::ForceComplete(pmAccumulatorCommandPtr pSharedPtr)
 {
 	FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAccumulatorResourceLock, Lock(), Unlock());
 
-    MarkExecutionEnd(pmSuccess, pSharedPtr);
-    mForceCompleted = true;
+    if(mCommandCount)
+    {
+        MarkExecutionEnd(pmSuccess, pSharedPtr);
+        mForceCompleted = true;
+    }
 }
 
 /* This method must be called with mAccumulatorResourceLock acquired (except if called from constructor) */
