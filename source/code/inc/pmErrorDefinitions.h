@@ -24,6 +24,7 @@
 #ifdef DEBUG
 #include <iostream>
 #include <stdio.h>	// For sprintf
+#include <execinfo.h>
 #endif
 
 namespace pm
@@ -31,12 +32,19 @@ namespace pm
 
 #ifdef DEBUG
 #define PMTHROW(x) { \
-			char lInteger[64]; \
-			sprintf(lInteger, " %d\n", __LINE__); \
-			std::string lStr("Generating Exception "); \
-			lStr += __FILE__; \
-			lStr += lInteger; \
-			std::cout << lStr.c_str() << std::flush; \
+			char dInteger[64]; \
+			sprintf(dInteger, " %d\n", __LINE__); \
+			std::string dStr("Generating Exception "); \
+			dStr += __FILE__; \
+			dStr += dInteger; \
+			std::cout << dStr.c_str() << std::flush; \
+            \
+            void* dCallstack[128]; \
+            int dBacktraceFrames = backtrace(dCallstack, 128); \
+            char** dBacktraceStrs = backtrace_symbols(dCallstack, dBacktraceFrames); \
+            for(int backtraceIndex = 0; backtraceIndex < dBacktraceFrames; ++backtraceIndex) \
+                std::cout << dBacktraceStrs[backtraceIndex] << std::endl; \
+            free(dBacktraceStrs); \
             throw x; \
 		}
 #define PMTHROW_NODUMP(x) throw x;
