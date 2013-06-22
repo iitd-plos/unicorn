@@ -29,6 +29,7 @@ else
 endif
 
 INCLUDES += -I../../source/code/inc $(BOOST_INCLUDE)
+LIBRARIES += -lpthread
 
 ifeq ($(PLATFORM), LINUX)
 	STRIP=strip -s

@@ -25,6 +25,7 @@
 #include <set>
 #include <vector>
 #include <string>
+#include <limits>
 
 #include "graph.h"
 
@@ -176,24 +177,47 @@ struct Level2Key
     }
 };
 
-struct Level2Value
+struct Level2InnerTaskValue
 {
-    double execTime;
-
     size_t subtaskCount;
-    bool serialComparisonResult;
-    
     double totalExecutionRate;
    
     std::map<std::string, std::pair<double, double> > workTimeStats;
     std::map<size_t, DeviceStats> deviceStats;
     std::map<size_t, MachineStats> machineStats;
     
+    Level2InnerTaskValue()
+    : subtaskCount(0)
+    , totalExecutionRate(0)
+    {}
+};
+
+struct Level2InnerTaskKey
+{
+    size_t originatingHost;
+    size_t taskSequenceId;
+    
+    Level2InnerTaskKey()
+    : originatingHost(std::numeric_limits<size_t>::infinity())
+    , taskSequenceId(std::numeric_limits<size_t>::infinity())
+    {}
+
+    friend bool operator< (const Level2InnerTaskKey& pFirst, const Level2InnerTaskKey& pSecond)
+    {
+        if(pFirst.originatingHost == pSecond.originatingHost)
+            return (pFirst.taskSequenceId < pSecond.taskSequenceId);
+        
+        return(pFirst.originatingHost < pSecond.originatingHost);
+    }
+};
+
+struct Level2Value
+{
+    double execTime;
+    std::map<Level2InnerTaskKey, Level2InnerTaskValue> innerTaskMap;
+
     Level2Value()
     : execTime(0)
-    , subtaskCount(0)
-    , serialComparisonResult(false)
-    , totalExecutionRate(0)
     {}
 };
 
@@ -250,7 +274,7 @@ private:
     
     void GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, SchedulingPolicy pPolicy, size_t pVarying2Val = 0);
     void GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pVarying1Val, size_t pVarying2Val);
-    void GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy);
+    void GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy, const Level2InnerTaskKey& pInnerTask);
     void GenerateMultiAssignComparisonGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, size_t pVarying1Val, size_t pVarying2Val);
     
     void GenerateSelectionGroup(size_t pPanelIndex, const panelConfigurationType& pPanelConf, std::ofstream& pHtmlStream);
@@ -259,8 +283,10 @@ private:
     void EmbedPlot(std::ofstream& pHtmlStream, Graph& pGraph, const std::string& pGraphTitle);
     
     void SelectSample(bool pMedianSample);
+    void BuildInnerTaskVector();
     
     void ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName, const std::string& pOutputFile);
+    int RunCommand(const std::string& pCmd, const std::string& pDisplayName);
     const std::string& GetTempOutputFileName();
     
     static void CopyFile(const std::string& pSrcFile, const std::string& pDestFile);
@@ -275,6 +301,7 @@ private:
     std::vector<std::set<size_t> > mHostsSetVector;
     
     BenchmarkResults mResults;
+    std::vector<Level2InnerTaskKey> mInnerTasks;
 };
 
 #endif

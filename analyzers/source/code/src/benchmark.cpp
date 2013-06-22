@@ -23,9 +23,14 @@
 #include <dirent.h>
 #include <unistd.h>
 #include <string.h>
+#include <pthread.h>
+#include <signal.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
+#include <sys/time.h>
+#include <sys/errno.h>
 #include <sys/wait.h>
 
 #include <iostream>
@@ -49,10 +54,13 @@
     const char* gIntermediatePath = "build/linux/release";
 #endif
 
+#define HANDLE_BENCHMARK_HANGS
+
 #define SEQUENTIAL_FILE_NAME "sequential"
 #define SINGLE_GPU_FILE_NAME "singleGpu"
 
 #define SAMPLE_COUNT 3
+#define TIMEOUT_IN_SECS 600
 
 Benchmark::keyValuePairs mGlobalConfiguration;
 
@@ -279,6 +287,7 @@ void Benchmark::ProcessResults()
     }
     
     SelectSample(false);
+    BuildInnerTaskVector();
 
     GenerateAnalysis();
 }
@@ -317,6 +326,15 @@ void Benchmark::SelectSample(bool pMedianSample)
                 const Level2Key& lLevel2Key = lInnerIter->first;
 
                 std::cout << lLevel2Key.hosts << " " << lLevel2Key.policy << " " << lLevel2Key.cluster << " " << lLevel2Key.multiAssign << " " << lLevel2Key.lazyMem << std::endl;
+                
+                const std::map<Level2InnerTaskKey, Level2InnerTaskValue>& lLevel2Value = lInnerIter->second.innerTaskMap;
+                std::map<Level2InnerTaskKey, Level2InnerTaskValue>::const_iterator lInnerTaskIter = lLevel2Value.begin(), lInnerTaskEndIter = lLevel2Value.end();
+                for(; lInnerTaskIter != lInnerTaskEndIter; ++lInnerTaskIter)
+                {
+                    const Level2InnerTaskKey& lInnerTask = lInnerTaskIter->first;
+
+                    std::cout << lInnerTask.originatingHost << " " << lInnerTask.taskSequenceId << std::endl;
+                }
             }
         }
     }
@@ -363,6 +381,19 @@ void Benchmark::SelectSample(bool pMedianSample)
     mResults.hostsMap = mSamples[0].hostsMap;
 }
 
+void Benchmark::BuildInnerTaskVector()
+{
+    BenchmarkResults::mapType::const_iterator lLevel1Iter = mResults.results.begin();
+    std::map<Level2Key, Level2Value>::const_iterator lLevel2Iter = lLevel1Iter->second.second.begin();
+
+    std::map<Level2InnerTaskKey, Level2InnerTaskValue>::const_iterator lIter = lLevel2Iter->second.innerTaskMap.begin(), lEndIter = lLevel2Iter->second.innerTaskMap.end();
+    for(; lIter != lEndIter; ++lIter)
+        mInnerTasks.push_back(lIter->first);
+    
+    if((mInnerTasks.size() > 1) && (mConfiguration["Inner_Task_Names"].empty() || (mInnerTasks.size() != mConfiguration["Inner_Task_Names"].size())))
+        throw std::exception();
+}
+
 void Benchmark::GenerateAnalysis()
 {
     std::cout << "Analyzing results for benchmark " << mName << " ..." << std::endl;
@@ -398,6 +429,9 @@ void Benchmark::GenerateAnalysis()
     lHtmlStream << "</center></head>" << std::endl;
 
     lHtmlStream << "<body>" << std::endl;
+    lHtmlStream << "<style type='text/css'> .boxed { border:1px solid #000; background:lightgray; display:inline-block; } </style>" << std::endl;
+    lHtmlStream << "<br><center><div class='boxed'><b>&nbsp;&nbsp;One Subtask&nbsp;&nbsp;</b>" << std::endl;
+    lHtmlStream << "<br>&nbsp;&nbsp;" << mConfiguration["Subtask_Definition"][0] << "&nbsp;&nbsp;</div></center>" << std::endl;
     
     GenerateTable(lHtmlStream);
     GeneratePlots(lHtmlStream);
@@ -1012,6 +1046,9 @@ size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWi
     const char* lMaOptions[] = {"Yes", "No"};
     lPanelConf.push_back(std::make_pair("Multi&nbsp;Assign", std::vector<std::string>(lMaOptions, lMaOptions + (sizeof(lMaOptions)/sizeof(lMaOptions[0])))));
 
+    if(mInnerTasks.size() > 1)
+        lPanelConf.push_back(std::make_pair("Inner&nbsp;Task", mConfiguration["Inner_Task_Names"]));
+
     pHtmlStream << "<div id='p" << pPanelIndex << "' value='" << lPanelConf.size() << "'>" << std::endl;
     
     GenerateSelectionGroup(pPanelIndex, lPanelConf, pHtmlStream);
@@ -1031,15 +1068,20 @@ size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWi
                     {
                         std::string lMaStr((maVal == 0) ? "2" : "1");
                         
-                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 1 << "_" << lMaStr << "' style='display:none'>" << std::endl;
-                        
-                        GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PUSH);
-                        pHtmlStream << "</div>" << std::endl;
+                        std::vector<Level2InnerTaskKey>::const_iterator lInnerTaskIter = mInnerTasks.begin(), lInnerTaskEndIter = mInnerTasks.end();
+                        for(size_t lInnerTaskIndex = 1; lInnerTaskIter != lInnerTaskEndIter; ++lInnerTaskIter, ++lInnerTaskIndex)
+                        {
+                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 1 << "_" << lMaStr << "_" << lInnerTaskIndex << "' style='display:none'>" << std::endl;
+                            
+                            GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PUSH, *lInnerTaskIter);
+                            pHtmlStream << "</div>" << std::endl;
 
-                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 2 << "_" << lMaStr << "' style='display:none'>" << std::endl;
-                        
-                        GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PULL);
-                        pHtmlStream << "</div>" << std::endl;
+                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 2 << "_" << lMaStr << "_" << lInnerTaskIndex << "' style='display:none'>" << std::endl;
+                            
+                            GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PULL, *lInnerTaskIter);
+                            
+                            pHtmlStream << "</div>" << std::endl;
+                        }
                     }
                 }
             }
@@ -1053,13 +1095,21 @@ size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWi
                 {
                     std::string lMaStr((maVal == 0) ? "2" : "1");
                 
-                    pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 1 << "_" << lMaStr << "' style='display:none'>" << std::endl;
-                    GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PUSH);
-                    pHtmlStream << "</div>" << std::endl;
+                    std::vector<Level2InnerTaskKey>::const_iterator lInnerTaskIter = mInnerTasks.begin(), lInnerTaskEndIter = mInnerTasks.end();
+                    for(size_t lInnerTaskIndex = 1; lInnerTaskIter != lInnerTaskEndIter; ++lInnerTaskIter, ++lInnerTaskIndex)
+                    {
+                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 1 << "_" << lMaStr << "_" << lInnerTaskIndex << "' style='display:none'>" << std::endl;
+                        
+                        GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PUSH, *lInnerTaskIter);
+                        
+                        pHtmlStream << "</div>" << std::endl;
 
-                    pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 2 << "_" << lMaStr << "' style='display:none'>" << std::endl;
-                    GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PULL);
-                    pHtmlStream << "</div>" << std::endl;
+                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 2 << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                        
+                        GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PULL, *lInnerTaskIter);
+                        
+                        pHtmlStream << "</div>" << std::endl;
+                    }
                 }
             }
         }
@@ -1323,7 +1373,7 @@ void Benchmark::GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t
     }
 }
 
-void Benchmark::GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy)
+void Benchmark::GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy, const Level2InnerTaskKey& pInnerTask)
 {
     size_t lCount = 0;
 
@@ -1344,7 +1394,7 @@ void Benchmark::GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pP
     lGraphDisplayNameStream << ", Hosts=" << pHosts;
     lGraphDisplayNameStream << ", " << ((pPolicy == PUSH) ? "Push" : "Pull") << std::endl;
 
-    BenchmarkResults::mapType::iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
+    BenchmarkResults::mapType::const_iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
     for(; lIter != lEndIter; ++lIter)
     {
         if(lIter->first.varying1 != pVarying1Val || lIter->first.varying2 != pVarying2Val)
@@ -1371,7 +1421,10 @@ void Benchmark::GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pP
             
             StandardChart lGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Time (in s) --->")));
 
-            std::map<size_t, DeviceStats>::const_iterator lDeviceIter = lInnerIter->second.deviceStats.begin(), lDeviceEndIter = lInnerIter->second.deviceStats.end();
+            const std::map<Level2InnerTaskKey, Level2InnerTaskValue>& lInnerTaskMap = lInnerIter->second.innerTaskMap;
+            const Level2InnerTaskValue& lInnerTaskVal = lInnerTaskMap.find(pInnerTask)->second;
+            std::map<size_t, DeviceStats>::const_iterator lDeviceIter = lInnerTaskVal.deviceStats.begin(), lDeviceEndIter = lInnerTaskVal.deviceStats.end();
+            
             for(; lDeviceIter != lDeviceEndIter; ++lDeviceIter)
             {
                 std::stringstream lDeviceName;
@@ -1550,7 +1603,7 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
         mHostsSetVector[pSampleIndex].insert(lLevel2Key.hosts);
     
     size_t lCurrentDevice = 0;
-    std::pair<size_t, size_t> lCurrentTask(std::numeric_limits<size_t>::infinity(), std::numeric_limits<size_t>::infinity());  // task originating host and sequence id
+    Level2InnerTaskKey lCurrentTask;
 
     boost::regex lExp2("^Subtask distribution for task \\[([0-9]+), ([0-9]+)\\] under scheduling policy ([0-9]+) ... ");
     boost::regex lExp3("^Device ([0-9]+) Subtasks ([0-9]+)");
@@ -1569,51 +1622,54 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
             size_t lSubtaskId = atoi(std::string(lResults[3]).c_str());
             double lStartTime = atof(std::string(lResults[4]).c_str());
             double lEndTime = atof(std::string(lResults[5]).c_str());
+
+            lCurrentTask.originatingHost = atoi(std::string(lResults[1]).c_str());
+            lCurrentTask.taskSequenceId = atoi(std::string(lResults[2]).c_str());
             
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lCurrentDevice].eventTimeline[lSubtaskId] = std::make_pair(lStartTime, lEndTime);
-            if(lEndTime > mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lCurrentDevice].lastEventTimings.second)
-                mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lCurrentDevice].lastEventTimings = std::make_pair(lStartTime, lEndTime);
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lCurrentDevice].eventTimeline[lSubtaskId] = std::make_pair(lStartTime, lEndTime);
+            if(lEndTime > mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lCurrentDevice].lastEventTimings.second)
+                mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lCurrentDevice].lastEventTimings = std::make_pair(lStartTime, lEndTime);
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp2))
         {
             if(lLevel2Key.policy != (enum SchedulingPolicy)(atoi(std::string(lResults[3]).c_str())))
                 throw std::exception();
             
-            lCurrentTask.first = atoi(std::string(lResults[1]).c_str());
-            lCurrentTask.second = atoi(std::string(lResults[2]).c_str());
+            lCurrentTask.originatingHost = atoi(std::string(lResults[1]).c_str());
+            lCurrentTask.taskSequenceId = atoi(std::string(lResults[2]).c_str());
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp3))
         {
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[atoi(std::string(lResults[1]).c_str())].subtasksExecuted = atoi(std::string(lResults[2]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[atoi(std::string(lResults[1]).c_str())].subtasksExecuted = atoi(std::string(lResults[2]).c_str());
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp4))
         {
             size_t lMachine = atoi(std::string(lResults[1]).c_str());
             
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].machineStats[lMachine].subtasksExecuted = atoi(std::string(lResults[2]).c_str());
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].machineStats[lMachine].cpuSubtasks = atoi(std::string(lResults[3]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].machineStats[lMachine].subtasksExecuted = atoi(std::string(lResults[2]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].machineStats[lMachine].cpuSubtasks = atoi(std::string(lResults[3]).c_str());
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp5))
         {
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].subtaskCount = atoi(std::string(lResults[1]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].subtaskCount = atoi(std::string(lResults[1]).c_str());
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp6))
         {
             std::string lCriterion(lResults[1]);
 
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].workTimeStats[lCriterion].first = atof(std::string(lResults[2]).c_str());
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].workTimeStats[lCriterion].second = atof(std::string(lResults[3]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].workTimeStats[lCriterion].first = atof(std::string(lResults[2]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].workTimeStats[lCriterion].second = atof(std::string(lResults[3]).c_str());
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp7))
         {
             size_t lDevice = atoi(std::string(lResults[1]).c_str());
             
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lDevice].subtaskExecutionRate = atoi(std::string(lResults[2]).c_str());
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lDevice].stealAttempts = atoi(std::string(lResults[3]).c_str());
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lDevice].stealSuccesses = atoi(std::string(lResults[4]).c_str());
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].deviceStats[lDevice].stealFailures = atoi(std::string(lResults[5]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lDevice].subtaskExecutionRate = atoi(std::string(lResults[2]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lDevice].stealAttempts = atoi(std::string(lResults[3]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lDevice].stealSuccesses = atoi(std::string(lResults[4]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lDevice].stealFailures = atoi(std::string(lResults[5]).c_str());
             
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].totalExecutionRate += atoi(std::string(lResults[2]).c_str());
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].totalExecutionRate += atoi(std::string(lResults[2]).c_str());
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp8))
         {
@@ -1623,7 +1679,6 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
             if(4 + (size_t)lLevel2Key.cluster != (size_t)(atoi(std::string(lResults[1]).c_str())))
                 throw std::exception();
 
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].serialComparisonResult = true;  //(bool)(!strcmp(std::string(lResults[4]).c_str(), "Passed"));
             mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].execTime = atof(std::string(lResults[2]).c_str());
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp9))
@@ -1789,11 +1844,103 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     }
 }
 
-void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName, const std::string& pOutputFile)
+int Benchmark::RunCommand(const std::string& pCmd, const std::string& pDisplayName)
 {
     std::cout << "      " << pDisplayName << "..." << std::endl;
 
-    int lRetVal = system(pCmd.c_str());
+    return system(pCmd.c_str());
+}
+
+void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName, const std::string& pOutputFile)
+{
+#ifdef HANDLE_BENCHMARK_HANGS
+    bool lHangDetected = false;
+    int lRetVal = -1;
+    int lPipeDescriptors[2];
+
+    if(pipe(lPipeDescriptors) != 0)
+    {
+        std::cout << "Pipe creation failed" << std::endl;
+        exit(1);
+    }
+    
+    pid_t lExecutorPid = fork();
+    if(lExecutorPid == -1)
+    {
+        std::cout << "Fork Failed" << std::endl;
+        exit(1);
+    }
+    
+    if(lExecutorPid == 0) // child process
+    {
+        close(lPipeDescriptors[0]);
+
+        lRetVal = RunCommand(pCmd, pDisplayName);
+
+        write(lPipeDescriptors[1], (void*)(&lRetVal), sizeof(lRetVal));
+        close(lPipeDescriptors[1]);
+
+        exit(0);
+    }
+
+    close(lPipeDescriptors[1]);
+
+    pid_t lTimerPid = fork();
+    if(lTimerPid == -1)
+    {
+        std::cout << "Secondary fork failed" << std::endl;
+        exit(1);
+    }
+
+    if(lTimerPid == 0) // child process
+    {
+        unsigned int lLeftTime = sleep(TIMEOUT_IN_SECS);
+        while(lLeftTime != 0)
+            lLeftTime = sleep(lLeftTime);
+
+        exit(0);
+    }
+
+    int lPid = wait(NULL);
+    if(lPid == lExecutorPid)
+    {
+        read(lPipeDescriptors[0], (void*)(&lRetVal), sizeof(lRetVal));
+        close(lPipeDescriptors[0]);
+        
+        if(kill(lTimerPid, SIGKILL) != 0)
+        {
+            std::cout << "Failed to kill timer process" << std::endl;
+            exit(1);
+        }
+    }
+    else if(lPid == lTimerPid)
+    {
+        close(lPipeDescriptors[0]);
+
+        lHangDetected = true;
+        
+        if(kill(lExecutorPid, SIGKILL) != 0)
+        {
+            std::cout << "Failed to kill executor process" << std::endl;
+            exit(1);
+        }
+    }
+
+    while(1)
+    {
+        if(wait(NULL) == -1 && errno == ECHILD)
+            break;
+    }
+
+    if(lHangDetected)
+    {
+        std::cerr << "[ERROR]: Command hanged - " << pCmd << std::endl;
+        ExecuteShellCommand(pCmd, pDisplayName, pOutputFile);
+    }
+    else
+#else
+    int lRetVal = RunCommand(pCmd, pDisplayName);
+#endif
     if(lRetVal != -1 && lRetVal != 127)
     {
         if(lRetVal != 0 || WIFSIGNALED(lRetVal) || !WIFEXITED(lRetVal))
@@ -1808,7 +1955,7 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
                 std::cout << "Failed to move file " << lTempFile.c_str() << " to " << pOutputFile.c_str() << std::endl;
         }
     }
-    
+
     unlink(GetTempOutputFileName().c_str());
 }
 
@@ -1967,8 +2114,9 @@ void Benchmark::LoadConfiguration()
 
     LoadKeyValuePairs(lConfPath, mConfiguration);
 
-    if(mConfiguration[std::string("Varying_1")].empty() || mConfiguration[std::string("Benchmark_Name")].empty() || mConfiguration[std::string("Varying1_Name")].empty()
-       || (!mConfiguration[std::string("Varying_2")].empty() && mConfiguration[std::string("Varying2_Name")].empty()))
+    if(mConfiguration[std::string("Benchmark_Name")].empty()  || mConfiguration[std::string("Subtask_Definition")].empty()
+    || mConfiguration[std::string("Varying_1")].empty() || mConfiguration[std::string("Varying1_Name")].empty()
+    || (!mConfiguration[std::string("Varying_2")].empty() && mConfiguration[std::string("Varying2_Name")].empty()))
         throw std::string("Mandatory configurations not defined in conf file ") + lConfPath.c_str();
 }
 
@@ -2005,7 +2153,7 @@ void Benchmark::LoadKeyValuePairs(const std::string& pFilePath, keyValuePairs& p
                 
                 if(lKey == std::string("Mpi_Options") || lKey == std::string("Benchmark_Name")
                 || lKey == std::string("Varying1_Name") || lKey == std::string("Varying2_Name")
-                || lKey == std::string("Fixed_Args"))
+                   || lKey == std::string("Fixed_Args") || lKey == std::string("Subtask_Definition"))
                 {
                     pPairs[lKey].push_back(lValueStr);
                 }
