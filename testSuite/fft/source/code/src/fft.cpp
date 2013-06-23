@@ -141,7 +141,14 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 #ifdef BUILD_CUDA
 	READ_NON_COMMON_ARGS
 
-	return 0;
+    double lStartTime = getCurrentTimeInSecs();
+    
+	if(fftSingleGpu2D(gParallelOutput, lPowX, lElemsX, lPowY, lElemsY, FORWARD_TRANSFORM_DIRECTION) != 0)
+        return 0;
+    
+	double lEndTime = getCurrentTimeInSecs();
+    
+	return (lEndTime - lStartTime);
 #else
     return 0;
 #endif

@@ -60,7 +60,7 @@
 #define SINGLE_GPU_FILE_NAME "singleGpu"
 
 #define SAMPLE_COUNT 3
-#define TIMEOUT_IN_SECS 600
+#define TIMEOUT_IN_SECS 300
 
 Benchmark::keyValuePairs mGlobalConfiguration;
 
@@ -1924,6 +1924,10 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
             std::cout << "Failed to kill executor process" << std::endl;
             exit(1);
         }
+        
+        std::stringstream lKillStream;
+        lKillStream << "ps -ef | grep '" << mExecPath << "' | awk '{print $2}' | xargs -n1 kill -9 ";
+        system(lKillStream.str().c_str());
     }
 
     while(1)
