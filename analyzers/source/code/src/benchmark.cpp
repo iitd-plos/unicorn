@@ -2185,7 +2185,8 @@ void Benchmark::LoadKeyValuePairs(const std::string& pFilePath, keyValuePairs& p
                 
                 if(lKey == std::string("Mpi_Options") || lKey == std::string("Benchmark_Name")
                 || lKey == std::string("Varying1_Name") || lKey == std::string("Varying2_Name")
-                   || lKey == std::string("Fixed_Args") || lKey == std::string("Subtask_Definition"))
+                || lKey == std::string("Fixed_Args") || lKey == std::string("Subtask_Definition")
+                || lKey == std::string("Other_Information"))
                 {
                     pPairs[lKey].push_back(lValueStr);
                 }
