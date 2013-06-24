@@ -431,7 +431,12 @@ void Benchmark::GenerateAnalysis()
     lHtmlStream << "<body>" << std::endl;
     lHtmlStream << "<style type='text/css'> .boxed { border:1px solid #000; background:lightgray; display:inline-block; } </style>" << std::endl;
     lHtmlStream << "<br><center><div class='boxed'><b>&nbsp;&nbsp;One Subtask&nbsp;&nbsp;</b>" << std::endl;
-    lHtmlStream << "<br>&nbsp;&nbsp;" << mConfiguration["Subtask_Definition"][0] << "&nbsp;&nbsp;</div></center>" << std::endl;
+    lHtmlStream << "<br>&nbsp;&nbsp;" << mConfiguration["Subtask_Definition"][0] << "&nbsp;&nbsp;" << std::endl;
+    
+    if(!mConfiguration["Other_Information"].empty())
+        lHtmlStream << "<br>&nbsp;&nbsp;" << mConfiguration["Other_Information"][0] << "&nbsp;&nbsp;" << std::endl;
+    
+    lHtmlStream << "</div></center>" << std::endl;
     
     GenerateTable(lHtmlStream);
     GeneratePlots(lHtmlStream);
@@ -1021,6 +1026,8 @@ size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWi
 {
     panelConfigurationType lPanelConf;
     
+    bool lHasInnerTasks = (mInnerTasks.size() > 1);
+    
     std::vector<std::string> lHostsVector;
     std::map<size_t, size_t>::const_iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
     for(; lHostsIter != lHostsEndIter; ++lHostsIter)
@@ -1046,7 +1053,7 @@ size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWi
     const char* lMaOptions[] = {"Yes", "No"};
     lPanelConf.push_back(std::make_pair("Multi&nbsp;Assign", std::vector<std::string>(lMaOptions, lMaOptions + (sizeof(lMaOptions)/sizeof(lMaOptions[0])))));
 
-    if(mInnerTasks.size() > 1)
+    if(lHasInnerTasks)
         lPanelConf.push_back(std::make_pair("Inner&nbsp;Task", mConfiguration["Inner_Task_Names"]));
 
     pHtmlStream << "<div id='p" << pPanelIndex << "' value='" << lPanelConf.size() << "'>" << std::endl;
@@ -1071,12 +1078,23 @@ size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWi
                         std::vector<Level2InnerTaskKey>::const_iterator lInnerTaskIter = mInnerTasks.begin(), lInnerTaskEndIter = mInnerTasks.end();
                         for(size_t lInnerTaskIndex = 1; lInnerTaskIter != lInnerTaskEndIter; ++lInnerTaskIter, ++lInnerTaskIndex)
                         {
-                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 1 << "_" << lMaStr << "_" << lInnerTaskIndex << "' style='display:none'>" << std::endl;
+                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 1 << "_" << lMaStr;
+                            
+                            if(lHasInnerTasks)
+                                pHtmlStream << "_" << lInnerTaskIndex;
+
+                            pHtmlStream << "' style='display:none'>" << std::endl;
                             
                             GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PUSH, *lInnerTaskIter);
+
                             pHtmlStream << "</div>" << std::endl;
 
-                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 2 << "_" << lMaStr << "_" << lInnerTaskIndex << "' style='display:none'>" << std::endl;
+                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 2 << "_" << lMaStr;
+                            
+                            if(lHasInnerTasks)
+                                pHtmlStream << "_" << lInnerTaskIndex;
+                            
+                            pHtmlStream << "' style='display:none'>" << std::endl;
                             
                             GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PULL, *lInnerTaskIter);
                             
@@ -1098,13 +1116,23 @@ size_t Benchmark::GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWi
                     std::vector<Level2InnerTaskKey>::const_iterator lInnerTaskIter = mInnerTasks.begin(), lInnerTaskEndIter = mInnerTasks.end();
                     for(size_t lInnerTaskIndex = 1; lInnerTaskIter != lInnerTaskEndIter; ++lInnerTaskIter, ++lInnerTaskIndex)
                     {
-                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 1 << "_" << lMaStr << "_" << lInnerTaskIndex << "' style='display:none'>" << std::endl;
+                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 1 << "_" << lMaStr;
+                     
+                        if(lHasInnerTasks)
+                            pHtmlStream << "_" << lInnerTaskIndex;
+                        
+                        pHtmlStream << "' style='display:none'>" << std::endl;
                         
                         GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PUSH, *lInnerTaskIter);
                         
                         pHtmlStream << "</div>" << std::endl;
 
-                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 2 << "_" << lMaStr << "' style='display:none'>" << std::endl;
+                        pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 2 << "_" << lMaStr;
+                        
+                        if(lHasInnerTasks)
+                            pHtmlStream << "_" << lInnerTaskIndex;
+                        
+                        pHtmlStream << "' style='display:none'>" << std::endl;
                         
                         GenerateLoadBalancingGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PULL, *lInnerTaskIter);
                         
