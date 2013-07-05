@@ -1,4 +1,23 @@
 
+/**
+ * Copyright (c) 2011 Indian Institute of Technology, New Delhi
+ * All Rights Reserved
+ *
+ * Entire information in this file and PMLIB software is property
+ * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * modification and any use in source form is strictly prohibited
+ * without formal written approval from Indian Institute of Technology, 
+ * New Delhi. Use of software in binary form is allowed provided
+ * the using application clearly highlights the credits.
+ *
+ * This work is the doctoral project of Tarun Beri under the guidance
+ * of Prof. Subodh Kumar and Prof. Sorav Bansal. More information
+ * about the authors is available at their websites -
+ * Prof. Subodh Kumar - http://www.cse.iitd.ernet.in/~subodh/
+ * Prof. Sorav Bansal - http://www.cse.iitd.ernet.in/~sbansal/
+ * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
+ */
+
 #ifdef BUILD_CUDA
 
 #include "pmPublicDefinitions.h"
@@ -129,7 +148,7 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     ((char*)pOutputMem)[lOffset + 2] = lBlueVal;
 }
     
-int PrepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImageData, int pImageBytesPerLine, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, void* pOutputMem, int pImageWidth, int pOffsetX, int pOffsetY, int pCols, int pRows)
+int prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImageData, int pImageBytesPerLine, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, void* pOutputMem, int pImageWidth, int pOffsetX, int pOffsetY, int pCols, int pRows)
 {
     int lEffectiveTextureWidth = pTextureWidth * PIXEL_COUNT;
 
@@ -254,7 +273,7 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     int lCols = lSubscriptionEndCol - lSubscriptionStartCol;
     int lRows = lSubscriptionEndRow - lSubscriptionStartRow;
 
-    if(PrepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lOffsetX, lOffsetY, lCols, lRows))
+    if(prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lOffsetX, lOffsetY, lCols, lRows))
         return pmUserError;
     
     return pmSuccess;
@@ -271,7 +290,7 @@ int singleGpuImageFilter(void* pInvertedImageData, int pImageWidth, int pImageHe
         return 1;
     }
 
-    int lRetVal = PrepareForLaunch(pImageWidth, pImageHeight, (char*)pInvertedImageData, pImageWidth * PIXEL_COUNT, pFilter, pFilterRadius, lOutputMemCudaPtr, pImageWidth, 0, 0, pImageWidth, pImageHeight);
+    int lRetVal = prepareForLaunch(pImageWidth, pImageHeight, (char*)pInvertedImageData, pImageWidth * PIXEL_COUNT, pFilter, pFilterRadius, lOutputMemCudaPtr, pImageWidth, 0, 0, pImageWidth, pImageHeight);
     
     if(cudaMemcpy(pOutputMem, lOutputMemCudaPtr, lImageSize, cudaMemcpyDeviceToHost) != cudaSuccess)
     {

@@ -29,8 +29,10 @@
 #include "pmCallbackUnit.h"
 #include "pmCallback.h"
 #include "pmHardware.h"
+#include "pmLogger.h"
 
 #include <string.h>
+#include <sstream>
 
 namespace pm
 {
@@ -489,9 +491,6 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
         PMTHROW(pmFatalErrorException());
 
 #ifdef _DEBUG
-    if(mTask->GetMemSectionRW()->IsReadWrite() && mTask->HasSameReadWriteSubscription())
-        PMTHROW(pmFatalErrorException());
-    
     // Auto lock/unlock scope
     {
         GET_SUBTASK(lSubtask, pStub, pSubtaskId);
@@ -751,6 +750,11 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
 
+#ifdef DUMP_SUBTASK_SUBSCRIPTION_LENGTH
+    size_t lReadSubscriptionsLength = 0;
+    size_t lWriteSubscriptionsLength = 0;
+#endif
+    
 	if(mTask->GetMemSectionRO())
     {
         subscriptionRecordType::iterator lIter, lEndIter;
@@ -765,6 +769,10 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
             pmSubscriptionInfo lSubscription;
             lSubscription.offset = lIter->first;
             lSubscription.length = lIter->second.first;
+            
+        #ifdef DUMP_SUBTASK_SUBSCRIPTION_LENGTH
+            lReadSubscriptionsLength += lSubscription.length;
+        #endif
             
             FetchInputMemSubscription(lSubtask, pDeviceType, lSubscription, lIter->second.second);
         }
@@ -786,10 +794,20 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
             lSubscription.offset = lIter->first;
             lSubscription.length = lIter->second.first;
             
+        #ifdef DUMP_SUBTASK_SUBSCRIPTION_LENGTH
+            lWriteSubscriptionsLength += lSubscription.length;
+        #endif
+            
             FetchOutputMemSubscription(lSubtask, pDeviceType, lSubscription, lIter->second.second);
         }
     }
 
+#ifdef DUMP_SUBTASK_SUBSCRIPTION_LENGTH
+    std::stringstream lStream;
+    lStream << "Subtask Id: " << pSubtaskId << "; Input Mem Read Subscriptions Length: " << lReadSubscriptionsLength << "; Output Mem Read Subscriptions Length: " << lWriteSubscriptionsLength ;
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+#endif
+    
 	WaitForSubscriptions(lSubtask, pStub);
     
 #ifdef SUPPORT_CUDA

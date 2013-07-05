@@ -31,12 +31,13 @@ double getCurrentTimeInSecs();
 }
 
 #define FETCH_INT_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = atoi(argArray[argIndex+1]); }
+#define FETCH_BOOL_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = (bool)atoi(argArray[argIndex+1]); }
 #define FETCH_STR_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = argArray[argIndex+1]; }
 
 typedef double (*serialProcessFunc)(int argc, char** argv, int pCommonArgs);
 typedef double (*singleGpuProcessFunc)(int argc, char** argv, int pCommonArgs);
-typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy);
-typedef double (*parallelProcessFunc2)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle1, pmCallbackHandle pCallbackHandle2, pmSchedulingPolicy pSchedulingPolicy);
+typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack);
+typedef double (*parallelProcessFunc2)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle1, pmCallbackHandle pCallbackHandle2, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack);
 typedef pmCallbacks (*callbacksFunc)();
 typedef int (*initFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*destroyFunc)();

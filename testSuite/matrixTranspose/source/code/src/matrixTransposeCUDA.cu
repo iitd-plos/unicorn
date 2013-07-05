@@ -11,7 +11,7 @@
 namespace matrixTranspose
 {
 
-__global__ void matrixTranspose_cuda(matrixTransposeTaskConf pTaskConf, pmSubtaskInfo pSubtaskInfo, void* pOutputBlock)
+__global__ void matrixTranspose_cuda(size_t pInputMemCols, size_t pSubtaskRows, void* pInputMem, void* pOutputBlock)
 {
     __shared__ MATRIX_DATA_TYPE lTile[GPU_TILE_DIM][GPU_TILE_DIM + 1];
 
@@ -20,20 +20,20 @@ __global__ void matrixTranspose_cuda(matrixTransposeTaskConf pTaskConf, pmSubtas
     
     int lIndexX = lBlockId_x * GPU_TILE_DIM + threadIdx.x;
     int lIndexY = lBlockId_y * GPU_TILE_DIM + threadIdx.y;
-    int lInputIndex = lIndexX + (lIndexY * pTaskConf.matrixDimCols);
+    int lInputIndex = lIndexX + (lIndexY * pInputMemCols);
 
     lIndexX = lBlockId_y * GPU_TILE_DIM + threadIdx.x;
     lIndexY = lBlockId_x * GPU_TILE_DIM + threadIdx.y;
-    int lOutputIndex = lIndexX + (lIndexY * pTaskConf.blockSizeRows);
+    int lOutputIndex = lIndexX + (lIndexY * pSubtaskRows);
 
     int i, lStride = (GPU_TILE_DIM/GPU_ELEMS_PER_THREAD);
     for(i = 0; i < GPU_TILE_DIM; i += lStride)
-        lTile[threadIdx.y + i][threadIdx.x] = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemRead)[lInputIndex + i * pTaskConf.matrixDimCols];
+        lTile[threadIdx.y + i][threadIdx.x] = ((MATRIX_DATA_TYPE*)pInputMem)[lInputIndex + i * pInputMemCols];
 
     __syncthreads();
 
     for(i = 0; i < GPU_TILE_DIM; i += lStride)
-        ((MATRIX_DATA_TYPE*)pOutputBlock)[lOutputIndex + i * pTaskConf.blockSizeRows] = lTile[threadIdx.x][threadIdx.y + i];
+        ((MATRIX_DATA_TYPE*)pOutputBlock)[lOutputIndex + i * pSubtaskRows] = lTile[threadIdx.x][threadIdx.y + i];
 }
 
 __global__ void matrixCopy_cuda(matrixTransposeTaskConf pTaskConf, pmSubtaskInfo pSubtaskInfo, void* pOutputBlock)
@@ -47,31 +47,126 @@ __global__ void matrixCopy_cuda(matrixTransposeTaskConf pTaskConf, pmSubtaskInfo
     for(i = 0; i < GPU_TILE_DIM; i += lStride)
         ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemWrite)[lOutputIndex + i * pTaskConf.matrixDimRows] = ((MATRIX_DATA_TYPE*)pOutputBlock)[lInputIndex + i * pTaskConf.blockSizeRows];
 }
+    
+__global__ void matrixTranspose_singleGpu(size_t pInputMemCols, size_t pSubtaskRows, void* pInputMem, void* pOutputBlock, size_t pMaxBlocksX, size_t pMaxBlocksY)
+{
+    __shared__ MATRIX_DATA_TYPE lTile[GPU_TILE_DIM][GPU_TILE_DIM + 1];
+
+    int lBlockId_x = (blockIdx.x + blockIdx.y) % gridDim.x;
+    int lBlockId_y = blockIdx.x;
+    
+    if(lBlockId_x >= pMaxBlocksX || lBlockId_y >= pMaxBlocksY)
+        return;
+    
+    int lIndexX = lBlockId_x * GPU_TILE_DIM + threadIdx.x;
+    int lIndexY = lBlockId_y * GPU_TILE_DIM + threadIdx.y;
+    int lInputIndex = lIndexX + (lIndexY * pInputMemCols);
+
+    lIndexX = lBlockId_y * GPU_TILE_DIM + threadIdx.x;
+    lIndexY = lBlockId_x * GPU_TILE_DIM + threadIdx.y;
+    int lOutputIndex = lIndexX + (lIndexY * pSubtaskRows);
+
+    int i, lStride = (GPU_TILE_DIM/GPU_ELEMS_PER_THREAD);
+    for(i = 0; i < GPU_TILE_DIM; i += lStride)
+        lTile[threadIdx.y + i][threadIdx.x] = ((MATRIX_DATA_TYPE*)pInputMem)[lInputIndex + i * pInputMemCols];
+
+    __syncthreads();
+
+    for(i = 0; i < GPU_TILE_DIM; i += lStride)
+        ((MATRIX_DATA_TYPE*)pOutputBlock)[lOutputIndex + i * pSubtaskRows] = lTile[threadIdx.x][threadIdx.y + i];
+}
 
 pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	matrixTransposeTaskConf* lTaskConf = (matrixTransposeTaskConf*)(pTaskInfo.taskConf);
 
-    void* lBlockCudaPtr;
-    size_t lBlockSize = sizeof(MATRIX_DATA_TYPE) * lTaskConf->blockSizeRows * lTaskConf->blockSizeRows;
-    if(cudaMalloc((void**)&lBlockCudaPtr, lBlockSize) != cudaSuccess)
-    {
-        std::cout << "Matrix Transpose: CUDA Memory Allocation Failed" << std::endl;
-        return pmUserError;
-    }
-
     dim3 gridConf(lTaskConf->blockSizeRows / GPU_TILE_DIM, lTaskConf->blockSizeRows / GPU_TILE_DIM, 1);
     dim3 blockConf(GPU_TILE_DIM, GPU_TILE_DIM / GPU_ELEMS_PER_THREAD, 1);
-    matrixTranspose_cuda <<<gridConf, blockConf>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);
-    matrixCopy_cuda <<<gridConf, blockConf>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);
     
-    if(cudaFree(lBlockCudaPtr) != cudaSuccess)
+    if(lTaskConf->inplace)
     {
-        std::cout << "Matrix Transpose: CUDA Memory Deallocation Failed" << std::endl;
-        return pmUserError;
+        void* lBlockCudaPtr;
+        size_t lBlockSize = sizeof(MATRIX_DATA_TYPE) * lTaskConf->blockSizeRows * lTaskConf->blockSizeRows;
+        if(cudaMalloc((void**)&lBlockCudaPtr, lBlockSize) != cudaSuccess)
+        {
+            std::cout << "Matrix Transpose: CUDA Memory Allocation Failed" << std::endl;
+            return pmUserError;
+        }
+
+        matrixTranspose_cuda <<<gridConf, blockConf>>> (lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, pSubtaskInfo.outputMemRead, lBlockCudaPtr);
+        matrixCopy_cuda <<<gridConf, blockConf>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);    // because transpose is inplace, this has to be a post step
+
+        if(cudaFree(lBlockCudaPtr) != cudaSuccess)
+        {
+            std::cout << "Matrix Transpose: CUDA Memory Deallocation Failed" << std::endl;
+            return pmUserError;
+        }
+    }
+    else
+    {
+        matrixTranspose_cuda <<<gridConf, blockConf>>> (lTaskConf->matrixDimCols, lTaskConf->matrixDimRows, pSubtaskInfo.inputMem, pSubtaskInfo.outputMemWrite);
     }
     
     return pmSuccess;
+}
+    
+int singleGpuMatrixTranspose(bool pInplace, MATRIX_DATA_TYPE* pInputMatrix, MATRIX_DATA_TYPE* pOutputMatrix, size_t pInputDimRows, size_t pInputDimCols)
+{
+    MATRIX_DATA_TYPE* lInputMatrix = pInplace ? pOutputMatrix : pInputMatrix;
+    
+    void* lInputMemCudaPtr = NULL;
+    void* lOutputMemCudaPtr = NULL;
+    
+    size_t lSize = sizeof(MATRIX_DATA_TYPE) * pInputDimRows * pInputDimCols;
+    if(cudaMalloc((void**)&lInputMemCudaPtr, lSize) != cudaSuccess)
+    {
+        std::cout << "Matrix Transpose: CUDA Input Memory Allocation Failed" << std::endl;
+        return 1;
+    }
+
+    if(cudaMemcpy(lInputMemCudaPtr, lInputMatrix, lSize, cudaMemcpyHostToDevice) != cudaSuccess)
+    {
+        std::cout << "Matrix Transpose: CUDA Input Memory Memcpy Failed" << std::endl;
+        return 1;
+    }
+
+    if(cudaMalloc((void**)&lOutputMemCudaPtr, lSize) != cudaSuccess)
+    {
+        std::cout << "Matrix Transpose: CUDA Output Memory Allocation Failed" << std::endl;
+        return 1;
+    }
+
+    size_t lGridDim = std::max(pInputDimRows / GPU_TILE_DIM, pInputDimCols / GPU_TILE_DIM);
+
+    dim3 gridConf(lGridDim, lGridDim, 1);
+    dim3 blockConf(GPU_TILE_DIM, GPU_TILE_DIM / GPU_ELEMS_PER_THREAD, 1);
+    matrixTranspose_singleGpu <<<gridConf, blockConf>>> (pInputDimCols, pInputDimRows, lInputMemCudaPtr, lOutputMemCudaPtr, pInputDimCols / GPU_TILE_DIM, pInputDimRows / GPU_TILE_DIM);
+
+    if(cudaDeviceSynchronize() != cudaSuccess)
+    {
+        std::cout << "Matrix Transpose: CUDA Device Synchronize Failed " << cudaGetLastError() << std::endl;
+        return 1;
+    }
+
+    if(cudaMemcpy(pOutputMatrix, lOutputMemCudaPtr, lSize, cudaMemcpyDeviceToHost) != cudaSuccess)
+    {
+        std::cout << "Matrix Transpose: CUDA Output Memory Memcpy Failed" << std::endl;
+        return 1;
+    }
+
+    if(cudaFree(lInputMemCudaPtr) != cudaSuccess)
+    {
+        std::cout << "Matrix Transpose: CUDA Input Memory Deallocation Failed" << std::endl;
+        return 1;
+    }
+
+    if(cudaFree(lOutputMemCudaPtr) != cudaSuccess)
+    {
+        std::cout << "Matrix Transpose: CUDA Output Memory Deallocation Failed" << std::endl;
+        return 1;
+    }
+    
+    return 0;
 }
 
 }

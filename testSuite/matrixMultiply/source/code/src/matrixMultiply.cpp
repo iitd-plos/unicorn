@@ -99,14 +99,20 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 #ifdef BUILD_CUDA
 	READ_NON_COMMON_ARGS
 
-	return 0;
+	double lStartTime = getCurrentTimeInSecs();
+
+	singleGpuMatrixMultiply(gSampleInput, gParallelOutput, lMatrixDim);
+
+	double lEndTime = getCurrentTimeInSecs();
+
+	return (lEndTime - lStartTime);
 #else
     return 0;
 #endif
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS
 
@@ -122,7 +128,6 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     pmRawMemPtr lRawInputPtr, lRawOutputPtr;
     pmGetRawMemPtr(lTaskDetails.inputMemHandle, &lRawInputPtr);
-    pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
     
 	memcpy(lRawInputPtr, gSampleInput, lInputMemSize);
 
@@ -147,9 +152,13 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     
 	double lEndTime = getCurrentTimeInSecs();
 
-	SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
+    if(pFetchBack)
+    {
+        SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
 
-	memcpy(gParallelOutput, lRawOutputPtr, lOutputMemSize);
+        pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
+        memcpy(gParallelOutput, lRawOutputPtr, lOutputMemSize);
+    }
 
 	FREE_TASK_AND_RESOURCES
 

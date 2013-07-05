@@ -186,7 +186,7 @@ bool ParallelSort(bool pMsbSort, pmMemHandle pInputMemHandle, pmMemHandle pOutpu
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS;
 
@@ -220,11 +220,13 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	double lEndTime = getCurrentTimeInSecs();
 
-	SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
+    if(pFetchBack)
+    {
+        SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
 
-	pmGetRawMemPtr(lOutputMemHandle, &lRawOutputPtr);
-
-	memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
+        pmGetRawMemPtr(lOutputMemHandle, &lRawOutputPtr);
+        memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
+    }
 
 	pmReleaseMemory(lInputMemHandle);
 	pmReleaseMemory(lOutputMemHandle);

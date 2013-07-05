@@ -34,12 +34,12 @@ std::vector<Result> gResultVector;
 bool gSerialResultsCompared;
 preSetupPostMpiInitFunc gPreSetupPostMpiInitFunc = NULL;
 
-double ExecuteParallelTask(int argc, char** argv, int pParallelMode, void* pParallelFunc, pmSchedulingPolicy pSchedulingPolicy)
+double ExecuteParallelTask(int argc, char** argv, int pParallelMode, void* pParallelFunc, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
     if(gCallbackHandleArrayCount == 1)
-        return (*((parallelProcessFunc*)pParallelFunc))(argc, argv, COMMON_ARGS, gCallbackHandleArray1[pParallelMode-1], pSchedulingPolicy);
+        return (*((parallelProcessFunc*)pParallelFunc))(argc, argv, COMMON_ARGS, gCallbackHandleArray1[pParallelMode-1], pSchedulingPolicy, pFetchBack);
     
-    return (*((parallelProcessFunc2*)pParallelFunc))(argc, argv, COMMON_ARGS, gCallbackHandleArray1[pParallelMode-1], gCallbackHandleArray2[pParallelMode-1], pSchedulingPolicy);
+    return (*((parallelProcessFunc2*)pParallelFunc))(argc, argv, COMMON_ARGS, gCallbackHandleArray1[pParallelMode-1], gCallbackHandleArray2[pParallelMode-1], pSchedulingPolicy, pFetchBack);
 }
 
 void RegisterLibraryCallback(int pParallelMode, std::string pCallbackKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
@@ -210,7 +210,7 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
                         if(lParallelMode == 0 || lParallelMode == i || (lParallelMode == 7 && (i == 4 || i == 5 || i == 6)))
                         {
                             Result lResult;
-                            lResult.execTime = ExecuteParallelTask(argc, argv, i, pParallelFunc, lPolicy);
+                            lResult.execTime = ExecuteParallelTask(argc, argv, i, pParallelFunc, lPolicy, (lRunMode == 1));
 
                             lResult.parallelMode = i;
                             lResult.schedulingPolicy = policy;

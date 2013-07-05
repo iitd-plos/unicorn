@@ -272,7 +272,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS
 
@@ -312,11 +312,14 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     
 	double lEndTime = getCurrentTimeInSecs();
 
-	SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
+    if(pFetchBack)
+    {
+        SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
 
-    pmRawMemPtr lRawOutputPtr;
-    pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
-	memcpy(gParallelOutput, lRawOutputPtr, IMAGE_SIZE);
+        pmRawMemPtr lRawOutputPtr;
+        pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
+        memcpy(gParallelOutput, lRawOutputPtr, IMAGE_SIZE);
+    }
 
 	FREE_TASK_AND_RESOURCES
 

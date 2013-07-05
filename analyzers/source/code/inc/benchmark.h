@@ -135,6 +135,11 @@ struct Level1Value
 {
     double sequentialTime;
     double singleGpuTime;
+    
+    Level1Value()
+    : sequentialTime(std::numeric_limits<double>::infinity())
+    , singleGpuTime(std::numeric_limits<double>::infinity())
+    {}
 };
 
 struct Level2Key
@@ -217,7 +222,7 @@ struct Level2Value
     std::map<Level2InnerTaskKey, Level2InnerTaskValue> innerTaskMap;
 
     Level2Value()
-    : execTime(0)
+    : execTime(std::numeric_limits<double>::infinity())
     {}
 };
 
@@ -263,10 +268,15 @@ private:
     void BeginHtmlSection(std::ofstream &pHtmlStream, const std::string& pSectionName);
 
     void GenerateAnalysis();
-    void GenerateTable(std::ofstream& pHtmlStream);
-    void GeneratePlots(std::ofstream& pHtmlStream);
+    void GenerateTable(std::ofstream& pHtmlStream, std::vector<size_t>& pRadioSetCount);
+    void GeneratePlots(std::ofstream& pHtmlStream, std::vector<size_t>& pRadioSetCount);
     Graph& GenerateStandardChart(size_t pPlotWidth, size_t pPlotHeight, StandardChart& pChart);
 
+    void GenerateTableInternal(std::ofstream& pHtmlStream, bool pSequential, bool pAbsoluteValues);
+
+    void GeneratePreControlCode(std::ofstream& pHtmlStream);
+    void GeneratePostControlCode(std::ofstream& pHtmlStream, const std::vector<size_t>& pRadioSetCount);
+    
     size_t GeneratePerformanceGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     size_t GenerateSchedulingModelsGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     size_t GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
@@ -279,7 +289,7 @@ private:
     
     void GenerateSelectionGroup(size_t pPanelIndex, const panelConfigurationType& pPanelConf, std::ofstream& pHtmlStream);
 
-    void EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults::mapType::iterator pLevel1Iter, size_t pHosts, bool pMultiAssign, bool pGenerateStaticBest);
+    void EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults::mapType::iterator pLevel1Iter, size_t pHosts, bool pMultiAssign, bool pGenerateStaticBest, bool pSequential, bool pAbsoluteValues);
     void EmbedPlot(std::ofstream& pHtmlStream, Graph& pGraph, const std::string& pGraphTitle);
     
     void SelectSample(bool pMedianSample);
