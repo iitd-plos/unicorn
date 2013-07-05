@@ -2218,18 +2218,46 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
         {
             fclose(lExecFile);
             
-            Benchmark b(lName, lExecPath);
-            
-            try
+            std::stringstream lConfigurationsKeyName;
+            lConfigurationsKeyName << lName << "_Configurations";
+
+            size_t lConfigurations = 1;
+            if(!GetGlobalConfiguration()[lConfigurationsKeyName.str()].empty())
+                lConfigurations = atoi((GetGlobalConfiguration()[lConfigurationsKeyName.str()][0]).c_str());
+
+            std::vector<std::string> lConfigurationalNames;
+            if(lConfigurations == 1)
             {
-                b.LoadConfiguration();
+                lConfigurationalNames.push_back(lName);
             }
-            catch(...)
+            else
             {
-                continue;
+                for(size_t confIndex = 0; confIndex < lConfigurations; ++confIndex)
+                {
+                    std::stringstream lConfName;
+                    lConfName << lName << "_" << (confIndex + 1);
+                    
+                    lConfigurationalNames.push_back(lConfName.str());
+                }
             }
             
-            pBenchmarks.push_back(b);
+            std::vector<std::string>::iterator lConfIter = lConfigurationalNames.begin(), lConfEndIter = lConfigurationalNames.end();
+            
+            for(; lConfIter != lConfEndIter; ++lConfIter)
+            {
+                Benchmark b(*lConfIter, lExecPath);
+                
+                try
+                {
+                    b.LoadConfiguration();
+                }
+                catch(...)
+                {
+                    continue;
+                }
+                
+                pBenchmarks.push_back(b);
+            }
         }
     }
 
