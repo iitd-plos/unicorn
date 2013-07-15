@@ -247,9 +247,13 @@ void pmMemSection::DisposeMemory()
 {
     if(mMem)
     {
-        FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
-        memSectionMapType& lMemSectionMap = GetMemSectionMap();
-        lMemSectionMap.erase(std::make_pair(mOwner, mGenerationNumberOnOwner));
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
+
+            memSectionMapType& lMemSectionMap = GetMemSectionMap();
+            lMemSectionMap.erase(std::make_pair(mOwner, mGenerationNumberOnOwner));
+        }
     
         pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->CancelMemoryTransferEvents(this);
 
