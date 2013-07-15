@@ -24,6 +24,7 @@
 #include "pmScheduler.h"
 #include "pmTask.h"
 #include "pmCallbackUnit.h"
+#include "pmHeavyOperations.h"
 
 #include <string.h>
 #include <sstream>
@@ -250,6 +251,8 @@ void pmMemSection::DisposeMemory()
         memSectionMapType& lMemSectionMap = GetMemSectionMap();
         lMemSectionMap.erase(std::make_pair(mOwner, mGenerationNumberOnOwner));
     
+        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->CancelMemoryTransferEvents(this);
+
         MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(this);
         mMem = NULL;
     }

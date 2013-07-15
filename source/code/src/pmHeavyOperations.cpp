@@ -91,8 +91,8 @@ pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
     if(pThreadCount == 0)
         PMTHROW(pmFatalErrorException());
 
-    for(size_t i=0; i<pThreadCount; ++i)
-        mThreadVector.push_back(new pmHeavyOperationsThread());
+    for(size_t i = 0; i < pThreadCount; ++i)
+        mThreadVector.push_back(new pmHeavyOperationsThread(i));
     
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::FILE_OPERATIONS_STRUCT);
 	SetupPersistentCommunicationCommands();
@@ -159,12 +159,12 @@ void pmHeavyOperationsThreadPool::UnpackDataEvent(char* pPackedData, int pPacked
     SubmitToThreadPool(lEvent, pPriority);
 }
     
-void pmHeavyOperationsThreadPool::MemTransferEvent(pmMemSection* pSrcMemSection, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority)
+void pmHeavyOperationsThreadPool::MemTransferEvent(pmCommunicatorCommand::memoryIdentifierStruct& pSrcMemIdentifier, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority)
 {
     heavyOperationsEvent lEvent;
 	lEvent.eventId = MEM_TRANSFER;
 
-	lEvent.memTransferDetails.srcMemSection = pSrcMemSection;
+	lEvent.memTransferDetails.srcMemIdentifier = pSrcMemIdentifier;
     lEvent.memTransferDetails.destMemIdentifier = pDestMemIdentifier;
 	lEvent.memTransferDetails.offset = pOffset;
 	lEvent.memTransferDetails.length = pLength;
@@ -184,6 +184,23 @@ void pmHeavyOperationsThreadPool::CommandCompletionEvent(pmCommandPtr pCommand)
 
 	SubmitToThreadPool(lEvent, pCommand->GetPriority());
 }
+    
+void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmMemSection* pMemSection)
+{
+    size_t lPoolSize = mThreadVector.size();
+
+	FINALIZE_PTR_ARRAY(dSignalWaitArray, SIGNAL_WAIT_IMPLEMENTATION_CLASS, new SIGNAL_WAIT_IMPLEMENTATION_CLASS[lPoolSize]);
+
+	heavyOperationsEvent lEvent;
+	lEvent.eventId = MEM_TRANSFER_CANCEL;
+	lEvent.memTransferCancelDetails.memSection = pMemSection;
+    lEvent.memTransferCancelDetails.signalWaitArray = dSignalWaitArray;
+    
+	SubmitToAllThreadsInPool(lEvent, MAX_CONTROL_PRIORITY);
+    
+    for(size_t i = 0; i < lPoolSize; ++i)
+        dSignalWaitArray[i].Wait();
+}
 
 void pmHeavyOperationsThreadPool::SubmitToThreadPool(heavyOperationsEvent& pEvent, ushort pPriority)
 {
@@ -196,9 +213,18 @@ void pmHeavyOperationsThreadPool::SubmitToThreadPool(heavyOperationsEvent& pEven
         mCurrentThread = 0;
 }
 
+void pmHeavyOperationsThreadPool::SubmitToAllThreadsInPool(heavyOperationsEvent& pEvent, ushort pPriority)
+{
+    std::vector<pmHeavyOperationsThread*>::iterator lIter = mThreadVector.begin(), lEndIter = mThreadVector.end();
+
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter)->SwitchThread(pEvent, pPriority);
+}
+
 
 /* class pmHeavyOperationsThread */
-pmHeavyOperationsThread::pmHeavyOperationsThread()
+pmHeavyOperationsThread::pmHeavyOperationsThread(size_t pThreadIndex)
+    : mThreadIndex(pThreadIndex)
 {
 }
     
@@ -256,10 +282,17 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 PMTHROW(pmFatalErrorException());   // Cyclic reference
             
             pmCommunicatorCommand::memoryReceivePacked* lPackedData = NULL;
+
+            if(lEventDetails.srcMemIdentifier.memOwnerHost != (uint)(*PM_LOCAL_MACHINE))
+                PMTHROW(pmFatalErrorException());
+            
+            pmMemSection* lSrcMemSection = pmMemSection::FindMemSection(PM_LOCAL_MACHINE, lEventDetails.srcMemIdentifier.generationNumber);
+            if(!lSrcMemSection)
+                return pmSuccess;
             
             // Check if the memory is residing locally or forward the request to the owner machine
             pmMemSection::pmMemOwnership lOwnerships;
-            lEventDetails.srcMemSection->GetOwners(lEventDetails.offset, lEventDetails.length, lOwnerships);
+            lSrcMemSection->GetOwners(lEventDetails.offset, lEventDetails.length, lOwnerships);
             
             pmMemSection* lDestMemSection = NULL;
 
@@ -278,7 +311,7 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                         PMTHROW(pmFatalErrorException());
                 
                 #ifdef ENABLE_MEM_PROFILING
-                    lEventDetails.srcMemSection->RecordMemTransfer(lInternalLength);
+                    lSrcMemSection->RecordMemTransfer(lInternalLength);
                 #endif
                 
                     if(lEventDetails.machine == PM_LOCAL_MACHINE)
@@ -294,7 +327,7 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                     {
                         lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset));
                     
-                        MEM_TRANSFER_DUMP(lEventDetails.srcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
+                        MEM_TRANSFER_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
 
                         pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
 
@@ -317,7 +350,7 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                     lData->destHost = *(lEventDetails.machine);
                     lData->isForwarded = 1;
                     
-                    MEM_FORWARD_DUMP(lEventDetails.srcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.memIdentifier, lRangeOwner.hostOffset)
+                    MEM_FORWARD_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.memIdentifier, lRangeOwner.hostOffset)
 
                     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, lRangeOwner.host, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
                     
@@ -334,6 +367,21 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
 
             HandleCommandCompletion(lEventDetails.command);
 
+            break;
+        }
+            
+        case MEM_TRANSFER_CANCEL:
+        {
+            memTransferCancelEvent& lEventDetails = pEvent.memTransferCancelDetails;
+            
+            /* There is no need to actually cancel any mem transfer event becuase even after cancelling the ones in queue,
+             another may still come (because of MA). These need to be handled separately anyway. This handling is done in
+             MEM_TRANSFER event of this function, where a memory request is only processed if that memory is still alive.
+             The only requirement here is that when a pmMemSection is being deleted, it should not be currently being processed.
+             This is ensured by issuing a dummy MEM_TRANSFER_CANCEL event. */
+
+            lEventDetails.signalWaitArray[mThreadIndex].Signal();
+            
             break;
         }
     }

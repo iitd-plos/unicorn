@@ -24,6 +24,7 @@
 #include "pmBase.h"
 #include "pmThread.h"
 #include "pmResourceLock.h"
+#include "pmSignalWait.h"
 
 #include <vector>
 
@@ -40,6 +41,7 @@ typedef enum eventIdentifier
 	PACK_DATA,
     UNPACK_DATA,
     MEM_TRANSFER,
+    MEM_TRANSFER_CANCEL,
     COMMAND_COMPLETION
 } eventIdentifier;
     
@@ -60,7 +62,7 @@ typedef struct unpackEvent
     
 typedef struct memTransferEvent
 {
-	pmMemSection* srcMemSection;
+	pmCommunicatorCommand::memoryIdentifierStruct srcMemIdentifier;
     pmCommunicatorCommand::memoryIdentifierStruct destMemIdentifier;
 	ulong offset;
 	ulong length;
@@ -69,6 +71,12 @@ typedef struct memTransferEvent
 	ushort priority;
     bool isForwarded;
 } memTransferEvent;
+    
+typedef struct memTransferCancelEvent
+{
+    pmMemSection* memSection;
+    SIGNAL_WAIT_IMPLEMENTATION_CLASS* signalWaitArray;
+} memTransferCancelEvent;
     
 typedef struct commandCompletion
 {
@@ -83,6 +91,7 @@ typedef struct heavyOperationsEvent : public pmBasicThreadEvent
 		packEvent packDetails;
         unpackEvent unpackDetails;
         memTransferEvent memTransferDetails;
+        memTransferCancelEvent memTransferCancelDetails;
 	};
     
     commandCompletion commandCompletionDetails;
@@ -93,7 +102,7 @@ typedef struct heavyOperationsEvent : public pmBasicThreadEvent
 class pmHeavyOperationsThread  : public THREADING_IMPLEMENTATION_CLASS<heavyOperations::heavyOperationsEvent>
 {
 public:
-    pmHeavyOperationsThread();
+    pmHeavyOperationsThread(size_t pThreadIndex);
     virtual ~pmHeavyOperationsThread();
     
 private:
@@ -101,6 +110,8 @@ private:
     pmStatus ProcessEvent(heavyOperations::heavyOperationsEvent& pEvent);
 
     void HandleCommandCompletion(pmCommandPtr pCommand);
+    
+    size_t mThreadIndex;
 };
 
 class pmHeavyOperationsThreadPool
@@ -113,14 +124,16 @@ public:
 
     void PackAndSendData(pmCommunicatorCommand::communicatorCommandTags pCommandTag, pmCommunicatorCommand::communicatorDataTypes pDataType, pmHardware* pDestination, void* pData, ushort pPriority);
     void UnpackDataEvent(char* pPackedData, int pPackedLength, ushort pPriority);
-    void MemTransferEvent(pmMemSection* pSrcMemSection, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
-
+    void MemTransferEvent(pmCommunicatorCommand::memoryIdentifierStruct& pSrcMemIdentifier, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
+    void CancelMemoryTransferEvents(pmMemSection* pMemSection);
+    
     static pmHeavyOperationsThreadPool* GetHeavyOperationsThreadPool();
 
 private:
     pmHeavyOperationsThreadPool(size_t pThreadCount);
 
     void SubmitToThreadPool(heavyOperations::heavyOperationsEvent& pEvent, ushort pPriority);
+    void SubmitToAllThreadsInPool(heavyOperations::heavyOperationsEvent& pEvent, ushort pPriority);
 	void SetupPersistentCommunicationCommands();
 	void DestroyPersistentCommunicationCommands();
     void SetupNewFileOperationsReception();

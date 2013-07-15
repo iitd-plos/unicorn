@@ -1953,7 +1953,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                     pmTask* lLockingTask = lMemSection->GetLockingTask();
                     ushort lPriority = lLockingTask ? lLockingTask->GetPriority() : MAX_CONTROL_PRIORITY;
 
-					pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lMemSection, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost),  lData->receiverOffset, lData->isForwarded, lPriority);
+					pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost),  lData->receiverOffset, lData->isForwarded, lPriority);
 
 					SetupNewMemTransferRequestReception();
 
