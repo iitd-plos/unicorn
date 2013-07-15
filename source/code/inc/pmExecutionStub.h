@@ -181,7 +181,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
-		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign);
+		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, bool pPrefetch);
 		pmStatus CommonPostExecuteOnCPU(pmTask* pTask, ulong pSubtaskId);
 
 		pmStatus FreeGpuResources();
@@ -222,9 +222,9 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         } currentSubtaskTerminus;
     
 		pmStatus ProcessEvent(execStub::stubEvent& pEvent);
-        virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign) = 0;
-        pmStatus ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination);
-        pmStatus ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus);
+        virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr) = 0;
+        pmStatus ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, ulong* pPrefetchSubtaskIdPtr);
+        pmStatus ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus, ulong* pPreftechSubtaskIdPtr);
         void PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         pmStatus CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign);
@@ -270,7 +270,7 @@ class pmStubGPU : public pmExecutionStub
 		virtual pmStatus FreeResources() = 0;
 		virtual pmStatus FreeExecutionResources() = 0;
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign) = 0;
+		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr) = 0;
 
 	private:
 };
@@ -289,7 +289,7 @@ class pmStubCPU : public pmExecutionStub
 
 		virtual pmDeviceType GetType();
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign);
+		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr);
 
 	private:
  		size_t mCoreId;
@@ -311,7 +311,7 @@ class pmStubCUDA : public pmStubGPU
 		virtual pmStatus FreeResources();
 		virtual pmStatus FreeExecutionResources();
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign);
+		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr);
 
     #ifdef SUPPORT_CUDA
         void* GetDeviceInfoCudaPtr();

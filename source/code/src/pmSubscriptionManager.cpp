@@ -105,6 +105,15 @@ pmStatus pmSubscriptionManager::InitializeSubtaskDefaults(pmExecutionStub* pStub
 
 	return pmSuccess;
 }
+    
+bool pmSubscriptionManager::IsSubtaskInitialized(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS>& lPair = mSubtaskMapVector[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+	
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
+
+	return !(lPair.first.find(pSubtaskId) == lPair.first.end());
+}
 
 pmStatus pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo)
 {
@@ -614,6 +623,23 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
     
 	return pmSuccess;
 }
+    
+void pmSubscriptionManager::MarkSubtaskReadyForExecution(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId);
+
+    if(lSubtask.mReadyForExecution)
+        PMTHROW(pmFatalErrorException());
+    
+    lSubtask.mReadyForExecution = true;
+}
+
+bool pmSubscriptionManager::IsSubtaskReadyForExecution(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId);
+
+    return lSubtask.mReadyForExecution;
+}
 
 void* pmSubscriptionManager::GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId)
 {
@@ -746,7 +772,7 @@ pmStatus pmSubscriptionManager::FreezeSubtaskSubscriptions(pmExecutionStub* pStu
     return pmSuccess;
 }
 
-pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType)
+pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, bool pPrefetch)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
 
@@ -808,13 +834,16 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
 #endif
     
-	WaitForSubscriptions(lSubtask, pStub);
-    
-#ifdef SUPPORT_CUDA
-    #ifdef SUPPORT_LAZY_MEMORY
-        ClearInputMemLazyProtectionForCuda(lSubtask, pDeviceType);
+    if(!pPrefetch)
+    {
+        WaitForSubscriptions(lSubtask, pStub);
+        
+    #ifdef SUPPORT_CUDA
+        #ifdef SUPPORT_LAZY_MEMORY
+            ClearInputMemLazyProtectionForCuda(lSubtask, pDeviceType);
+        #endif
     #endif
-#endif
+    }
     
     return pmSuccess;
 }
@@ -1055,6 +1084,7 @@ pmStatus pmSubtask::Initialize(pmTask* pTask)
     mScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
     
     mWriteOnlyLazyUnprotectedPageCount = 0;
+    mReadyForExecution = false;
     
 	return pmSuccess;
 }

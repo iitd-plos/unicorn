@@ -88,6 +88,8 @@ namespace subscription
         std::vector<char> mWriteOnlyLazyDefaultValue;
         std::map<size_t, size_t> mWriteOnlyLazyUnprotectedPageRangesMap;
         size_t mWriteOnlyLazyUnprotectedPageCount;
+    
+        bool mReadyForExecution;    // a flag indicating that pmDataDistributionCB has already been executed
         
 		pmStatus Initialize(pmTask* pTask);
 	} pmSubtask;
@@ -113,9 +115,10 @@ class pmSubscriptionManager : public pmBase
 
         pmStatus EraseSubscription(pmExecutionStub* pStub, ulong pSubtaskId);
 		pmStatus InitializeSubtaskDefaults(pmExecutionStub* pStub, ulong pSubtaskId);
+        bool IsSubtaskInitialized(pmExecutionStub* pStub, ulong pSubtaskId);
 		pmStatus RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo);
         pmStatus FreezeSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId);
-        pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType);
+        pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, bool pPrefetch);
 		pmStatus SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
         pmStatus SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, char* pVal, size_t pLength);
 
@@ -143,6 +146,9 @@ class pmSubscriptionManager : public pmBase
         void* GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
         pmStatus DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
         void CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBeginIter, subscription::subscriptionRecordType::const_iterator& pEndIter, ulong pShadowMemOffset);
+    
+        void MarkSubtaskReadyForExecution(pmExecutionStub* pStub, ulong pSubtaskId);
+        bool IsSubtaskReadyForExecution(pmExecutionStub* pStub, ulong pSubtaskId);
 
         static pmMemSection* FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr);
 

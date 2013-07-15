@@ -660,8 +660,20 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             pEvent.execDetails.rangeExecutedOnce = true;
             pEvent.execDetails.lastExecutedSubtaskId = lLastExecutedSubtaskId;
         
+        #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
+            ulong lPrefetchSubtaskId = std::numeric_limits<ulong>::infinity();
+        #endif
+
+            ulong* lPrefetchSubtaskIdPtr = NULL;
             if(lLastExecutedSubtaskId != lRange.endSubtask)
+            {
+            #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
+                lPrefetchSubtaskIdPtr = &lPrefetchSubtaskId;
+                lPrefetchSubtaskId = lLastExecutedSubtaskId + 1;
+            #endif
+                
                 SwitchThread(pEvent, lRange.task->GetPriority());
+            }
         
             bool lPrematureTermination = false;
             bool lReassigned = false;
@@ -674,7 +686,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         #endif
         
             lCommand->MarkExecutionStart();
-            pmStatus lExecStatus = pmExecutionStub::ExecuteWrapper(lCurrentRange.task, lLastExecutedSubtaskId, lIsMultiAssignRange, lRange.startSubtask, lReassigned, lForceAckFlag, lPrematureTermination);
+            pmStatus lExecStatus = pmExecutionStub::ExecuteWrapper(lCurrentRange.task, lLastExecutedSubtaskId, lIsMultiAssignRange, lRange.startSubtask, lReassigned, lForceAckFlag, lPrematureTermination, lPrefetchSubtaskIdPtr);
             lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
 
             if(lPrematureTermination)
@@ -1019,7 +1031,7 @@ void pmExecutionStub::CheckTermination(ulong pSubtaskId)
     if(!mCurrentSubtaskStats)
         return;
 
-    if(mCurrentSubtaskStats->subtaskId != pSubtaskId)
+    if(mCurrentSubtaskStats->subtaskId != pSubtaskId && (mCurrentSubtaskStats->subtaskId + 1) != pSubtaskId)
         PMTHROW(pmFatalErrorException());
     
     if(mCurrentSubtaskStats->prematureTermination)
@@ -1062,18 +1074,18 @@ bool pmExecutionStub::IsHighPriorityEventWaiting(ushort pPriority)
 	return GetPriorityQueue().IsHighPriorityElementPresent(pPriority);
 }
 
-pmStatus pmExecutionStub::ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination)
+pmStatus pmExecutionStub::ExecuteWrapper(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, ulong* pPrefetchSubtaskIdPtr)
 {
     currentSubtaskTerminus lTerminus(pReassigned, pForceAckFlag, pPrematureTermination, this);
 
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &pSubtaskId);
-    pmStatus lStatus = ExecuteWrapperInternal(pTask, pSubtaskId, pIsMultiAssign, pParentRangeStartSubtask, lTerminus);
+    pmStatus lStatus = ExecuteWrapperInternal(pTask, pSubtaskId, pIsMultiAssign, pParentRangeStartSubtask, lTerminus, pPrefetchSubtaskIdPtr);
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
 
     return lStatus;
 }
-    
-pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus)
+
+pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong pParentRangeStartSubtask, currentSubtaskTerminus& pTerminus, ulong* pPrefetchSubtaskIdPtr)
 {
     pmStatus lStatus = pmStatusUnavailable;
 
@@ -1083,7 +1095,7 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
 
     try
     {
-        lStatus = Execute(pTask, pSubtaskId, pIsMultiAssign);
+        lStatus = Execute(pTask, pSubtaskId, pIsMultiAssign, pPrefetchSubtaskIdPtr);
     }
     catch(pmPrematureExitException& e)
     {
@@ -1101,31 +1113,45 @@ pmStatus pmExecutionStub::ExecuteWrapperInternal(pmTask* pTask, ulong pSubtaskId
     return lStatus;
 }
     
-pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign)
+pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, bool pPrefetch)
 {
-#ifdef ENABLE_TASK_PROFILING
-    // Task Profiler Scope
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+
+    if(!lSubscriptionManager.IsSubtaskInitialized(this, pSubtaskId) || !lSubscriptionManager.IsSubtaskReadyForExecution(this, pSubtaskId))
     {
-        pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr1(pTask->GetTaskProfiler(), taskProfiler::PRE_SUBTASK_EXECUTION);
+    #ifdef ENABLE_TASK_PROFILING
+        // Task Profiler Scope
+        {
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr1(pTask->GetTaskProfiler(), taskProfiler::PRE_SUBTASK_EXECUTION);
+            
+            lSubscriptionManager.InitializeSubtaskDefaults(this, pSubtaskId);
+        }
+    #else
+        lSubscriptionManager.InitializeSubtaskDefaults(this, pSubtaskId);
+    #endif
         
-        pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
+        INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
+
+    #ifdef ENABLE_TASK_PROFILING
+        pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr2(pTask->GetTaskProfiler(), taskProfiler::PRE_SUBTASK_EXECUTION);
+    #endif
+
+        lSubscriptionManager.FreezeSubtaskSubscriptions(this, pSubtaskId);
+        
+        if(pPrefetch)
+            lSubscriptionManager.FetchSubtaskSubscriptions(this, pSubtaskId, GetType(), true);
+        
+        lSubscriptionManager.MarkSubtaskReadyForExecution(this, pSubtaskId);
     }
-#else
-    pTask->GetSubscriptionManager().InitializeSubtaskDefaults(this, pSubtaskId);
-#endif
-    
-    INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataDistributionCB, pTask->GetCallbackUnit()->GetDataDistributionCB(), Invoke, this, pTask, pSubtaskId);
 
-#ifdef ENABLE_TASK_PROFILING
-    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr2(pTask->GetTaskProfiler(), taskProfiler::PRE_SUBTASK_EXECUTION);
-#endif
+    if(!pPrefetch)
+    {
+        lSubscriptionManager.FetchSubtaskSubscriptions(this, pSubtaskId, GetType(), false);
+        
+        if(pTask->DoSubtasksNeedShadowMemory() || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
+            lSubscriptionManager.CreateSubtaskShadowMem(this, pSubtaskId);
+    }
 
-    pTask->GetSubscriptionManager().FreezeSubtaskSubscriptions(this, pSubtaskId);
-    pTask->GetSubscriptionManager().FetchSubtaskSubscriptions(this, pSubtaskId, GetType());
-    
-    if(pTask->DoSubtasksNeedShadowMemory() || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
-        pTask->GetSubscriptionManager().CreateSubtaskShadowMem(this, pSubtaskId);
-	
 	return pmSuccess;
 }
 
@@ -1265,9 +1291,13 @@ pmDeviceType pmStubCPU::GetType()
 	return CPU;
 }
 
-pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign)
+pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr)
 {
-	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign));
+	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign, false));
+    
+    if(pPreftechSubtaskIdPtr)
+        PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true));
+    
 	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign, mCoreId);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
 	
@@ -1355,10 +1385,14 @@ pmDeviceType pmStubCUDA::GetType()
 #endif
 }
 
-pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign)
+pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr)
 {
 #ifdef SUPPORT_CUDA
-	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign));
+	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign, false));
+
+    if(pPreftechSubtaskIdPtr)
+        PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true));
+
 	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign, mDeviceIndex);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
 #endif
