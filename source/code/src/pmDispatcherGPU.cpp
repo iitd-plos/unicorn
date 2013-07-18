@@ -130,10 +130,10 @@ size_t pmDispatcherCUDA::GetCountCUDA()
 	return mCountCUDA;
 }
 
-pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr)
+pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr)
 {
 #ifdef SUPPORT_CUDA
-	pmTask* lTask = (pmTask*)(pTaskInfo.taskHandle);
+	pmTask* lTask = (pmTask*)(pTaskInfoCuda.taskHandle);
 	uint lOriginatingMachineIndex = (uint)(*(lTask->GetOriginatingHost()));
 	ulong lSequenceNumber = lTask->GetSequenceNumber();
 
@@ -141,7 +141,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, size_t pBoundDev
     pmLastCudaExecutionRecord& lLastExecutionRecord = dynamic_cast<pmStubCUDA*>(pStub)->GetLastExecutionRecord();
 
     pmMemSection* lMemSection = lTask->GetMemSectionRW();
-	return InvokeKernel(pStub, lLastExecutionRecord, pBoundDeviceIndex, pTaskInfo, pStub->GetProcessingElement()->GetDeviceInfo(), lDeviceInfoCudaPtr, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, pCustomKernelPtr, lOriginatingMachineIndex, lSequenceNumber, (lMemSection ? lMemSection->GetMem() : NULL));
+	return InvokeKernel(pStub, lLastExecutionRecord, pTaskInfo, pTaskInfoCuda, pStub->GetProcessingElement()->GetDeviceInfo(), lDeviceInfoCudaPtr, pSubtaskInfo, pCudaLaunchConf, pOutputMemWriteOnly, pKernelPtr, pCustomKernelPtr, lOriginatingMachineIndex, lSequenceNumber, (lMemSection ? lMemSection->GetMem() : NULL));
 #else	
         return pmSuccess;
 #endif

@@ -72,7 +72,6 @@ namespace pm
         ulong taskSequenceNumber;
         ulong lastSubtaskId;
         void* inputMemCudaPtr;
-        void* taskConfCudaPtr;
         bool valid;
         
         pmLastCudaExecutionRecord()
@@ -80,7 +79,6 @@ namespace pm
         , taskSequenceNumber(0)
         , lastSubtaskId(0)
         , inputMemCudaPtr(NULL)
-        , taskConfCudaPtr(NULL)
         , valid(false)
         {}
     } pmLastCudaExecutionRecord;

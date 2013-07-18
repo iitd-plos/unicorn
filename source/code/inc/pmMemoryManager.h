@@ -18,8 +18,8 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
-#ifndef __PM_VIRTUAL_MEMORY__
-#define __PM_VIRTUAL_MEMORY__
+#ifndef __PM_MEMORY_MANAGER__
+#define __PM_MEMORY_MANAGER__
 
 #include "pmBase.h"
 #include "pmResourceLock.h"

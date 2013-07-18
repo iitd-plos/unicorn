@@ -21,6 +21,8 @@
 #include "pmBase.h"
 #include "pmDispatcherGPU.h"
 
+#include "pmExecutionStub.h"
+
 #ifdef SUPPORT_CUDA
 #include "pmLogger.h"
 #endif
@@ -37,9 +39,16 @@ cudaError_t (*gFuncPtr_cudaGetDeviceCount)(int* count);
 cudaError_t (*gFuncPtr_cudaGetDeviceProperties)(struct cudaDeviceProp* prop, int device);
 cudaError_t (*gFuncPtr_cudaSetDevice)(int device);
 cudaError_t (*gFuncPtr_cudaMalloc)(void** pCudaPtr, int pLength);
-cudaError_t (*gFuncPtr_cudaMemcpy)(void* pCudaPtr, void* pHostPtr, int pLength, int pDirection);
+cudaError_t (*gFuncPtr_cudaMemcpy)(void* pCudaPtr, const void* pHostPtr, size_t pLength, enum cudaMemcpyKind pDirection);
 cudaError_t (*gFuncPtr_cudaFree)(void* pCudaPtr);
 cudaError_t (*gFuncPtr_cudaDeviceSynchronize)();
+cudaError_t (*gFuncPtr_cudaStreamCreate)(cudaStream_t* pCudaStream);
+cudaError_t (*gFuncPtr_cudaStreamDestroy)(cudaStream_t pCudaStream);
+cudaError_t (*gFuncPtr_cudaStreamSynchronize)(cudaStream_t pCudaStream);
+cudaError_t (*gFuncPtr_cudaMemcpyAsync)(void* pCudaPtr, const void* pHostPtr, size_t pLength, enum cudaMemcpyKind pDirection, cudaStream_t pCudaStream);
+cudaError_t (*gFuncPtr_cudaHostAlloc)(void** pHost, size_t pSize, unsigned int pFlags);
+cudaError_t (*gFuncPtr_cudaFreeHost)(void* pPtr);
+
 
 
 #define EXECUTE_CUDA_SYMBOL(libPtr, symbol, prototype, ...) \
@@ -112,7 +121,7 @@ std::string pmDispatcherCUDA::GetDeviceDescription(size_t pDeviceIndex)
 	return lStream.str();
 }
     
-void* pmDispatcherCUDA::GetDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo)
+void* pmDispatcherCUDA::CreateDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo)
 {
     void* lDeviceInfoCudaPtr = NULL;
 
@@ -122,7 +131,7 @@ void* pmDispatcherCUDA::GetDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo)
     return lDeviceInfoCudaPtr;
 }
     
-void pmDispatcherCUDA::FreeDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr)
+void pmDispatcherCUDA::DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr)
 {
     SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pDeviceInfoCudaPtr );
 }
@@ -178,79 +187,154 @@ private:
     void* mCudaPtr;
 };
     
+struct pmCudaStreamAutoPtr : public pmBase
+{
+public:
+    pmCudaStreamAutoPtr(void* pRuntimeHandle)
+    : mRuntimeHandle(pRuntimeHandle)
+    , mStream(NULL)
+    {
+        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaStreamCreate", gFuncPtr_cudaStreamCreate, &mStream );
+    }
+    
+    ~pmCudaStreamAutoPtr()
+    {
+        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaStreamDestroy", gFuncPtr_cudaStreamDestroy, mStream );
+    }
+    
+    cudaStream_t GetStream()
+    {
+        return mStream;
+    }
+    
+private:
+    void* mRuntimeHandle;
+    cudaStream_t mStream;
+};
+    
 struct pmCudaAutoPtrCollection
 {
-    pmCudaAutoPtr mInputMemAutoPtr, mOutputMemAutoPtr, mScratchBufferAutoPtr, mTaskConfAutoPtr, mStatusAutoPtr;
+    pmCudaAutoPtr mInputMemAutoPtr, mOutputMemAutoPtr, mScratchBufferAutoPtr, mStatusAutoPtr;
+    pmCudaStreamAutoPtr mCudaStreamAutoPtr;
     
     pmCudaAutoPtrCollection(void* pRuntimeHandle)
     : mInputMemAutoPtr(pRuntimeHandle)
     , mOutputMemAutoPtr(pRuntimeHandle)
     , mScratchBufferAutoPtr(pRuntimeHandle)
-    , mTaskConfAutoPtr(pRuntimeHandle)
     , mStatusAutoPtr(pRuntimeHandle)
+    , mCudaStreamAutoPtr(pRuntimeHandle)
     {}
 };
-
-pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem)
+    
+std::pair<void*, void*> pmDispatcherCUDA::AllocatePinnedBuffer(size_t pSize)
 {
-    pmCudaAutoPtrCollection lCudaAutoPtrCollection(mRuntimeHandle);
+    void* lMem = NULL;
+    void* lCudaMem = NULL;
 
-    pmTaskInfo lTaskInfoCuda = pTaskInfo;
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaHostAlloc", gFuncPtr_cudaHostAlloc, &lMem, pSize, cudaHostAllocDefault );
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)(&lCudaMem), pSize );
+    
+    return std::make_pair(lMem, lCudaMem);
+}
+    
+void pmDispatcherCUDA::DeallocatePinnedBuffer(std::pair<void*, void*> pMemPair)
+{
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFreeHost", gFuncPtr_cudaFreeHost, pMemPair.first );
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pMemPair.second );
+}
+    
+void* pmDispatcherCUDA::CreateTaskConf(pmTaskInfo& pTaskInfo)
+{
+    void* lTaskConfCudaPtr = NULL;
+
+    if(pTaskInfo.taskConfLength)
+    {
+        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&lTaskConfCudaPtr, pTaskInfo.taskConfLength );
+
+        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTaskConfCudaPtr, pTaskInfo.taskConf, pTaskInfo.taskConfLength, cudaMemcpyHostToDevice );
+    }
+    
+    return lTaskConfCudaPtr;
+}
+
+void pmDispatcherCUDA::DestroyTaskConf(void* pTaskConfCudaPtr)
+{
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pTaskConfCudaPtr );
+}
+    
+void pmDispatcherCUDA::ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmSubtaskInfo& pSubtaskInfo, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, size_t& pInputMem, size_t& pOutputMem, size_t& pScratchMem)
+{
+    pInputMem = pOutputMem = pScratchMem = 0;
+
+    bool lMatchingLastExecutionRecord = false;
+
+    if(pLastRecord.valid && pLastRecord.taskOriginatingMachineIndex == pOriginatingMachineIndex && pLastRecord.taskSequenceNumber == pSequenceNumber)
+        lMatchingLastExecutionRecord = true;
+    
+    if(pSubtaskInfo.inputMem && pSubtaskInfo.inputMemLength != 0)
+    {
+        if(!(lMatchingLastExecutionRecord && SubtasksHaveMatchingSubscriptions(pStub, pOriginatingMachineIndex, pSequenceNumber, pLastRecord.lastSubtaskId, pSubtaskInfo.subtaskId, INPUT_MEM_READ_SUBSCRIPTION)))
+            pInputMem = pSubtaskInfo.inputMemLength;
+    }
+        
+	if(pSubtaskInfo.outputMem && pSubtaskInfo.outputMemLength != 0)
+        pOutputMem = pSubtaskInfo.outputMemLength;
+
+//    if(pKernelPtr)
+//        lMemReqd += (sizeof(pmStatus));
+    
+    pmScratchBufferInfo lScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
+    size_t lScratchBufferSize = 0;
+    void* lCpuScratchBuffer = CheckAndGetScratchBuffer(pStub, pOriginatingMachineIndex, pSequenceNumber, pSubtaskInfo.subtaskId, lScratchBufferSize, lScratchBufferInfo);
+    if(lCpuScratchBuffer && lScratchBufferSize)
+        pScratchMem = lScratchBufferSize;
+}
+
+pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem)
+{
+    size_t lLogAlignment = 8;   // 256 byte alignment
+    pmCudaAutoPtrCollection lCudaAutoPtrCollection(mRuntimeHandle);
+    
+    size_t lInputMemReqd, lOutputMemReqd, lScratchMemReqd;
+    pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->ComputeMemoryRequiredForSubtask(pStub, pLastRecord, pSubtaskInfo, pKernelPtr, pOriginatingMachineIndex, pSequenceNumber, lInputMemReqd, lOutputMemReqd, lScratchMemReqd);
+    
+    pmMemChunk* lPinnedMemChunk = ((pmStubCUDA*)pStub)->GetPinnedBufferChunk();
+
+    void* lInputMemPinnedPtr = (lInputMemReqd ? lPinnedMemChunk->Allocate(lInputMemReqd, lLogAlignment) : NULL);
+    void* lOutputMemPinnedPtr = (lOutputMemReqd ? lPinnedMemChunk->Allocate(lOutputMemReqd, lLogAlignment) : NULL);
+    void* lScratchMemPinnedPtr = (lScratchMemReqd ? lPinnedMemChunk->Allocate(lScratchMemReqd, lLogAlignment) : NULL);
+    
+    if(lInputMemReqd && !lInputMemPinnedPtr)
+        PMTHROW(pmFatalErrorException());
+
+    if(lOutputMemReqd && !lOutputMemPinnedPtr)
+        PMTHROW(pmFatalErrorException());
+    
+    if(lScratchMemReqd && !lScratchMemPinnedPtr)
+        PMTHROW(pmFatalErrorException());
+    
     pmSubtaskInfo lSubtaskInfoCuda = pSubtaskInfo;
 
-    CopyMemoriesToGpu(pStub, pLastRecord, pTaskInfo, pSubtaskInfo, pOutputMemWriteOnly, pKernelPtr, pOriginatingMachineIndex, pSequenceNumber, pTaskOutputMem, lTaskInfoCuda, lSubtaskInfoCuda, &lCudaAutoPtrCollection);
+    CopyMemoriesToGpu(pStub, pLastRecord, pSubtaskInfo, pOutputMemWriteOnly, pKernelPtr, pOriginatingMachineIndex, pSequenceNumber, pTaskOutputMem, lSubtaskInfoCuda, &lCudaAutoPtrCollection, lInputMemPinnedPtr, lScratchMemPinnedPtr);
     
-    pmStatus lStatus = ExecuteKernel(pStub, pTaskInfo, lTaskInfoCuda, pDeviceInfo, pDeviceInfoCudaPtr, lSubtaskInfoCuda, pCudaLaunchConf, pKernelPtr, pCustomKernelPtr, &lCudaAutoPtrCollection);
+    pmStatus lStatus = ExecuteKernel(pStub, pTaskInfo, pTaskInfoCuda, pDeviceInfo, pDeviceInfoCudaPtr, lSubtaskInfoCuda, pCudaLaunchConf, pKernelPtr, pCustomKernelPtr, &lCudaAutoPtrCollection);
     
     pmStatus lStatus2 = CopyMemoriesFromGpu(pStub, pSubtaskInfo, lSubtaskInfoCuda, pKernelPtr, pOriginatingMachineIndex, pSequenceNumber, &lCudaAutoPtrCollection);
+    
+    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaStreamSynchronize", gFuncPtr_cudaStreamSynchronize, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() );
+    
+    lPinnedMemChunk->Deallocate(lInputMemPinnedPtr);
+    lPinnedMemChunk->Deallocate(lOutputMemPinnedPtr);
+    lPinnedMemChunk->Deallocate(lScratchMemPinnedPtr);
     
     if(!pCustomKernelPtr)
         return lStatus2;
     
     return lStatus;
 }
-    
-size_t pmDispatcherCUDA::ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pAutoPtrCollection)
+
+void pmDispatcherCUDA::CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem, pmSubtaskInfo& pSubtaskInfoCuda, void* pAutoPtrCollection, void* pInputMemPinnedPtr, void* pScratchMemPinnedPtr)
 {
-    pmCudaAutoPtrCollection& lCudaAutoPtrCollection = *((pmCudaAutoPtrCollection*)pAutoPtrCollection);
-
-    size_t lMemReqd = 0;
-    bool lMatchingLastExecutionRecord = false;
-
-    if(pLastRecord.valid && pLastRecord.taskOriginatingMachineIndex == pOriginatingMachineIndex && pLastRecord.taskSequenceNumber == pSequenceNumber)
-        lMatchingLastExecutionRecord = true;
-    
-    if(pTaskInfo.taskConf && pTaskInfo.taskConfLength != 0)
-    {
-        if(!(lMatchingLastExecutionRecord && pLastRecord.taskConfCudaPtr))
-            lMemReqd += pTaskInfo.taskConfLength;
-    }
-
-    if(pSubtaskInfo.inputMem && pSubtaskInfo.inputMemLength != 0)
-    {
-        if(!(lMatchingLastExecutionRecord && SubtasksHaveMatchingSubscriptions(pStub, pOriginatingMachineIndex, pSequenceNumber, pLastRecord.lastSubtaskId, pSubtaskInfo.subtaskId, INPUT_MEM_READ_SUBSCRIPTION)))
-            lMemReqd += pSubtaskInfo.inputMemLength;
-    }
-        
-	if(pSubtaskInfo.outputMem && pSubtaskInfo.outputMemLength != 0)
-        lMemReqd += pSubtaskInfo.outputMemLength;
-
-    if(pKernelPtr)
-        lMemReqd += (sizeof(pmStatus));
-    
-    pmScratchBufferInfo lScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
-    size_t lScratchBufferSize = 0;
-    void* lCpuScratchBuffer = CheckAndGetScratchBuffer(pStub, pOriginatingMachineIndex, pSequenceNumber, pSubtaskInfo.subtaskId, lScratchBufferSize, lScratchBufferInfo);
-    if(lCpuScratchBuffer && lScratchBufferSize)
-        lMemReqd += lScratchBufferSize;
-    
-    return lMemReqd;
-}
-    
-void pmDispatcherCUDA::CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem, pmTaskInfo& pTaskInfoCuda, pmSubtaskInfo& pSubtaskInfoCuda, void* pAutoPtrCollection)
-{
-    size_t lMemReqd = ComputeMemoryRequiredForSubtask(pStub, pLastRecord, pTaskInfo, pSubtaskInfo, pKernelPtr, pOriginatingMachineIndex, pSequenceNumber, pAutoPtrCollection);
-
     pmCudaAutoPtrCollection& lCudaAutoPtrCollection = *((pmCudaAutoPtrCollection*)pAutoPtrCollection);
 
     bool lMatchingLastExecutionRecord = false;
@@ -258,22 +342,6 @@ void pmDispatcherCUDA::CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecu
     if(pLastRecord.valid && pLastRecord.taskOriginatingMachineIndex == pOriginatingMachineIndex && pLastRecord.taskSequenceNumber == pSequenceNumber)
         lMatchingLastExecutionRecord = true;
     
-    void* lTaskConfCudaPtr = NULL;
-    if(pTaskInfo.taskConf && pTaskInfo.taskConfLength != 0)
-    {
-        if(lMatchingLastExecutionRecord && pLastRecord.taskConfCudaPtr)
-        {
-            lTaskConfCudaPtr = pLastRecord.taskConfCudaPtr;
-        }
-        else
-        {
-            lCudaAutoPtrCollection.mTaskConfAutoPtr.reset(pTaskInfo.taskConfLength);
-            lTaskConfCudaPtr = lCudaAutoPtrCollection.mTaskConfAutoPtr.getPtr();
-
-            SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTaskConfCudaPtr, pTaskInfo.taskConf, pTaskInfo.taskConfLength, cudaMemcpyHostToDevice );
-        }
-    }
-
     void* lInputMemCudaPtr = NULL;
     void* lOutputMemCudaPtr = NULL;
 
@@ -299,7 +367,7 @@ void pmDispatcherCUDA::CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecu
             {
                 void* lTempDevicePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lInputMemCudaPtr) + (*lIter).first - lInputMemSubscriptionInfo.offset);
                 void* lTempHostPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.inputMem) + (*lIter).first - lInputMemSubscriptionInfo.offset);
-                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTempDevicePtr, lTempHostPtr, (*lIter).second, cudaMemcpyHostToDevice );
+                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, lTempDevicePtr, lTempHostPtr, (*lIter).second, cudaMemcpyHostToDevice, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() );
             }
         }
     }
@@ -310,20 +378,12 @@ void pmDispatcherCUDA::CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecu
         pLastRecord.inputMemCudaPtr = NULL;
     }
         
-    if(pLastRecord.valid && pLastRecord.taskConfCudaPtr && pLastRecord.taskConfCudaPtr != lTaskConfCudaPtr)
-    {
-        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pLastRecord.taskConfCudaPtr );
-        pLastRecord.taskConfCudaPtr = NULL;
-    }
-
     lCudaAutoPtrCollection.mInputMemAutoPtr.release();
-    lCudaAutoPtrCollection.mTaskConfAutoPtr.release();
 
     pLastRecord.taskOriginatingMachineIndex = pOriginatingMachineIndex;
     pLastRecord.taskSequenceNumber = pSequenceNumber;
     pLastRecord.lastSubtaskId = pSubtaskInfo.subtaskId;
     pLastRecord.inputMemCudaPtr = lInputMemCudaPtr;
-    pLastRecord.taskConfCudaPtr = lTaskConfCudaPtr;
     pLastRecord.valid = true;
     
     pmSubscriptionInfo lUnifiedSubscriptionInfo;
@@ -344,7 +404,7 @@ void pmDispatcherCUDA::CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecu
             {
                 void* lTempDevicePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMemCudaPtr) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
                 void* lTempHostPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pTaskOutputMem) + (*lIter).first);
-                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTempDevicePtr, lTempHostPtr, (*lIter).second, cudaMemcpyHostToDevice );
+                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, lTempDevicePtr, lTempHostPtr, (*lIter).second, cudaMemcpyHostToDevice, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() );
             }
         }
 	}
@@ -356,10 +416,8 @@ void pmDispatcherCUDA::CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecu
         lCudaAutoPtrCollection.mStatusAutoPtr.reset(sizeof(pmStatus));
         pmStatus* lStatusPtr = (pmStatus*)lCudaAutoPtrCollection.mStatusAutoPtr.getPtr();
 
-        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lStatusPtr, &lStatus, sizeof(pmStatus), cudaMemcpyHostToDevice );
+        SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, lStatusPtr, &lStatus, sizeof(pmStatus), cudaMemcpyHostToDevice, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() );
     }
-
-	pTaskInfoCuda.taskConf = lTaskConfCudaPtr;
 
 	pSubtaskInfoCuda.inputMem = lInputMemCudaPtr;
 	pSubtaskInfoCuda.outputMem = lOutputMemCudaPtr;
@@ -390,7 +448,7 @@ void pmDispatcherCUDA::CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecu
 
         if(lScratchBufferInfo == PRE_SUBTASK_TO_SUBTASK || lScratchBufferInfo == PRE_SUBTASK_TO_POST_SUBTASK)
         {
-            SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, pSubtaskInfoCuda.gpuContext.scratchBuffer, lCpuScratchBuffer, lScratchBufferSize, cudaMemcpyHostToDevice );
+            SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, pSubtaskInfoCuda.gpuContext.scratchBuffer, lCpuScratchBuffer, lScratchBufferSize, cudaMemcpyHostToDevice, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() );
         }
     }
 }
@@ -420,9 +478,9 @@ pmStatus pmDispatcherCUDA::ExecuteKernel(pmExecutionStub* pStub, pmTaskInfo& pTa
                 dim3 blockConf(pCudaLaunchConf.threadsX, pCudaLaunchConf.threadsY, pCudaLaunchConf.threadsZ);
 
                 if(pCudaLaunchConf.sharedMem)
-                    pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem>>> (pTaskInfoCuda, (pmDeviceInfo*)pDeviceInfoCudaPtr, pSubtaskInfoCuda, lStatusPtr);
+                    pKernelPtr <<<gridConf, blockConf, pCudaLaunchConf.sharedMem, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() >>> (pTaskInfoCuda, (pmDeviceInfo*)pDeviceInfoCudaPtr, pSubtaskInfoCuda, lStatusPtr);
                 else
-                    pKernelPtr <<<gridConf, blockConf>>> (pTaskInfoCuda, (pmDeviceInfo*)pDeviceInfoCudaPtr, pSubtaskInfoCuda, lStatusPtr);
+                    pKernelPtr <<<gridConf, blockConf, 0, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() >>> (pTaskInfoCuda, (pmDeviceInfo*)pDeviceInfoCudaPtr, pSubtaskInfoCuda, lStatusPtr);
             }
             else
             {
@@ -446,8 +504,6 @@ pmStatus pmDispatcherCUDA::CopyMemoriesFromGpu(pmExecutionStub* pStub, pmSubtask
 
     pmStatus lStatus = pmStatusUnavailable;
 
-    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaDeviceSynchronize", gFuncPtr_cudaDeviceSynchronize );
-
     cudaError_t lLastError = cudaGetLastError();
     if(lLastError == cudaSuccess)
     {
@@ -466,14 +522,14 @@ pmStatus pmDispatcherCUDA::CopyMemoriesFromGpu(pmExecutionStub* pStub, pmSubtask
                 {
                     void* lTempDevicePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMemCudaPtr) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
                     void* lTempHostPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + ((*lIter).first - lUnifiedSubscriptionInfo.offset));
-                    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lTempHostPtr, lTempDevicePtr, (*lIter).second, cudaMemcpyDeviceToHost );
+                    SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, lTempHostPtr, lTempDevicePtr, (*lIter).second, cudaMemcpyDeviceToHost, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() );
                 }
             }
             
             if(pKernelPtr)
             {
                 pmStatus* lStatusPtr = (pmStatus*)lCudaAutoPtrCollection.mStatusAutoPtr.getPtr();
-                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, &lStatus, lStatusPtr, sizeof(pmStatus), cudaMemcpyDeviceToHost );
+                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, &lStatus, lStatusPtr, sizeof(pmStatus), cudaMemcpyDeviceToHost, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() );
             }
 
             pmScratchBufferInfo lScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
@@ -481,7 +537,7 @@ pmStatus pmDispatcherCUDA::CopyMemoriesFromGpu(pmExecutionStub* pStub, pmSubtask
             void* lCpuScratchBuffer = CheckAndGetScratchBuffer(pStub, pOriginatingMachineIndex, pSequenceNumber, pSubtaskInfo.subtaskId, lScratchBufferSize, lScratchBufferInfo);
             if(lCpuScratchBuffer && lScratchBufferSize && (lScratchBufferInfo == SUBTASK_TO_POST_SUBTASK || lScratchBufferInfo == PRE_SUBTASK_TO_POST_SUBTASK))
             {
-                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpy", gFuncPtr_cudaMemcpy, lCpuScratchBuffer, pSubtaskInfoCuda.gpuContext.scratchBuffer, lScratchBufferSize, cudaMemcpyDeviceToHost );
+                SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, lCpuScratchBuffer, pSubtaskInfoCuda.gpuContext.scratchBuffer, lScratchBufferSize, cudaMemcpyDeviceToHost, lCudaAutoPtrCollection.mCudaStreamAutoPtr.GetStream() );
             }
         }
     }
@@ -505,12 +561,6 @@ pmStatus pmDispatcherCUDA::FreeLastExecutionResources(pmLastCudaExecutionRecord&
             pLastExecutionRecord.inputMemCudaPtr = NULL;
         }
             
-        if(pLastExecutionRecord.taskConfCudaPtr)
-        {
-            SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaFree", gFuncPtr_cudaFree, pLastExecutionRecord.taskConfCudaPtr );
-            pLastExecutionRecord.taskConfCudaPtr = NULL;
-        }
-        
         pLastExecutionRecord.valid = false;
     }
     

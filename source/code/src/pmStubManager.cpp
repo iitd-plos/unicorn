@@ -105,7 +105,17 @@ pmStatus pmStubManager::CreateExecutionStubs()
 #else
 	mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
-    
+
+#if defined(MACOS)
+    size_t lPhysicalMemory = 0;
+    size_t lBufferLength = sizeof(lPhysicalMemory);
+
+    if(sysctlbyname("hw.memsize", &lPhysicalMemory, &lBufferLength, NULL, 0) != 0)
+        mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
+#else
+    size_t lPhysicalMemory = sysconf(_SC_PHYS_PAGES) * ::getpagesize();
+#endif
+
 	for(size_t i=0; i<mProcessingElementsCPU; ++i)
 		mStubVector.push_back(new pmStubCPU(i, (uint)(mStubVector.size())));
 
@@ -115,8 +125,11 @@ pmStatus pmStubManager::CreateExecutionStubs()
     
     std::vector<pmExecutionStub*>::iterator lIter = mStubVector.begin(), lEndIter = mStubVector.end();
     for(; lIter != lEndIter; ++lIter)
-        (*lIter)->ThreadBindEvent();
-
+    {
+        (*lIter)->ThreadBindEvent(lPhysicalMemory, mStubCount);
+        (*lIter)->WaitForQueuedCommands();
+    }
+    
 	return pmSuccess;
 }
 
@@ -155,6 +168,13 @@ void pmStubManager::InitializeEventTimelines()
         (*lIter)->InitializeEventTimeline();
 }
 #endif
+    
+void pmStubManager::WaitForAllStubsToFinish()
+{
+    std::vector<pmExecutionStub*>::iterator lIter = mStubVector.begin(), lEndIter = mStubVector.end();
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter)->WaitForQueuedCommands();
+}
 
 };
 

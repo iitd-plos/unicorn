@@ -125,7 +125,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 	return false;
 }
 
-pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, size_t pBoundHardwareDeviceIndex)
+pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, pmTaskInfo& pTaskInfo)
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
@@ -145,7 +145,6 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			if(!mCallback_CPU)
 				return pmSuccess;
 
-            pmTaskInfo& lTaskInfo = pTask->GetTaskInfo();
             pmDeviceInfo& lDeviceInfo = pStub->GetProcessingElement()->GetDeviceInfo();
 
             pmJmpBufAutoPtr lJmpBufAutoPtr;
@@ -156,7 +155,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
             if(!lJmpVal)
             {
                 lJmpBufAutoPtr.Reset(&lJmpBuf, pStub, pSubtaskId);
-                lStatus = mCallback_CPU(lTaskInfo, lDeviceInfo, lSubtaskInfo);
+                lStatus = mCallback_CPU(pTaskInfo, lDeviceInfo, lSubtaskInfo);
             }
             else
             {
@@ -175,7 +174,8 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
             
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskId);
 
-            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pBoundHardwareDeviceIndex, pTask->GetTaskInfo(), lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
+            // pTaskInfo is task info with CUDA pointers; pTask->GetTaskInfo() is with CPU pointers
+            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pTask->GetTaskInfo(), pTaskInfo, lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
             
 			break;
 		}

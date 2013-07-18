@@ -30,10 +30,6 @@ namespace pm
 
 class pmExecutionStub;
 
-/**
- * \brief The representation of a parallel task.
- */
-
 class pmStubManager : public pmBase
 {
 	public:
@@ -51,6 +47,8 @@ class pmStubManager : public pmBase
 
 		pmExecutionStub* GetStub(pmProcessingElement* pDevice);
 		pmExecutionStub* GetStub(uint pIndex);
+    
+        void WaitForAllStubsToFinish();
 
 	private:
 		pmStubManager();

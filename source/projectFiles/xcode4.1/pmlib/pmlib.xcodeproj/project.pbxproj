@@ -20,6 +20,7 @@
 		0EFEA57216EF141000DDB741 /* pmUtility.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFEA57016EF141000DDB741 /* pmUtility.cpp */; };
 		0EFF67BA1545CF7800ED4E8F /* pmRedistributor.h in Headers */ = {isa = PBXBuildFile; fileRef = 0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */; };
 		0EFF67BD1545CF9A00ED4E8F /* pmRedistributor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */; };
+		2B2E44041795C8B900309100 /* pmMemChunk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B2E44021795C8B900309100 /* pmMemChunk.cpp */; };
 		2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED2F151C7B07006AA45D /* pmBase.h */; };
 		2BCCED6F151C7B07006AA45D /* pmCallback.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED30151C7B07006AA45D /* pmCallback.h */; };
 		2BCCED70151C7B07006AA45D /* pmCallbackUnit.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED31151C7B07006AA45D /* pmCallbackUnit.h */; };
@@ -104,6 +105,8 @@
 		0EFEA57016EF141000DDB741 /* pmUtility.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmUtility.cpp; sourceTree = "<group>"; };
 		0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmRedistributor.h; sourceTree = "<group>"; };
 		0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmRedistributor.cpp; sourceTree = "<group>"; };
+		2B2E44011795C6E800309100 /* pmMemChunk.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmMemChunk.h; sourceTree = "<group>"; };
+		2B2E44021795C8B900309100 /* pmMemChunk.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemChunk.cpp; sourceTree = "<group>"; };
 		2BCCED1D151C7AA1006AA45D /* pmlib.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		2BCCED21151C7AA1006AA45D /* pmlib-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "pmlib-Prefix.pch"; sourceTree = "<group>"; };
 		2BCCED22151C7AA1006AA45D /* pmlibProj.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = pmlibProj.xcconfig; sourceTree = "<group>"; };
@@ -243,6 +246,7 @@
 				0E0668D616BEB8B3001D0B8F /* pmHeavyOperations.h */,
 				2BCCED3C151C7B07006AA45D /* pmInternalDefinitions.h */,
 				2BCCED3D151C7B07006AA45D /* pmLogger.h */,
+				2B2E44011795C6E800309100 /* pmMemChunk.h */,
 				2BCCED3E151C7B07006AA45D /* pmMemoryManager.h */,
 				2BCCED3F151C7B07006AA45D /* pmMemSection.h */,
 				2BCCED40151C7B07006AA45D /* pmNetwork.h */,
@@ -291,6 +295,7 @@
 				2BCCED5B151C7B07006AA45D /* pmHardware.cpp */,
 				0E0668D816BEB8C6001D0B8F /* pmHeavyOperations.cpp */,
 				2BCCED5C151C7B07006AA45D /* pmLogger.cpp */,
+				2B2E44021795C8B900309100 /* pmMemChunk.cpp */,
 				2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */,
 				2BCCED5E151C7B07006AA45D /* pmMemSection.cpp */,
 				2BCCED5F151C7B07006AA45D /* pmNetwork.cpp */,
@@ -451,6 +456,7 @@
 				0EFEA57216EF141000DDB741 /* pmUtility.cpp in Sources */,
 				0EB3339F16F28D120078AC9C /* pmDataTypes.cpp in Sources */,
 				0E7327BF16F7A409006FE28F /* pmRangeAccessor.cpp in Sources */,
+				2B2E44041795C8B900309100 /* pmMemChunk.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

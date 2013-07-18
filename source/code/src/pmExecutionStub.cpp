@@ -78,12 +78,14 @@ pmProcessingElement* pmExecutionStub::GetProcessingElement()
 	return pmDevicePool::GetDevicePool()->GetDeviceAtMachineIndex(PM_LOCAL_MACHINE, mDeviceIndexOnMachine);
 }
     
-pmStatus pmExecutionStub::ThreadBindEvent()
+pmStatus pmExecutionStub::ThreadBindEvent(size_t pPhysicalMemory, size_t pTotalStubCount)
 {
 	stubEvent lEvent;
 	lEvent.eventId = THREAD_BIND;
+    lEvent.bindDetails.physicalMemory = pPhysicalMemory;
+    lEvent.bindDetails.totalStubCount = pTotalStubCount;
 	SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
-    
+
     return pmSuccess;
 }
 
@@ -194,6 +196,21 @@ pmStatus pmExecutionStub::FreeGpuResources()
 #endif
 
 	return pmSuccess;
+}
+    
+void pmExecutionStub::FreeTaskResources(pmTask* pTask)
+{
+#ifdef SUPPORT_CUDA
+    if(dynamic_cast<pmStubCUDA*>(this))
+    {
+        stubEvent lEvent;
+        lEvent.eventId = FREE_TASK_RESOURCES;
+        lEvent.freeTaskResourcesDetails.taskOriginatingHost = pTask->GetOriginatingHost();
+        lEvent.freeTaskResourcesDetails.taskSequenceNumber = pTask->GetSequenceNumber();
+
+        SwitchThread(lEvent, RESERVED_PRIORITY);
+    }
+#endif
 }
     
 void pmExecutionStub::PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus)
@@ -616,6 +633,12 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 			BindToProcessingElement();
             TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_EXEC_STUB, this);
 
+        #ifdef SUPPORT_CUDA
+            pmStubCUDA* lStub = dynamic_cast<pmStubCUDA*>(this);
+            if(lStub)
+                lStub->ReservePinnedMemory(pEvent.bindDetails.physicalMemory, pEvent.bindDetails.totalStubCount);
+        #endif
+
 			break;
 		}
         
@@ -659,7 +682,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         
             pEvent.execDetails.rangeExecutedOnce = true;
             pEvent.execDetails.lastExecutedSubtaskId = lLastExecutedSubtaskId;
-        
+
         #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
             ulong lPrefetchSubtaskId = std::numeric_limits<ulong>::infinity();
         #endif
@@ -847,6 +870,15 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             pmTask* lTask = pEvent.processRedistributionBucketDetails.task;
             
             lTask->GetRedistributor()->ProcessRedistributionBucket(pEvent.processRedistributionBucketDetails.bucketIndex);
+            
+            break;
+        }
+            
+        case FREE_TASK_RESOURCES:
+        {
+    #ifdef SUPPORT_CUDA
+            ((pmStubCUDA*)this)->FreeTaskResources(pEvent.freeTaskResourcesDetails.taskOriginatingHost, pEvent.freeTaskResourcesDetails.taskSequenceNumber);
+    #endif
             
             break;
         }
@@ -1298,7 +1330,7 @@ pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign
     if(pPreftechSubtaskIdPtr)
         PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true));
     
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign, mCoreId);
+	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign, pTask->GetTaskInfo());
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
 	
 	return pmSuccess;
@@ -1320,6 +1352,7 @@ pmStubCUDA::pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine)
 	: pmStubGPU(pDeviceIndexOnMachine)
     , mDeviceIndex(pDeviceIndex)
 #ifdef SUPPORT_CUDA
+    , mPinnedAllocation(NULL, NULL)
     , mDeviceInfoCudaPtr(NULL)
 #endif
 {
@@ -1340,13 +1373,37 @@ pmStatus pmStubCUDA::FreeResources()
 pmStatus pmStubCUDA::FreeExecutionResources()
 {
 #ifdef SUPPORT_CUDA
+    if(mPinnedBufferChunk->GetChunk())
+        pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->DeallocatePinnedBuffer(mPinnedAllocation);
+        
     if(mDeviceInfoCudaPtr)
-        pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeDeviceInfoCudaPtr(mDeviceInfoCudaPtr);
+        pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->DestroyDeviceInfoCudaPtr(mDeviceInfoCudaPtr);
 
     pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeLastExecutionResources(mLastExecutionRecord);
 #endif
     return pmSuccess;
 }
+
+#ifdef SUPPORT_CUDA
+pmMemChunk* pmStubCUDA::GetPinnedBufferChunk()
+{
+    return mPinnedBufferChunk.get();
+}
+    
+void pmStubCUDA::FreeTaskResources(pmMachine* pOriginatingHost, ulong pSequenceNumber)
+{
+    std::pair<pmMachine*, ulong> lPair(pOriginatingHost, pSequenceNumber);
+
+    std::map<std::pair<pmMachine*, ulong>, pmTaskInfo>::iterator lIter = mTaskInfoCudaMap.find(lPair);
+    if(lIter != mTaskInfoCudaMap.end())
+    {
+        if(lIter->second.taskConfLength)
+            pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->DestroyTaskConf(lIter->second.taskConf);
+    
+        mTaskInfoCudaMap.erase(lPair);
+    }
+}
+#endif
 
 pmStatus pmStubCUDA::BindToProcessingElement()
 {
@@ -1393,7 +1450,21 @@ pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssig
     if(pPreftechSubtaskIdPtr)
         PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true));
 
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign, mDeviceIndex);
+    std::pair<pmMachine*, ulong> lPair(pTask->GetOriginatingHost(), pTask->GetSequenceNumber());
+
+    std::map<std::pair<pmMachine*, ulong>, pmTaskInfo>::iterator lIter = mTaskInfoCudaMap.find(lPair);
+    if(lIter == mTaskInfoCudaMap.end())
+    {
+        pmTaskInfo& lTaskInfo = pTask->GetTaskInfo();
+        void* lTaskConfCudaPtr = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->CreateTaskConf(lTaskInfo);
+
+        mTaskInfoCudaMap[lPair] = lTaskInfo;
+        lIter = mTaskInfoCudaMap.find(lPair);
+        
+        lIter->second.taskConf = lTaskConfCudaPtr;
+    }
+
+	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pIsMultiAssign, lIter->second);
 	PROPAGATE_FAILURE_RET_STATUS(CommonPostExecuteOnCPU(pTask, pSubtaskId));
 #endif
 
@@ -1404,7 +1475,7 @@ pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssig
 void* pmStubCUDA::GetDeviceInfoCudaPtr()
 {
     if(!mDeviceInfoCudaPtr)
-        mDeviceInfoCudaPtr = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetDeviceInfoCudaPtr(GetProcessingElement()->GetDeviceInfo());
+        mDeviceInfoCudaPtr = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->CreateDeviceInfoCudaPtr(GetProcessingElement()->GetDeviceInfo());
         
     return mDeviceInfoCudaPtr;
 }
@@ -1412,6 +1483,19 @@ void* pmStubCUDA::GetDeviceInfoCudaPtr()
 pmLastCudaExecutionRecord& pmStubCUDA::GetLastExecutionRecord()
 {
     return mLastExecutionRecord;
+}
+    
+void pmStubCUDA::ReservePinnedMemory(size_t pPhysicalMemory, size_t pTotalStubCount)
+{
+    if(pPhysicalMemory && pTotalStubCount)
+    {
+//        size_t lBufferSize = std::min((size_t)4 * 1024 * 1024 * 1024, pPhysicalMemory / pTotalStubCount);
+        size_t lBufferSize = std::min((size_t)512 * 1024 * 1024, pPhysicalMemory / pTotalStubCount);
+        mPinnedAllocation = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->AllocatePinnedBuffer(lBufferSize);
+
+        if(mPinnedAllocation.first)
+            mPinnedBufferChunk.reset(new pmMemChunk(mPinnedAllocation.first, lBufferSize));
+    }
 }
 #endif
 

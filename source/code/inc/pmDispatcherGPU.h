@@ -53,13 +53,21 @@ class pmDispatcherCUDA : public pmBase
 
 		std::string GetDeviceName(size_t pDeviceIndex);
 		std::string GetDeviceDescription(size_t pDeviceIndex);
-		pmStatus InvokeKernel(pmExecutionStub* pStub, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr);
+		pmStatus InvokeKernel(pmExecutionStub* pStub, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr);
 
 #ifdef SUPPORT_CUDA
-        void* GetDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo);
-        void FreeDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr);
+        void* CreateDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo);
+        void DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr);
 
-		pmStatus InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastExecutionRecord, size_t pBoundDeviceIndex, pmTaskInfo& pTaskInfo, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem);
+        std::pair<void*, void*> AllocatePinnedBuffer(size_t pSize);
+        void DeallocatePinnedBuffer(std::pair<void*, void*> pMemPair);
+
+        void* CreateTaskConf(pmTaskInfo& pTaskInfo);
+        void DestroyTaskConf(void* pTaskConfCudaPtr);
+    
+        void ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmSubtaskInfo& pSubtaskInfo, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, size_t& pInputMem, size_t& pOutputMem, size_t& pScratchMem);
+
+        pmStatus InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastExecutionRecord, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem);
 
         pmStatus FreeLastExecutionResources(pmLastCudaExecutionRecord& pLastExecutionRecord);
 #endif
@@ -82,8 +90,7 @@ class pmDispatcherCUDA : public pmBase
         bool RequiresPrematureExit(pmExecutionStub* pStub, ulong pSubtaskId);
 
 #ifdef SUPPORT_CUDA
-        size_t ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pAutoPtrCollection);
-        void CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem, pmTaskInfo& pTaskInfoCuda, pmSubtaskInfo& pSubtaskInfoCuda, void* pAutoPtrCollection);
+        void CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem, pmSubtaskInfo& pSubtaskInfoCuda, void* pAutoPtrCollection, void* pInputMemPinnedPtr, void* pScratchMemPinnedPtr);
         pmStatus ExecuteKernel(pmExecutionStub* pStub, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfoCuda, pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, void* pAutoPtrCollection);
         pmStatus CopyMemoriesFromGpu(pmExecutionStub* pStub, pmSubtaskInfo& pSubtaskInfo, pmSubtaskInfo& pSubtaskInfoCuda, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pAutoPtrCollection);
 #endif

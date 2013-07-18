@@ -873,6 +873,8 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
         case TERMINATE_TASK:
         {
             taskTerminate& lEventDetails = pEvent.taskTerminateDetails;
+            
+            FreeTaskResourcesOnLocalStubs(lEventDetails.task);
         
             if(dynamic_cast<pmLocalTask*>(lEventDetails.task) != NULL)
             {
@@ -890,6 +892,14 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
     }
 
 	return pmSuccess;
+}
+
+void pmScheduler::FreeTaskResourcesOnLocalStubs(pmTask* pTask)
+{
+    pmStubManager* lManager = pmStubManager::GetStubManager();
+    uint lStubCount = (uint)(lManager->GetStubCount());
+    for(uint i = 0; i < lStubCount; ++i)
+        lManager->GetStub(i)->FreeTaskResources(pTask);
 }
 
 void pmScheduler::CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask, bool pTaskListeningOnCancellation)

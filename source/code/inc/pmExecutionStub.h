@@ -28,6 +28,10 @@
     #include "pmEventTimeline.h"
 #endif
 
+#ifdef SUPPORT_CUDA
+#include "pmMemChunk.h"
+#endif
+
 #include <setjmp.h>
 
 namespace pm
@@ -56,6 +60,7 @@ typedef enum eventIdentifier
     , DEFERRED_SHADOW_MEM_COMMITS
     , REDUCTION_FINISH
     , PROCESS_REDISTRIBUTION_BUCKET
+    , FREE_TASK_RESOURCES
 #ifdef DUMP_EVENT_TIMELINE
     , INIT_EVENT_TIMELINE
 #endif
@@ -63,6 +68,8 @@ typedef enum eventIdentifier
 
 typedef struct threadBind
 {
+    size_t physicalMemory;
+    size_t totalStubCount;
 } threadBind;
 
 typedef struct subtaskExec
@@ -107,6 +114,12 @@ typedef struct processRedistributionBucket
     size_t bucketIndex;
 } processRedistributionBucket;
     
+typedef struct freeTaskResources
+{
+    pmMachine* taskOriginatingHost;
+    ulong taskSequenceNumber;
+} freeTaskResources;
+    
 #ifdef DUMP_EVENT_TIMELINE
 typedef struct initTimeline
 {
@@ -126,6 +139,7 @@ typedef struct stubEvent : public pmBasicThreadEvent
         deferredShadowMemCommits deferredShadowMemCommitsDetails;
         reductionFinish reductionFinishDetails;
         processRedistributionBucket processRedistributionBucketDetails;
+        freeTaskResources freeTaskResourcesDetails;
     #ifdef DUMP_EVENT_TIMELINE
         initTimeline initTimelineDetails;
     #endif
@@ -154,7 +168,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 		pmProcessingElement* GetProcessingElement();
 
-        pmStatus ThreadBindEvent();
+        pmStatus ThreadBindEvent(size_t pPhysicalMemory, size_t pTotalStubCount);
     #ifdef DUMP_EVENT_TIMELINE
         pmStatus InitializeEventTimeline();
     #endif
@@ -166,6 +180,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void ProcessDeferredShadowMemCommits(pmTask* pTask);
         void ReductionFinishEvent(pmTask* pTask);
         void ProcessRedistributionBucket(pmTask* pTask, size_t pBucketIndex);
+        void FreeTaskResources(pmTask* pTask);
 
         pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
 
@@ -312,16 +327,22 @@ class pmStubCUDA : public pmStubGPU
 		virtual pmStatus FreeExecutionResources();
 
 		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr);
-
+    
     #ifdef SUPPORT_CUDA
+        pmMemChunk* GetPinnedBufferChunk();
         void* GetDeviceInfoCudaPtr();
         pmLastCudaExecutionRecord& GetLastExecutionRecord();
+        void ReservePinnedMemory(size_t pPhysicalMemory, size_t pTotalStubCount);
+        void FreeTaskResources(pmMachine* pOriginatingHost, ulong pSequenceNumber);
     #endif
 
 	private:
 		size_t mDeviceIndex;
 
     #ifdef SUPPORT_CUDA
+        std::map<std::pair<pmMachine*, ulong>, pmTaskInfo> mTaskInfoCudaMap; // pair of task originating host and sequence number
+        std::auto_ptr<pmMemChunk> mPinnedBufferChunk;
+        std::pair<void*, void*> mPinnedAllocation;  // CPU ptr and CUDA ptr
         void* mDeviceInfoCudaPtr;
         pmLastCudaExecutionRecord mLastExecutionRecord;
     #endif
