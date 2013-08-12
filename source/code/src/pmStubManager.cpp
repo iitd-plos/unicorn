@@ -90,18 +90,43 @@ pmStatus pmStubManager::CreateExecutionStubs()
         mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
 #elif defined(LINUX)
     uint lA, lB, lC, lD;
-
-#if 0
+    
+    GetCpuIdInfo(1, 0, lA, lB, lC, lD);
+    size_t lLogicalCores = ((lB >> 16) & 0xff);
+    bool lHyperThreadingEnabled = (lD & (0x1 << 28));
+    
     GetCpuIdInfo(0, 0, lA, lB, lC, lD);
     std::string lVendor((char*)(&lB), 4);
     lVendor.append(std::string((char*)(&lD), 4));
     lVendor.append(std::string((char*)(&lC), 4));
-#endif
     
-    GetCpuIdInfo(1, 0, lA, lB, lC, lD);
-    bool lHyperThreadingEnabled = (lD & (0x1 << 28));
+    size_t lPhysicalCores, lPos;
+    if(lVendor.find(std::string("Intel"), lPos) != string::npos)
+    {
+        GetCpuIdInfo(4, 0, lA, lB, lC, lD);
+        lPhysicalCores = ((lA >> 26) & 0x3f) + 1;
+    }
+    else if(lVendor.find(std::string("AMD"), lPos) != string::npos)
+    {
+        GetCpuIdInfo(0x80000008, 0, lA, lB, lC, lD);
+        lPhysicalCores = ((size_t)(lC & 0xff)) + 1;
+    }
+    else
+    {
+        lPhysicalCores = sysconf(_SC_NPROCESSORS_ONLN);
+    }
     
-    mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN) / (lHyperThreadingEnabled ? 2 : 1);
+    size_t lAvailableCores = sysconf(_SC_NPROCESSORS_ONLN);
+    
+    if(lAvailableCores > lPhysicalCores)
+    {
+        lHyperThreadingEnabled &= (lPhysicalCores < lLogicalCores);
+        mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN) / (lHyperThreadingEnabled ? 2 : 1);
+    }
+    else
+    {
+        mProcessingElementsCPU = lAvailableCores;
+    }
 #else
 	mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
