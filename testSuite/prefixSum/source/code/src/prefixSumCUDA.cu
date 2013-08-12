@@ -231,7 +231,7 @@ pmStatus prefixSum_compute(PREFIX_SUM_DATA_TYPE* pInput, PREFIX_SUM_DATA_TYPE* p
     return pmSuccess;
 }
     
-pmStatus prefixSum_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
+pmStatus prefixSum_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
 {
     unsigned int lElems = (pSubtaskInfo.inputMemLength / sizeof(PREFIX_SUM_DATA_TYPE));
 

@@ -48,7 +48,7 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
-pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pSameReadWriteSubscriptions)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pSameReadWriteSubscriptions, bool pOverlapComputeCommunication)
 	: mTaskId(pTaskId)
 	, mMemRO(pMemRO)
 	, mCallbackUnit(pCallbackUnit)
@@ -63,6 +63,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     , mSequenceNumber(0)
     , mMultiAssignEnabled(pMultiAssignEnabled)
     , mSameReadWriteSubscription(pSameReadWriteSubscriptions)
+    , mOverlapComputeCommunication(pOverlapComputeCommunication)
     , mReadOnlyMemAddrForSubtasks(NULL)
 	, mSubtasksExecuted(0)
 	, mSubtaskExecutionFinished(false)
@@ -87,10 +88,12 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     if(pMemRO)
     {
         pMemRO->Lock(this, pInputMemInfo);
-    
+
+    #ifdef SUPPORT_LAZY_MEMORY
         if(pMemRO->IsLazy())
             mReadOnlyMemAddrForSubtasks = mMemRO->GetReadOnlyLazyMemoryMapping();
         else
+    #endif
             mReadOnlyMemAddrForSubtasks = mMemRO->GetMem();
     }
     
@@ -336,8 +339,10 @@ void* pmTask::CheckOutSubtaskMemory(size_t pLength, bool pForceNonLazy)
         lMem = mUnallocatedShadowMemPool.back();
         mUnallocatedShadowMemPool.pop_back();
 
+    #ifdef SUPPORT_LAZY_MEMORY
         if(GetMemSectionRW()->IsLazy())
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lMem, mIndividualShadowMemAllocationLength, true, true);
+    #endif
     }
     
     return lMem;
@@ -531,6 +536,11 @@ bool pmTask::HasSameReadWriteSubscription()
     return mSameReadWriteSubscription;
 }
 
+bool pmTask::ShouldOverlapComputeCommunication()
+{
+    return mOverlapComputeCommunication;
+}
+
 void pmTask::MarkLocalStubsFreeOfCancellations()
 {
 }
@@ -553,8 +563,8 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
 
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pSameReadWriteSubscriptions /* = false */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pSameReadWriteSubscriptions)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pSameReadWriteSubscriptions /* = false */, bool pOverlapComputeCommunication /* = true */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pSameReadWriteSubscriptions, pOverlapComputeCommunication)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
     , mUserSideTaskCompleted(false)
@@ -839,8 +849,8 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 
 /* class pmRemoteTask */
-pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pSameReadWriteSubscriptions /* = false */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pSameReadWriteSubscriptions)
+pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pSameReadWriteSubscriptions /* = false */, bool pOverlapComputeCommunication /* = true */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pSameReadWriteSubscriptions, pOverlapComputeCommunication)
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)

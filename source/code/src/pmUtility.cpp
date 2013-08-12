@@ -29,6 +29,8 @@
 #include <sys/mman.h>
 #include <fcntl.h>
 
+#include <dlfcn.h>	// For dlopen/dlclose/dlsym
+
 namespace pm
 {
 
@@ -245,6 +247,30 @@ void pmUtility::UnmapFile(const char* pPath)
         PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MUNMAP_FAILED));
     
     lFileMappings.erase(lStr);
+}
+
+void* pmUtility::OpenLibrary(char* pPath)
+{
+	return dlopen(pPath, RTLD_LAZY | RTLD_LOCAL);
+}
+
+pmStatus pmUtility::CloseLibrary(void* pLibHandle)
+{
+	if(pLibHandle)
+	{
+		if(dlclose(pLibHandle) != 0)
+			PMTHROW(pmIgnorableException(pmIgnorableException::LIBRARY_CLOSE_FAILURE));
+	}
+
+	return pmSuccess;
+}
+
+void* pmUtility::GetExportedSymbol(void* pLibHandle, char* pSymbol)
+{
+	if(!pLibHandle)
+		return NULL;
+
+	return dlsym(pLibHandle, pSymbol);
 }
 
 } // end namespace pm

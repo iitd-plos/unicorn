@@ -17,7 +17,6 @@ __global__ void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceI
     unsigned int lDimension = lTaskConf->matrixDim;
     unsigned int lMatrixSize = lDimension * lDimension;
 
-
     MATRIX_DATA_TYPE value = (MATRIX_DATA_TYPE)0;
     int rowId = pSubtaskInfo.subtaskId;
     int colId = ((blockIdx.x * gridDim.y + blockIdx.y)*(blockDim.x * blockDim.y)) + (threadIdx.x * blockDim.y) + threadIdx.y;

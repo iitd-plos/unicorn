@@ -304,6 +304,15 @@ bool isLazyMemEnabled()
     return false;
 }
 
+bool isComputeCommunicationOverlapEnabled()
+{
+    const char* lVal = getenv("PMLIB_DISABLE_COMPUTE_COMMUNICATION_OVERLAP");
+    if(lVal && atoi(lVal) != 0)
+        return false;
+    
+    return true;
+}
+
 double getCurrentTimeInSecs()
 {
 	struct timeval lTimeVal;

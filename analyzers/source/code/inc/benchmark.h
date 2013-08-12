@@ -149,13 +149,15 @@ struct Level2Key
     enum clusterType cluster;
     bool multiAssign;
     bool lazyMem;
+    bool overlapComputeCommunication;
     
-    Level2Key(size_t pHosts, enum SchedulingPolicy pPolicy, enum clusterType pCluster, bool pMultiAssign, bool pLazyMem)
+    Level2Key(size_t pHosts, enum SchedulingPolicy pPolicy, enum clusterType pCluster, bool pMultiAssign, bool pLazyMem, bool pOverlapComputeCommunication)
     : hosts(pHosts)
     , policy(pPolicy)
     , cluster(pCluster)
     , multiAssign(pMultiAssign)
     , lazyMem(pLazyMem)
+    , overlapComputeCommunication(pOverlapComputeCommunication)
     {}
 
     friend bool operator< (const Level2Key& pFirst, const Level2Key& pSecond)
@@ -167,7 +169,12 @@ struct Level2Key
                 if(pFirst.cluster == pSecond.cluster)
                 {
                     if(pFirst.multiAssign == pSecond.multiAssign)
+                    {
+                        if(pFirst.lazyMem == pSecond.lazyMem)
+                            return (pFirst.overlapComputeCommunication < pSecond.overlapComputeCommunication);
+                            
                         return (pFirst.lazyMem < pSecond.lazyMem);
+                    }
                     
                     return (pFirst.multiAssign < pSecond.multiAssign);
                 }
@@ -272,7 +279,7 @@ private:
     void GeneratePlots(std::ofstream& pHtmlStream, std::vector<size_t>& pRadioSetCount);
     Graph& GenerateStandardChart(size_t pPlotWidth, size_t pPlotHeight, StandardChart& pChart);
 
-    void GenerateTableInternal(std::ofstream& pHtmlStream, bool pSequential, bool pAbsoluteValues);
+    void GenerateTableInternal(std::ofstream& pHtmlStream, bool pSequential, bool pAbsoluteValues, bool pOverlap);
 
     void GeneratePreControlCode(std::ofstream& pHtmlStream);
     void GeneratePostControlCode(std::ofstream& pHtmlStream, const std::vector<size_t>& pRadioSetCount);
@@ -281,15 +288,17 @@ private:
     size_t GenerateSchedulingModelsGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     size_t GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     size_t GenerateMultiAssignComparisonGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
+    size_t GenerateOverlapComparisonGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     
-    void GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, SchedulingPolicy pPolicy, size_t pVarying2Val = 0);
-    void GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pVarying1Val, size_t pVarying2Val);
-    void GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy, const Level2InnerTaskKey& pInnerTask);
-    void GenerateMultiAssignComparisonGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, size_t pVarying1Val, size_t pVarying2Val);
+    void GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, SchedulingPolicy pPolicy, size_t pVarying2Val = 0);
+    void GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, size_t pVarying1Val, size_t pVarying2Val);
+    void GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy, const Level2InnerTaskKey& pInnerTask);
+    void GenerateMultiAssignComparisonGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, size_t pVarying1Val, size_t pVarying2Val, bool pOverlap);
+    void GenerateOverlapComparisonGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, size_t pVarying1Val, size_t pVarying2Val, bool pMA);
     
     void GenerateSelectionGroup(size_t pPanelIndex, const panelConfigurationType& pPanelConf, std::ofstream& pHtmlStream);
 
-    void EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults::mapType::iterator pLevel1Iter, size_t pHosts, bool pMultiAssign, bool pGenerateStaticBest, bool pSequential, bool pAbsoluteValues);
+    void EmbedResultsInTable(std::ofstream& pHtmlStream, BenchmarkResults::mapType::iterator pLevel1Iter, size_t pHosts, bool pMultiAssign, bool pGenerateStaticBest, bool pSequential, bool pAbsoluteValues, bool pOverlap);
     void EmbedPlot(std::ofstream& pHtmlStream, Graph& pGraph, const std::string& pGraphTitle);
     
     void SelectSample(bool pMedianSample);

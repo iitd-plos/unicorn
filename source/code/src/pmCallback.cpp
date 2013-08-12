@@ -71,7 +71,7 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
 
     if(!lJmpVal)
     {
-        lJmpBufAutoPtr.Reset(&lJmpBuf, pStub, pSubtaskId);
+        lJmpBufAutoPtr.Reset(&lJmpBuf, pStub);
         lStatus = mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId);
     }
     else
@@ -124,17 +124,21 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 
 	return false;
 }
+    
+bool pmSubtaskCB::HasCustomGpuCallback()
+{
+#ifdef SUPPORT_CUDA
+    return (mCallback_GPU_Custom != NULL);
+#else
+    return false;
+#endif
+}
 
-pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, pmTaskInfo& pTaskInfo)
+pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly)
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
 #endif
-
-    bool lOutputMemWriteOnly = false;
-    
-    pmSubtaskInfo lSubtaskInfo;
-    pTask->GetSubtaskInfo(pStub, pSubtaskId, pMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
     
     pmStatus lStatus = pmStatusUnavailable;
 
@@ -154,8 +158,8 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
             
             if(!lJmpVal)
             {
-                lJmpBufAutoPtr.Reset(&lJmpBuf, pStub, pSubtaskId);
-                lStatus = mCallback_CPU(pTaskInfo, lDeviceInfo, lSubtaskInfo);
+                lJmpBufAutoPtr.Reset(&lJmpBuf, pStub);
+                lStatus = mCallback_CPU(pTaskInfo, lDeviceInfo, pSubtaskInfo);
             }
             else
             {
@@ -175,7 +179,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskId);
 
             // pTaskInfo is task info with CUDA pointers; pTask->GetTaskInfo() is with CPU pointers
-            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pTask->GetTaskInfo(), pTaskInfo, lSubtaskInfo, lCudaLaunchConf, lOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
+            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pTask->GetTaskInfo(), pTaskInfo, pSubtaskInfo, lCudaLaunchConf, pOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
             
 			break;
 		}

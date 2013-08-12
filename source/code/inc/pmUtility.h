@@ -53,6 +53,10 @@ public:
     static void RegisterFileMappingResponse(const char* pPath);
     static void RegisterFileUnmappingResponse(const char* pPath);
 
+    static void* OpenLibrary(char* pPath);
+    static pmStatus CloseLibrary(void* pLibHandle);
+    static void* GetExportedSymbol(void* pLibHandle, char* pSymbol);
+    
 private:
     static pendingResponsesMapType& GetFileMappingPendingResponsesMap();
     static pendingResponsesMapType& GetFileUnmappingPendingResponsesMap();

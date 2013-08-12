@@ -10,7 +10,7 @@
 namespace fft
 {
 
-pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
+pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
@@ -21,6 +21,13 @@ pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
     if(lResult != CUFFT_SUCCESS)
     {
         std::cout << "CUFFT cufftPlan1d Error: " << lResult << std::endl;
+        return pmUserError;
+    }
+    
+    lResult = cufftSetStream(lPlan, (cudaStream_t)pCudaStream);
+    if(lResult != CUFFT_SUCCESS)
+    {
+        std::cout << "CUFFT set stream Error: " << lResult << std::endl;
         return pmUserError;
     }
     

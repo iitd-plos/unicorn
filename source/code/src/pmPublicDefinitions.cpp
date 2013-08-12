@@ -73,7 +73,7 @@ static const char* pmErrorMessages[] =
 	"Failure in time measurement",
 	"Memory allocation/management failure",
 	"Error in network communication",
-	"Minor problem. Exceution can continue.",
+	"Minor problem. Execution can continue.",
 	"Problem with GPU card or driver software",
 	"Computational Limits Exceeded",
 	"Memory not allocated through PMLIB or wrong memory access type",
@@ -121,18 +121,6 @@ pmStatus pmInitialize()
 	{
 		pmController* lController;
 		SAFE_GET_CONTROLLER(lController);		// Initializes the variable lController; If no controller returns error
-
-#if 0
-        pm::pmRangeAccessor<int> lAccessor;
-        lAccessor.Insert(0, 10, 4);
-        lAccessor.Insert(12, 20, 6);
-        
-        int lVal = 0;
-        if(lAccessor.Find(6, 1, lVal))
-            std::cout << "Found " << lVal << std::endl;
-        else
-            std::cout << " Not Found" << std::endl;
-#endif
 	}
 	catch(pmException& e)
 	{
@@ -203,6 +191,7 @@ unsigned int pmGetHostCount()
 
 pmGpuContext::pmGpuContext()
     : scratchBuffer(NULL)
+    , reservedGlobalMem(NULL)
 {
 }
     
@@ -329,7 +318,7 @@ pmTaskDetails::pmTaskDetails()
 	, taskConfLength(0)
 	, inputMemHandle(NULL)
 	, outputMemHandle(NULL)
-    , inputMemInfo(INPUT_MEM_READ_ONLY_LAZY)
+    , inputMemInfo(INPUT_MEM_READ_ONLY)
     , outputMemInfo(OUTPUT_MEM_WRITE_ONLY)
 	, subtaskCount(0)
 	, taskId(0)
@@ -338,6 +327,7 @@ pmTaskDetails::pmTaskDetails()
     , timeOutInSecs(__MAX(int))
     , multiAssignEnabled(true)
     , sameReadWriteSubscriptions(false)
+    , overlapComputeCommunication(true)
 	, cluster(NULL)
 {
 }
@@ -377,14 +367,24 @@ pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTas
 }
     
 pmCudaLaunchConf::pmCudaLaunchConf()
+	: blocksX(1)
+    , blocksY(1)
+    , blocksZ(1)
+    , threadsX(1)
+    , threadsY(1)
+    , threadsZ(1)
+	, sharedMem(0)
 {
-	blocksX = blocksY = blocksZ = threadsX = threadsY = threadsZ = 1;
-	sharedMem = 0;
 }
     
 pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf)
 {
 	SAFE_EXECUTE_ON_CONTROLLER(SetCudaLaunchConf_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pCudaLaunchConf);
+}
+    
+pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pSize)
+{
+	SAFE_EXECUTE_ON_CONTROLLER(ReserveCudaGlobalMem_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pSize);
 }
 
 pmSubscriptionInfo::pmSubscriptionInfo()

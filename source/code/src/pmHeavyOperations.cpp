@@ -282,11 +282,8 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 PMTHROW(pmFatalErrorException());   // Cyclic reference
             
             pmCommunicatorCommand::memoryReceivePacked* lPackedData = NULL;
-
-            if(lEventDetails.srcMemIdentifier.memOwnerHost != (uint)(*PM_LOCAL_MACHINE))
-                PMTHROW(pmFatalErrorException());
             
-            pmMemSection* lSrcMemSection = pmMemSection::FindMemSection(PM_LOCAL_MACHINE, lEventDetails.srcMemIdentifier.generationNumber);
+            pmMemSection* lSrcMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.srcMemIdentifier.memOwnerHost), lEventDetails.srcMemIdentifier.generationNumber);
             if(!lSrcMemSection)
                 return pmSuccess;
             

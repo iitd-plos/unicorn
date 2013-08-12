@@ -42,12 +42,11 @@ namespace pm
     class pmSubtaskTerminationCheckPointAutoPtr
     {
         public:
-            pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId);
+            pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub);
             ~pmSubtaskTerminationCheckPointAutoPtr();
     
         private:
             pmExecutionStub* mStub;
-            ulong mSubtaskId;
     };
     
     class pmJmpBufAutoPtr
@@ -56,12 +55,11 @@ namespace pm
             pmJmpBufAutoPtr();
             ~pmJmpBufAutoPtr();
 
-            void Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId);
+            void Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub);
             void SetHasJumped();
         
         private:
             pmExecutionStub* mStub;
-            ulong mSubtaskId;
             bool mHasJumped;
     };
     
@@ -82,6 +80,34 @@ namespace pm
         , valid(false)
         {}
     } pmLastCudaExecutionRecord;
+
+    class pmCudaAutoPtr
+    {
+    public:
+        pmCudaAutoPtr(void* pRuntimeHandle, size_t pAllocationSize = 0);
+        ~pmCudaAutoPtr();
+        
+        void reset(size_t pAllocationSize);
+        void release();
+        void* getPtr();
+        
+    private:
+        void* mRuntimeHandle;
+        void* mCudaPtr;
+    };
+    
+    typedef struct pmCudaMemcpyCommand
+    {
+        void* srcPtr;
+        void* destPtr;
+        size_t size;
+        
+        pmCudaMemcpyCommand(void* pSrcPtr, void* pDestPtr, size_t pSize)
+        : srcPtr(pSrcPtr)
+        , destPtr(pDestPtr)
+        , size(pSize)
+        {}
+    } pmCudaMemcpyCommand;
 #endif
     
 #ifdef ENABLE_TASK_PROFILING
@@ -118,6 +144,33 @@ namespace pm
             taskProfiler::profileType mProfileType;
     };
 #endif
+    
+#ifdef DUMP_EVENT_TIMELINE
+    class pmEventTimeline;
+
+    class pmSubtaskRangeExecutionTimelineAutoPtr
+    {
+        public:
+            pmSubtaskRangeExecutionTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pStartSubtask, ulong pEndSubtask);
+            ~pmSubtaskRangeExecutionTimelineAutoPtr();
+        
+            void ResetEndSubtask(ulong pEndSubtask);
+        
+            void InitializeNextSubtask();
+            void SetGracefulCompletion();
+        
+            static std::string GetEventName(ulong pSubtaskId, pmTask* pTask);
+            static std::string GetCancelledEventName(ulong pSubtaskId, pmTask* pTask);
+
+        private:
+            pmTask* mTask;
+            pmEventTimeline* mEventTimeline;
+            ulong mStartSubtask;
+            ulong mEndSubtask;
+            bool mRangeCancelledOrException;
+            ulong mSubtasksInitialized;
+    };
+#endif
 
     typedef struct pmSubtaskRange
     {
@@ -125,6 +178,22 @@ namespace pm
         pmProcessingElement* originalAllottee;
         ulong startSubtask;
         ulong endSubtask;
+
+        /*
+        pmSubtaskRange(pmTask* pTask, pmProcessingElement* pOriginalAllottee, ulong pStartSubtask, ulong pEndSubtask)
+        : task(pTask)
+        , originalAllottee(pOriginalAllottee)
+        , startSubtask(pStartSubtask)
+        , endSubtask(pEndSubtask)
+        {}
+        
+        pmSubtaskRange(const pmSubtaskRange& pRange)
+        : task(pRange.task)
+        , originalAllottee(pRange.originalAllottee)
+        , startSubtask(pRange.startSubtask)
+        , endSubtask(pRange.endSubtask)
+        {}
+        */
     } pmSubtaskRange;
     
     #define STATIC_ACCESSOR(type, className, funcName) \

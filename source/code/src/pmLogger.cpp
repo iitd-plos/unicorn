@@ -95,7 +95,7 @@ pmStatus pmLogger::Log(logLevel pMsgLevel, logType pMsgType, const char* pMsg, b
 
 	if(pMsgLevel <= mLogLevel)
 	{
-		if(pMsgType == INFORMATION)
+		if(pMsgType == INFORMATION || pMsgType == WARNING)
 		{
             if(pLeadingBlankLine)
                 fprintf(stdout, "\n");

@@ -110,6 +110,7 @@ namespace pm
     typedef struct pmGpuContext
     {
         void* scratchBuffer;
+        void* reservedGlobalMem;
 
         pmGpuContext();
     } pmGpuContext;
@@ -216,12 +217,12 @@ namespace pm
 	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId);
 	typedef pmStatus (*pmSubtaskCallback_CPU)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
+	typedef pmStatus (*pmSubtaskCallback_GPU_Custom)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
 	typedef pmStatus (*pmDataReductionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
 	typedef pmStatus (*pmDataRedistributionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef bool     (*pmDeviceSelectionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
 	typedef pmStatus (*pmPreDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
 	typedef pmStatus (*pmPostDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
-    typedef pmSubtaskCallback_CPU pmSubtaskCallback_GPU_Custom;
 
 	/** Unified callback structure */
 	typedef struct pmCallbacks
@@ -247,7 +248,6 @@ namespace pm
 
 	/* The registered callbacks must be released by the application using the following API */
 	pmStatus pmReleaseCallbacks(pmCallbackHandle pCallbackHandle);
-
 	
 	/** The memory creation API. The allocated memory is returned in the variable pMemHandle */
 	pmStatus pmCreateMemory(size_t pLength, pmMemHandle* pMemHandle);
@@ -306,6 +306,15 @@ namespace pm
      *  of calling this function otherwise is undefined.
      */
     pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf);
+    
+    /** If subtask_gpu_custom is set, application may need to allocate a CUDA buffer in the custom callback.
+     *  cudaMalloc and like functions are synchronous and they interrupt any possibility of asynchronous launches,
+     *  resulting in limited occupancy on the device. By using this function, a subtask can upfront ask the library
+     *  to reserve that buffer. This buffer can be accessed in kernels using pSubtaskInfo.gpuContext->reservedGlobalMem
+     *  This function can only be called from DataDistribution callback. The effect of calling this function otherwise
+     *  is undefined.
+     */
+    pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pSize);
 	
 	/** The task details structure used for task submission */
 	typedef struct pmTaskDetails
@@ -324,6 +333,7 @@ namespace pm
         int timeOutInSecs;                      /* By default, this is max possible value in signed int, negative values mean no timeout */
         bool multiAssignEnabled;                /* By default, this is true */
         bool sameReadWriteSubscriptions;        /* By default, this is false. Applies only to output memory of the task. */
+        bool overlapComputeCommunication;       /* By default, this is true */
 		pmClusterHandle cluster;                /* Unused */
 
 		pmTaskDetails();

@@ -41,6 +41,7 @@ class pmMemSection;
  * \brief The class responsible for all GPU related operations on various graphics cards
  */
 
+#ifdef SUPPORT_CUDA
 class pmDispatcherCUDA : public pmBase
 {
 	public:
@@ -55,25 +56,38 @@ class pmDispatcherCUDA : public pmBase
 		std::string GetDeviceDescription(size_t pDeviceIndex);
 		pmStatus InvokeKernel(pmExecutionStub* pStub, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr);
 
-#ifdef SUPPORT_CUDA
         void* CreateDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo);
         void DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr);
 
-        std::pair<void*, void*> AllocatePinnedBuffer(size_t pSize);
-        void DeallocatePinnedBuffer(std::pair<void*, void*> pMemPair);
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+        size_t GetLogCudaAlignment();
+        void* AllocatePinnedBuffer(size_t pSize);
+        void DeallocatePinnedBuffer(void* pMem);
+    #endif
 
         void* CreateTaskConf(pmTaskInfo& pTaskInfo);
         void DestroyTaskConf(void* pTaskConfCudaPtr);
     
-        void ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmSubtaskInfo& pSubtaskInfo, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, size_t& pInputMem, size_t& pOutputMem, size_t& pScratchMem);
+        ulong FindCollectivelyExecutableSubtaskRangeEnd(pmExecutionStub* pStub, const pmSubtaskRange& pSubtaskRange, bool pMultiAssign, std::vector<std::vector<std::pair<size_t, size_t> > >& pOffsets, size_t& pTotalMem);
 
-        pmStatus InvokeKernel(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastExecutionRecord, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem);
-
+        pmStatus InvokeKernel(pmExecutionStub* pStub, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, std::vector<void*>& pCudaPointers);
+    
         pmStatus FreeLastExecutionResources(pmLastCudaExecutionRecord& pLastExecutionRecord);
-#endif
+    
+        size_t GetAvailableCudaMem();
+        void* GetRuntimeHandle();
+    
+        void* AllocateCudaMem(size_t pSize);
+        void DeallocateCudaMem(void* pPtr);
+    
+        void StreamFinishCallback(void* pUserData);
     
 	private:
 		pmStatus CountAndProbeProcessingElements();
+
+        size_t ComputeAlignedMemoryRequirement(size_t pAllocation1, size_t pAllocation2);
+    
+        void ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, pmSubtaskInfo& pSubtaskInfo, ulong* pLastSubtaskIdIfSameTask, uint pOriginatingMachineIndex, ulong pSequenceNumber, size_t& pInputMem, size_t& pOutputMem, size_t& pScratchMem, bool& pUseLastSubtaskInputMem);
 
         void* CheckAndGetScratchBuffer(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId, size_t& pScratchBufferSize, pmScratchBufferInfo& pScratchBufferInfo);
 
@@ -85,24 +99,21 @@ class pmDispatcherCUDA : public pmBase
     
         bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub, uint pTaskOriginatingMachineIndex, ulong pTaskSequenceNumber, ulong pSubtaskId1, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
     
-        void MarkInsideUserCode(pmExecutionStub* pStub, ulong pSubtaskId);
-        void MarkInsideLibraryCode(pmExecutionStub* pStub, ulong pSubtaskId);
-        bool RequiresPrematureExit(pmExecutionStub* pStub, ulong pSubtaskId);
+        void MarkInsideUserCode(pmExecutionStub* pStub);
+        void MarkInsideLibraryCode(pmExecutionStub* pStub);
+        bool RequiresPrematureExit(pmExecutionStub* pStub);
+    
+        int GetCudaDriverVersion();
 
-#ifdef SUPPORT_CUDA
-        void CopyMemoriesToGpu(pmExecutionStub* pStub, pmLastCudaExecutionRecord& pLastRecord, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pTaskOutputMem, pmSubtaskInfo& pSubtaskInfoCuda, void* pAutoPtrCollection, void* pInputMemPinnedPtr, void* pScratchMemPinnedPtr);
-        pmStatus ExecuteKernel(pmExecutionStub* pStub, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfoCuda, pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, void* pAutoPtrCollection);
-        pmStatus CopyMemoriesFromGpu(pmExecutionStub* pStub, pmSubtaskInfo& pSubtaskInfo, pmSubtaskInfo& pSubtaskInfoCuda, pmSubtaskCallback_GPU_CUDA pKernelPtr, uint pOriginatingMachineIndex, ulong pSequenceNumber, void* pAutoPtrCollection);
-#endif
+        pmStatus ExecuteKernel(pmExecutionStub* pStub, pmTaskInfo& pTaskInfo, pmTaskInfo& pTaskInfoCuda, pmDeviceInfo& pDeviceInfo, pmDeviceInfo* pDeviceInfoCudaPtr, pmSubtaskInfo& pSubtaskInfoCuda, pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, cudaStream_t pStream, pmStatus* pStatusPtr);
 
 		size_t mCountCUDA;
 		void* mCutilHandle;
 		void* mRuntimeHandle;
 
-#ifdef SUPPORT_CUDA
 		std::vector<std::pair<int, cudaDeviceProp> > mDeviceVector;
-#endif
 };
+#endif
 
 class pmDispatcherGPU : public pmBase
 {
@@ -110,7 +121,10 @@ class pmDispatcherGPU : public pmBase
 		static pmDispatcherGPU* GetDispatcherGPU();
 
 		size_t ProbeProcessingElementsAndCreateStubs(std::vector<pmExecutionStub*>& pStubVector);
+
+    #ifdef SUPPORT_CUDA
 		pmDispatcherCUDA* GetDispatcherCUDA();
+    #endif
 
 		size_t GetCountGPU();
 
@@ -119,7 +133,10 @@ class pmDispatcherGPU : public pmBase
 		virtual ~pmDispatcherGPU();
 				
 		size_t mCountGPU;
+    
+    #ifdef SUPPORT_CUDA
 		pmDispatcherCUDA* mDispatcherCUDA;
+    #endif
 };
 
 } // end namespace pm

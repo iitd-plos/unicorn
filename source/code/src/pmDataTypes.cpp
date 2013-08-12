@@ -21,9 +21,11 @@
 #include "pmBase.h"
 #include "pmLogger.h"
 #include "pmTimer.h"
+#include "pmTask.h"
 #include "pmResourceLock.h"
 #include "pmExecutionStub.h"
 #include "pmTaskProfiler.h"
+#include "pmHardware.h"
 
 #include <iostream>
 #include <iomanip>
@@ -37,7 +39,6 @@ namespace pm
 /* class pmJmpBufAutoPtr */
 pmJmpBufAutoPtr::pmJmpBufAutoPtr()
     : mStub(NULL)
-    , mSubtaskId(0)
     , mHasJumped(false)
 {
 }
@@ -45,16 +46,15 @@ pmJmpBufAutoPtr::pmJmpBufAutoPtr()
 pmJmpBufAutoPtr::~pmJmpBufAutoPtr()
 {
     if(mStub)
-        mStub->UnsetupJmpBuf(mSubtaskId, mHasJumped);
+        mStub->UnsetupJmpBuf(mHasJumped);
 }
 
-void pmJmpBufAutoPtr::Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub, ulong pSubtaskId)
+void pmJmpBufAutoPtr::Reset(sigjmp_buf* pJmpBuf, pmExecutionStub* pStub)
 {
     mStub = pStub;
-    mSubtaskId = pSubtaskId;
     
     if(mStub)
-        mStub->SetupJmpBuf(pJmpBuf, mSubtaskId);
+        mStub->SetupJmpBuf(pJmpBuf);
 }
 
 void pmJmpBufAutoPtr::SetHasJumped()
@@ -64,16 +64,15 @@ void pmJmpBufAutoPtr::SetHasJumped()
     
 
 /* class pmUserLibraryCodeAutoPtr */
-pmSubtaskTerminationCheckPointAutoPtr::pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub, ulong pSubtaskId)
+pmSubtaskTerminationCheckPointAutoPtr::pmSubtaskTerminationCheckPointAutoPtr(pmExecutionStub* pStub)
     : mStub(pStub)
-    , mSubtaskId(pSubtaskId)
 {
-    mStub->MarkInsideLibraryCode(mSubtaskId);
+    mStub->MarkInsideLibraryCode();
 }
     
 pmSubtaskTerminationCheckPointAutoPtr::~pmSubtaskTerminationCheckPointAutoPtr()
 {
-    mStub->MarkInsideUserCode(mSubtaskId);
+    mStub->MarkInsideUserCode();
 }
 
 
@@ -89,6 +88,67 @@ pmRecordProfileEventAutoPtr::pmRecordProfileEventAutoPtr(pmTaskProfiler* pTaskPr
 pmRecordProfileEventAutoPtr::~pmRecordProfileEventAutoPtr()
 {
     mTaskProfiler->RecordProfileEvent(mProfileType, false);
+}
+#endif
+
+#ifdef DUMP_EVENT_TIMELINE
+/* class pmSubtaskRangeExecutionTimelineAutoPtr */
+pmSubtaskRangeExecutionTimelineAutoPtr::pmSubtaskRangeExecutionTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pStartSubtask, ulong pEndSubtask)
+    : mTask(pTask)
+    , mEventTimeline(pEventTimeline)
+    , mStartSubtask(pStartSubtask)
+    , mEndSubtask(pEndSubtask)
+    , mRangeCancelledOrException(true)
+    , mSubtasksInitialized(0)
+{}
+    
+pmSubtaskRangeExecutionTimelineAutoPtr::~pmSubtaskRangeExecutionTimelineAutoPtr()
+{
+    if(mRangeCancelledOrException)
+    {
+        for(ulong i = 0; i < mSubtasksInitialized; ++i)
+        {
+            mEventTimeline->RenameEvent(GetEventName(mStartSubtask + i, mTask), GetCancelledEventName(mStartSubtask + i, mTask));
+            mEventTimeline->RecordEvent(GetCancelledEventName(mStartSubtask + i, mTask), false);
+        }
+    }
+    else
+    {
+        for(ulong i = 0; i < mSubtasksInitialized; ++i)
+            mEventTimeline->RecordEvent(GetEventName(mStartSubtask + i, mTask), false);
+    }
+}
+    
+void pmSubtaskRangeExecutionTimelineAutoPtr::ResetEndSubtask(ulong pEndSubtask)
+{
+    mEndSubtask = pEndSubtask;
+}
+    
+void pmSubtaskRangeExecutionTimelineAutoPtr::InitializeNextSubtask()
+{
+    mEventTimeline->RecordEvent(GetEventName(mStartSubtask + mSubtasksInitialized, mTask), true);
+    ++mSubtasksInitialized;
+}
+
+void pmSubtaskRangeExecutionTimelineAutoPtr::SetGracefulCompletion()
+{
+    mRangeCancelledOrException = false;
+}
+
+std::string pmSubtaskRangeExecutionTimelineAutoPtr::GetEventName(ulong pSubtaskId, pmTask* pTask)
+{
+    std::stringstream lEventName;
+    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pSubtaskId;
+    
+    return lEventName.str();
+}
+
+std::string pmSubtaskRangeExecutionTimelineAutoPtr::GetCancelledEventName(ulong pSubtaskId, pmTask* pTask)
+{
+    std::stringstream lEventName;
+    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pSubtaskId << "_Cancelled";
+
+    return lEventName.str();
 }
 #endif
 

@@ -1114,7 +1114,7 @@ pmStatus pmScheduler::AssignSubtasksToDevices(pmLocalTask* pLocalTask)
 	std::vector<pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
 
 	size_t lSize = lDevices.size();
-	for(size_t i=0; i<lSize; ++i)
+	for(size_t i = 0; i < lSize; ++i)
 		AssignSubtasksToDevice(lDevices[i], pLocalTask);
 
 	return pmSuccess;

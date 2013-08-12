@@ -89,7 +89,8 @@ namespace subscription
         std::map<size_t, size_t> mWriteOnlyLazyUnprotectedPageRangesMap;
         size_t mWriteOnlyLazyUnprotectedPageCount;
     
-        bool mReadyForExecution;    // a flag indicating that pmDataDistributionCB has already been executed
+        bool mReadyForExecution;    // a flag indicating that pmDataDistributionCB has already been executed (data may not be fetched)
+        size_t mReservedCudaGlobalMemSize;
         
 		pmStatus Initialize(pmTask* pTask);
 	} pmSubtask;
@@ -120,13 +121,18 @@ class pmSubscriptionManager : public pmBase
         pmStatus FreezeSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId);
         pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, bool pPrefetch);
 		pmStatus SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
+        pmStatus ReserveCudaGlobalMem(pmExecutionStub* pStub, ulong pSubtaskId, size_t pSize);
         pmStatus SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, char* pVal, size_t pLength);
 
         void AddWriteOnlyLazyUnprotection(pmExecutionStub* pStub, ulong pSubtaskId, size_t pPageNum);
         size_t GetWriteOnlyLazyUnprotectedPagesCount(pmExecutionStub* pStub, ulong pSubtaskId);
+    
+    #ifdef SUPPORT_LAZY_MEMORY
         const std::map<size_t, size_t>& GetWriteOnlyLazyUnprotectedPageRanges(pmExecutionStub* pStub, ulong pSubtaskId);
+    #endif
 
 		pmCudaLaunchConf& GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId);
+        size_t GetReservedCudaGlobalMemSize(pmExecutionStub* pStub, ulong pSubtaskId);
         void InitializeWriteOnlyLazyMemory(pmExecutionStub* pStub, ulong pSubtaskId, size_t pOffsetFromBase, void* pLazyPageAddr, size_t pLength);
     
         void DropScratchBufferIfNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId);
@@ -144,7 +150,9 @@ class pmSubscriptionManager : public pmBase
 
         pmStatus CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, void* pMem = NULL, size_t pMemLength = 0, size_t pWriteOnlyUnprotectedRanges = 0, uint* pUnprotectedRanges = NULL);
         void* GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
-        pmStatus DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
+    
+        void DestroySubtaskRangeShadowMem(pmExecutionStub* pStub, ulong pStartSubtaskId, ulong pEndSubtaskId);
+        void DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
         void CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBeginIter, subscription::subscriptionRecordType::const_iterator& pEndIter, ulong pShadowMemOffset);
     
         void MarkSubtaskReadyForExecution(pmExecutionStub* pStub, ulong pSubtaskId);

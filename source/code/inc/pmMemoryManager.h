@@ -67,11 +67,12 @@ class pmMemoryManager : public pmBase
     
         virtual size_t GetVirtualMemoryPageSize() = 0;
         virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount) = 0;
+
+        virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy) = 0;
     
 #ifdef SUPPORT_LAZY_MEMORY
         virtual void* CreateReadOnlyMemoryMapping(pmMemSection* pMemSection) = 0;
         virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength) = 0;
-        virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy) = 0;
         virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed) = 0;
 #endif
 
@@ -108,6 +109,8 @@ namespace linuxMemManager
 class pmLinuxMemoryManager : public pmMemoryManager
 {
     private:
+        friend void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
+
         class sharedMemAutoPtr
         {
             public:
@@ -132,6 +135,9 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
         size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
     
+        pmStatus InstallSegFaultHandler();
+		pmStatus UninstallSegFaultHandler();
+
     private:
 		pmLinuxMemoryManager();
 		virtual ~pmLinuxMemoryManager();
@@ -144,24 +150,20 @@ class pmLinuxMemoryManager : public pmMemoryManager
         void FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMemSection::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand);
 
         void FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
-        
+
+        virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy);
+
 #ifdef SUPPORT_LAZY_MEMORY
     public:
         virtual void* CreateReadOnlyMemoryMapping(pmMemSection* pMemSection);
         virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength);
-        virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy);
         virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
 
-        pmStatus InstallSegFaultHandler();
-		pmStatus UninstallSegFaultHandler();
-
     private:
-        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr);
-        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
-        pmStatus CopyLazyInputMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pFaultAddr);
-        pmStatus CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
-
-        friend void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
+        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pLazyMemAddr);
+        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
+        pmStatus CopyLazyInputMemPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pFaultAddr);
+        pmStatus CopyShadowMemPage(pmExecutionStub* pStub, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
 
         void* CreateMemoryMapping(int pSharedMemDescriptor, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
         void DeleteMemoryMapping(void* pMem, size_t pLength);

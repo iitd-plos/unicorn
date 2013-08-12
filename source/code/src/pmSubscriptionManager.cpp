@@ -262,6 +262,25 @@ pmStatus pmSubscriptionManager::SetCudaLaunchConf(pmExecutionStub* pStub, ulong 
 
 	return pmSuccess;
 }
+
+pmStatus pmSubscriptionManager::ReserveCudaGlobalMem(pmExecutionStub* pStub, ulong pSubtaskId, size_t pSize)
+{
+    if(!mTask->GetCallbackUnit()->GetSubtaskCB()->HasCustomGpuCallback())
+        return pmIgnorableError;
+    
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId);
+    
+#ifdef SUPPORT_CUDA
+    if(pStub->GetType() != GPU_CUDA)
+		PMTHROW(pmFatalErrorException());
+#else
+        PMTHROW(pmFatalErrorException());
+#endif
+
+	lSubtask.mReservedCudaGlobalMemSize = pSize;
+
+	return pmSuccess;
+}
     
 pmStatus pmSubscriptionManager::SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, char* pVal, size_t pLength)
 {
@@ -317,6 +336,13 @@ pmCudaLaunchConf& pmSubscriptionManager::GetCudaLaunchConf(pmExecutionStub* pStu
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
 
 	return lSubtask.mCudaLaunchConf;
+}
+    
+size_t pmSubscriptionManager::GetReservedCudaGlobalMemSize(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId);
+
+	return lSubtask.mReservedCudaGlobalMemSize;
 }
     
 void* pmSubscriptionManager::GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize)
@@ -597,6 +623,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
         }
     }
     
+#ifdef SUPPORT_LAZY_MEMORY
     if(lIsLazyMem)
     {
         // Lazy protect read subscriptions
@@ -620,6 +647,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
         lShadowMemMap[(void*)lShadowMem].subscriptionInfo = lUnifiedSubscriptionInfo;
         lShadowMemMap[(void*)lShadowMem].memSection = lMemSection;
     }
+#endif
     
 	return pmSuccess;
 }
@@ -652,11 +680,17 @@ void* pmSubscriptionManager::GetSubtaskShadowMem(pmExecutionStub* pStub, ulong p
 	return (void*)(lSubtask.mShadowMem.get_ptr());
 }
 
-pmStatus pmSubscriptionManager::DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId)
+void pmSubscriptionManager::DestroySubtaskRangeShadowMem(pmExecutionStub* pStub, ulong pStartSubtaskId, ulong pEndSubtaskId)
+{
+    for(ulong lSubtaskId = pStartSubtaskId; lSubtaskId < pEndSubtaskId; ++lSubtaskId)
+        DestroySubtaskShadowMem(pStub, lSubtaskId);
+}
+
+void pmSubscriptionManager::DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
 
-	return DestroySubtaskShadowMemInternal(lSubtask, pStub, pSubtaskId);
+	DestroySubtaskShadowMemInternal(lSubtask, pStub, pSubtaskId);
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
@@ -737,7 +771,7 @@ pmMemSection* pmSubscriptionManager::FindMemSectionContainingShadowAddr(void* pA
 pmStatus pmSubscriptionManager::FreezeSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
-	
+
     if(mTask->GetMemSectionRO())
     {
         subscriptionRecordType& lMap = lSubtask.mInputMemSubscriptions;
@@ -851,12 +885,12 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
 {
-    std::vector<pmCommunicatorCommandPtr> lReceiveVector;
 	pmMemSection* lMemSection = mTask->GetMemSectionRO();
     bool lIsLazy = lMemSection->IsLazy();
 
     if(!lIsLazy || pDeviceType != CPU)
     {   
+        std::vector<pmCommunicatorCommandPtr> lReceiveVector;
         size_t lOffset = pSubscriptionInfo.offset;
         size_t lLength = pSubscriptionInfo.length;
 
@@ -866,9 +900,8 @@ pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, p
     #endif
         
         MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength, lReceiveVector);
+        pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
     }
-
-    pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
     
 	return pmSuccess;
 }
@@ -876,12 +909,12 @@ pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, p
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
 {
-    std::vector<pmCommunicatorCommandPtr> lReceiveVector;
 	pmMemSection* lMemSection = mTask->GetMemSectionRW();
     bool lIsLazy = lMemSection->IsLazy();
     
     if(!lMemSection->IsWriteOnly() && (!lIsLazy || pDeviceType != CPU))
     {   
+        std::vector<pmCommunicatorCommandPtr> lReceiveVector;
         size_t lOffset = pSubscriptionInfo.offset;
         size_t lLength = pSubscriptionInfo.length;
         
@@ -891,9 +924,8 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmSubtask& pSubtask, 
     #endif
         
         MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength, lReceiveVector);
+        pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
     }
-    
-    pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
 
 	return pmSuccess;
 }
@@ -1021,12 +1053,14 @@ size_t pmSubscriptionManager::GetWriteOnlyLazyUnprotectedPagesCount(pmExecutionS
     return lSubtask.mWriteOnlyLazyUnprotectedPageCount;
 }
     
+#ifdef SUPPORT_LAZY_MEMORY
 const std::map<size_t, size_t>& pmSubscriptionManager::GetWriteOnlyLazyUnprotectedPageRanges(pmExecutionStub* pStub, ulong pSubtaskId)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId);
 
     return lSubtask.mWriteOnlyLazyUnprotectedPageRangesMap;
 }
+#endif
 
 #ifdef SUPPORT_CUDA
 /* Must be called with mSubtaskMapVector stub's lock acquired */
@@ -1085,6 +1119,7 @@ pmStatus pmSubtask::Initialize(pmTask* pTask)
     
     mWriteOnlyLazyUnprotectedPageCount = 0;
     mReadyForExecution = false;
+    mReservedCudaGlobalMemSize = 0;
     
 	return pmSuccess;
 }

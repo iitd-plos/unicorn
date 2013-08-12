@@ -287,11 +287,14 @@ namespace pm
 			{
 				LIBRARY_OPEN_FAILURE,
 				RUNTIME_ERROR,
-				UNDEFINED_SYMBOL
+				UNDEFINED_SYMBOL,
+                DRIVER_VERSION_UNSUPPORTED
 			} failureTypes;
 
             pmExceptionGPU(gpuTypes pIdGPU, failureTypes pFailureId, int cudaError = 0) {mIdGPU = pIdGPU; mFailureId = pFailureId; mCudaError = cudaError;}
 			pmStatus GetStatusCode() {return pmGraphicsCardError;}
+        
+            failureTypes GetFailureId() {return mFailureId;}
 
 		private:
 			gpuTypes mIdGPU;

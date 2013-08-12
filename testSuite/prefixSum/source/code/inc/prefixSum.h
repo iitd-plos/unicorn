@@ -13,7 +13,7 @@ using namespace pm;
 #ifdef BUILD_CUDA
 #include <cuda.h>
 
-pmStatus prefixSum_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
+pmStatus prefixSum_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
 
 typedef void (*elemAdd_cudaFuncPtr)(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
 extern elemAdd_cudaFuncPtr elemAdd_cudaFunc;

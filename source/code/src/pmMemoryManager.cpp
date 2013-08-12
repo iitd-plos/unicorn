@@ -259,7 +259,6 @@ void* pmLinuxMemoryManager::AllocateMemory(pmMemSection* pMemSection, size_t& pL
     return lPtr;
 }
 
-#ifdef SUPPORT_LAZY_MEMORY
 void* pmLinuxMemoryManager::CreateCheckOutMemory(size_t pLength, bool pIsLazy)
 {
     size_t lPageCount = 0;
@@ -278,7 +277,6 @@ void* pmLinuxMemoryManager::CreateCheckOutMemory(size_t pLength, bool pIsLazy)
 
     return AllocateMemory(NULL, pLength, lPageCount);
 }
-#endif
 
 pmStatus pmLinuxMemoryManager::DeallocateMemory(pmMemSection* pMemSection)
 {
@@ -649,7 +647,7 @@ pmStatus pmLinuxMemoryManager::SetLazyProtection(void* pAddr, size_t pLength, bo
     return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount)
+pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount)
 {
 	size_t lPageSize = GetVirtualMemoryPageSize();
     size_t lBytesToBeFetched = (1 + pForwardPrefetchPageCount) * lPageSize;
@@ -689,12 +687,12 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, ulong 
 	return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pLazyMemAddr)
+pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pLazyMemAddr)
 {
-    return LoadLazyMemoryPage(pStub, pSubtaskId, pMemSection, pLazyMemAddr, pMemSection->GetLazyForwardPrefetchPageCount());
+    return LoadLazyMemoryPage(pStub, pMemSection, pLazyMemAddr, pMemSection->GetLazyForwardPrefetchPageCount());
 }
 
-pmStatus pmLinuxMemoryManager::CopyLazyInputMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, void* pFaultAddr)
+pmStatus pmLinuxMemoryManager::CopyLazyInputMemPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pFaultAddr)
 {
 #ifdef _DEBUG
     if(pMemSection->IsOutput() || !pMemSection->IsLazy())
@@ -709,13 +707,13 @@ pmStatus pmLinuxMemoryManager::CopyLazyInputMemPage(pmExecutionStub* pStub, ulon
     void* lDestAddr = reinterpret_cast<void*>(lPageAddr);
     void* lSrcAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pMemSection->GetMem()) + lOffset);
 
-    LoadLazyMemoryPage(pStub, pSubtaskId, pMemSection, lSrcAddr);
+    LoadLazyMemoryPage(pStub, pMemSection, lSrcAddr);
     SetLazyProtection(lDestAddr, lPageSize, true, true);    // we may actually not allow writes here at all and abort if a write access is done to RO memory
     
     return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr)
+pmStatus pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr)
 {
 #ifdef _DEBUG
     if(pMemSection->IsInput() || !pMemSection->IsLazyReadWrite())
@@ -731,7 +729,7 @@ pmStatus pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, ulong p
     void* lDestAddr = reinterpret_cast<void*>(lPageAddr);
     void* lSrcAddr = reinterpret_cast<void*>(lSrcMemBaseAddr + lOffset);
 
-    LoadLazyMemoryPage(pStub, pSubtaskId, pMemSection, lSrcAddr);
+    LoadLazyMemoryPage(pStub, pMemSection, lSrcAddr);
     SetLazyProtection(lDestAddr, lPageSize, true, true);
     
     size_t lMaxSrcAddr = lSrcMemBaseAddr + pMemSection->GetLength();
@@ -743,9 +741,12 @@ pmStatus pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, ulong p
     
     return pmSuccess;
 }
+#endif
     
 pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
-{    
+{
+    void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
+
 	struct sigaction lSigAction;
 
 	lSigAction.sa_flags = SA_SIGINFO;
@@ -791,13 +792,14 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
     void* lSubtaskPtr = lPair.second;
     if(!lStub || !lSubtaskPtr)
         abort();
-    
-    ulong lSubtaskId = *(static_cast<ulong*>(lSubtaskPtr));
-    
-    pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(lStub, lSubtaskId);
 
+    pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(lStub);
+
+#ifdef SUPPORT_LAZY_MEMORY
     try
     {
+        ulong lSubtaskId = *(static_cast<ulong*>(lSubtaskPtr));
+
         size_t lShadowMemOffset = 0;
         void* lShadowMemBaseAddr = NULL;
 
@@ -815,7 +817,7 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
         pmMemSection* lMemSection = pmMemSection::FindMemSectionContainingLazyAddress((void*)(pSigInfo->si_addr));
         if(lMemSection)
         {
-            if(lMemoryManager->CopyLazyInputMemPage(lStub, lSubtaskId, lMemSection, (void*)(pSigInfo->si_addr)) != pmSuccess)
+            if(lMemoryManager->CopyLazyInputMemPage(lStub, lMemSection, (void*)(pSigInfo->si_addr)) != pmSuccess)
                 abort();
         }
         else    /* Check if the address belongs to a lazy output memory */
@@ -825,7 +827,7 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
             {
                 if(lMemSection->IsLazyReadWrite())
                 {
-                    if(lMemoryManager->CopyShadowMemPage(lStub, lSubtaskId, lMemSection, lShadowMemOffset, lShadowMemBaseAddr, (void*)(pSigInfo->si_addr)) != pmSuccess)
+                    if(lMemoryManager->CopyShadowMemPage(lStub, lMemSection, lShadowMemOffset, lShadowMemBaseAddr, (void*)(pSigInfo->si_addr)) != pmSuccess)
                         abort();
                 }
                 else
@@ -858,8 +860,8 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
     {
         abort();
     }
-}
 #endif
+}
 
 linuxMemManager::memSectionSpecifics::memSectionSpecifics()
     : mInFlightLock __LOCK_NAME__("linuxMemManager::memSectionSpecifics::mInFlightLock")

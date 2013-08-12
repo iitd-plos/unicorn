@@ -49,10 +49,6 @@ class pmBase
 //		void* operator new [] (size_t pSize);	//implicitly declared as a static member function
 //		void operator delete [] (void* pPtr);	//implicitly declared as a static member function
 
-		void* OpenLibrary(char* pPath);
-		pmStatus CloseLibrary(void* pLibHandle);
-		void* GetExportedSymbol(void* pLibHandle, char* pSymbol);
-
 		uint GetRandomInt(uint pMaxLimit);
     
         static ulong GetIntegralCurrentTimeInSecs();

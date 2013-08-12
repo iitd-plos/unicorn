@@ -56,6 +56,7 @@ void commonFinish();
 void RequestPreSetupCallbackPostMpiInit(preSetupPostMpiInitFunc pFunc);
 
 bool isMultiAssignEnabled();    /* by default, it's enabled */
+bool isComputeCommunicationOverlapEnabled();    /* by default, it's enabled */
 bool isLazyMemEnabled();    /* by default, it's diabled */
 
 #define CREATE_MEM(memSize, memHandle) SAFE_PM_EXEC( pmCreateMemory(memSize, &memHandle) )
@@ -76,7 +77,8 @@ bool isLazyMemEnabled();    /* by default, it's diabled */
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \
-	lTaskDetails.multiAssignEnabled = isMultiAssignEnabled();
+	lTaskDetails.multiAssignEnabled = isMultiAssignEnabled(); \
+    lTaskDetails.overlapComputeCommunication = isComputeCommunicationOverlapEnabled();
 
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \

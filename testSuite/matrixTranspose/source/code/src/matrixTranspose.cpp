@@ -266,6 +266,15 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazy
         lBlockOffset += lTaskConf->matrixDimRows * sizeof(MATRIX_DATA_TYPE);
     }
     
+#ifdef BUILD_CUDA
+	// Reserve CUDA Global Mem
+	if(lTaskConf->inplace && pDeviceInfo.deviceType == pm::GPU_CUDA)
+    {
+        size_t lBlockSize = sizeof(MATRIX_DATA_TYPE) * lTaskConf->blockSizeRows * lTaskConf->blockSizeRows;
+		pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, lBlockSize);
+    }
+#endif
+    
 	return pmSuccess;
 }
 

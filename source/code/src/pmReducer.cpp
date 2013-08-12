@@ -208,6 +208,7 @@ pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, p
     datatype* lShadowMem1 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub1, pSubtaskId1);
     datatype* lShadowMem2 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub2, pSubtaskId2);
 
+#ifdef SUPPORT_LAZY_MEMORY
     if(mTask->GetMemSectionRW()->IsLazyWriteOnly())
     {
         const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pStub2, pSubtaskId2);
@@ -239,6 +240,7 @@ pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, p
         }
     }
     else
+#endif
     {
         if(mTask->GetMemSectionRW()->IsReadWrite())
             PMTHROW(pmFatalErrorException());

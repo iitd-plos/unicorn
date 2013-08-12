@@ -35,7 +35,7 @@ typedef struct fftTaskConf
 
 #ifdef BUILD_CUDA
 #include <cuda.h>
-pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
+pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
 int fftSingleGpu2D(bool inplace, complex* input, complex* output, size_t powx, size_t nx, size_t powy, size_t ny, int dir);
 #endif
 
@@ -55,7 +55,7 @@ namespace matrixTranspose
     double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo);
 
 #ifdef BUILD_CUDA
-    pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
+    pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
 #endif
 }
 #endif

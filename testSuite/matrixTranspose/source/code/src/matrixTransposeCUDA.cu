@@ -76,35 +76,25 @@ __global__ void matrixTranspose_singleGpu(size_t pInputMemCols, size_t pSubtaskR
         ((MATRIX_DATA_TYPE*)pOutputBlock)[lOutputIndex + i * pSubtaskRows] = lTile[threadIdx.x][threadIdx.y + i];
 }
 
-pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
+pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
 {
 	matrixTransposeTaskConf* lTaskConf = (matrixTransposeTaskConf*)(pTaskInfo.taskConf);
 
     dim3 gridConf(lTaskConf->blockSizeRows / GPU_TILE_DIM, lTaskConf->blockSizeRows / GPU_TILE_DIM, 1);
     dim3 blockConf(GPU_TILE_DIM, GPU_TILE_DIM / GPU_ELEMS_PER_THREAD, 1);
+
+    cudaStream_t lCudaStream = (cudaStream_t)pCudaStream;
     
     if(lTaskConf->inplace)
     {
-        void* lBlockCudaPtr;
-        size_t lBlockSize = sizeof(MATRIX_DATA_TYPE) * lTaskConf->blockSizeRows * lTaskConf->blockSizeRows;
-        if(cudaMalloc((void**)&lBlockCudaPtr, lBlockSize) != cudaSuccess)
-        {
-            std::cout << "Matrix Transpose: CUDA Memory Allocation Failed" << std::endl;
-            return pmUserError;
-        }
+        void* lBlockCudaPtr = pSubtaskInfo.gpuContext.reservedGlobalMem;
 
-        matrixTranspose_cuda <<<gridConf, blockConf>>> (lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, pSubtaskInfo.outputMemRead, lBlockCudaPtr);
-        matrixCopy_cuda <<<gridConf, blockConf>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);    // because transpose is inplace, this has to be a post step
-
-        if(cudaFree(lBlockCudaPtr) != cudaSuccess)
-        {
-            std::cout << "Matrix Transpose: CUDA Memory Deallocation Failed" << std::endl;
-            return pmUserError;
-        }
+        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, pSubtaskInfo.outputMemRead, lBlockCudaPtr);
+        matrixCopy_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);    // because transpose is inplace, this has to be a post step
     }
     else
     {
-        matrixTranspose_cuda <<<gridConf, blockConf>>> (lTaskConf->matrixDimCols, lTaskConf->matrixDimRows, pSubtaskInfo.inputMem, pSubtaskInfo.outputMemWrite);
+        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->matrixDimCols, lTaskConf->matrixDimRows, pSubtaskInfo.inputMem, pSubtaskInfo.outputMemWrite);
     }
     
     return pmSuccess;

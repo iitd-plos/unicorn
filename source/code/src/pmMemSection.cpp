@@ -112,6 +112,7 @@ pmMemSection::~pmMemSection()
             PMTHROW(pmFatalErrorException());
     #endif
 
+    #ifdef SUPPORT_LAZY_MEMORY
         if(mReadOnlyLazyMapping)
         {
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeleteReadOnlyMemoryMapping(mReadOnlyLazyMapping, mAllocatedLength);
@@ -123,6 +124,7 @@ pmMemSection::~pmMemSection()
 
             mReadOnlyLazyMapping = NULL;
         }
+    #endif
     }
     
     DisposeMemory();

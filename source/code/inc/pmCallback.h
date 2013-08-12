@@ -63,9 +63,10 @@ class pmSubtaskCB : public pmCallback
 		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom);
 		virtual ~pmSubtaskCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, pmTaskInfo& pTaskInfo);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly);
 
 		virtual bool IsCallbackDefinedForDevice(pmDeviceType pDeviceType);
+        virtual bool HasCustomGpuCallback();
 
 	private:
 		pmSubtaskCallback_CPU mCallback_CPU;

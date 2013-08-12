@@ -448,6 +448,9 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
     if(pLocalTask->HasSameReadWriteSubscription())
         flags |= TASK_SAME_READ_WRITE_SUBSCRIPTION_FLAG_VAL;
 
+    if(pLocalTask->ShouldOverlapComputeCommunication())
+        flags |= TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL;
+
 	strncpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN-1);
 	callbackKey[MAX_CB_KEY_LEN-1] = '\0';
 }
@@ -575,6 +578,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
     
     void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pReducingStub, pSubtaskId);
     
+#ifdef SUPPORT_LAZY_MEMORY
     if(pTask->GetMemSectionRW()->IsLazyWriteOnly())
     {
         size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
@@ -602,6 +606,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
         this->reduceStruct.writeOnlyUnprotectedPageRangesCount = (uint)(lMap.size());
     }
     else
+#endif
     {
         if((this->reduceStruct.outputMemReadSubscriptionCount == 0) || (lTotalWriteSubscriptionLength == lUnifiedSubscriptionInfo.length))
         {
