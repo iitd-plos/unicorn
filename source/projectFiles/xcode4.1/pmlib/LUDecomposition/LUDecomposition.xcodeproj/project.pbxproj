@@ -1,0 +1,267 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0E2EAAD4168CA38F00D0CA07 /* commonAPI.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E2EAAD3168CA38F00D0CA07 /* commonAPI.cpp */; };
+		0E4016DC16A9C3BE0099CF5B /* pmlib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E4016DB16A9C3BE0099CF5B /* pmlib.dylib */; };
+		2BC801A517B6C16500326783 /* luDecomposition.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC801A317B6C16500326783 /* luDecomposition.cpp */; };
+		2BCF774B17C29FDA009BD72B /* libcblas.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 2BCF774A17C29FDA009BD72B /* libcblas.dylib */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0EEBD21C168CA14A001D9422 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0E2EAAD3168CA38F00D0CA07 /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
+		0E4016DB16A9C3BE0099CF5B /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+		0EEBD21E168CA14A001D9422 /* LUDecomposition */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = LUDecomposition; sourceTree = BUILT_PRODUCTS_DIR; };
+		2BC801A117B6C16500326783 /* luDecomposition.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = luDecomposition.h; path = ../../../../../testSuite/luDecomposition/source/code/inc/luDecomposition.h; sourceTree = "<group>"; };
+		2BC801A317B6C16500326783 /* luDecomposition.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = luDecomposition.cpp; path = ../../../../../testSuite/luDecomposition/source/code/src/luDecomposition.cpp; sourceTree = "<group>"; };
+		2BC801A417B6C16500326783 /* luDecompositionCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = luDecompositionCUDA.cu; path = ../../../../../testSuite/luDecomposition/source/code/src/luDecompositionCUDA.cu; sourceTree = "<group>"; };
+		2BCF774A17C29FDA009BD72B /* libcblas.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libcblas.dylib; path = usr/lib/libcblas.dylib; sourceTree = SDKROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0EEBD21B168CA14A001D9422 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2BCF774B17C29FDA009BD72B /* libcblas.dylib in Frameworks */,
+				0E4016DC16A9C3BE0099CF5B /* pmlib.dylib in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0EEBD213168CA14A001D9422 = {
+			isa = PBXGroup;
+			children = (
+				2BCF774A17C29FDA009BD72B /* libcblas.dylib */,
+				0E4016DB16A9C3BE0099CF5B /* pmlib.dylib */,
+				0E2EAAD3168CA38F00D0CA07 /* commonAPI.cpp */,
+				0EEBD221168CA14A001D9422 /* LUDecomposition */,
+				0EEBD21F168CA14A001D9422 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0EEBD21F168CA14A001D9422 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0EEBD21E168CA14A001D9422 /* LUDecomposition */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0EEBD221168CA14A001D9422 /* LUDecomposition */ = {
+			isa = PBXGroup;
+			children = (
+				2BC801A017B6C16500326783 /* inc */,
+				2BC801A217B6C16500326783 /* src */,
+			);
+			name = LUDecomposition;
+			sourceTree = "<group>";
+		};
+		2BC801A017B6C16500326783 /* inc */ = {
+			isa = PBXGroup;
+			children = (
+				2BC801A117B6C16500326783 /* luDecomposition.h */,
+			);
+			name = inc;
+			path = ../../../../../testSuite/luDecomposition/source/code/inc;
+			sourceTree = SOURCE_ROOT;
+		};
+		2BC801A217B6C16500326783 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				2BC801A317B6C16500326783 /* luDecomposition.cpp */,
+				2BC801A417B6C16500326783 /* luDecompositionCUDA.cu */,
+			);
+			name = src;
+			path = ../../../../../testSuite/luDecomposition/source/code/src;
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0EEBD21D168CA14A001D9422 /* LUDecomposition */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0EEBD228168CA14A001D9422 /* Build configuration list for PBXNativeTarget "LUDecomposition" */;
+			buildPhases = (
+				0EEBD21A168CA14A001D9422 /* Sources */,
+				0EEBD21B168CA14A001D9422 /* Frameworks */,
+				0EEBD21C168CA14A001D9422 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = LUDecomposition;
+			productName = MatrixTranspose;
+			productReference = 0EEBD21E168CA14A001D9422 /* LUDecomposition */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0EEBD215168CA14A001D9422 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0450;
+				ORGANIZATIONNAME = "Tarun Beri";
+			};
+			buildConfigurationList = 0EEBD218168CA14A001D9422 /* Build configuration list for PBXProject "LUDecomposition" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 0EEBD213168CA14A001D9422;
+			productRefGroup = 0EEBD21F168CA14A001D9422 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0EEBD21D168CA14A001D9422 /* LUDecomposition */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0EEBD21A168CA14A001D9422 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0E2EAAD4168CA38F00D0CA07 /* commonAPI.cpp in Sources */,
+				2BC801A517B6C16500326783 /* luDecomposition.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0EEBD226168CA14A001D9422 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		0EEBD227168CA14A001D9422 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		0EEBD229168CA14A001D9422 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"DEBUG=1",
+					"SAMPLE_NAME=luDecomposition",
+					MACOS,
+				);
+				HEADER_SEARCH_PATHS = (
+					$SRCROOT/../../../../../source/code/inc/,
+					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
+				);
+				LIBRARY_SEARCH_PATHS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		0EEBD22A168CA14A001D9422 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"SAMPLE_NAME=luDecomposition",
+					MACOS,
+				);
+				HEADER_SEARCH_PATHS = (
+					$SRCROOT/../../../../../source/code/inc/,
+					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
+				);
+				LIBRARY_SEARCH_PATHS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0EEBD218168CA14A001D9422 /* Build configuration list for PBXProject "LUDecomposition" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0EEBD226168CA14A001D9422 /* Debug */,
+				0EEBD227168CA14A001D9422 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0EEBD228168CA14A001D9422 /* Build configuration list for PBXNativeTarget "LUDecomposition" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0EEBD229168CA14A001D9422 /* Debug */,
+				0EEBD22A168CA14A001D9422 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0EEBD215168CA14A001D9422 /* Project object */;
+}
