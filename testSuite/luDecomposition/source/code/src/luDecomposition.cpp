@@ -65,11 +65,6 @@ std::auto_ptr<MATRIX_DATA_TYPE> reproduceNonDecomposedMatrix(MATRIX_DATA_TYPE* p
     return lLower;
 }
     
-//void findErrorMatrix(MATRIX_DATA_TYPE* pMatrix, size_t pDim)
-//{
-//    CBLAS_AXPY((int)pDim * (int)pDim, -1.0, gSampleInput, 1, pMatrix, 1);
-//}
-    
 float findFrobeniusNormal(MATRIX_DATA_TYPE* pMatrix, size_t pDim)
 {
     MATRIX_DATA_TYPE lSum = 0.0f;
