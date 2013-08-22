@@ -210,7 +210,7 @@ bool ParallelAddAuxArray(pmMemHandle pSrcMemHandle, pmMemHandle pAuxMemHandle, u
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle1, pmCallbackHandle pCallbackHandle2, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS;
 
@@ -230,7 +230,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	double lStartTime = getCurrentTimeInSecs();
 
     unsigned int lSubtaskCount = (lArrayLength/ELEMS_PER_SUBTASK) + ((lArrayLength%ELEMS_PER_SUBTASK)?1:0);
-    if(!ParallelPrefixSum(lInputMemHandle, lOutputMemHandle, lArrayLength, lSubtaskCount, pCallbackHandle1, pSchedulingPolicy))
+    if(!ParallelPrefixSum(lInputMemHandle, lOutputMemHandle, lArrayLength, lSubtaskCount, pCallbackHandle[0], pSchedulingPolicy))
         return (double)-1.0;
 
     if(lSubtaskCount > 1)
@@ -238,7 +238,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         CREATE_MEM(lSubtaskCount * sizeof(PREFIX_SUM_DATA_TYPE), lAuxMemHandle);
         PopulateAuxMem(lOutputMemHandle, lAuxMemHandle, lArrayLength, lSubtaskCount);
 
-        if(!ParallelAddAuxArray(lOutputMemHandle, lAuxMemHandle, lArrayLength, lSubtaskCount, pCallbackHandle2, pSchedulingPolicy))
+        if(!ParallelAddAuxArray(lOutputMemHandle, lAuxMemHandle, lArrayLength, lSubtaskCount, pCallbackHandle[1], pSchedulingPolicy))
             return (double)-1.0;
     }
     
@@ -357,8 +357,9 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
-	// All the five functions pointers passed here are executed only on the host submitting the task
-	commonStart2(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "PREFIXSUM", DoSetDefaultCallbacks2, "ELEMADD");
+    callbackStruct lStruct[2] = { {DoSetDefaultCallbacks, "PREFIXSUM"}, {DoSetDefaultCallbacks2, "ELEMADD"} };
+
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 2);
 
 	commonFinish();
 

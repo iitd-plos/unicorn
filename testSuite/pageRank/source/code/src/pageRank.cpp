@@ -388,7 +388,7 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS
     
@@ -422,7 +422,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 		}
     
         lTaskConf.iteration = i;
-		if(!ParallelPageRankIteration(lInputMemHandle, &lOutputMemHandle, &lTaskConf, pCallbackHandle, pSchedulingPolicy))
+		if(!ParallelPageRankIteration(lInputMemHandle, &lOutputMemHandle, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
 			return (double)-1.0;
     }
     
@@ -524,8 +524,9 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
-	// All the five functions pointers passed here are executed only on the host submitting the task
-	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "PAGERANK");
+    callbackStruct lStruct[1] = {DoSetDefaultCallbacks, "PAGERANK"};
+
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 1);
 
 	commonFinish();
 

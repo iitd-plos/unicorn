@@ -24,6 +24,8 @@
 
 #ifdef MACOS
 #include <sys/sysctl.h>
+#else
+#include <string>
 #endif
 
 #include SYSTEM_CONFIGURATION_HEADER	// For sysconf function

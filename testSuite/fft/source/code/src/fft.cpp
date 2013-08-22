@@ -258,7 +258,7 @@ bool Parallel_Transpose(void* pInputMemHandle, pmMemInfo pInputMemInfo, void* pO
 #endif
     
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle1, pmCallbackHandle pCallbackHandle2, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS
 
@@ -293,11 +293,11 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     
 	double lStartTime = getCurrentTimeInSecs();
 
-    if(!Parallel_FFT_1D(lInputMemHandle, lInputMemInfo, lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle1, pSchedulingPolicy))
+    if(!Parallel_FFT_1D(lInputMemHandle, lInputMemInfo, lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
         return (double)-1.0;
 
 #ifdef FFT_2D
-    if(!Parallel_Transpose(lOutputMemHandle, lInputMemInfo, lInputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle2, pSchedulingPolicy))
+    if(!Parallel_Transpose(lOutputMemHandle, lInputMemInfo, lInputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle[1], pSchedulingPolicy))
         return (double)-1.0;
     
     lTaskConf.elemsX = lElemsY;
@@ -306,10 +306,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.powY = lPowX;
     lTaskConf.rowPlanner = false;
     
-    if(!Parallel_FFT_1D(lInputMemHandle, lInputMemInfo, lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle1, pSchedulingPolicy))
+    if(!Parallel_FFT_1D(lInputMemHandle, lInputMemInfo, lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
         return (double)-1.0;
 
-    if(!Parallel_Transpose(lOutputMemHandle, lInputMemInfo, lInputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle2, pSchedulingPolicy))
+    if(!Parallel_Transpose(lOutputMemHandle, lInputMemInfo, lInputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle[1], pSchedulingPolicy))
         return (double)-1.0;
     
     if(!lInplace)
@@ -465,8 +465,9 @@ int main(int argc, char** argv)
 {
     RequestPreSetupCallbackPostMpiInit(DoPreSetupPostMpiInit);
     
-	// All the functions pointers passed here are executed only on the host submitting the task
-	commonStart2(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "FFT", DoSetDefaultCallbacks2, "MatrixTranspose");
+    callbackStruct lStruct[2] = { {DoSetDefaultCallbacks, "FFT"}, {DoSetDefaultCallbacks2, "MATRIXTRANSPOSE"} };
+
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 2);
 
 	commonFinish();
 

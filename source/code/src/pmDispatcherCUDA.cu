@@ -373,6 +373,10 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmExecutionStub* pStub, pmTaskInfo& pTas
 
     ExecuteKernel(pStub, pTaskInfo, pTaskInfoCuda, pDeviceInfo, (pmDeviceInfo*)pDeviceInfoCudaPtr, lSubtaskInfoCuda, pCudaLaunchConf, pKernelPtr, pCustomKernelPtr, lStreamAutoPtr.GetStream(), ((pmStatus*)pCudaPointers[4]));
 
+    cudaError_t lCudaError = cudaGetLastError();
+    if(lCudaError != cudaSuccess)
+        THROW_CUDA_ERROR(lCudaError);
+    
     std::vector<pmCudaMemcpyCommand>::iterator lDeviceToHostIter = pDeviceToHostCommands.begin(), lDeviceToHostEndIter = pDeviceToHostCommands.end();
     for(; lDeviceToHostIter != lDeviceToHostEndIter; ++lDeviceToHostIter)
     {

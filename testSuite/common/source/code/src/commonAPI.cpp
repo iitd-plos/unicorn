@@ -18,9 +18,7 @@
 #define DEFAULT_PARALLEL_MODE 6
 #define DEFAULT_SCHEDULING_POLICY 0
 
-pmCallbackHandle gCallbackHandleArray1[6];
-pmCallbackHandle gCallbackHandleArray2[6];
-int gCallbackHandleArrayCount;
+std::vector<pmCallbackHandle> gCallbackHandles[6];
 
 struct Result
 {
@@ -34,12 +32,9 @@ std::vector<Result> gResultVector;
 bool gSerialResultsCompared;
 preSetupPostMpiInitFunc gPreSetupPostMpiInitFunc = NULL;
 
-double ExecuteParallelTask(int argc, char** argv, int pParallelMode, void* pParallelFunc, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
+double ExecuteParallelTask(int argc, char** argv, int pParallelMode, parallelProcessFunc pParallelFunc, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
-    if(gCallbackHandleArrayCount == 1)
-        return (*((parallelProcessFunc*)pParallelFunc))(argc, argv, COMMON_ARGS, gCallbackHandleArray1[pParallelMode-1], pSchedulingPolicy, pFetchBack);
-    
-    return (*((parallelProcessFunc2*)pParallelFunc))(argc, argv, COMMON_ARGS, gCallbackHandleArray1[pParallelMode-1], gCallbackHandleArray2[pParallelMode-1], pSchedulingPolicy, pFetchBack);
+    return (pParallelFunc)(argc, argv, COMMON_ARGS, &(gCallbackHandles[pParallelMode - 1])[0], pSchedulingPolicy, pFetchBack);
 }
 
 void RegisterLibraryCallback(int pParallelMode, std::string pCallbackKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
@@ -63,60 +58,45 @@ void RegisterLibraryCallback(int pParallelMode, std::string pCallbackKey, pmCall
     static const char* lArray[6] = {"1", "2", "3", "4", "5", "6"};
 
     std::string lTempKey;
-    lTempKey = pCallbackKey + lArray[pParallelMode-1];
+    lTempKey = pCallbackKey + lArray[pParallelMode - 1];
 
-    SAFE_PM_EXEC( pmRegisterCallbacks((char*)lTempKey.c_str(), pCallbacks, &pCallbackHandle[pParallelMode-1]) );
+    SAFE_PM_EXEC( pmRegisterCallbacks((char*)lTempKey.c_str(), pCallbacks, pCallbackHandle) );
 }
 
-void RegisterLibraryCallbacks(std::string pCallbackKey1, callbacksFunc pCallbacksFunc1, std::string pCallbackKey2, callbacksFunc pCallbacksFunc2)
+void RegisterLibraryCallbacks(callbackStruct* pCallbacksStruct, size_t pCallbacksCount)
 {
-	pmCallbacks lCallbacks1 = pCallbacksFunc1();
+    gCallbackHandles[0].resize(pCallbacksCount);
+    gCallbackHandles[1].resize(pCallbacksCount);
+    gCallbackHandles[2].resize(pCallbacksCount);
+    gCallbackHandles[3].resize(pCallbacksCount);
+    gCallbackHandles[4].resize(pCallbacksCount);
+    gCallbackHandles[5].resize(pCallbacksCount);
 
-    RegisterLibraryCallback(1, pCallbackKey1, lCallbacks1, gCallbackHandleArray1);
-    RegisterLibraryCallback(2, pCallbackKey1, lCallbacks1, gCallbackHandleArray1);
-    RegisterLibraryCallback(3, pCallbackKey1, lCallbacks1, gCallbackHandleArray1);
-    RegisterLibraryCallback(4, pCallbackKey1, lCallbacks1, gCallbackHandleArray1);
-    RegisterLibraryCallback(5, pCallbackKey1, lCallbacks1, gCallbackHandleArray1);
-    RegisterLibraryCallback(6, pCallbackKey1, lCallbacks1, gCallbackHandleArray1);
-
-    if(pCallbacksFunc2)
+    for(size_t i = 0; i < pCallbacksCount; ++i)
     {
-        pmCallbacks lCallbacks2 = pCallbacksFunc2();
+        pmCallbacks lCallbacks = pCallbacksStruct[i].func();
 
-        RegisterLibraryCallback(1, pCallbackKey2, lCallbacks2, gCallbackHandleArray2);
-        RegisterLibraryCallback(2, pCallbackKey2, lCallbacks2, gCallbackHandleArray2);
-        RegisterLibraryCallback(3, pCallbackKey2, lCallbacks2, gCallbackHandleArray2);
-        RegisterLibraryCallback(4, pCallbackKey2, lCallbacks2, gCallbackHandleArray2);
-        RegisterLibraryCallback(5, pCallbackKey2, lCallbacks2, gCallbackHandleArray2);
-        RegisterLibraryCallback(6, pCallbackKey2, lCallbacks2, gCallbackHandleArray2);
+        RegisterLibraryCallback(1, pCallbacksStruct[i].key, lCallbacks, &(gCallbackHandles[0])[i]);
+        RegisterLibraryCallback(2, pCallbacksStruct[i].key, lCallbacks, &(gCallbackHandles[1])[i]);
+        RegisterLibraryCallback(3, pCallbacksStruct[i].key, lCallbacks, &(gCallbackHandles[2])[i]);
+        RegisterLibraryCallback(4, pCallbacksStruct[i].key, lCallbacks, &(gCallbackHandles[3])[i]);
+        RegisterLibraryCallback(5, pCallbacksStruct[i].key, lCallbacks, &(gCallbackHandles[4])[i]);
+        RegisterLibraryCallback(6, pCallbacksStruct[i].key, lCallbacks, &(gCallbackHandles[5])[i]);
     }
-    
-    gCallbackHandleArrayCount = pCallbacksFunc2 ? 2 : 1;
 }
 
 void ReleaseLibraryCallbacks()
 {
-    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray1[0]) );
-    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray1[1]) );
-    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray1[2]) );
-    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray1[3]) );
-    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray1[4]) );
-    SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray1[5]) );
-
-    if(gCallbackHandleArrayCount == 2)
+    for(size_t i = 0; i < 6; ++i)
     {
-        SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray2[0]) );
-        SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray2[1]) );
-        SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray2[2]) );
-        SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray2[3]) );
-        SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray2[4]) );
-        SAFE_PM_EXEC( pmReleaseCallbacks(gCallbackHandleArray2[5]) );
+        std::vector<pmCallbackHandle>::iterator lIter = gCallbackHandles[i].begin(), lEndIter = gCallbackHandles[i].end();
+        for(; lIter != lEndIter; ++lIter)
+            SAFE_PM_EXEC( pmReleaseCallbacks(*lIter) );
     }
 }
 
-void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc,
-                    void* pParallelFunc, callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey1,
-                    callbacksFunc pCallbacksFunc2, std::string pCallbackKey2)
+void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc, parallelProcessFunc pParallelFunc,
+                 compareFunc pCompareFunc, destroyFunc pDestroyFunc, callbackStruct* pCallbacksStruct, size_t pCallbacksCount)
 {
 	double lSerialExecTime = (double)0;
 	double lSingleGpuExecTime = (double)0;
@@ -157,7 +137,7 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
     }
     
     if(lRunMode == 0 || lRunMode == 1)
-        RegisterLibraryCallbacks(pCallbackKey1, pCallbacksFunc1, pCallbackKey2, pCallbacksFunc2);
+        RegisterLibraryCallbacks(pCallbacksStruct, pCallbacksCount);
 
 	if(pmGetHostId() == SUBMITTING_HOST_ID)
 	{
@@ -234,19 +214,6 @@ void commonStartInternal(int argc, char** argv, initFunc pInitFunc, serialProces
 			exit(1);
 		}
 	}
-}
-
-void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc,
-                    parallelProcessFunc2 pParallelFunc, callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc,
-                    std::string pCallbackKey1, callbacksFunc pCallbacksFunc2, std::string pCallbackKey2)
-{
-    commonStartInternal(argc, argv, pInitFunc, pSerialFunc, pSingleGpuFunc, &pParallelFunc, pCallbacksFunc1, pCompareFunc, pDestroyFunc, pCallbackKey1, pCallbacksFunc2, pCallbackKey2);
-}
-
-void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc, parallelProcessFunc pParallelFunc,
-                 callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey)
-{
-    commonStartInternal(argc, argv, pInitFunc, pSerialFunc, pSingleGpuFunc, &pParallelFunc, pCallbacksFunc, pCompareFunc, pDestroyFunc, pCallbackKey, NULL, std::string());
 }
 
 void commonFinish()

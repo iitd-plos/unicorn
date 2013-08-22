@@ -272,7 +272,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS
 
@@ -282,7 +282,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	// Output Mem contains the result image
 	// Number of subtasks is equal to the number of rows
     unsigned int lSubtasks = (gImageWidth/TILE_DIM + (gImageWidth%TILE_DIM ? 1 : 0)) * (gImageHeight/TILE_DIM + (gImageHeight%TILE_DIM ? 1 : 0));
-	CREATE_TASK(0, IMAGE_SIZE, lSubtasks, pCallbackHandle, pSchedulingPolicy)
+	CREATE_TASK(0, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
 
 	imageFilterTaskConf lTaskConf;
     strcpy(lTaskConf.imagePath, lImagePath);
@@ -411,8 +411,9 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
-	// All the five functions pointers passed here are executed only on the host submitting the task
-	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "IMAGEFILTER");
+    callbackStruct lStruct[1] = {DoSetDefaultCallbacks, "IMAGEFILTER"};
+    
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 1);
 
 	commonFinish();
 

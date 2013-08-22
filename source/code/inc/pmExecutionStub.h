@@ -33,6 +33,7 @@
 #endif
 
 #include <setjmp.h>
+#include <string.h>
 
 namespace pm
 {

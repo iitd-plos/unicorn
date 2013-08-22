@@ -112,7 +112,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS
 
@@ -124,7 +124,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	size_t lInputMemSize = 2 * lMatrixSize;
 	size_t lOutputMemSize = lMatrixSize;
 
-	CREATE_TASK(lInputMemSize, lOutputMemSize, lMatrixDim, pCallbackHandle, pSchedulingPolicy)
+	CREATE_TASK(lInputMemSize, lOutputMemSize, lMatrixDim, pCallbackHandle[0], pSchedulingPolicy)
 
     pmRawMemPtr lRawInputPtr, lRawOutputPtr;
     pmGetRawMemPtr(lTaskDetails.inputMemHandle, &lRawInputPtr);
@@ -233,8 +233,9 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
-	// All the five functions pointers passed here are executed only on the host submitting the task
-	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "MATRIXMUL");
+    callbackStruct lStruct[1] = {DoSetDefaultCallbacks, "MATRIXMUL"};
+    
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 1);
 
 	commonFinish();
 

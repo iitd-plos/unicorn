@@ -395,7 +395,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 }
 
 // Returns execution time on success; 0 on error
-double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
+double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
 	READ_NON_COMMON_ARGS
 
@@ -418,7 +418,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
 	memcpy(lRawInputPtr, (lInplace ? gParallelOutput : gSampleInput), lMemSize);
 
-    double lTime = parallelMatrixTranspose(lPowRows, lPowCols, lMatrixDimRows, lMatrixDimCols, lInputMemHandle, lOutputMemHandle, pCallbackHandle, pSchedulingPolicy, INPUT_MEM_READ_ONLY, (lInplace ? OUTPUT_MEM_READ_WRITE : OUTPUT_MEM_WRITE_ONLY));
+    double lTime = parallelMatrixTranspose(lPowRows, lPowCols, lMatrixDimRows, lMatrixDimCols, lInputMemHandle, lOutputMemHandle, pCallbackHandle[0], pSchedulingPolicy, INPUT_MEM_READ_ONLY, (lInplace ? OUTPUT_MEM_READ_WRITE : OUTPUT_MEM_WRITE_ONLY));
     
     if(lTime != -1.0 && pFetchBack)
     {
@@ -535,8 +535,9 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
-	// All the five functions pointers passed here are executed only on the host submitting the task
-	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoSetDefaultCallbacks, DoCompare, DoDestroy, "MATRIXMUL");
+    callbackStruct lStruct[1] = {DoSetDefaultCallbacks, "MATRIXTRANSPOSE"};
+    
+	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 1);
     
 	commonFinish();
     

@@ -36,20 +36,21 @@ double getCurrentTimeInSecs();
 
 typedef double (*serialProcessFunc)(int argc, char** argv, int pCommonArgs);
 typedef double (*singleGpuProcessFunc)(int argc, char** argv, int pCommonArgs);
-typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack);
-typedef double (*parallelProcessFunc2)(int argc, char** argv, int pCommonArgs, pmCallbackHandle pCallbackHandle1, pmCallbackHandle pCallbackHandle2, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack);
+typedef double (*parallelProcessFunc)(int argc, char** argv, int pCommonArgs, pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack);
 typedef pmCallbacks (*callbacksFunc)();
 typedef int (*initFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*destroyFunc)();
 typedef int (*compareFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*preSetupPostMpiInitFunc)(int argc, char** argv, int pCommonArgs);
 
-void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc, parallelProcessFunc pParallelFunc,
-	callbacksFunc pCallbacksFunc, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey);
+typedef struct callbackStruct
+{
+    callbacksFunc func;
+    std::string key;
+} callbackStruct;
 
-void commonStart2(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc, parallelProcessFunc2 pParallelFunc,
-                    callbacksFunc pCallbacksFunc1, compareFunc pCompareFunc, destroyFunc pDestroyFunc, std::string pCallbackKey1,
-                    callbacksFunc pCallbacksFunc2, std::string pCallbackKey2);
+void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pSerialFunc, singleGpuProcessFunc pSingleGpuFunc, parallelProcessFunc pParallelFunc,
+	compareFunc pCompareFunc, destroyFunc pDestroyFunc, callbackStruct* pCallbacksStruct, size_t pCallbacksCount);
 
 void commonFinish();
 
