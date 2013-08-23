@@ -11,6 +11,8 @@
 #include <cblas.h>
 #endif
 
+#include <memory>
+
 #include "commonAPI.h"
 #include "luDecomposition.h"
 
