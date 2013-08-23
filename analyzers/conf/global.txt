@@ -1,5 +1,6 @@
-Hosts = 1
-Host_File = hosts.txt
-Mpi_Options =
+Hosts = 1 2 4 8
+Mpi_Options = --hostfile /home/tarun/Data/hosts2.txt --mca mpi_preconnect_mpi 1 
 Generate_Static_Best = false
-Benchmarks = matrixMultiply matrixTranspose
+Benchmarks = matrixMultiply fft matrixTranspose imageFiltering
+fft_Configurations = 2
+matrixTranspose_Configurations = 2

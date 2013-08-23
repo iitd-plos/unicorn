@@ -3,3 +3,5 @@ Varying_2 = 11 12 13 14
 Benchmark_Name = Inplace Non-Square Matrix Transpose
 Varying1_Name = log(rows)
 Varying2_Name = log(cols)
+Subtask_Definition = 4096 rows * 4096 cols
+Fixed_Args = 1

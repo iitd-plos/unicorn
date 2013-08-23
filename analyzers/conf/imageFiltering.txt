@@ -1,4 +1,6 @@
-Varying_1 = 3 5
+Varying_1 = 3 7 11 15
 Benchmark_Name = Image Convolution
 Varying1_Name = Filter Dimension
-Fixed_Args = ../../../testSuite/imageFiltering/images/hubble.bmp
+Fixed_Args = ../../../testSuite/imageFiltering/images/huge1.bmp
+Subtask_Definition = 2048 rows * 2048 cols
+Other_Information = Image Size: 24942 rows * 15436 cols

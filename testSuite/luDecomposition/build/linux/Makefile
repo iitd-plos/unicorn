@@ -29,6 +29,8 @@ endif
 ifeq ($(PLATFORM), MACOS)
 INCLUDES += -I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library//Frameworks/vecLib.framework/Versions/A/Headers
 LIBRARIES += -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/usr/lib/
+else
+LIBRARIES += -L/usr/lib64/atlas
 endif
 
 LIBRARIES += -lcblas
