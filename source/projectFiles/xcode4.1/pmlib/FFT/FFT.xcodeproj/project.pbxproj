@@ -30,7 +30,7 @@
 		0E4016D816A9C3A80099CF5B /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E817902166F89940092C7D4 /* FFT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = FFT; sourceTree = BUILT_PRODUCTS_DIR; };
 		0E81792F166F8B1B0092C7D4 /* fft.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = fft.h; path = ../../../../../testSuite/fft/source/code/inc/fft.h; sourceTree = "<group>"; };
-		0E817931166F8B1B0092C7D4 /* fft.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; name = fft.cpp; path = ../../../../../testSuite/fft/source/code/src/fft.cpp; sourceTree = "<group>"; };
+		0E817931166F8B1B0092C7D4 /* fft.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; name = fft.cpp; path = ../../../../../testSuite/fft/source/code/src/fft.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		0E817932166F8B1B0092C7D4 /* fftCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = fftCUDA.cu; path = ../../../../../testSuite/fft/source/code/src/fftCUDA.cu; sourceTree = "<group>"; };
 		0EF13CDE166FEF8600D012B4 /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */

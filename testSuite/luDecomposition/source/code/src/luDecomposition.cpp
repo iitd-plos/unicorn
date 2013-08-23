@@ -171,7 +171,6 @@ pmStatus horizVertComp_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSub
         MATRIX_DATA_TYPE* lU01 = lL00 + lOffsetElems;
         
         CBLAS_TRSM(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasNonUnit, BLOCK_DIM, BLOCK_DIM, 1.0f, lL00, (int)lTaskConf->matrixDim, lU01, (int)lTaskConf->matrixDim);
-
     }
     else    // Lower Triangular Matrix (Solve A01 = L10 * U00)
     {
@@ -303,7 +302,8 @@ bool StageParallelTask(enum taskStage pStage, pmMemHandle pMemHandle, size_t pTa
     lTaskDetails.taskId = pTaskId;
     lTaskDetails.outputMemHandle = pMemHandle;
     lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE;
-    lTaskDetails.sameReadWriteSubscriptions = true;
+    lTaskDetails.disjointReadWritesAcrossSubtasks = true;
+    lTaskDetails.canForciblyCancelSubtasks = false;
     lTaskDetails.taskConf = &lTaskConf;
     lTaskDetails.taskConfLength = sizeof(luTaskConf);
 

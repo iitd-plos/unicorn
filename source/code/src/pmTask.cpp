@@ -48,7 +48,7 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
-pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pSameReadWriteSubscriptions, bool pOverlapComputeCommunication)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pDisjointReadWritesAcrossSubtasks, bool pOverlapComputeCommunication, bool pCanForciblyCancelSubtasks)
 	: mTaskId(pTaskId)
 	, mMemRO(pMemRO)
 	, mCallbackUnit(pCallbackUnit)
@@ -62,9 +62,10 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     , mSubscriptionManager(this)
     , mSequenceNumber(0)
     , mMultiAssignEnabled(pMultiAssignEnabled)
-    , mSameReadWriteSubscription(pSameReadWriteSubscriptions)
+    , mDisjointReadWritesAcrossSubtasks(pDisjointReadWritesAcrossSubtasks)
     , mOverlapComputeCommunication(pOverlapComputeCommunication)
     , mReadOnlyMemAddrForSubtasks(NULL)
+    , mCanForciblyCancelSubtasks(pCanForciblyCancelSubtasks)
 	, mSubtasksExecuted(0)
 	, mSubtaskExecutionFinished(false)
     , mExecLock __LOCK_NAME__("pmTask::mExecLock")
@@ -131,6 +132,11 @@ void pmTask::UnlockMemories()
 bool pmTask::IsMultiAssignEnabled()
 {
     return mMultiAssignEnabled;
+}
+    
+bool pmTask::CanForciblyCancelSubtasks()
+{
+    return mCanForciblyCancelSubtasks;
 }
 
 void* pmTask::GetTaskConfiguration()
@@ -300,7 +306,7 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool p
 
 void* pmTask::CheckOutSubtaskMemory(size_t pLength, bool pForceNonLazy)
 {
-    if(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription())
+    if(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks())
         return NULL;    // In this case, system might not have enough memory as memory for all individual subtasks need to be held till the end
     
     bool lIsLazy = (!pForceNonLazy && GetMemSectionRW()->IsLazy());
@@ -450,7 +456,7 @@ ulong pmTask::GetSubtasksExecuted()
 
 bool pmTask::DoSubtasksNeedShadowMemory()
 {
-	return (mMemRW && (mMemRW->IsLazy() || (mMemRW->IsReadWrite() && !HasSameReadWriteSubscription()) || (mCallbackUnit->GetDataReductionCB() != NULL)));
+	return (mMemRW && (mMemRW->IsLazy() || (mMemRW->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || (mCallbackUnit->GetDataReductionCB() != NULL)));
 }
     
 void pmTask::TerminateTask()
@@ -531,9 +537,9 @@ void pmTask::RegisterStubShadowMemCommitMessage()
         MarkLocalStubsFreeOfShadowMemCommits();
 }
     
-bool pmTask::HasSameReadWriteSubscription()
+bool pmTask::HasDisjointReadWritesAcrossSubtasks()
 {
-    return mSameReadWriteSubscription;
+    return mDisjointReadWritesAcrossSubtasks;
 }
 
 bool pmTask::ShouldOverlapComputeCommunication()
@@ -563,8 +569,8 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
 
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pSameReadWriteSubscriptions /* = false */, bool pOverlapComputeCommunication /* = true */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pSameReadWriteSubscriptions, pOverlapComputeCommunication)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pDisjointReadWritesAcrossSubtasks /* = false */, bool pOverlapComputeCommunication /* = true */, bool pCanForciblyCancelSubtasks /* = true */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pDisjointReadWritesAcrossSubtasks, pOverlapComputeCommunication, pCanForciblyCancelSubtasks)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
     , mUserSideTaskCompleted(false)
@@ -640,7 +646,7 @@ void pmLocalTask::MarkLocalStubsFreeOfCancellations()
     
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
+    if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || mLocalStubsFreeOfShadowMemCommits))
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
     
     mLocalStubsFreeOfCancellations = true;
@@ -649,7 +655,7 @@ void pmLocalTask::MarkLocalStubsFreeOfCancellations()
 void pmLocalTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
 #ifdef _DEBUG
-    if(!GetMemSectionRW()->IsReadWrite() || HasSameReadWriteSubscription())
+    if(!GetMemSectionRW()->IsReadWrite() || HasDisjointReadWritesAcrossSubtasks())
         PMTHROW(pmFatalErrorException());
 #endif
     
@@ -669,7 +675,7 @@ void pmLocalTask::MarkUserSideTaskCompletion()
     {
         FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
+        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || mLocalStubsFreeOfShadowMemCommits))
             pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
             
         mUserSideTaskCompleted = true;
@@ -849,8 +855,8 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 
 /* class pmRemoteTask */
-pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pSameReadWriteSubscriptions /* = false */, bool pOverlapComputeCommunication /* = true */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pSameReadWriteSubscriptions, pOverlapComputeCommunication)
+pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pDisjointReadWritesAcrossSubtasks /* = false */, bool pOverlapComputeCommunication /* = true */, bool pCanForciblyCancelSubtasks /* = true */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pDisjointReadWritesAcrossSubtasks, pOverlapComputeCommunication, pCanForciblyCancelSubtasks)
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)
@@ -901,7 +907,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
+    if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || mLocalStubsFreeOfShadowMemCommits))
     {
         DoPostInternalCompletion();
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
@@ -916,7 +922,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 void pmRemoteTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
 #ifdef _DEBUG
-    if(!GetMemSectionRW()->IsReadWrite() || HasSameReadWriteSubscription())
+    if(!GetMemSectionRW()->IsReadWrite() || HasDisjointReadWritesAcrossSubtasks())
         PMTHROW(pmFatalErrorException());
 #endif
 
@@ -938,7 +944,7 @@ void pmRemoteTask::MarkUserSideTaskCompletion()
 {
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if((!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasSameReadWriteSubscription()) || mLocalStubsFreeOfShadowMemCommits))
+    if((!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || mLocalStubsFreeOfShadowMemCommits))
     {
         DoPostInternalCompletion();
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);

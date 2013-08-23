@@ -332,12 +332,15 @@ namespace pm
         pmSchedulingPolicy policy;              /* By default, this is SLOW_START */
         int timeOutInSecs;                      /* By default, this is max possible value in signed int, negative values mean no timeout */
         bool multiAssignEnabled;                /* By default, this is true */
-        bool sameReadWriteSubscriptions;        /* By default, this is false. Applies only to output memory of the task. */
+        bool disjointReadWritesAcrossSubtasks;  /* By default, this is false. Applies only to output memory of the task (only if it is RW). */
         bool overlapComputeCommunication;       /* By default, this is true */
+        bool canForciblyCancelSubtasks;         /* By default, this is true. Applies only if multiAssignEnabled is true. */
 		pmClusterHandle cluster;                /* Unused */
 
 		pmTaskDetails();
 	} pmTaskDetails;
+    
+    /* The flag disjointReadWritesAcrossSubtasks should be true (for RW output memories) if the read subscriptions of a subtask do not overlap with write subscriptions of any subtasks other than itself. */
 
 	/** The task submission API. Returns the task handle in variable pTaskHandle on success. */
 	pmStatus pmSubmitTask(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle);

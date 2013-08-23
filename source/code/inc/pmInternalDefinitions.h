@@ -91,8 +91,9 @@ const unsigned short MIN_PRIORITY_LEVEL = __MAX(unsigned short);
 const unsigned short DEFAULT_PRIORITY_LEVEL = MAX_PRIORITY_LEVEL;
 
 const unsigned short TASK_MULTI_ASSIGN_FLAG_VAL = 0x0001;   // LSB
-const unsigned short TASK_SAME_READ_WRITE_SUBSCRIPTION_FLAG_VAL = 0x0002;
+const unsigned short TASK_DISJOINT_READ_WRITES_ACROSS_SUBTASKS_FLAG_VAL = 0x0002;
 const unsigned short TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL = 0x0004;
+const unsigned short TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL = 0x0008;
 
 #define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
 
@@ -107,7 +108,7 @@ const unsigned short TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL = 0x0004
 
 #define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (memAddr % pageSize))
 
-#define SUPPORT_LAZY_MEMORY
+//#define SUPPORT_LAZY_MEMORY
 
 #ifdef SUPPORT_LAZY_MEMORY
     #define LAZY_FORWARD_PREFETCH_PAGE_COUNT 5

@@ -221,7 +221,7 @@ bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemInfo pInputMemInfo, pmMem
 
     if(lInplace)
     {
-        lTaskDetails.sameReadWriteSubscriptions = true;
+        lTaskDetails.disjointReadWritesAcrossSubtasks = true;
     }
     else
     {

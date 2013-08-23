@@ -312,7 +312,7 @@ pmStatus pmGetRawMemPtr(pmMemHandle pMem, void** pPtr)
 {
     SAFE_EXECUTE_ON_CONTROLLER(GetRawMemPtr_Public, pMem, pPtr);
 }
-    
+
 pmTaskDetails::pmTaskDetails()
     : taskConf(NULL)
 	, taskConfLength(0)
@@ -326,8 +326,9 @@ pmTaskDetails::pmTaskDetails()
     , policy(SLOW_START)
     , timeOutInSecs(__MAX(int))
     , multiAssignEnabled(true)
-    , sameReadWriteSubscriptions(false)
+    , disjointReadWritesAcrossSubtasks(false)
     , overlapComputeCommunication(true)
+    , canForciblyCancelSubtasks(true)
 	, cluster(NULL)
 {
 }

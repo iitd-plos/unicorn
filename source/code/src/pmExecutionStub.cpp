@@ -950,7 +950,8 @@ void pmExecutionStub::CancelCurrentlyExecutingSubtaskRange(bool pTaskListeningOn
         
         if(!mExecutingLibraryCode)
         {
-            TerminateUserModeExecution();
+            if(mCurrentSubtaskRangeStats->task->CanForciblyCancelSubtasks())
+                TerminateUserModeExecution();
         }
         else
         {
@@ -1211,7 +1212,7 @@ pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubta
     
     if(!lReduceCallback && (pTask->DoSubtasksNeedShadowMemory() || (pTask->IsMultiAssignEnabled() && pIsMultiAssign)))
     {
-        if(pTask->GetMemSectionRW()->IsReadWrite() && !pTask->HasSameReadWriteSubscription())
+        if(pTask->GetMemSectionRW()->IsReadWrite() && !pTask->HasDisjointReadWritesAcrossSubtasks())
             DeferShadowMemCommit(pTask, pSubtaskId);
         else
             CommitSubtaskShadowMem(pTask, pSubtaskId);

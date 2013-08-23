@@ -445,11 +445,14 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
     if(pLocalTask->IsMultiAssignEnabled())
         flags |= TASK_MULTI_ASSIGN_FLAG_VAL;
     
-    if(pLocalTask->HasSameReadWriteSubscription())
-        flags |= TASK_SAME_READ_WRITE_SUBSCRIPTION_FLAG_VAL;
+    if(pLocalTask->HasDisjointReadWritesAcrossSubtasks())
+        flags |= TASK_DISJOINT_READ_WRITES_ACROSS_SUBTASKS_FLAG_VAL;
 
     if(pLocalTask->ShouldOverlapComputeCommunication())
         flags |= TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL;
+    
+    if(pLocalTask->CanForciblyCancelSubtasks())
+        flags |= TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL;
 
 	strncpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN-1);
 	callbackKey[MAX_CB_KEY_LEN-1] = '\0';

@@ -190,7 +190,7 @@ bool ParallelAddAuxArray(pmMemHandle pSrcMemHandle, pmMemHandle pAuxMemHandle, u
 	lTaskDetails.outputMemHandle = pSrcMemHandle;
     lTaskDetails.inputMemInfo = INPUT_MEM_READ_ONLY;
     lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE;
-    lTaskDetails.sameReadWriteSubscriptions = true;
+    lTaskDetails.disjointReadWritesAcrossSubtasks = true;
 
 	prefixSumTaskConf lTaskConf;
 	lTaskConf.arrayLen = pArrayLength;

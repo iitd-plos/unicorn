@@ -149,7 +149,7 @@
 		2BCCED53151C7B07006AA45D /* pmCluster.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmCluster.cpp; sourceTree = "<group>"; };
 		2BCCED54151C7B07006AA45D /* pmCommand.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmCommand.cpp; sourceTree = "<group>"; };
 		2BCCED55151C7B07006AA45D /* pmCommunicator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmCommunicator.cpp; sourceTree = "<group>"; };
-		2BCCED56151C7B07006AA45D /* pmController.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmController.cpp; sourceTree = "<group>"; };
+		2BCCED56151C7B07006AA45D /* pmController.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = pmController.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED57151C7B07006AA45D /* pmDevicePool.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmDevicePool.cpp; sourceTree = "<group>"; };
 		2BCCED58151C7B07006AA45D /* pmDispatcherCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = pmDispatcherCUDA.cu; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED59151C7B07006AA45D /* pmDispatcherGPU.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmDispatcherGPU.cpp; sourceTree = "<group>"; };
@@ -159,7 +159,7 @@
 		2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemoryManager.cpp; sourceTree = "<group>"; };
 		2BCCED5E151C7B07006AA45D /* pmMemSection.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemSection.cpp; sourceTree = "<group>"; };
 		2BCCED5F151C7B07006AA45D /* pmNetwork.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmNetwork.cpp; sourceTree = "<group>"; };
-		2BCCED60151C7B07006AA45D /* pmPublicDefinitions.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmPublicDefinitions.cpp; sourceTree = "<group>"; };
+		2BCCED60151C7B07006AA45D /* pmPublicDefinitions.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = pmPublicDefinitions.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED61151C7B07006AA45D /* pmReducer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmReducer.cpp; sourceTree = "<group>"; };
 		2BCCED62151C7B07006AA45D /* pmResourceLock.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmResourceLock.cpp; sourceTree = "<group>"; };
 		2BCCED63151C7B07006AA45D /* pmSafePriorityQueue.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmSafePriorityQueue.cpp; sourceTree = "<group>"; };
@@ -168,7 +168,7 @@
 		2BCCED66151C7B07006AA45D /* pmStubManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmStubManager.cpp; sourceTree = "<group>"; };
 		2BCCED67151C7B07006AA45D /* pmSubscriptionManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmSubscriptionManager.cpp; sourceTree = "<group>"; };
 		2BCCED68151C7B07006AA45D /* pmSubtaskManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmSubtaskManager.cpp; sourceTree = "<group>"; };
-		2BCCED69151C7B07006AA45D /* pmTask.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTask.cpp; sourceTree = "<group>"; };
+		2BCCED69151C7B07006AA45D /* pmTask.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = pmTask.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED6A151C7B07006AA45D /* pmTaskExecStats.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTaskExecStats.cpp; sourceTree = "<group>"; };
 		2BCCED6B151C7B07006AA45D /* pmTaskManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTaskManager.cpp; sourceTree = "<group>"; };
 		2BCCED6C151C7B07006AA45D /* pmThread.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmThread.cpp; sourceTree = "<group>"; };

@@ -300,7 +300,7 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
     if((lInputMem == lOutputMem) || (!lInputMem && !lOutputMem))
         PMTHROW(pmFatalErrorException());
 
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.inputMemInfo, pTaskDetails.outputMemInfo, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, pTaskDetails.multiAssignEnabled, pTaskDetails.sameReadWriteSubscriptions, pTaskDetails.overlapComputeCommunication);
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.inputMemInfo, pTaskDetails.outputMemInfo, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, pTaskDetails.multiAssignEnabled, pTaskDetails.disjointReadWritesAcrossSubtasks, pTaskDetails.overlapComputeCommunication, pTaskDetails.canForciblyCancelSubtasks);
 
 	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 
