@@ -23,9 +23,9 @@ endif
 OUTDIR= $(BUILD)
 
 ifeq ($(DEBUG), 1)
-	PROGRAM=$(OUTDIR)/$(SAMPLE_NAME)_g.exe
+	PROGRAM=$(OUTDIR)/$(SAMPLE_NAME)$(NAME_SUFFIX)_g.exe
 else
-	PROGRAM=$(OUTDIR)/$(SAMPLE_NAME).exe
+	PROGRAM=$(OUTDIR)/$(SAMPLE_NAME)$(NAME_SUFFIX).exe
 endif
 
 ifeq ($(BUILD_CUDA), 1)
@@ -72,13 +72,13 @@ final:
 
 # Generic rule for compiling any cpp file. Any specific rules must
 # be added after this rule as the later one overrides
-%.o: ../../source/code/src/%.cpp
+%$(NAME_SUFFIX).o: ../../source/code/src/%.cpp
 	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
 
 %.o: $(PATH_PREFIX)../../../common/source/code/src/%.cpp
 	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
 
-%.o: ../../source/code/src/%.cu
+%$(NAME_SUFFIX).o: ../../source/code/src/%.cu
 	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
 
 strip: $(PROGRAM)

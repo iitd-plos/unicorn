@@ -247,6 +247,8 @@ public:
     typedef std::map<std::string, std::vector<std::string> > keyValuePairs;
     typedef std::vector<std::pair<std::string, std::vector<std::string> > > panelConfigurationType;
 
+    void SetExecPath(const std::string& pExecPath);
+    
     void CollectResults();
     void ProcessResults();
 
@@ -263,7 +265,7 @@ public:
     void ExecuteSample(const std::string& pHosts, const std::string& pSpaceSeparatedVaryingsStr, const std::string& pOutputFolder);
     
 protected:
-    Benchmark(const std::string& pName, const std::string& pExecPath);
+    Benchmark(const std::string& pName);
 
 private:
     void LoadConfiguration();

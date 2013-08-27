@@ -12,14 +12,22 @@ namespace fft
 #error "FFT_DATA_TYPE not defined"
 #endif
 
-#ifndef MATRIX_DATA_TYPE
-#error "MATRIX_DATA_TYPE not defined"
-#endif
-
 #define FORWARD_TRANSFORM_DIRECTION 1
 #define REVERSE_TRANSFORM_DIRECTION 0
 
+#if defined(FFT_1D) && defined(FFT_2D)
+#error "Both FFT_1D and FFT_2D defined !!!"
+#endif
+    
+#if !defined(FFT_1D) && !defined(FFT_2D)
 #define FFT_2D
+#endif
+
+#ifdef FFT_2D
+    #ifndef MATRIX_DATA_TYPE
+    #error "MATRIX_DATA_TYPE not defined"
+    #endif
+#endif
 
 using namespace pm;
 

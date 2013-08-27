@@ -233,7 +233,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
-    callbackStruct lStruct[1] = {DoSetDefaultCallbacks, "MATRIXMUL"};
+    callbackStruct lStruct[1] = { {DoSetDefaultCallbacks, "MATRIXMUL"} };
     
 	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 1);
 

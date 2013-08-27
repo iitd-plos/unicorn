@@ -149,9 +149,8 @@ private:
     std::set<std::pair<double, size_t> > mData;
 };
 
-Benchmark::Benchmark(const std::string& pName, const std::string& pExecPath)
+Benchmark::Benchmark(const std::string& pName)
 : mName(pName)
-, mExecPath(pExecPath)
 {
     mHostsSetVector.resize(SAMPLE_COUNT);
 }
@@ -2386,6 +2385,11 @@ const std::string& Benchmark::GetExecPath()
     return mExecPath;
 }
 
+void Benchmark::SetExecPath(const std::string& pExecPath)
+{
+    mExecPath = pExecPath;
+}
+
 void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
 {
     char lPathSeparator[1];
@@ -2438,64 +2442,72 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
     for(; lIter != lEndIter; ++lIter)
     {
         const std::string& lName = (*lIter);
-
-        std::string lExecPath(lTestSuitePath);
-        lExecPath.append(lSeparator);
-        lExecPath += lName;
-        lExecPath.append(lSeparator);
-        lExecPath.append(gIntermediatePath);
-        lExecPath.append(lSeparator);
-        lExecPath.append(lName);
-        lExecPath.append(".exe");
         
-        FILE* lExecFile = fopen(lExecPath.c_str(), "rb");
-        if(lExecFile)
+        std::stringstream lConfigurationsKeyName;
+        lConfigurationsKeyName << lName << "_Configurations";
+
+        size_t lConfigurations = 1;
+        if(!GetGlobalConfiguration()[lConfigurationsKeyName.str()].empty())
+            lConfigurations = atoi((GetGlobalConfiguration()[lConfigurationsKeyName.str()][0]).c_str());
+
+        std::vector<std::string> lConfigurationalNames;
+        if(lConfigurations == 1)
         {
-            fclose(lExecFile);
-            
-            std::stringstream lConfigurationsKeyName;
-            lConfigurationsKeyName << lName << "_Configurations";
-
-            size_t lConfigurations = 1;
-            if(!GetGlobalConfiguration()[lConfigurationsKeyName.str()].empty())
-                lConfigurations = atoi((GetGlobalConfiguration()[lConfigurationsKeyName.str()][0]).c_str());
-
-            std::vector<std::string> lConfigurationalNames;
-            if(lConfigurations == 1)
+            lConfigurationalNames.push_back(lName);
+        }
+        else
+        {
+            for(size_t confIndex = 0; confIndex < lConfigurations; ++confIndex)
             {
-                lConfigurationalNames.push_back(lName);
-            }
-            else
-            {
-                for(size_t confIndex = 0; confIndex < lConfigurations; ++confIndex)
-                {
-                    std::stringstream lConfName;
-                    lConfName << lName << "_" << (confIndex + 1);
-                    
-                    lConfigurationalNames.push_back(lConfName.str());
-                }
-            }
-            
-            std::vector<std::string>::iterator lConfIter = lConfigurationalNames.begin(), lConfEndIter = lConfigurationalNames.end();
-            
-            for(; lConfIter != lConfEndIter; ++lConfIter)
-            {
-                Benchmark b(*lConfIter, lExecPath);
+                std::stringstream lConfName;
+                lConfName << lName << "_" << (confIndex + 1);
                 
-                try
-                {
-                    b.LoadConfiguration();
-                }
-                catch(...)
-                {
-                    continue;
-                }
-                
-                pBenchmarks.push_back(b);
+                lConfigurationalNames.push_back(lConfName.str());
             }
         }
-    }
+        
+        std::vector<std::string>::iterator lConfIter = lConfigurationalNames.begin(), lConfEndIter = lConfigurationalNames.end();
+        for(size_t lConfIndex = 0; lConfIter != lConfEndIter; ++lConfIter, ++lConfIndex)
+        {
+            Benchmark b(*lConfIter);
+            
+            try
+            {
+                b.LoadConfiguration();
+                
+                std::string lExecName(b.mConfiguration[std::string("Exec_Name")][0]);
+                if(lExecName.empty())
+                    lExecName = lName;
+                
+                std::string lExecPath(lTestSuitePath);
+                lExecPath.append(lSeparator);
+                lExecPath += lName;
+                lExecPath.append(lSeparator);
+                lExecPath.append(gIntermediatePath);
+                lExecPath.append(lSeparator);
+                lExecPath.append(lExecName);
+                lExecPath.append(".exe");
 
+                FILE* lExecFile = fopen(lExecPath.c_str(), "rb");
+                if(!lExecFile)
+                    throw std::string("Exec file not found");
+                    
+                fclose(lExecFile);
+                b.SetExecPath(lExecPath);
+            }
+            catch(const std::string& pExecStr)
+            {
+                std::cout << "Caught Exception - " << pExecStr << std::endl;
+                continue;
+            }
+            catch(...)
+            {
+                continue;
+            }
+            
+            pBenchmarks.push_back(b);
+        }
+    }
 }
 
 void Benchmark::LoadGlobalConfiguration()

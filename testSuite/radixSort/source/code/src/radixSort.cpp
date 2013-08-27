@@ -317,7 +317,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
-    callbackStruct lStruct[1] = {DoSetDefaultCallbacks, "RADIXSORT"};
+    callbackStruct lStruct[1] = { {DoSetDefaultCallbacks, "RADIXSORT"} };
     
 	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 1);
 
