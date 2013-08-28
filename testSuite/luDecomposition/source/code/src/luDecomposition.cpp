@@ -8,7 +8,10 @@
 #ifdef MACOS
 #include <vecLib/cblas.h>
 #else
-#include <cblas.h>
+extern "C"
+{
+    #include <cblas.h>
+}
 #endif
 
 #include <memory>
