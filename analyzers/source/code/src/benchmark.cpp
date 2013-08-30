@@ -2474,10 +2474,12 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
             try
             {
                 b.LoadConfiguration();
+
+                keyValuePairs::iterator lIter = b.mConfiguration.find(std::string("Exec_Name"));
+                if(lIter != b.mConfiguration.end() && lIter->second.size() <= lConfIndex)
+                    throw std::string("Exec name not defined for all configurations");
                 
-                std::string lExecName(b.mConfiguration[std::string("Exec_Name")][0]);
-                if(lExecName.empty())
-                    lExecName = lName;
+                std::string lExecName((lIter != b.mConfiguration.end()) ? (lIter->second)[lConfIndex] : lName);
                 
                 std::string lExecPath(lTestSuitePath);
                 lExecPath.append(lSeparator);
