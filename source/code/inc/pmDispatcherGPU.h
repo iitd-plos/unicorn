@@ -59,8 +59,9 @@ class pmDispatcherCUDA : public pmBase
         void* CreateDeviceInfoCudaPtr(pmDeviceInfo& pDeviceInfo);
         void DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr);
 
+        size_t GetCudaAlignment(size_t pDeviceIndex);
+
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        size_t GetLogCudaAlignment();
         void* AllocatePinnedBuffer(size_t pSize);
         void DeallocatePinnedBuffer(void* pMem);
     #endif
@@ -85,7 +86,7 @@ class pmDispatcherCUDA : public pmBase
 	private:
 		pmStatus CountAndProbeProcessingElements();
 
-        size_t ComputeAlignedMemoryRequirement(size_t pAllocation1, size_t pAllocation2);
+        size_t ComputeAlignedMemoryRequirement(size_t pAllocation1, size_t pAllocation2, size_t pDeviceIndex);
     
         void ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, pmSubtaskInfo& pSubtaskInfo, ulong* pLastSubtaskIdIfSameTask, uint pOriginatingMachineIndex, ulong pSequenceNumber, size_t& pInputMem, size_t& pOutputMem, size_t& pScratchMem, bool& pUseLastSubtaskInputMem);
 

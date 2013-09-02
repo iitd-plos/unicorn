@@ -366,6 +366,8 @@ class pmStubCUDA : public pmStubGPU
         void ReservePinnedMemory(size_t pPhysicalMemory, size_t pTotalStubCount);
         pmMemChunk* GetPinnedBufferChunk();
     #endif
+    
+        size_t GetDeviceIndex();
 
     protected:
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, bool pMultiAssign);

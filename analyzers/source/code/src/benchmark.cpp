@@ -61,6 +61,7 @@
 
 #define SAMPLE_COUNT 3
 #define TIMEOUT_IN_SECS 600
+#define NON_PMLIB_TASK_TIMEOUT_FACTOR 10
 
 Benchmark::keyValuePairs mGlobalConfiguration;
 
@@ -2282,7 +2283,8 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
 
     if(lTimerPid == 0) // child process
     {
-        unsigned int lLeftTime = sleep(TIMEOUT_IN_SECS);
+        unsigned int lLeftTime = sleep(((std::string("sequential").compare(pDisplayName) == 0 || std::string("singlegpu").compare(pDisplayName) == 0) ? NON_PMLIB_TASK_TIMEOUT_FACTOR : 1) * TIMEOUT_IN_SECS);
+
         while(lLeftTime != 0)
             lLeftTime = sleep(lLeftTime);
 
@@ -2467,7 +2469,7 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
         }
         
         std::vector<std::string>::iterator lConfIter = lConfigurationalNames.begin(), lConfEndIter = lConfigurationalNames.end();
-        for(size_t lConfIndex = 0; lConfIter != lConfEndIter; ++lConfIter, ++lConfIndex)
+        for(; lConfIter != lConfEndIter; ++lConfIter)
         {
             Benchmark b(*lConfIter);
             
@@ -2475,11 +2477,8 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
             {
                 b.LoadConfiguration();
 
-                keyValuePairs::iterator lIter = b.mConfiguration.find(std::string("Exec_Name"));
-                if(lIter != b.mConfiguration.end() && lIter->second.size() <= lConfIndex)
-                    throw std::string("Exec name not defined for all configurations");
-                
-                std::string lExecName((lIter != b.mConfiguration.end()) ? (lIter->second)[lConfIndex] : lName);
+                keyValuePairs::iterator lIter = b.mConfiguration.find(std::string("Exec_Name"));                
+                std::string lExecName((lIter != b.mConfiguration.end()) ? (lIter->second)[0] : lName);
                 
                 std::string lExecPath(lTestSuitePath);
                 lExecPath.append(lSeparator);

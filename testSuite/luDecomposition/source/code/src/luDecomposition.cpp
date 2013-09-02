@@ -306,7 +306,6 @@ bool StageParallelTask(enum taskStage pStage, pmMemHandle pMemHandle, size_t pTa
     lTaskDetails.outputMemHandle = pMemHandle;
     lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE;
     lTaskDetails.disjointReadWritesAcrossSubtasks = true;
-    lTaskDetails.canForciblyCancelSubtasks = false;
     lTaskDetails.taskConf = &lTaskConf;
     lTaskDetails.taskConfLength = sizeof(luTaskConf);
 

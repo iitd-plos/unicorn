@@ -41,7 +41,7 @@ void* pmMemChunk::GetChunk()
     return mChunk;
 }
 
-void* pmMemChunk::Allocate(size_t pSize, size_t pLogAlignment)
+void* pmMemChunk::Allocate(size_t pSize, size_t pAlignment)
 {
     if(!pSize)
         return NULL;
@@ -55,8 +55,8 @@ void* pmMemChunk::Allocate(size_t pSize, size_t pLogAlignment)
             return NULL;
         
         size_t lAddr = reinterpret_cast<size_t>(mChunk) + lFreeIter->second;
-        size_t lMinBlockDiff = (1 << pLogAlignment);
-        size_t lPossibleAllocation = (((lAddr + lMinBlockDiff - 1) >> pLogAlignment) << pLogAlignment);
+        size_t lHighestVal = pAlignment - 1;
+        size_t lPossibleAllocation = ((lAddr + lHighestVal) & ~lHighestVal);
         
         size_t lLastReqdAddr = lPossibleAllocation + pSize - 1;
         size_t lLastAvailableAddr = lAddr + lFreeIter->first - 1;

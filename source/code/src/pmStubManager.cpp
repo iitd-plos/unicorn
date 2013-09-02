@@ -102,7 +102,7 @@ pmStatus pmStubManager::CreateExecutionStubs()
     lVendor.append(std::string((char*)(&lD), 4));
     lVendor.append(std::string((char*)(&lC), 4));
     
-    size_t lPhysicalCores, lPos;
+    size_t lPhysicalCores = 0, lPos = 0;
     if(lVendor.find(std::string("Intel"), lPos) != string::npos)
     {
         GetCpuIdInfo(4, 0, lA, lB, lC, lD);

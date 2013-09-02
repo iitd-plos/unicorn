@@ -230,7 +230,7 @@ pmMPI::~pmMPI()
         pmLogger::GetLogger()->PrintDeferredLog();
     
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();
-    
+
     uint lMachines = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
     for(uint i = 1; i < lMachines; ++i)
     {
@@ -1597,7 +1597,7 @@ pmStatus pmMPI::CancelDummyRequest()
 {
 	if(mDummyReceiveRequest)
 	{
-	        MPI_Request lRequest;
+        MPI_Request lRequest;
         
 		if( MPI_CALL("MPI_Isend", (MPI_Isend(NULL, 0, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::DUMMY_REQUEST_CANCEL_ERROR));
@@ -1618,6 +1618,13 @@ pmStatus pmMPI::StopThreadExecution()
     if(mSignalWait)
         PMTHROW(pmFatalErrorException());
 
+	// Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+        if(mThreadTerminationFlag)
+            return pmSuccess;   // Already stopped
+    }
+    
     mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
 
 	// Auto lock/unlock scope
@@ -1632,6 +1639,8 @@ pmStatus pmMPI::StopThreadExecution()
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
     
     delete mSignalWait;
+    
+    mSignalWait = NULL;
 
 	return pmSuccess;
 }
@@ -1887,6 +1896,9 @@ pmStatus pmMPI::ThreadSwitchCallback(networkEvent& pCommand)
     
 pmStatus pmMPI::FreezeReceptionAndFinishCommands()
 {
+    StopThreadExecution();
+
+#if 0
     /* Set no more persistent command reception; steal commands may be active even after tasks are destroyed */
 
 	// Auto lock/unlock scope
@@ -1921,6 +1933,10 @@ pmStatus pmMPI::FreezeReceptionAndFinishCommands()
         
         mCommandCompletionSignalWait.Wait();
     }
+#endif
+    
+    if(mReceiveThread)
+        mReceiveThread->StopThreadExecution();
 
     return pmSuccess;
 }
@@ -1954,6 +1970,13 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::StopThreadExecution()
     if(mSignalWait)
         PMTHROW(pmFatalErrorException());
     
+	// Auto lock/unlock scope
+	{
+		FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+        if(mThreadTerminationFlag)
+            return pmSuccess;   // Already stopped
+    }
+        
     mSignalWait = new SIGNAL_WAIT_IMPLEMENTATION_CLASS();
 
 	// Auto lock/unlock scope
@@ -1967,8 +1990,9 @@ pmStatus pmMPI::pmUnknownLengthReceiveThread::StopThreadExecution()
     
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-    //delete[] lData;
     delete mSignalWait;
+    
+    mSignalWait = NULL;
     
 	return pmSuccess;
 }

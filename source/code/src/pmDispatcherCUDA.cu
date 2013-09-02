@@ -31,8 +31,6 @@
 namespace pm
 {
 
-const size_t gLogCudaAlignment = 8; // 256 byte alignment
-    
 cudaError_t (*gFuncPtr_cudaGetDeviceCount)(int* count);
 cudaError_t (*gFuncPtr_cudaGetDeviceProperties)(struct cudaDeviceProp* prop, int device);
 cudaError_t (*gFuncPtr_cudaSetDevice)(int device);
@@ -207,13 +205,14 @@ pmStatus pmDispatcherCUDA::BindToDevice(size_t pDeviceIndex)
 
 std::string pmDispatcherCUDA::GetDeviceName(size_t pDeviceIndex)
 {
-	cudaDeviceProp lProp = mDeviceVector[pDeviceIndex].second;
+	const cudaDeviceProp& lProp = mDeviceVector[pDeviceIndex].second;
 	return lProp.name;
 }
 
 std::string pmDispatcherCUDA::GetDeviceDescription(size_t pDeviceIndex)
 {
-	cudaDeviceProp lProp = mDeviceVector[pDeviceIndex].second;
+	const cudaDeviceProp& lProp = mDeviceVector[pDeviceIndex].second;
+
 	std::stringstream lStream;
     lStream << "Clock Rate=" << lProp.clockRate << ";sharedMemPerBlock=" << lProp.sharedMemPerBlock << ";computeCapability=" << lProp.major << "." << lProp.minor;
 
@@ -233,13 +232,15 @@ void pmDispatcherCUDA::DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr)
 {
     DeallocateCudaMem(pDeviceInfoCudaPtr);
 }
+    
+size_t pmDispatcherCUDA::GetCudaAlignment(size_t pDeviceIndex)
+{
+	const cudaDeviceProp& lProp = mDeviceVector[pDeviceIndex].second;
+    
+    return lProp.textureAlignment;
+}
 
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-size_t pmDispatcherCUDA::GetLogCudaAlignment()
-{
-    return gLogCudaAlignment;
-}
-    
 void* pmDispatcherCUDA::AllocatePinnedBuffer(size_t pSize)
 {
     void* lMem = NULL;
@@ -304,14 +305,15 @@ void pmDispatcherCUDA::DeallocateCudaMem(void* pPtr)
     pm::DeallocateCudaMem(mRuntimeHandle, pPtr);
 }
 
-size_t pmDispatcherCUDA::ComputeAlignedMemoryRequirement(size_t pAllocation1, size_t pAllocation2)
+size_t pmDispatcherCUDA::ComputeAlignedMemoryRequirement(size_t pAllocation1, size_t pAllocation2, size_t pDeviceIndex)
 {
     if(!pAllocation2)
         return pAllocation1;
     
-    size_t lMinBlockDiff = (1 << gLogCudaAlignment);
-    size_t lAllocation = (((pAllocation1 + lMinBlockDiff - 1) >> gLogCudaAlignment) << gLogCudaAlignment);
-
+    size_t lCudaAlignment = GetCudaAlignment(pDeviceIndex);
+    size_t lHighestVal = lCudaAlignment - 1;
+    size_t lAllocation = ((pAllocation1 + lHighestVal) & ~lHighestVal);
+    
     return lAllocation + pAllocation2;
 }
     

@@ -1435,6 +1435,11 @@ pmStatus pmStubCUDA::FreeExecutionResources()
     
     return pmSuccess;
 }
+    
+size_t pmStubCUDA::GetDeviceIndex()
+{
+    return mDeviceIndex;
+}
 
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
 pmMemChunk* pmStubCUDA::GetPinnedBufferChunk()
@@ -1846,7 +1851,7 @@ void pmStubCUDA::PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubt
     if(mPinnedAllocation)
         PMTHROW(pmFatalErrorException());
     
-    mPinnedAllocation = mPinnedBufferChunk->Allocate(mTotalAllocationSize, pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetLogCudaAlignment());
+    mPinnedAllocation = mPinnedBufferChunk->Allocate(mTotalAllocationSize, pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetCudaAlignment(mDeviceIndex));
     
     if(!mPinnedAllocation)
         PMTHROW(pmFatalErrorException());

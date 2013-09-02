@@ -73,18 +73,14 @@ pmLinuxMemoryManager::pmLinuxMemoryManager()
     , mTrackLock __LOCK_NAME__("pmLinuxMemoryManager::mTrackLock")
 #endif
 {
-#ifdef SUPPORT_LAZY_MEMORY
 	InstallSegFaultHandler();
-#endif
 
 	mPageSize = ::getpagesize();
 }
 
 pmLinuxMemoryManager::~pmLinuxMemoryManager()
 {
-#ifdef SUPPORT_LAZY_MEMORY
 	UninstallSegFaultHandler();
-#endif
 
 #ifdef TRACK_MEMORY_ALLOCATIONS
     std::stringstream lStream;

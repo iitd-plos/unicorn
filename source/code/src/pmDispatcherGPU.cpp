@@ -238,6 +238,7 @@ bool pmDispatcherCUDA::RequiresPrematureExit(pmExecutionStub* pStub)
 
 ulong pmDispatcherCUDA::FindCollectivelyExecutableSubtaskRangeEnd(pmExecutionStub* pStub, const pmSubtaskRange& pSubtaskRange, bool pMultiAssign, std::vector<std::vector<std::pair<size_t, size_t> > >& pOffsets, size_t& pTotalMem)
 {
+    size_t lDeviceIndex = static_cast<pmStubCUDA*>(pStub)->GetDeviceIndex();
     size_t lStatusSize = sizeof(pmStatus);
 
     pmTask* lTask = pSubtaskRange.task;
@@ -297,23 +298,23 @@ ulong pmDispatcherCUDA::FindCollectivelyExecutableSubtaskRangeEnd(pmExecutionStu
         }
         else
         {
-            pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lInputMem);
+            pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lInputMem, lDeviceIndex);
             lVector.push_back(std::make_pair(pTotalMem - lInputMem, lInputMem));
             
             lLastInputMemOffset = pTotalMem - lInputMem;
             lLastInputMemSize = lInputMem;
         }
 
-        pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lOutputMem);
+        pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lOutputMem, lDeviceIndex);
         lVector.push_back(std::make_pair(pTotalMem - lOutputMem, lOutputMem));
         
-        pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lScratchMem);
+        pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lScratchMem, lDeviceIndex);
         lVector.push_back(std::make_pair(pTotalMem - lScratchMem, lScratchMem));
         
-        pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lReservedMem);
+        pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lReservedMem, lDeviceIndex);
         lVector.push_back(std::make_pair(pTotalMem - lReservedMem, lReservedMem));
 
-        pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lStatusSize);
+        pTotalMem = ComputeAlignedMemoryRequirement(pTotalMem, lStatusSize, lDeviceIndex);
         lVector.push_back(std::make_pair(pTotalMem - lStatusSize, lStatusSize));
 
         if(pTotalMem > lAvailableCudaMem || pTotalMem > lAvailablePinnedMem)

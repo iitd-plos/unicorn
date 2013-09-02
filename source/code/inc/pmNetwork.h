@@ -105,10 +105,11 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 				pmUnknownLengthReceiveThread(pmMPI* mMPI);
 				virtual ~pmUnknownLengthReceiveThread();
 
+				pmStatus StopThreadExecution();
+
 				virtual pmStatus ThreadSwitchCallback(network::networkEvent& pCommand);
 
 			private:
-				pmStatus StopThreadExecution();
 				pmStatus SendDummyProbeCancellationMessage(MPI_Request& pRequest);
 				pmStatus ReceiveDummyProbeCancellationMessage();
 

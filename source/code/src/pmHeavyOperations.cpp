@@ -101,7 +101,7 @@ pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
 pmHeavyOperationsThreadPool::~pmHeavyOperationsThreadPool()
 {
     size_t lThreadCount = mThreadVector.size();
-    for(size_t i=0; i<lThreadCount; ++i)
+    for(size_t i = 0; i < lThreadCount; ++i)
         delete mThreadVector[i];
 
     mThreadVector.clear();

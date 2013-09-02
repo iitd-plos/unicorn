@@ -37,7 +37,7 @@ public:
 
     void* GetChunk();
     
-    void* Allocate(size_t pSize, size_t pLogAlignment);
+    void* Allocate(size_t pSize, size_t pAlignment);
     void Deallocate(void* pPtr);
     
     size_t GetBiggestAvaialbleContiguousAllocation();
