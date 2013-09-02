@@ -161,6 +161,15 @@ pmStatus imageFilterDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInpu
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
     }
 
+#ifdef BUILD_CUDA
+	// Reserve CUDA Global Mem
+	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
+    {
+        size_t lReservedMem = computeSubtaskReservedMemRequirement(pTaskInfo, pDeviceInfo, pSubtaskId);
+		pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, lReservedMem);
+    }
+#endif
+
 	return pmSuccess;
 }
 

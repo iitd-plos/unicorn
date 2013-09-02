@@ -3,6 +3,7 @@
 
 #include "pmPublicDefinitions.h"
 #include "matrixMultiply.h"
+#include "commonAPI.h"
 
 #include <iostream>
 
@@ -64,23 +65,10 @@ int singleGpuMatrixMultiply(MATRIX_DATA_TYPE* pInputMatrices, MATRIX_DATA_TYPE* 
 
     size_t lOutputSize = sizeof(MATRIX_DATA_TYPE) * pDim * pDim;
     size_t lInputSize = 2 * lOutputSize;
-    if(cudaMalloc((void**)&lInputMemCudaPtr, lInputSize) != cudaSuccess)
-    {
-        std::cout << "Matrix Multiply: CUDA Input Memory Allocation Failed" << std::endl;
-        return 1;
-    }
 
-    if(cudaMemcpy(lInputMemCudaPtr, pInputMatrices, lInputSize, cudaMemcpyHostToDevice) != cudaSuccess)
-    {
-        std::cout << "Matrix Multiply: CUDA Memcpy Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaMalloc((void**)&lOutputMemCudaPtr, lOutputSize) != cudaSuccess)
-    {
-        std::cout << "Matrix Multiply: CUDA Output Memory Allocation Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lInputMemCudaPtr, lInputSize));
+    CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(lInputMemCudaPtr, pInputMatrices, lInputSize, cudaMemcpyHostToDevice));
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lOutputMemCudaPtr, lOutputSize));
 
     size_t lMaxThreadsPerDim = 32;
     size_t lBlocksPerDim = (pDim/lMaxThreadsPerDim) + ((pDim%lMaxThreadsPerDim) ? 1 : 0);
@@ -89,29 +77,11 @@ int singleGpuMatrixMultiply(MATRIX_DATA_TYPE* pInputMatrices, MATRIX_DATA_TYPE* 
     dim3 blockConf(lMaxThreadsPerDim, lMaxThreadsPerDim, 1);
     matrixMultiply_singleGpu<<<gridConf, blockConf>>>((MATRIX_DATA_TYPE*)lInputMemCudaPtr, (MATRIX_DATA_TYPE*)lOutputMemCudaPtr, pDim);
     
-    if(cudaDeviceSynchronize() != cudaSuccess)
-    {
-        std::cout << "Matrix Multiply: CUDA Device Synchronize Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaDeviceSynchronize", cudaDeviceSynchronize());
 
-    if(cudaMemcpy(pOutputMatrix, lOutputMemCudaPtr, lOutputSize, cudaMemcpyDeviceToHost) != cudaSuccess)
-    {
-        std::cout << "Matrix Multiply: CUDA Memcpy Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaFree(lOutputMemCudaPtr) != cudaSuccess)
-    {
-        std::cout << "Matrix Multiply: CUDA Output Memory Deallocation Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaFree(lInputMemCudaPtr) != cudaSuccess)
-    {
-        std::cout << "Matrix Multiply: CUDA Input Memory Deallocation Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(pOutputMatrix, lOutputMemCudaPtr, lOutputSize, cudaMemcpyDeviceToHost));
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lOutputMemCudaPtr));
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lInputMemCudaPtr));
 
     return 0;
 }

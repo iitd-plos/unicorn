@@ -3,6 +3,7 @@
 
 #include "pmPublicDefinitions.h"
 #include "prefixSum.h"
+#include "commonAPI.h"
 
 #include <iostream>
 
@@ -148,11 +149,7 @@ PREFIX_SUM_DATA_TYPE* prefixSum_computeInternal(PREFIX_SUM_DATA_TYPE* pInput, PR
     unsigned int lSharedMem = (lElemsPerBlock + (lElemsPerBlock / NUM_BANKS)) * sizeof(PREFIX_SUM_DATA_TYPE);
     
     PREFIX_SUM_DATA_TYPE* lBlockSumsCudaPtr;
-    if(cudaMalloc((void**)&lBlockSumsCudaPtr, lBlockCount * sizeof(PREFIX_SUM_DATA_TYPE)) != cudaSuccess)
-    {
-        std::cout << "Prefix Sum: CUDA Memory Allocation Failed" << std::endl;
-        return NULL;
-    }
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lBlockSumsCudaPtr, lBlockCount * sizeof(PREFIX_SUM_DATA_TYPE)));
 
     int lBlockCountX = (lBlockCount / 65535) + ((lBlockCount % 65535) ? 1 : 0);
     int lBlockCountY = (lBlockCount < 65535) ? lBlockCount : 65535;
@@ -160,11 +157,10 @@ PREFIX_SUM_DATA_TYPE* prefixSum_computeInternal(PREFIX_SUM_DATA_TYPE* pInput, PR
     dim3 lGridConf(lBlockCountX, lBlockCountY, 1);
     prefixSum_cuda <<<lGridConf, lThreadsPerBlock, lSharedMem>>> (pInput, pOutput, lElemsPerBlock, pElems, lBlockSumsCudaPtr, lBlockCount);
 
-    cudaError_t lError;
-    if((lError = cudaGetLastError()) != cudaSuccess)
+    if(cudaGetLastError() != cudaSuccess)
     {
-        cudaFree(lBlockSumsCudaPtr);
-        std::cout << "Prefix Sum: CUDA Error " << lError << std::endl;
+        CUDA_ERROR_CHECK("cudaFree", cudaFree(lBlockSumsCudaPtr));
+        return NULL;
     }
 
     pOutputElems = lBlockCount;
@@ -180,7 +176,7 @@ pmStatus prefixSum_compute(PREFIX_SUM_DATA_TYPE* pInput, PREFIX_SUM_DATA_TYPE* p
 
     if(!lBlockLastsScan1)
         return pmUserError;
-    
+
     if(lBlocksScan1 > 1)
     {
         PREFIX_SUM_DATA_TYPE* lBlockIncrsCudaPtr;

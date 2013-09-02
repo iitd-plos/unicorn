@@ -16,6 +16,16 @@ typedef struct complex
 bool localDeviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
 double getCurrentTimeInSecs();
 
+#define CUDA_ERROR_CHECK(name, x) \
+{ \
+    cudaError_t dCudaError = x; \
+    if(dCudaError != cudaSuccess) \
+    { \
+        std::cout << name << " failed with error " << dCudaError << std::endl; \
+        exit(1); \
+    } \
+}
+
 #define SUBMITTING_HOST_ID 0
 #define LOCAL_DEVICE_SELECTION_CALLBACK localDeviceSelectionCallback
 
@@ -87,6 +97,4 @@ bool isLazyMemEnabled();    /* by default, it's diabled */
         SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.inputMemHandle) ); \
     if(lTaskDetails.outputMemHandle) \
         SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.outputMemHandle) );
-
-
 

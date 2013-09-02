@@ -10,39 +10,35 @@
 namespace fft
 {
 
+#define CUFFT_ERROR_CHECK(name, x) \
+{ \
+    cufftResult dResult = x; \
+    if(dResult != CUFFT_SUCCESS) \
+    { \
+        std::cout << name << " failed with error " << dResult << std::endl; \
+        exit(1); \
+    } \
+}
+
 pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
     cufftHandle lPlan;
-    cufftResult lResult;
     
-    lResult = cufftPlan1d(&lPlan, lTaskConf->elemsY, CUFFT_C2C, ROWS_PER_FFT_SUBTASK);
-    if(lResult != CUFFT_SUCCESS)
-    {
-        std::cout << "CUFFT cufftPlan1d Error: " << lResult << std::endl;
-        return pmUserError;
-    }
-    
-    lResult = cufftSetStream(lPlan, (cudaStream_t)pCudaStream);
-    if(lResult != CUFFT_SUCCESS)
-    {
-        std::cout << "CUFFT set stream Error: " << lResult << std::endl;
-        return pmUserError;
-    }
+    CUFFT_ERROR_CHECK("cufftPlan1d", cufftPlan1d(&lPlan, lTaskConf->elemsY, CUFFT_C2C, ROWS_PER_FFT_SUBTASK));
+    CUFFT_ERROR_CHECK("cufftSetStream", cufftSetStream(lPlan, (cudaStream_t)pCudaStream));
     
     if(lTaskConf->inplace)
-        lResult = cufftExecC2C(lPlan, (cufftComplex*)pSubtaskInfo.outputMem, (cufftComplex*)pSubtaskInfo.outputMem, CUFFT_FORWARD);
-    else
-        lResult = cufftExecC2C(lPlan, (cufftComplex*)pSubtaskInfo.inputMem, (cufftComplex*)pSubtaskInfo.outputMem, CUFFT_FORWARD);
-    
-    if(lResult != CUFFT_SUCCESS)
     {
-        std::cout << "CUFFT cufftExecC2C Error: " << lResult << std::endl;
-        return pmUserError;
+        CUFFT_ERROR_CHECK("cufftExecC2C", cufftExecC2C(lPlan, (cufftComplex*)pSubtaskInfo.outputMem, (cufftComplex*)pSubtaskInfo.outputMem, CUFFT_FORWARD));
+    }
+    else
+    {
+        CUFFT_ERROR_CHECK("cufftExecC2C", cufftExecC2C(lPlan, (cufftComplex*)pSubtaskInfo.inputMem, (cufftComplex*)pSubtaskInfo.outputMem, CUFFT_FORWARD));
     }
     
-    cufftDestroy(lPlan);
+    CUFFT_ERROR_CHECK("cufftDestroy", cufftDestroy(lPlan));
     
     return pmSuccess;
 }
@@ -54,76 +50,29 @@ int fftSingleGpu2D(bool inplace, complex* inputData, complex* outputData, size_t
     
     void* lInputMemCudaPtr = NULL;
     size_t lSize = sizeof(FFT_DATA_TYPE) * nx * ny;
-    if(cudaMalloc((void**)&lInputMemCudaPtr, lSize) != cudaSuccess)
-    {
-        std::cout << "FFT: CUDA Output Memory Allocation Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lInputMemCudaPtr, lSize));
+    CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(lInputMemCudaPtr, lInputData, lSize, cudaMemcpyHostToDevice));
 
-    if(cudaMemcpy(lInputMemCudaPtr, lInputData, lSize, cudaMemcpyHostToDevice) != cudaSuccess)
-    {
-        std::cout << "FFT: CUDA Memcpy Failed" << std::endl;
-        return 1;
-    }
-
-    void* lOutputMemCudaPtr = NULL;
-    if(inplace)
-    {
-        lOutputMemCudaPtr = lInputMemCudaPtr;
-    }
-    else
-    {
-        if(cudaMalloc((void**)&lOutputMemCudaPtr, lSize) != cudaSuccess)
-        {
-            std::cout << "FFT: CUDA Output Memory Allocation Failed" << std::endl;
-            return 1;
-        }
-    }
+    void* lOutputMemCudaPtr = lInputMemCudaPtr;
+    if(!inplace)
+        CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lOutputMemCudaPtr, lSize));
     
     cufftHandle lPlan;
-    cufftResult lResult;
     
 #ifdef FFT_2D
-    lResult = cufftPlan2d(&lPlan, ny, nx, CUFFT_C2C);
+    CUFFT_ERROR_CHECK("cufftPlan2d", cufftPlan2d(&lPlan, ny, nx, CUFFT_C2C));
 #else
-    lResult = cufftPlan1d(&lPlan, ny, CUFFT_C2C, nx);
+    CUFFT_ERROR_CHECK("cufftPlan1d", cufftPlan1d(&lPlan, ny, CUFFT_C2C, nx));
 #endif
     
-    if(lResult != CUFFT_SUCCESS)
-    {
-        std::cout << "CUFFT cufftPlan Error: " << lResult << std::endl;
-        return pmUserError;
-    }
+    CUFFT_ERROR_CHECK("cufftExecC2C", cufftExecC2C(lPlan, (cufftComplex*)lInputMemCudaPtr, (cufftComplex*)lOutputMemCudaPtr, CUFFT_FORWARD));
+    CUFFT_ERROR_CHECK("cufftDestroy", cufftDestroy(lPlan));
 
-    lResult = cufftExecC2C(lPlan, (cufftComplex*)lInputMemCudaPtr, (cufftComplex*)lOutputMemCudaPtr, CUFFT_FORWARD);
-    if(lResult != CUFFT_SUCCESS)
-    {
-        std::cout << "CUFFT cufftExecC2C Error: " << lResult << std::endl;
-        return pmUserError;
-    }
-    
-    cufftDestroy(lPlan);
-
-    if(cudaMemcpy(outputData, lOutputMemCudaPtr, lSize, cudaMemcpyDeviceToHost) != cudaSuccess)
-    {
-        std::cout << "FFT: CUDA Memcpy Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaFree(lOutputMemCudaPtr) != cudaSuccess)
-    {
-        std::cout << "FFT: CUDA Memory Deallocation Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(outputData, lOutputMemCudaPtr, lSize, cudaMemcpyDeviceToHost));
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lOutputMemCudaPtr));
     
     if(!inplace)
-    {
-        if(cudaFree(lInputMemCudaPtr) != cudaSuccess)
-        {
-            std::cout << "FFT: CUDA Memory Deallocation Failed" << std::endl;
-            return 1;
-        }
-    }
+        CUDA_ERROR_CHECK("cudaFree", cudaFree(lInputMemCudaPtr));
     
     return 0;
 }

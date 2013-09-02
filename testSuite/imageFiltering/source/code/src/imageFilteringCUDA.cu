@@ -28,8 +28,42 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include <map>
+
+#include "commonAPI.h"
+
 namespace imageFiltering
 {
+
+size_t getCudaAlignment()
+{
+    static std::map<int, size_t> sMap;  // deviceId versus textureAlignment
+
+    int lDeviceId;
+    CUDA_ERROR_CHECK("cudaGetDevice", cudaGetDevice(&lDeviceId));
+
+    std::map<int, size_t>::iterator lIter = sMap.find(lDeviceId);
+    if(lIter == sMap.end())
+    {
+        cudaDeviceProp lDeviceProp;
+        CUDA_ERROR_CHECK("cudaGetDeviceProperties", cudaGetDeviceProperties(&lDeviceProp, lDeviceId));
+    
+        sMap[lDeviceId] = lDeviceProp.textureAlignment;
+        
+        return lDeviceProp.textureAlignment;
+    }
+    
+    return lIter->second;
+}
+
+size_t getTexturePitch(size_t pTextureWidth)
+{
+    size_t lAlignment = getCudaAlignment();
+    size_t lHighestVal = lAlignment - 1;
+    
+    int lEffectiveTextureWidth = pTextureWidth * PIXEL_COUNT;
+    return ((lEffectiveTextureWidth + lHighestVal) & ~lHighestVal);
+}
 
 #define TEXEL_TYPE char
 
@@ -148,60 +182,29 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     ((char*)pOutputMem)[lOffset + 2] = lBlueVal;
 }
     
-int prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImageData, int pImageBytesPerLine, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, void* pOutputMem, int pImageWidth, int pOffsetX, int pOffsetY, int pCols, int pRows)
+void prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImageData, int pImageBytesPerLine, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, void* pOutputMem, int pImageWidth, int pOffsetX, int pOffsetY, int pCols, int pRows, size_t pTexturePitch, void* pTextureMem, char* pFilterPtr, cudaStream_t pCudaStream)
 {
     int lEffectiveTextureWidth = pTextureWidth * PIXEL_COUNT;
 
-    void* lTextureMem = NULL;
-    size_t lPitch = 0;
-    if(cudaMallocPitch(&lTextureMem, &lPitch, lEffectiveTextureWidth, pTextureHeight) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Memory Allocation Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaMemcpyAsync", cudaMemcpyAsync(pFilterPtr, pFilter, MAX_FILTER_DIM * MAX_FILTER_DIM, cudaMemcpyHostToDevice, pCudaStream));
 
-    if(cudaMemcpy2D(lTextureMem, lPitch, pInvertedImageData, pImageBytesPerLine, lEffectiveTextureWidth, pTextureHeight, cudaMemcpyHostToDevice) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Memcpy 2D Failed" << std::endl;
-        return 1;
-    }
-    
+    CUDA_ERROR_CHECK("cudaMemcpy2DAsync", cudaMemcpy2DAsync(pTextureMem, pTexturePitch, pInvertedImageData, pImageBytesPerLine, lEffectiveTextureWidth, pTextureHeight, cudaMemcpyHostToDevice, pCudaStream));
+
     gInvertedTextureRef.addressMode[0] = cudaAddressModeClamp;
     gInvertedTextureRef.addressMode[1] = cudaAddressModeClamp;
     gInvertedTextureRef.filterMode = cudaFilterModePoint;
     gInvertedTextureRef.normalized = false;
-    
+
     float lAlignmentOffset = 0.0;
     size_t lTextureOffset = 0;
     cudaChannelFormatDesc lChannelDesc = cudaCreateChannelDesc(8, 0, 0, 0, cudaChannelFormatKindUnsigned);
-    if(cudaBindTexture2D(&lTextureOffset, gInvertedTextureRef, lTextureMem, lChannelDesc, lEffectiveTextureWidth, pTextureHeight, lPitch) != cudaSuccess)
-    {
-        std::cout << "Image Filter: Texture Binding Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaBindTexture2D", cudaBindTexture2D(&lTextureOffset, gInvertedTextureRef, pTextureMem, lChannelDesc, lEffectiveTextureWidth, pTextureHeight, pTexturePitch));
     
     // Mislaigned binding; rebind
     if(lTextureOffset != 0)
     {
         lAlignmentOffset = lTextureOffset / sizeof(TEXEL_TYPE);
-        if(cudaBindTexture2D(&lTextureOffset, gInvertedTextureRef, lTextureMem, lChannelDesc, lEffectiveTextureWidth + lAlignmentOffset, pTextureHeight, lPitch) != cudaSuccess)
-        {
-            std::cout << "Image Filter: Texture Binding Failed" << std::endl;
-            return 1;
-        }
-    }
-
-    char* lFilterPtr = NULL;
-    if(cudaMalloc((void**)&lFilterPtr, (MAX_FILTER_DIM * MAX_FILTER_DIM)) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Filter Memory Allocation Failed" << std::endl;
-        return 1;
-    }
-    
-    if(cudaMemcpy(lFilterPtr, pFilter, MAX_FILTER_DIM * MAX_FILTER_DIM, cudaMemcpyHostToDevice) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Memcpy Failed" << std::endl;
-        return 1;
+        CUDA_ERROR_CHECK("cudaBindTexture2D", cudaBindTexture2D(&lTextureOffset, gInvertedTextureRef, pTextureMem, lChannelDesc, lEffectiveTextureWidth + lAlignmentOffset, pTextureHeight, pTexturePitch));
     }
     
     int lBlocksX = (pCols / GPU_BLOCK_DIM) + ((pCols % GPU_BLOCK_DIM) ? 1 : 0);
@@ -211,38 +214,21 @@ int prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImage
 
     dim3 gridConf(lBlocksX, lBlocksY, 1);
     dim3 blockConf(GPU_BLOCK_DIM, GPU_BLOCK_DIM, 1);
-    imageFilter_cuda <<<gridConf, blockConf, lSharedMemReqd>>> (pOffsetX, pOffsetY, pCols, pRows, lAlignmentOffset, pOutputMem, pImageWidth, lEffectiveTextureWidth, lFilterPtr, pFilterRadius);
+    imageFilter_cuda <<<gridConf, blockConf, lSharedMemReqd, pCudaStream>>> (pOffsetX, pOffsetY, pCols, pRows, lAlignmentOffset, pOutputMem, pImageWidth, lEffectiveTextureWidth, pFilterPtr, pFilterRadius);
 
-    if(cudaDeviceSynchronize() != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Device Synchronize Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaUnbindTexture(gInvertedTextureRef) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Unbind Texture Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaFree(lTextureMem) != cudaSuccess || cudaFree(lFilterPtr) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Memory Deallocation Failed" << std::endl;
-        return 1;
-    }
-
-    return 0;
+    //CUDA_ERROR_CHECK("cudaStreamSynchronize", cudaStreamSynchronize(pCudaStream));
+    CUDA_ERROR_CHECK("cudaUnbindTexture", cudaUnbindTexture(gInvertedTextureRef));
 }
-
-pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
+    
+size_t computeSubtaskReservedMemRequirement(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
 {
 	imageFilterTaskConf* lTaskConf = (imageFilterTaskConf*)(pTaskInfo.taskConf);
 
     unsigned int lTilesPerRow = (lTaskConf->imageWidth/TILE_DIM + (lTaskConf->imageWidth%TILE_DIM ? 1 : 0));
     
-    int lSubscriptionStartCol = (unsigned int)((pSubtaskInfo.subtaskId % lTilesPerRow) * TILE_DIM);
+    int lSubscriptionStartCol = (unsigned int)((pSubtaskId % lTilesPerRow) * TILE_DIM);
     int lSubscriptionEndCol = lSubscriptionStartCol + TILE_DIM;
-    int lSubscriptionStartRow = (unsigned int)((pSubtaskInfo.subtaskId / lTilesPerRow) * TILE_DIM);
+    int lSubscriptionStartRow = (unsigned int)((pSubtaskId / lTilesPerRow) * TILE_DIM);
     int lSubscriptionEndRow = lSubscriptionStartRow + TILE_DIM;
 
     if(lSubscriptionEndCol > lTaskConf->imageWidth)
@@ -264,18 +250,53 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     int lSubImageWidth = lEndCol - lStartCol;
     int lSubImageHeight = lEndRow - lStartRow;
     
+    return ((MAX_FILTER_DIM * MAX_FILTER_DIM) + (getTexturePitch(lSubImageWidth) * lSubImageHeight));
+}
+
+pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
+{
+	imageFilterTaskConf* lTaskConf = (imageFilterTaskConf*)(pTaskInfo.taskConf);
+    
+    unsigned int lTilesPerRow = (lTaskConf->imageWidth/TILE_DIM + (lTaskConf->imageWidth%TILE_DIM ? 1 : 0));
+    
+    int lSubscriptionStartCol = (unsigned int)((pSubtaskInfo.subtaskId % lTilesPerRow) * TILE_DIM);
+    int lSubscriptionEndCol = lSubscriptionStartCol + TILE_DIM;
+    int lSubscriptionStartRow = (unsigned int)((pSubtaskInfo.subtaskId / lTilesPerRow) * TILE_DIM);
+    int lSubscriptionEndRow = lSubscriptionStartRow + TILE_DIM;
+    
+    if(lSubscriptionEndCol > lTaskConf->imageWidth)
+        lSubscriptionEndCol = lTaskConf->imageWidth;
+    
+    if(lSubscriptionEndRow > lTaskConf->imageHeight)
+        lSubscriptionEndRow = lTaskConf->imageHeight;
+    
+    int lStartCol = lSubscriptionStartCol - lTaskConf->filterRadius;
+    int lEndCol = lSubscriptionEndCol + lTaskConf->filterRadius;
+    int lStartRow = lSubscriptionStartRow - lTaskConf->filterRadius;
+    int lEndRow = lSubscriptionEndRow + lTaskConf->filterRadius;
+    
+    if(lStartCol < 0) lStartCol = 0;
+    if(lStartRow < 0) lStartRow = 0;
+    if(lEndCol > lTaskConf->imageWidth) lEndCol = lTaskConf->imageWidth;
+    if(lEndRow > lTaskConf->imageHeight) lEndRow = lTaskConf->imageHeight;
+    
+    int lSubImageWidth = lEndCol - lStartCol;
+    int lSubImageHeight = lEndRow - lStartRow;
+    
     char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset;
     lInvertedImageData += (lTaskConf->imageBytesPerLine * (lTaskConf->imageHeight - lEndRow) + lStartCol * PIXEL_COUNT);
- 
+    
     int lOffsetX = lSubscriptionStartCol - lStartCol;
     int lOffsetY = lEndRow - lSubscriptionEndRow;
     
     int lCols = lSubscriptionEndCol - lSubscriptionStartCol;
     int lRows = lSubscriptionEndRow - lSubscriptionStartRow;
-
-    if(prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lOffsetX, lOffsetY, lCols, lRows))
-        return pmUserError;
     
+    char* lFilterPtr = (char*)(pSubtaskInfo.gpuContext.reservedGlobalMem);
+    void* lTextureMem  = (void*)(lFilterPtr + (MAX_FILTER_DIM * MAX_FILTER_DIM));
+    
+    prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lOffsetX, lOffsetY, lCols, lRows, getTexturePitch(lSubImageWidth), lTextureMem, lFilterPtr, (cudaStream_t)pCudaStream);
+
     return pmSuccess;
 }
 
@@ -284,27 +305,27 @@ int singleGpuImageFilter(void* pInvertedImageData, int pImageWidth, int pImageHe
 {
     void* lOutputMemCudaPtr = NULL;
     size_t lImageSize = (pImageWidth * pImageHeight * PIXEL_COUNT);
-    if(cudaMalloc((void**)&lOutputMemCudaPtr, lImageSize) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Output Memory Allocation Failed" << std::endl;
-        return 1;
-    }
 
-    int lRetVal = prepareForLaunch(pImageWidth, pImageHeight, (char*)pInvertedImageData, pImageWidth * PIXEL_COUNT, pFilter, pFilterRadius, lOutputMemCudaPtr, pImageWidth, 0, 0, pImageWidth, pImageHeight);
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lOutputMemCudaPtr, lImageSize));
+
+    int lEffectiveTextureWidth = pImageWidth * PIXEL_COUNT;
+    size_t lPitch = 0;
+
+    char* lFilterPtr = NULL;
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lFilterPtr, (MAX_FILTER_DIM * MAX_FILTER_DIM)));
+
+    void* lTextureMem = NULL;
+    CUDA_ERROR_CHECK("cudaMallocPitch", cudaMallocPitch(&lTextureMem, &lPitch, lEffectiveTextureWidth, pImageHeight));
+
+    prepareForLaunch(pImageWidth, pImageHeight, (char*)pInvertedImageData, pImageWidth * PIXEL_COUNT, pFilter, pFilterRadius, lOutputMemCudaPtr, pImageWidth, 0, 0, pImageWidth, pImageHeight, lPitch, lTextureMem, lFilterPtr, NULL);
     
-    if(cudaMemcpy(pOutputMem, lOutputMemCudaPtr, lImageSize, cudaMemcpyDeviceToHost) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Memcpy Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(pOutputMem, lOutputMemCudaPtr, lImageSize, cudaMemcpyDeviceToHost));
 
-    if(cudaFree(lOutputMemCudaPtr) != cudaSuccess)
-    {
-        std::cout << "Image Filter: CUDA Memory Deallocation Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lTextureMem));
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lFilterPtr));
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lOutputMemCudaPtr));
 
-    return lRetVal;
+    return 0;
 }
 
 }

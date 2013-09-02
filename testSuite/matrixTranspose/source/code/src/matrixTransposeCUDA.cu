@@ -108,23 +108,10 @@ int singleGpuMatrixTranspose(bool pInplace, MATRIX_DATA_TYPE* pInputMatrix, MATR
     void* lOutputMemCudaPtr = NULL;
     
     size_t lSize = sizeof(MATRIX_DATA_TYPE) * pInputDimRows * pInputDimCols;
-    if(cudaMalloc((void**)&lInputMemCudaPtr, lSize) != cudaSuccess)
-    {
-        std::cout << "Matrix Transpose: CUDA Input Memory Allocation Failed" << std::endl;
-        return 1;
-    }
 
-    if(cudaMemcpy(lInputMemCudaPtr, lInputMatrix, lSize, cudaMemcpyHostToDevice) != cudaSuccess)
-    {
-        std::cout << "Matrix Transpose: CUDA Input Memory Memcpy Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaMalloc((void**)&lOutputMemCudaPtr, lSize) != cudaSuccess)
-    {
-        std::cout << "Matrix Transpose: CUDA Output Memory Allocation Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lInputMemCudaPtr, lSize));
+    CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(lInputMemCudaPtr, lInputMatrix, lSize, cudaMemcpyHostToDevice));
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)&lOutputMemCudaPtr, lSize));
 
     size_t lGridDim = std::max(pInputDimRows / GPU_TILE_DIM, pInputDimCols / GPU_TILE_DIM);
 
@@ -132,29 +119,11 @@ int singleGpuMatrixTranspose(bool pInplace, MATRIX_DATA_TYPE* pInputMatrix, MATR
     dim3 blockConf(GPU_TILE_DIM, GPU_TILE_DIM / GPU_ELEMS_PER_THREAD, 1);
     matrixTranspose_singleGpu <<<gridConf, blockConf>>> (pInputDimCols, pInputDimRows, lInputMemCudaPtr, lOutputMemCudaPtr, pInputDimCols / GPU_TILE_DIM, pInputDimRows / GPU_TILE_DIM);
 
-    if(cudaDeviceSynchronize() != cudaSuccess)
-    {
-        std::cout << "Matrix Transpose: CUDA Device Synchronize Failed " << cudaGetLastError() << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaDeviceSynchronize", cudaDeviceSynchronize());
 
-    if(cudaMemcpy(pOutputMatrix, lOutputMemCudaPtr, lSize, cudaMemcpyDeviceToHost) != cudaSuccess)
-    {
-        std::cout << "Matrix Transpose: CUDA Output Memory Memcpy Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaFree(lInputMemCudaPtr) != cudaSuccess)
-    {
-        std::cout << "Matrix Transpose: CUDA Input Memory Deallocation Failed" << std::endl;
-        return 1;
-    }
-
-    if(cudaFree(lOutputMemCudaPtr) != cudaSuccess)
-    {
-        std::cout << "Matrix Transpose: CUDA Output Memory Deallocation Failed" << std::endl;
-        return 1;
-    }
+    CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(pOutputMatrix, lOutputMemCudaPtr, lSize, cudaMemcpyDeviceToHost));
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lInputMemCudaPtr));
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lOutputMemCudaPtr));
     
     return 0;
 }

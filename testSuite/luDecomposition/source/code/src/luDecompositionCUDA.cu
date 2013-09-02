@@ -208,12 +208,8 @@ int singleGpuLUDecomposition(MATRIX_DATA_TYPE* pMatrix, size_t pDim)
     cublasHandle_t lCublasHandle = lManager.GetHandle();
 
     void* lDevicePtr = NULL;
-    if(cudaMalloc((void**)(&lDevicePtr), (int)(pDim * pDim * sizeof(MATRIX_DATA_TYPE))) != cudaSuccess)
-    {
-        std::cout << "cudaMalloc Failed" << std::endl;
-        exit(1);
-    }
-    
+    CUDA_ERROR_CHECK("cudaMalloc", cudaMalloc((void**)(&lDevicePtr), (int)(pDim * pDim * sizeof(MATRIX_DATA_TYPE))));
+
     MATRIX_DATA_TYPE* lMatrix = (MATRIX_DATA_TYPE*)lDevicePtr;
     
     CUBLAS_ERROR_CHECK("cublasSetMatrix", cublasSetMatrix(pDim, pDim, sizeof(MATRIX_DATA_TYPE), pMatrix, pDim, lDevicePtr, pDim));
@@ -223,11 +219,7 @@ int singleGpuLUDecomposition(MATRIX_DATA_TYPE* pMatrix, size_t pDim)
 
     for(size_t i = 0; i < pDim - 1; ++i)
     {
-        if(cudaMemcpy(&lDiagonalElem, lMatrix + i + i * pDim, sizeof(MATRIX_DATA_TYPE), cudaMemcpyDeviceToHost) != cudaSuccess)
-        {
-            std::cout << "CUDA Memcpy Failed" << std::endl;
-            exit(1);
-        }
+        CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(&lDiagonalElem, lMatrix + i + i * pDim, sizeof(MATRIX_DATA_TYPE), cudaMemcpyDeviceToHost));
 
         MATRIX_DATA_TYPE lReciprocal = 1.0/lDiagonalElem;
 	
@@ -237,11 +229,7 @@ int singleGpuLUDecomposition(MATRIX_DATA_TYPE* pMatrix, size_t pDim)
 
     CUBLAS_ERROR_CHECK("cublasGetMatrix", cublasGetMatrix(pDim, pDim, sizeof(MATRIX_DATA_TYPE), lDevicePtr, pDim, pMatrix, pDim));
 
-    if(cudaFree(lDevicePtr) != cudaSuccess)
-    {
-        std::cout << "cudaFree Failed" << std::endl;
-        exit(1);
-    }
+    CUDA_ERROR_CHECK("cudaFree", cudaFree(lDevicePtr));
 
    return 0;
 }
