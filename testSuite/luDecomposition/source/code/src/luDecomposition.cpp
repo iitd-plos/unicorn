@@ -5,15 +5,6 @@
 #include <string.h>
 #include <math.h>
 
-#ifdef MACOS
-#include <vecLib/cblas.h>
-#else
-extern "C"
-{
-    #include <cblas.h>
-}
-#endif
-
 #include <memory>
 
 #include "commonAPI.h"
@@ -478,10 +469,6 @@ int main(int argc, char** argv)
 	commonStart(argc, argv, DoInit, DoSerialProcess, DoSingleGpuProcess, DoParallelProcess, DoCompare, DoDestroy, lStruct, 3);
     
 	commonFinish();
-    
-#ifdef BUILD_CUDA
-    FreeCublasHandles();
-#endif
 
 	return 0;
 }

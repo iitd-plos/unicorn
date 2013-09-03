@@ -213,6 +213,7 @@
 					"DEBUG=1",
 					"SAMPLE_NAME=luDecomposition",
 					MACOS,
+					ENABLE_BLAS,
 				);
 				HEADER_SEARCH_PATHS = (
 					$SRCROOT/../../../../../source/code/inc/,
@@ -230,6 +231,7 @@
 				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
 					"SAMPLE_NAME=luDecomposition",
 					MACOS,
+					ENABLE_BLAS,
 				);
 				HEADER_SEARCH_PATHS = (
 					$SRCROOT/../../../../../source/code/inc/,

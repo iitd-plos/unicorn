@@ -28,7 +28,16 @@ else
 	PROGRAM=$(OUTDIR)/$(SAMPLE_NAME)$(NAME_SUFFIX).exe
 endif
 
+ifeq ($(BUILD_COMMON), 1)
+OBJECTS += commonAPI.o
+endif
+
 ifeq ($(BUILD_CUDA), 1)
+ifeq ($(ENABLE_BLAS), 1)
+CUDA_OBJECTS += commonAPICUDA.o
+LIBRARIES += -lcublas
+CUDAFLAGS += -DENABLE_BLAS
+endif
 FLAGS += -DBUILD_CUDA -DSUPPORT_CUDA
 CUDAFLAGS += -DBUILD_CUDA -DSUPPORT_CUDA
 INCLUDES += -I$(CUDA_INCLUDE_PATH)
@@ -36,8 +45,17 @@ OBJECTS += $(CUDA_OBJECTS)
 LIBRARIES += -L$(CUDA_LIB_PATH) -lcudart
 endif
 
-ifeq ($(BUILD_COMMON), 1)
-OBJECTS += commonAPI.o
+ifeq ($(ENABLE_BLAS), 1)
+FLAGS += -DENABLE_BLAS
+
+ifeq ($(PLATFORM), MACOS)
+INCLUDES += -I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library//Frameworks/vecLib.framework/Versions/A/Headers
+LIBRARIES += -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/usr/lib/
+else
+LIBRARIES += -L/usr/lib64/atlas
+endif
+
+LIBRARIES += -lcblas
 endif
 
 INCLUDES += -I$(PMLIB_INCLUDE_PATH) -I../../source/code/inc -I$(PATH_PREFIX)../../../common/source/code/inc
@@ -79,6 +97,9 @@ final:
 	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
 
 %$(NAME_SUFFIX).o: ../../source/code/src/%.cu
+	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+
+%.o: $(PATH_PREFIX)../../../common/source/code/src/%.cu
 	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
 
 strip: $(PROGRAM)

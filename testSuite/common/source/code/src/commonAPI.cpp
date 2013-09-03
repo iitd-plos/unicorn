@@ -237,6 +237,13 @@ void commonFinish()
             std::cout << std::endl;
         }
     }
+    
+#ifdef BUILD_CUDA
+#ifdef ENABLE_BLAS
+    void FreeCublasHandles();
+    FreeCublasHandles();
+#endif
+#endif
 }
 
 void RequestPreSetupCallbackPostMpiInit(preSetupPostMpiInitFunc pFunc)

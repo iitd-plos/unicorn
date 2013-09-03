@@ -98,3 +98,56 @@ bool isLazyMemEnabled();    /* by default, it's diabled */
     if(lTaskDetails.outputMemHandle) \
         SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.outputMemHandle) );
 
+
+#ifdef ENABLE_BLAS
+
+#ifdef MACOS
+#include <vecLib/cblas.h>
+#else
+extern "C"
+{
+    #include <cblas.h>
+}
+#endif
+
+#ifdef BUILD_CUDA
+#ifdef __CUDACC__
+
+#include <cublas_v2.h>
+#include <map>
+
+#define CUBLAS_ERROR_CHECK(name, x) \
+{ \
+    cublasStatus_t dStatus = x; \
+    if(dStatus != CUBLAS_STATUS_SUCCESS) \
+    { \
+        std::cout << name << " failed with error " << dStatus << std::endl; \
+        exit(1); \
+    } \
+}
+
+typedef std::map<pmDeviceHandle, cublasHandle_t> cublasHandleMapType;
+
+cublasHandle_t CreateCublasHandle();
+void DestroyCublasHandle(cublasHandle_t pCublasHandle);
+cublasHandleMapType& GetCublasHandleMap();
+
+cublasHandle_t GetCublasHandle(pmDeviceHandle pDeviceHandle);
+void FreeCublasHandles();
+
+class cublasHandleManager
+{
+public:
+    cublasHandleManager();
+    ~cublasHandleManager();
+    
+    cublasHandle_t GetHandle();
+    
+private:
+    cublasHandle_t mHandle;
+};
+
+#endif
+#endif
+
+#endif

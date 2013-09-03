@@ -21,12 +21,19 @@
             location = "group:../../../../testSuite/common/source/code/src"
             name = "src">
             <FileRef
+               location = "group:commonAPICUDA.cu"
+               assignedFileDataType = "public.c-plus-plus-source">
+            </FileRef>
+            <FileRef
                location = "group:commonAPI.cpp">
             </FileRef>
          </Group>
       </Group>
       <FileRef
          location = "group:MatrixMultiply/MatrixMultiply.xcodeproj">
+      </FileRef>
+      <FileRef
+         location = "group:MatrixMultiplyBlas/MatrixMultiplyBlas.xcodeproj">
       </FileRef>
       <FileRef
          location = "group:RadixSort/RadixSort.xcodeproj">

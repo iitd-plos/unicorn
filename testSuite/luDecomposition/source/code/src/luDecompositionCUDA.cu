@@ -7,9 +7,6 @@
 
 #include <iostream>
 
-#include <cublas_v2.h>
-#include <map>
-
 namespace luDecomposition
 {
     
@@ -27,83 +24,6 @@ namespace luDecomposition
 
 const MATRIX_DATA_TYPE gOne = (MATRIX_DATA_TYPE)1.0;
 const MATRIX_DATA_TYPE gMinusOne = (MATRIX_DATA_TYPE)-1.0;
-
-#define CUBLAS_ERROR_CHECK(name, x) \
-{ \
-    cublasStatus_t dStatus = x; \
-    if(dStatus != CUBLAS_STATUS_SUCCESS) \
-    { \
-        std::cout << name << " failed with error " << dStatus << std::endl; \
-        exit(1); \
-    } \
-}
-
-cublasHandle_t CreateCublasHandle()
-{
-    cublasHandle_t lCublasHandle;
-
-    CUBLAS_ERROR_CHECK("cublasCreate", cublasCreate(&lCublasHandle));
-    
-    return lCublasHandle;
-}
-
-void DestroyCublasHandle(cublasHandle_t pCublasHandle)
-{
-    CUBLAS_ERROR_CHECK("cublasDestroy", cublasDestroy(pCublasHandle));
-}
-    
-class cublasHandleManager
-{
-public:
-    cublasHandleManager()
-    : mHandle(CreateCublasHandle())
-    {
-    }
-
-    ~cublasHandleManager()
-    {
-        DestroyCublasHandle(mHandle);
-    }
-    
-    cublasHandle_t GetHandle()
-    {
-        return mHandle;
-    }
-    
-private:
-    cublasHandle_t mHandle;
-};
-
-typedef std::map<pmDeviceHandle, cublasHandle_t> cublasHandleMapType;
-
-cublasHandleMapType& GetCublasHandleMap()
-{
-    static cublasHandleMapType gMap;
-    
-    return gMap;
-}
-
-cublasHandle_t GetCublasHandle(pmDeviceHandle pDeviceHandle)
-{
-    cublasHandleMapType& lCublasHandleMap = GetCublasHandleMap();
-
-    typename cublasHandleMapType::iterator lIter = lCublasHandleMap.find(pDeviceHandle);
-    if(lIter == lCublasHandleMap.end())
-        lIter = lCublasHandleMap.insert(std::make_pair(pDeviceHandle, CreateCublasHandle())).first;
-
-    return lIter->second;
-}
-    
-void FreeCublasHandles()
-{
-    cublasHandleMapType& lCublasHandleMap = GetCublasHandleMap();
-    typename cublasHandleMapType::iterator lIter = lCublasHandleMap.begin(), lEndIter = lCublasHandleMap.end();
-    
-    for(; lIter != lEndIter; ++lIter)
-        DestroyCublasHandle(lIter->second);
-
-    lCublasHandleMap.clear();
-}
     
 __global__ void findDiagonalElemReciprocal(MATRIX_DATA_TYPE* pDiagonalElem, MATRIX_DATA_TYPE* pMatrix, size_t pDim, size_t pIndex)
 {

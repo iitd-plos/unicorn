@@ -179,13 +179,16 @@ pmStatus pmDispatcherCUDA::CountAndProbeProcessingElements()
 
 	SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaGetDeviceCount", gFuncPtr_cudaGetDeviceCount, &lCountCUDA );
 
-	for(int i = 0; i<lCountCUDA; ++i)
+	for(int i = 0; i < lCountCUDA; ++i)
 	{
 		cudaDeviceProp lDeviceProp;
 		SAFE_EXECUTE_CUDA( mRuntimeHandle, "cudaGetDeviceProperties", gFuncPtr_cudaGetDeviceProperties, &lDeviceProp, i );
 
-		if(!(lDeviceProp.major == 9999 && lDeviceProp.minor == 9999))
-			mDeviceVector.push_back(std::pair<int, cudaDeviceProp>(i, lDeviceProp));
+        if(lDeviceProp.computeMode != cudaComputeModeProhibited)
+        {
+            if(!(lDeviceProp.major == 9999 && lDeviceProp.minor == 9999))
+                mDeviceVector.push_back(std::pair<int, cudaDeviceProp>(i, lDeviceProp));
+        }
 	}
 
 	mCountCUDA = mDeviceVector.size();
