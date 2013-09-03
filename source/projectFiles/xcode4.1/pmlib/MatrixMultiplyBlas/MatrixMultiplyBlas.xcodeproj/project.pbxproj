@@ -1,0 +1,269 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0E4016D316A9C36F0099CF5B /* pmlib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E4016D216A9C36F0099CF5B /* pmlib.dylib */; };
+		0EBCECEA16772C5700479DB9 /* commonAPI.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EBCECE916772C5700479DB9 /* commonAPI.cpp */; };
+		2B3D2C8917D618B1003F1849 /* libcblas.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B3D2C8817D618B1003F1849 /* libcblas.dylib */; };
+		2BD15E1317D64DB400B98367 /* matrixMultiplyBlas.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BD15E1117D64DB400B98367 /* matrixMultiplyBlas.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		0E8178D0166F894F0092C7D4 /* CopyFiles */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = /usr/share/man/man1/;
+			dstSubfolderSpec = 0;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 1;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0E4016D216A9C36F0099CF5B /* pmlib.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
+		0E8178D2166F894F0092C7D4 /* MatrixMultiplyBlas */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = MatrixMultiplyBlas; sourceTree = BUILT_PRODUCTS_DIR; };
+		0EBCECE916772C5700479DB9 /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
+		2B3D2C8817D618B1003F1849 /* libcblas.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libcblas.dylib; path = usr/lib/libcblas.dylib; sourceTree = SDKROOT; };
+		2BD15E0F17D64DB400B98367 /* matrixMultiplyBlas.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = matrixMultiplyBlas.h; sourceTree = "<group>"; };
+		2BD15E1117D64DB400B98367 /* matrixMultiplyBlas.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = matrixMultiplyBlas.cpp; sourceTree = "<group>"; };
+		2BD15E1217D64DB400B98367 /* matrixMultiplyBlasCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = matrixMultiplyBlasCUDA.cu; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		0E8178CF166F894F0092C7D4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2B3D2C8917D618B1003F1849 /* libcblas.dylib in Frameworks */,
+				0E4016D316A9C36F0099CF5B /* pmlib.dylib in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		0E8178C7166F894F0092C7D4 = {
+			isa = PBXGroup;
+			children = (
+				2B3D2C8817D618B1003F1849 /* libcblas.dylib */,
+				0E4016D216A9C36F0099CF5B /* pmlib.dylib */,
+				0EBCECE916772C5700479DB9 /* commonAPI.cpp */,
+				0E8178D5166F894F0092C7D4 /* MatrixMultiplyBlas */,
+				0E8178D3166F894F0092C7D4 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		0E8178D3166F894F0092C7D4 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				0E8178D2166F894F0092C7D4 /* MatrixMultiplyBlas */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		0E8178D5166F894F0092C7D4 /* MatrixMultiplyBlas */ = {
+			isa = PBXGroup;
+			children = (
+				2BD15E0E17D64DB400B98367 /* inc */,
+				2BD15E1017D64DB400B98367 /* src */,
+			);
+			path = MatrixMultiplyBlas;
+			sourceTree = "<group>";
+		};
+		2BD15E0E17D64DB400B98367 /* inc */ = {
+			isa = PBXGroup;
+			children = (
+				2BD15E0F17D64DB400B98367 /* matrixMultiplyBlas.h */,
+			);
+			name = inc;
+			path = ../../../../../testSuite/matrixMultiplyBlas/source/code/inc;
+			sourceTree = SOURCE_ROOT;
+		};
+		2BD15E1017D64DB400B98367 /* src */ = {
+			isa = PBXGroup;
+			children = (
+				2BD15E1117D64DB400B98367 /* matrixMultiplyBlas.cpp */,
+				2BD15E1217D64DB400B98367 /* matrixMultiplyBlasCUDA.cu */,
+			);
+			name = src;
+			path = ../../../../../testSuite/matrixMultiplyBlas/source/code/src;
+			sourceTree = SOURCE_ROOT;
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		0E8178D1166F894F0092C7D4 /* MatrixMultiplyBlas */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0E8178DC166F894F0092C7D4 /* Build configuration list for PBXNativeTarget "MatrixMultiplyBlas" */;
+			buildPhases = (
+				0E8178CE166F894F0092C7D4 /* Sources */,
+				0E8178CF166F894F0092C7D4 /* Frameworks */,
+				0E8178D0166F894F0092C7D4 /* CopyFiles */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = MatrixMultiplyBlas;
+			productName = MatrixMultiplyBlas;
+			productReference = 0E8178D2166F894F0092C7D4 /* MatrixMultiplyBlas */;
+			productType = "com.apple.product-type.tool";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0E8178C9166F894F0092C7D4 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 0450;
+				ORGANIZATIONNAME = "Tarun Beri";
+			};
+			buildConfigurationList = 0E8178CC166F894F0092C7D4 /* Build configuration list for PBXProject "MatrixMultiplyBlas" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = English;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+			);
+			mainGroup = 0E8178C7166F894F0092C7D4;
+			productRefGroup = 0E8178D3166F894F0092C7D4 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				0E8178D1166F894F0092C7D4 /* MatrixMultiplyBlas */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		0E8178CE166F894F0092C7D4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0EBCECEA16772C5700479DB9 /* commonAPI.cpp in Sources */,
+				2BD15E1317D64DB400B98367 /* matrixMultiplyBlas.cpp in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		0E8178DA166F894F0092C7D4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		0E8178DB166F894F0092C7D4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				GCC_C_LANGUAGE_STANDARD = gnu99;
+				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 10.8;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+		0E8178DD166F894F0092C7D4 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GCC_PREPROCESSOR_DEFINITIONS = "";
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"DEBUG=1",
+					"SAMPLE_NAME=matrixMultiplyBlas",
+					MACOS,
+					ENABLE_BLAS,
+				);
+				HEADER_SEARCH_PATHS = (
+					$SRCROOT/../../../../../source/code/inc/,
+					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
+				);
+				LIBRARY_SEARCH_PATHS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		0E8178DE166F894F0092C7D4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
+					"SAMPLE_NAME=matrixMultiplyBlas",
+					MACOS,
+					ENABLE_BLAS,
+				);
+				HEADER_SEARCH_PATHS = (
+					$SRCROOT/../../../../../source/code/inc/,
+					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
+				);
+				LIBRARY_SEARCH_PATHS = "";
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				"USER_HEADER_SEARCH_PATHS[arch=*]" = "";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		0E8178CC166F894F0092C7D4 /* Build configuration list for PBXProject "MatrixMultiplyBlas" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0E8178DA166F894F0092C7D4 /* Debug */,
+				0E8178DB166F894F0092C7D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0E8178DC166F894F0092C7D4 /* Build configuration list for PBXNativeTarget "MatrixMultiplyBlas" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0E8178DD166F894F0092C7D4 /* Debug */,
+				0E8178DE166F894F0092C7D4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0E8178C9166F894F0092C7D4 /* Project object */;
+}
