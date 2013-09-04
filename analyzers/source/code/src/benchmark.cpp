@@ -1983,6 +1983,9 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
         throw std::exception();
 
     Level2Key lLevel2Key((size_t)(atoi(std::string(lResults[1]).c_str())), (enum SchedulingPolicy)(atoi(std::string(lResults[2]).c_str())), (enum clusterType)(atoi(std::string(lResults[3]).c_str())), (bool)(atoi(std::string(lResults[4]).c_str())), (bool)(atoi(std::string(lResults[5]).c_str())), (bool)(atoi(std::string(lResults[6]).c_str())));
+    
+    static Level2Value lLevel2Value;
+    mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key] = lLevel2Value;
 
     if(mHostsSetVector[pSampleIndex].find(lLevel2Key.hosts) == mHostsSetVector[pSampleIndex].end())
         mHostsSetVector[pSampleIndex].insert(lLevel2Key.hosts);
@@ -2328,8 +2331,15 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
 
     if(lHangDetected)
     {
-        std::cerr << "[ERROR]: Command hanged - " << pCmd << std::endl;
-        ExecuteShellCommand(pCmd, pDisplayName, pOutputFile);
+        if(CheckIfException(GetTempOutputFileName()))
+        {
+            std::cerr << "[ERROR]: Command hanged with exception - " << pCmd << std::endl;
+            ExecuteShellCommand(pCmd, pDisplayName, pOutputFile);
+        }
+        else
+        {
+            std::cerr << "[ERROR]: Command hanged - " << pCmd << std::endl;
+        }
     }
     else
 #else
@@ -2351,6 +2361,31 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
     }
 
     unlink(GetTempOutputFileName().c_str());
+}
+
+bool Benchmark::CheckIfException(const std::string& pFilePath)
+{
+    bool lRetVal = false;
+
+    std::ifstream lFileStream(pFilePath.c_str());
+    if(lFileStream.fail())
+        throw std::exception();
+
+    std::string lLine;
+    boost::regex lExp("Generating Exception");
+    
+    while(std::getline(lFileStream, lLine))
+    {
+        if(boost::regex_search(lLine.c_str(), lExp))
+        {
+            lRetVal = true;
+            break;
+        }
+    }
+
+    lFileStream.close();
+
+    return lRetVal;
 }
 
 const std::string& Benchmark::GetTempOutputFileName()

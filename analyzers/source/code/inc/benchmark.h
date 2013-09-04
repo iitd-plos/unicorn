@@ -137,8 +137,8 @@ struct Level1Value
     double singleGpuTime;
     
     Level1Value()
-    : sequentialTime(std::numeric_limits<double>::infinity())
-    , singleGpuTime(std::numeric_limits<double>::infinity())
+    : sequentialTime(std::numeric_limits<double>::max())
+    , singleGpuTime(std::numeric_limits<double>::max())
     {}
 };
 
@@ -210,8 +210,8 @@ struct Level2InnerTaskKey
     size_t taskSequenceId;
     
     Level2InnerTaskKey()
-    : originatingHost(std::numeric_limits<size_t>::infinity())
-    , taskSequenceId(std::numeric_limits<size_t>::infinity())
+    : originatingHost(std::numeric_limits<size_t>::max())
+    , taskSequenceId(std::numeric_limits<size_t>::max())
     {}
 
     friend bool operator< (const Level2InnerTaskKey& pFirst, const Level2InnerTaskKey& pSecond)
@@ -229,7 +229,7 @@ struct Level2Value
     std::map<Level2InnerTaskKey, Level2InnerTaskValue> innerTaskMap;
 
     Level2Value()
-    : execTime(std::numeric_limits<double>::infinity())
+    : execTime(std::numeric_limits<double>::max())
     {}
 };
 
@@ -308,6 +308,7 @@ private:
     
     void ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName, const std::string& pOutputFile);
     int RunCommand(const std::string& pCmd, const std::string& pDisplayName);
+    bool CheckIfException(const std::string& pFilePath);
     const std::string& GetTempOutputFileName();
     
     static void CopyFile(const std::string& pSrcFile, const std::string& pDestFile);
