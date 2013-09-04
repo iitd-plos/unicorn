@@ -36,6 +36,7 @@
 
 #include <string.h>
 #include <sstream>
+#include <limits>
 
 namespace pm
 {
