@@ -325,7 +325,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void CommitShadowMemPendingOnAllStubs(pmTask* pTask);
 		pmStatus CancelTask(pmLocalTask* pLocalTask);
 
-		pmCommandCompletionCallback GetUnknownLengthCommandCompletionCallback();
+		pmCommandCompletionCallback GetSchedulerCommandCompletionCallback();
     
         pmStatus WaitForAllCommandsToFinish();
 

@@ -672,12 +672,15 @@ pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked()
 	memset(this, 0, sizeof(*this));
 }
 
-pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr)
+pmCommunicatorCommand::memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
 {
 	this->receiveStruct.memOwnerHost = pMemOwnerHost;
 	this->receiveStruct.generationNumber = pGenerationNumber;
 	this->receiveStruct.offset = pOffset;
 	this->receiveStruct.length = pLength;
+    this->receiveStruct.isTaskOriginated = pIsTaskOriginated;
+    this->receiveStruct.originatingHost = pTaskOriginatingHost;
+    this->receiveStruct.sequenceNumber = pTaskSequenceNumber;
 	this->mem.ptr = pMemPtr;
 	this->mem.length = (uint)pLength;
 }

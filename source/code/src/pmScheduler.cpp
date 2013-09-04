@@ -185,7 +185,7 @@ pmScheduler* pmScheduler::GetScheduler()
     return &lScheduler;
 }
 
-pmCommandCompletionCallback pmScheduler::GetUnknownLengthCommandCompletionCallback()
+pmCommandCompletionCallback pmScheduler::GetSchedulerCommandCompletionCallback()
 {
 	return SchedulerCommandCompletionCallback;
 }
@@ -1856,7 +1856,17 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					pmMemSection* lMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lData->receiveStruct.memOwnerHost), lData->receiveStruct.generationNumber);
                 
 					if(lMemSection)		// If memory still exists
-						MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lMemSection, lData->receiveStruct.offset, lData->receiveStruct.length, lData->mem.ptr);
+                    {
+                        pmTask* lRequestingTask = NULL;
+                        if(lData->receiveStruct.isTaskOriginated)
+                        {
+                            pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->receiveStruct.originatingHost);
+                            lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lData->receiveStruct.sequenceNumber);
+                        }
+
+                        if(!lData->receiveStruct.isTaskOriginated || lRequestingTask)
+                            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lMemSection, lData->receiveStruct.offset, lData->receiveStruct.length, lData->mem.ptr, lRequestingTask);
+                    }
 
 					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
 					delete[] (char*)(lData->mem.ptr);
@@ -1954,16 +1964,14 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 					pmCommunicatorCommand::memoryTransferRequest* lData = (pmCommunicatorCommand::memoryTransferRequest*)(lCommunicatorCommand->GetData());
 
 					pmMemSection* lMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lData->sourceMemIdentifier.memOwnerHost), lData->sourceMemIdentifier.generationNumber);
-					if(!lMemSection)
-                    {
-                        std::cout << pmGetHostId() << " " << lData->sourceMemIdentifier.generationNumber << std::endl;
-						PMTHROW(pmFatalErrorException());
-                    }
-            
-                    pmTask* lLockingTask = lMemSection->GetLockingTask();
-                    ushort lPriority = lLockingTask ? lLockingTask->GetPriority() : MAX_CONTROL_PRIORITY;
 
-					pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost),  lData->receiverOffset, lData->isForwarded, lPriority);
+					if(lMemSection)
+                    {
+                        pmTask* lLockingTask = lMemSection->GetLockingTask();
+                        ushort lPriority = lLockingTask ? lLockingTask->GetPriority() : MAX_CONTROL_PRIORITY;
+
+                        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, lPriority, lData->isTaskOriginated, lData->originatingHost, lData->sequenceNumber);
+                    }
 
 					SetupNewMemTransferRequestReception();
 

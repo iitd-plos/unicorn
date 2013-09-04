@@ -452,7 +452,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
     MATRIX_DATA_TYPE lSerialNormal = findFrobeniusNormal(lSerial.get(), lMatrixDim);
     MATRIX_DATA_TYPE lParallelNormal = findFrobeniusNormal(lParallel.get(), lMatrixDim);
     
-    return (fabsf(lSerialNormal - lParallelNormal) > 1e-5);
+    return (fabsf(lSerialNormal - lParallelNormal)/lSerialNormal > 1e-5);
 #else
     std::cout << "Results not compared in single precision" << std::endl;
     return 0;

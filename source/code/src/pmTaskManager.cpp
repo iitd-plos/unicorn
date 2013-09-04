@@ -248,6 +248,16 @@ pmStatus pmTaskManager::ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask*
 
 pmTask* pmTaskManager::FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
+    pmTask* lTask = FindTaskNoThrow(pOriginatingHost, pSequenceNumber);
+
+    if(!lTask)
+        PMTHROW(pmFatalErrorException());
+    
+    return lTask;
+}
+
+pmTask* pmTaskManager::FindTaskNoThrow(pmMachine* pOriginatingHost, ulong pSequenceNumber)
+{
     pmTask* lTask = NULL;
     
     if(pOriginatingHost == PM_LOCAL_MACHINE)
@@ -260,9 +270,6 @@ pmTask* pmTaskManager::FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumb
         FINALIZE_RESOURCE(dResourceLock, GetRemoteTaskResourceLock().Lock(), GetRemoteTaskResourceLock().Unlock());
         lTask = FindRemoteTask_Internal(pOriginatingHost, pSequenceNumber);
     }
-
-    if(!lTask)
-        PMTHROW(pmFatalErrorException());
     
     return lTask;
 }

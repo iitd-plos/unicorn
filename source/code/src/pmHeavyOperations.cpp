@@ -29,6 +29,7 @@
 #include "pmNetwork.h"
 #include "pmLogger.h"
 #include "pmUtility.h"
+#include "pmTaskManager.h"
 
 namespace pm
 {
@@ -159,7 +160,7 @@ void pmHeavyOperationsThreadPool::UnpackDataEvent(char* pPackedData, int pPacked
     SubmitToThreadPool(lEvent, pPriority);
 }
     
-void pmHeavyOperationsThreadPool::MemTransferEvent(pmCommunicatorCommand::memoryIdentifierStruct& pSrcMemIdentifier, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority)
+void pmHeavyOperationsThreadPool::MemTransferEvent(pmCommunicatorCommand::memoryIdentifierStruct& pSrcMemIdentifier, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
 {
     heavyOperationsEvent lEvent;
 	lEvent.eventId = MEM_TRANSFER;
@@ -172,6 +173,9 @@ void pmHeavyOperationsThreadPool::MemTransferEvent(pmCommunicatorCommand::memory
 	lEvent.memTransferDetails.receiverOffset = pReceiverOffset;
 	lEvent.memTransferDetails.priority = pPriority;
     lEvent.memTransferDetails.isForwarded = pIsForwarded;
+    lEvent.memTransferDetails.isTaskOriginated = pIsTaskOriginated;
+    lEvent.memTransferDetails.taskOriginatingHost = pTaskOriginatingHost;
+    lEvent.memTransferDetails.taskSequenceNumber = pTaskSequenceNumber;
     
     SubmitToThreadPool(lEvent, pPriority);
 }
@@ -254,7 +258,7 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         {
             packEvent& lEventDetails = pEvent.packDetails;
 
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, lEventDetails.commandTag, lEventDetails.destination, lEventDetails.dataType, lEventDetails.data, 1, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, lEventDetails.commandTag, lEventDetails.destination, lEventDetails.dataType, lEventDetails.data, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 
 			pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
 
@@ -318,15 +322,23 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                         if(!lDestMemSection)
                             PMTHROW(pmFatalErrorException());
                     
-                        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestMemSection, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset));
+                        pmTask* lRequestingTask = NULL;
+                        if(lEventDetails.isTaskOriginated)
+                        {
+                            pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.taskOriginatingHost);
+                            lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lEventDetails.taskSequenceNumber);
+                        }
+
+                        if(!lEventDetails.isTaskOriginated || lRequestingTask)
+                            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestMemSection, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset), lRequestingTask);
                     }
                     else
                     {
-                        lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset));
+                        lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset), lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber);
                     
                         MEM_TRANSFER_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
 
-                        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
+                        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 
                         pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
                     }
@@ -346,10 +358,13 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                     lData->length = lInternalLength;
                     lData->destHost = *(lEventDetails.machine);
                     lData->isForwarded = 1;
+                    lData->isTaskOriginated = lEventDetails.isTaskOriginated;
+                    lData->originatingHost = lEventDetails.taskOriginatingHost;
+                    lData->sequenceNumber = lEventDetails.taskSequenceNumber;
                     
                     MEM_FORWARD_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.memIdentifier, lRangeOwner.hostOffset)
 
-                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, lRangeOwner.host, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0, pmScheduler::GetScheduler()->GetUnknownLengthCommandCompletionCallback());
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, lRangeOwner.host, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
                     
                     pmCommunicator::GetCommunicator()->Send(lCommand);
                 }

@@ -444,7 +444,7 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmMemSection* pMemSection, ushort p
 
 	size_t lRegionCount = lRegionsToBeFetched.size();
 
-	for(size_t i=0; i<lRegionCount; ++i)
+	for(size_t i = 0; i < lRegionCount; ++i)
 	{
 		ulong lOffset = lRegionsToBeFetched[i].first - (ulong)lMem;
 		ulong lLength = lRegionsToBeFetched[i].second - lRegionsToBeFetched[i].first + 1;
@@ -480,6 +480,8 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
     
 	regionFetchData lFetchData;
 
+    pmTask* lLockingTask = pMemSection->GetLockingTask();
+    
 	pmCommunicatorCommand::memoryTransferRequest* lData = new pmCommunicatorCommand::memoryTransferRequest();
 	lData->sourceMemIdentifier.memOwnerHost = pRangeOwner.memIdentifier.memOwnerHost;
 	lData->sourceMemIdentifier.generationNumber = pRangeOwner.memIdentifier.generationNumber;
@@ -490,10 +492,22 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
 	lData->length = pLength;
 	lData->destHost = *PM_LOCAL_MACHINE;
     lData->isForwarded = 0;
-    
-	lFetchData.sendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host,	pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0);
+    lData->isTaskOriginated = (ushort)(lLockingTask != NULL);
 
-	pmCommunicator::GetCommunicator()->Send(lFetchData.sendCommand);
+    if(lLockingTask)
+    {
+        lData->originatingHost = (uint)(*(lLockingTask->GetOriginatingHost()));
+        lData->sequenceNumber = lLockingTask->GetSequenceNumber();
+    }
+    else
+    {
+        lData->originatingHost = std::numeric_limits<uint>::max();
+        lData->sequenceNumber = std::numeric_limits<ulong>::max();
+    }
+    
+	pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+
+	pmCommunicator::GetCommunicator()->Send(lSendCommand);
 
     MEM_REQ_DUMP(pMemSection, pMem, pOffset, pRangeOwner.hostOffset, pLength, (uint)(*pRangeOwner.host));
         
@@ -503,7 +517,7 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
     pInFlightMap[lAddr] = std::make_pair(lData->length, lFetchData);
 
 #ifdef ENABLE_TASK_PROFILING
-    if(pMemSection->GetLockingTask())
+    if(lLockingTask)
         pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, true);
 #endif
     
@@ -511,12 +525,16 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
 	pCommand = lFetchData.receiveCommand;
 }
     
-pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem)
+pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask)
 {
     using namespace linuxMemManager;
 
     if(!pLength)
         PMTHROW(pmFatalErrorException());
+    
+    pmTask* lLockingTask = pMemSection->GetLockingTask();
+    if(lLockingTask != pRequestingTask)
+        return pmSuccess;
     
     memSectionSpecifics& lSpecifics = GetMemSectionSpecifics(pMemSection);
     pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
@@ -537,7 +555,6 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
         pMemSection->AcquireOwnershipImmediate(pOffset, lPair.first);
 
     #ifdef ENABLE_TASK_PROFILING
-        pmTask* lLockingTask = pMemSection->GetLockingTask();
         if(lLockingTask)
             lLockingTask->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
     #endif
@@ -547,7 +564,6 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
             pMemSection->RecordMemReceive(pLength);
     #endif
 
-        delete (pmCommunicatorCommand::memoryTransferRequest*)(lData.sendCommand->GetData());
         lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
 
         lMap.erase(lIter);
@@ -593,7 +609,6 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
             pMemSection->AcquireOwnershipImmediate(lOffset, lPair.first);
             
         #ifdef ENABLE_TASK_PROFILING
-            pmTask* lLockingTask = pMemSection->GetLockingTask();
             if(lLockingTask)
                 pMemSection->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pMemSection->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
         #endif
@@ -603,7 +618,6 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
                 pMemSection->RecordMemReceive(pLength);
         #endif
 
-            delete (pmCommunicatorCommand::memoryTransferRequest*)(lData.sendCommand->GetData());
             lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
 
             lSpecifics.mInFlightMemoryMap.erase(lBaseIter);

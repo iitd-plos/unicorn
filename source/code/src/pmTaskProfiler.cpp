@@ -50,7 +50,7 @@ static const char* profileName[] =
 
 pmTaskProfiler::pmTaskProfiler()
 {
-    for(int i=0; i<MAX_PROFILE_TYPES; ++i)
+    for(int i = 0; i < MAX_PROFILE_TYPES; ++i)
     {
         mTimer[i].Start();
         mTimer[i].Pause();
@@ -68,7 +68,7 @@ pmTaskProfiler::~pmTaskProfiler()
     lStream << "Task Profiler [";
     lStream << "Host " << pmGetHostId() << "] ............" << std::endl;
     
-    for(int i=0; i<MAX_PROFILE_TYPES; ++i)
+    for(int i = 0; i < MAX_PROFILE_TYPES; ++i)
     {
         mTimer[i].Stop();
 

@@ -70,6 +70,9 @@ typedef struct memTransferEvent
     ulong receiverOffset;
 	ushort priority;
     bool isForwarded;
+    bool isTaskOriginated;
+    uint taskOriginatingHost;
+    ulong taskSequenceNumber;
 } memTransferEvent;
     
 typedef struct memTransferCancelEvent
@@ -124,7 +127,7 @@ public:
 
     void PackAndSendData(pmCommunicatorCommand::communicatorCommandTags pCommandTag, pmCommunicatorCommand::communicatorDataTypes pDataType, pmHardware* pDestination, void* pData, ushort pPriority);
     void UnpackDataEvent(char* pPackedData, int pPackedLength, ushort pPriority);
-    void MemTransferEvent(pmCommunicatorCommand::memoryIdentifierStruct& pSrcMemIdentifier, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
+    void MemTransferEvent(pmCommunicatorCommand::memoryIdentifierStruct& pSrcMemIdentifier, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
     void CancelMemoryTransferEvents(pmMemSection* pMemSection);
     
     static pmHeavyOperationsThreadPool* GetHeavyOperationsThreadPool();

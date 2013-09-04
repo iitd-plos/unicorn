@@ -559,7 +559,7 @@ ulong pmTask::GetSequenceNumber()
 {
     return mSequenceNumber;
 }
-    
+
 pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
 {
     mSequenceNumber = pSequenceNumber;

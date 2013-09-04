@@ -357,10 +357,13 @@ class pmCommunicatorCommand : public pmCommand
 			ulong length;
 			uint destHost;			// Host that will receive the memory (generally same as the requesting host)
             ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host.
+            ushort isTaskOriginated;    // Tells whether a task has demanded this memory or user has explicitly requested it
+            uint originatingHost;   // Valid only if isTaskOriginated is true
+			ulong sequenceNumber;	// Valid only if isTaskOriginated is true; sequence number of local task object (on originating host)
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 7
+				FIELD_COUNT_VALUE = 10
 			} fieldCount;
 
 		} memoryTransferRequest;
@@ -411,10 +414,13 @@ class pmCommunicatorCommand : public pmCommand
 			ulong generationNumber;
 			ulong offset;
 			ulong length;
+            ushort isTaskOriginated;    // Tells whether a task has demanded this memory or user has explicitly requested it
+            uint originatingHost;       // Valid only if isTaskOriginated is true
+			ulong sequenceNumber;       // Valid only if isTaskOriginated is true; sequence number of local task object (on originating host)            
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 4
+				FIELD_COUNT_VALUE = 7
 			} fieldCount;
 
 		} memoryReceiveStruct;
@@ -422,7 +428,7 @@ class pmCommunicatorCommand : public pmCommand
 		typedef struct memoryReceivePacked
 		{
 			memoryReceivePacked();
-			memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr);
+			memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
 			~memoryReceivePacked();
 
 			memoryReceiveStruct receiveStruct;

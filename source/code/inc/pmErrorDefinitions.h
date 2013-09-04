@@ -21,7 +21,7 @@
 #ifndef __PM_ERROR_DEFINITIONS__
 #define __PM_ERROR_DEFINITIONS__
 
-#ifdef DEBUG
+#ifdef DUMP_EXCEPTION_BACKTRACE
 #include <iostream>
 #include <stdio.h>	// For sprintf
 #include <execinfo.h>
@@ -30,7 +30,7 @@
 namespace pm
 {
 
-#ifdef DEBUG
+#ifdef DUMP_EXCEPTION_BACKTRACE
 #define PMTHROW(x) { \
 			char dInteger[64]; \
 			sprintf(dInteger, " %d\n", __LINE__); \
@@ -47,11 +47,11 @@ namespace pm
             free(dBacktraceStrs); \
             throw x; \
 		}
-#define PMTHROW_NODUMP(x) throw x;
 #else
 #define PMTHROW(x) throw x;
-#define PMTHROW_NODUMP(x) throw x;
 #endif
+
+#define PMTHROW_NODUMP(x) throw x;
 
 	/**
 	  * Exceptions thrown internally by PMLIB

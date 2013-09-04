@@ -63,7 +63,7 @@ class pmMemoryManager : public pmBase
         virtual pmStatus DeallocateMemory(void* pMem) = 0;
 
         virtual void FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector) = 0;
-        virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem) = 0;
+        virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask) = 0;
     
         virtual size_t GetVirtualMemoryPageSize() = 0;
         virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount) = 0;
@@ -85,7 +85,6 @@ namespace linuxMemManager
 {
     typedef struct regionFetchData
     {
-        pmCommunicatorCommandPtr sendCommand;
         pmCommunicatorCommandPtr receiveCommand;
         
         std::map<size_t, size_t> partialReceiveRecordMap;
@@ -129,7 +128,7 @@ class pmLinuxMemoryManager : public pmMemoryManager
         virtual pmStatus DeallocateMemory(void* pMem);
 
         virtual void FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
-        virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem);
+        virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask);
 
         virtual size_t GetVirtualMemoryPageSize();
 
