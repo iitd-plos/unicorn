@@ -1507,6 +1507,7 @@ pmStatus pmScheduler::SendAcknowledgement(pmProcessingElement* pDevice, pmSubtas
     
 pmStatus pmScheduler::ClearPendingTaskCommands(pmTask* pTask)
 {
+    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->CancelTaskSpecificMemoryTransferEvents(pTask);
     return DeleteMatchingCommands(pTask->GetPriority(), taskClearMatchFunc, pTask);
 }
     
@@ -1967,10 +1968,7 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
 
 					if(lMemSection)
                     {
-                        pmTask* lLockingTask = lMemSection->GetLockingTask();
-                        ushort lPriority = lLockingTask ? lLockingTask->GetPriority() : MAX_CONTROL_PRIORITY;
-
-                        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, lPriority, lData->isTaskOriginated, lData->originatingHost, lData->sequenceNumber);
+                        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, lData->priority, lData->isTaskOriginated, lData->originatingHost, lData->sequenceNumber);
                     }
 
 					SetupNewMemTransferRequestReception();

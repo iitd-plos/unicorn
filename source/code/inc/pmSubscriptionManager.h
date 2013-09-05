@@ -162,8 +162,8 @@ class pmSubscriptionManager : public pmBase
 
 	private:
         pmStatus WaitForSubscriptions(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub);
-        pmStatus FetchInputMemSubscription(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
-        pmStatus FetchOutputMemSubscription(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscription::subscriptionData& pData);
+        pmStatus FetchInputMemSubscription(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, ushort pPriority, subscription::subscriptionData& pData);
+        pmStatus FetchOutputMemSubscription(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, ushort pPriority, subscription::subscriptionData& pData);
     
 #ifdef SUPPORT_CUDA
     #ifdef SUPPORT_LAZY_MEMORY

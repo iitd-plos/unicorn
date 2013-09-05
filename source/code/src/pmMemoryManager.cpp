@@ -506,6 +506,8 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
         lData->sequenceNumber = std::numeric_limits<ulong>::max();
     }
     
+    lData->priority = pPriority;
+    
 	pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 
 	pmCommunicator::GetCommunicator()->Send(lSendCommand);

@@ -42,6 +42,7 @@ typedef enum eventIdentifier
     UNPACK_DATA,
     MEM_TRANSFER,
     MEM_TRANSFER_CANCEL,
+    TASK_MEM_TRANSFER_CANCEL,
     COMMAND_COMPLETION
 } eventIdentifier;
     
@@ -80,6 +81,11 @@ typedef struct memTransferCancelEvent
     pmMemSection* memSection;
     SIGNAL_WAIT_IMPLEMENTATION_CLASS* signalWaitArray;
 } memTransferCancelEvent;
+
+typedef struct taskMemTransferCancelEvent
+{
+    pmTask* task;
+} taskMemTransferCancelEvent;
     
 typedef struct commandCompletion
 {
@@ -95,6 +101,7 @@ typedef struct heavyOperationsEvent : public pmBasicThreadEvent
         unpackEvent unpackDetails;
         memTransferEvent memTransferDetails;
         memTransferCancelEvent memTransferCancelDetails;
+        taskMemTransferCancelEvent taskMemTransferCancelDetails;
 	};
     
     commandCompletion commandCompletionDetails;
@@ -129,6 +136,7 @@ public:
     void UnpackDataEvent(char* pPackedData, int pPackedLength, ushort pPriority);
     void MemTransferEvent(pmCommunicatorCommand::memoryIdentifierStruct& pSrcMemIdentifier, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
     void CancelMemoryTransferEvents(pmMemSection* pMemSection);
+    void CancelTaskSpecificMemoryTransferEvents(pmTask* pTask);
     
     static pmHeavyOperationsThreadPool* GetHeavyOperationsThreadPool();
 
@@ -152,6 +160,8 @@ private:
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
+bool taskMemTransferEventsMatchFunc(heavyOperations::heavyOperationsEvent& pEvent, void* pCriterion);
+    
 }
 
 #endif

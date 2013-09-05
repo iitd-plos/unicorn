@@ -29,6 +29,7 @@
 #include "pmNetwork.h"
 #include "pmLogger.h"
 #include "pmUtility.h"
+#include "pmTask.h"
 #include "pmTaskManager.h"
 
 namespace pm
@@ -205,6 +206,15 @@ void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmMemSection* pMemS
     for(size_t i = 0; i < lPoolSize; ++i)
         dSignalWaitArray[i].Wait();
 }
+    
+void pmHeavyOperationsThreadPool::CancelTaskSpecificMemoryTransferEvents(pmTask* pTask)
+{
+	heavyOperationsEvent lEvent;
+	lEvent.eventId = TASK_MEM_TRANSFER_CANCEL;
+	lEvent.taskMemTransferCancelDetails.task = pTask;
+    
+	SubmitToAllThreadsInPool(lEvent, MAX_CONTROL_PRIORITY);
+}
 
 void pmHeavyOperationsThreadPool::SubmitToThreadPool(heavyOperationsEvent& pEvent, ushort pPriority)
 {
@@ -361,6 +371,7 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                     lData->isTaskOriginated = lEventDetails.isTaskOriginated;
                     lData->originatingHost = lEventDetails.taskOriginatingHost;
                     lData->sequenceNumber = lEventDetails.taskSequenceNumber;
+                    lData->priority = lEventDetails.priority;
                     
                     MEM_FORWARD_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.memIdentifier, lRangeOwner.hostOffset)
 
@@ -394,6 +405,14 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
 
             lEventDetails.signalWaitArray[mThreadIndex].Signal();
             
+            break;
+        }
+            
+        case TASK_MEM_TRANSFER_CANCEL:
+        {
+            taskMemTransferCancelEvent& lEventDetails = pEvent.taskMemTransferCancelDetails;
+            DeleteMatchingCommands(lEventDetails.task->GetPriority(), taskMemTransferEventsMatchFunc, lEventDetails.task);
+
             break;
         }
     }
@@ -463,6 +482,25 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr pCommand)
         default:
 			PMTHROW(pmFatalErrorException());
     }
+}
+    
+bool taskMemTransferEventsMatchFunc(heavyOperationsEvent& pEvent, void* pCriterion)
+{
+    switch(pEvent.eventId)
+    {
+        case MEM_TRANSFER:
+        {
+            if(pEvent.memTransferDetails.isTaskOriginated && pEvent.memTransferDetails.taskOriginatingHost == (uint)(*((pmTask*)pCriterion)->GetOriginatingHost()) && pEvent.memTransferDetails.taskSequenceNumber == ((pmTask*)pCriterion)->GetSequenceNumber())
+                return true;
+        
+            break;
+        }
+        
+        default:
+            return false;
+    }
+    
+    return false;
 }
 
 }

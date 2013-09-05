@@ -1450,6 +1450,7 @@ pmStatus pmMPI::RegisterTransferDataType(pmCommunicatorCommand::communicatorData
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isTaskOriginated, lIsTaskOriginatedMPI, MPI_UNSIGNED_SHORT, 7, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 8, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 9, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.priority, lPriorityMPI, MPI_UNSIGNED_SHORT, 10, 1);
 
 			break;
 		}

@@ -360,10 +360,11 @@ class pmCommunicatorCommand : public pmCommand
             ushort isTaskOriginated;    // Tells whether a task has demanded this memory or user has explicitly requested it
             uint originatingHost;   // Valid only if isTaskOriginated is true
 			ulong sequenceNumber;	// Valid only if isTaskOriginated is true; sequence number of local task object (on originating host)
+            ushort priority;
 
 			typedef enum fieldCount
 			{
-				FIELD_COUNT_VALUE = 10
+				FIELD_COUNT_VALUE = 11
 			} fieldCount;
 
 		} memoryTransferRequest;

@@ -1,0 +1,4 @@
+Varying_1 = 12 13 14 15 16
+Benchmark_Name = Square Matrix Multiplication Using Blas
+Varying1_Name = log(MatrixDim)
+Subtask_Definition =  1 Block (2048 * 2048 elements)

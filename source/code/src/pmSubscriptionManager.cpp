@@ -815,6 +815,8 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
     size_t lWriteSubscriptionsLength = 0;
 #endif
     
+    ushort lPriority = (mTask->GetPriority() + (pPrefetch ? 1 : 0));
+    
 	if(mTask->GetMemSectionRO())
     {
         subscriptionRecordType::iterator lIter, lEndIter;
@@ -834,7 +836,7 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
             lReadSubscriptionsLength += lSubscription.length;
         #endif
             
-            FetchInputMemSubscription(lSubtask, pDeviceType, lSubscription, lIter->second.second);
+            FetchInputMemSubscription(lSubtask, pDeviceType, lSubscription, lPriority, lIter->second.second);
         }
     }
 
@@ -858,7 +860,7 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
             lWriteSubscriptionsLength += lSubscription.length;
         #endif
             
-            FetchOutputMemSubscription(lSubtask, pDeviceType, lSubscription, lIter->second.second);
+            FetchOutputMemSubscription(lSubtask, pDeviceType, lSubscription, lPriority, lIter->second.second);
         }
     }
 
@@ -883,7 +885,7 @@ pmStatus pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
-pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
+pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, ushort pPriority, subscriptionData& pData)
 {
 	pmMemSection* lMemSection = mTask->GetMemSectionRO();
     bool lIsLazy = lMemSection->IsLazy();
@@ -899,7 +901,7 @@ pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, p
             lMemSection->GetPageAlignedAddresses(lOffset, lLength);
     #endif
         
-        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength, lReceiveVector);
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, pPriority, lOffset, lLength, lReceiveVector);
         pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
     }
     
@@ -907,7 +909,7 @@ pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, p
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
-pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, subscriptionData& pData)
+pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, ushort pPriority, subscriptionData& pData)
 {
 	pmMemSection* lMemSection = mTask->GetMemSectionRW();
     bool lIsLazy = lMemSection->IsLazy();
@@ -923,7 +925,7 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmSubtask& pSubtask, 
             lMemSection->GetPageAlignedAddresses(lOffset, lLength);
     #endif
         
-        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, mTask->GetPriority(), lOffset, lLength, lReceiveVector);
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, pPriority, lOffset, lLength, lReceiveVector);
         pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
     }
 
