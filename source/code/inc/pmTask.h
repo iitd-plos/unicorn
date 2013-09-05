@@ -181,7 +181,7 @@ class pmLocalTask : public pmTask
 	public:
 		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true, bool pDisjointReadWritesAcrossSubtasks = false, bool pOverlapComputeCommunication = true, bool pCanForciblyCancelSubtasks = true);
 
-		pmStatus FindCandidateProcessingElements(std::set<pmProcessingElement*>& pDevices);
+		const std::vector<pmProcessingElement*>& FindCandidateProcessingElements(std::set<pmMachine*>& pMachines);
 
 		pmStatus WaitForCompletion();
 		double GetExecutionTimeInSecs();

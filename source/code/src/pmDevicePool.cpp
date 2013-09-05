@@ -298,13 +298,13 @@ pmProcessingElement* pmDevicePool::GetDeviceAtGlobalIndex(uint pGlobalDeviceInde
 	return &(mDevicesVector[pGlobalDeviceIndex]);
 }
 
-pmStatus pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceType pType, pmCluster* pCluster, std::set<pmProcessingElement*>& pDevices)
+pmStatus pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceType pType, pmCluster* pCluster, std::vector<pmProcessingElement*>& pDevices)
 {
-	size_t lSize = mDevicesVector.size();
-	for(size_t i=0; i<lSize; ++i)
+	std::vector<pmProcessingElement>::iterator lIter = mDevicesVector.begin(), lEndIter = mDevicesVector.end();
+	for(; lIter != lEndIter; ++lIter)
 	{
-		if(mDevicesVector[i].GetType() == pType && pCluster->ContainsMachine(mDevicesVector[i].GetMachine()))
-			pDevices.insert(&(mDevicesVector[i]));
+		if((*lIter).GetType() == pType && pCluster->ContainsMachine((*lIter).GetMachine()))
+			pDevices.push_back(&(*lIter));
 	}
 
 	return pmSuccess;

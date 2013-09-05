@@ -1248,8 +1248,8 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
     
     pmTimedEventManager::GetTimedEventManager()->AddTaskTimeOutEvent(pLocalTask, lTriggerTime);
     
-	std::set<pmProcessingElement*> lDevices;
-	pLocalTask->FindCandidateProcessingElements(lDevices);
+	std::set<pmMachine*> lMachines;
+	const std::vector<pmProcessingElement*>& lDevices = pLocalTask->FindCandidateProcessingElements(lMachines);
     
     if(lDevices.empty())
     {
@@ -1259,8 +1259,8 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 
 	pLocalTask->InitializeSubtaskManager(pLocalTask->GetSchedulingModel());
 
-	std::set<pmMachine*> lMachines;
-	pmProcessingElement::GetMachines(lDevices, lMachines);
+    /* PENDING --- All machines where the memories associated with the task are currently residing
+     must also be sent task definition */
 	AssignTaskToMachines(pLocalTask, lMachines);
 
 	AssignSubtasksToDevices(pLocalTask);

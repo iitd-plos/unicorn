@@ -301,6 +301,16 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
             if(!lSrcMemSection)
                 return pmSuccess;
             
+            pmTask* lRequestingTask = NULL;
+            if(lEventDetails.isTaskOriginated)
+            {
+                pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.taskOriginatingHost);
+                lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lEventDetails.taskSequenceNumber);
+                
+//                if(lOriginatingHost == PM_LOCAL_MACHINE && !lRequestingTask)
+//                    return pmSuccess;
+            }
+            
             // Check if the memory is residing locally or forward the request to the owner machine
             pmMemSection::pmMemOwnership lOwnerships;
             lSrcMemSection->GetOwners(lEventDetails.offset, lEventDetails.length, lOwnerships);
@@ -331,13 +341,6 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                     
                         if(!lDestMemSection)
                             PMTHROW(pmFatalErrorException());
-                    
-                        pmTask* lRequestingTask = NULL;
-                        if(lEventDetails.isTaskOriginated)
-                        {
-                            pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.taskOriginatingHost);
-                            lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lEventDetails.taskSequenceNumber);
-                        }
 
                         if(!lEventDetails.isTaskOriginated || lRequestingTask)
                             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestMemSection, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset), lRequestingTask);

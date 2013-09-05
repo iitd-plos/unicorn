@@ -778,74 +778,55 @@ pmStatus pmLocalTask::GetStatus()
 	return mTaskCommand->GetStatus();
 }
 
-pmStatus pmLocalTask::FindCandidateProcessingElements(std::set<pmProcessingElement*>& pDevices)
+const std::vector<pmProcessingElement*>& pmLocalTask::FindCandidateProcessingElements(std::set<pmMachine*>& pMachines)
 {
 	pmDevicePool* lDevicePool;
 	SAFE_GET_DEVICE_POOL(lDevicePool);
 
-	mDevices.clear();
-	pDevices.clear();
-
+    std::vector<pmProcessingElement*> lAvailableDevices;
 	pmSubtaskCB* lSubtaskCB = GetCallbackUnit()->GetSubtaskCB();
 	if(lSubtaskCB)
 	{
-		for(uint i=0; i<MAX_DEVICE_TYPES; ++i)
+		for(uint i = 0; i < MAX_DEVICE_TYPES; ++i)
 		{
-			if(lSubtaskCB->IsCallbackDefinedForDevice((pmDeviceType)i))
-				lDevicePool->GetAllDevicesOfTypeInCluster((pmDeviceType)i, GetCluster(), pDevices);
+            pmDeviceType lType = (pmDeviceType)(MAX_DEVICE_TYPES - 1 - i);
+			if(lSubtaskCB->IsCallbackDefinedForDevice(lType))
+				lDevicePool->GetAllDevicesOfTypeInCluster(lType, GetCluster(), lAvailableDevices);
 		}
 	}
 
-	if(!pDevices.empty())
+	if(!lAvailableDevices.empty())
 	{
 		pmDeviceSelectionCB* lDeviceSelectionCB = GetCallbackUnit()->GetDeviceSelectionCB();
 		if(lDeviceSelectionCB)
 		{
-			std::set<pmProcessingElement*> lDevices;
-
-			std::set<pmProcessingElement*>::iterator lIter;
-			for(lIter = pDevices.begin(); lIter != pDevices.end(); ++lIter)
+			std::vector<pmProcessingElement*>::iterator lIter = lAvailableDevices.begin(), lEndIter = lAvailableDevices.end();
+			for(; lIter != lEndIter; ++lIter)
 			{
 				if(lDeviceSelectionCB->Invoke(this, *lIter))
-					lDevices.insert(*lIter);
+					mDevices.push_back(*lIter);
 			}
-
-			pDevices = lDevices;
 		}
-	}
-
-	// If the number of subtasks is less than number of devices, then discard the extra devices
-	ulong lSubtaskCount = GetSubtaskCount();
-	ulong lDeviceCount = (ulong)(pDevices.size());	
-	ulong lFinalCount = lDeviceCount;
-
-	if(lSubtaskCount < lDeviceCount)
-		lFinalCount = lSubtaskCount;
-
-	std::set<pmProcessingElement*>::iterator lIter = pDevices.begin();
-	for(ulong i=0; i<lFinalCount; ++i)
-	{
-		mDevices.push_back(*lIter);
-		++lIter;
+        else
+        {
+            mDevices = lAvailableDevices;
+        }
 	}
 
 	mAssignedDeviceCount = (uint)(mDevices.size());
 
-    pDevices.erase(lIter, pDevices.end());
-
-    if(!pDevices.empty())
+    if(!mDevices.empty())
     {
-        std::set<pmMachine*> lMachines;
-        pmProcessingElement::GetMachines(mDevices, lMachines);
+        pmProcessingElement::GetMachines(mDevices, pMachines);
         
         FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-        mPendingCompletions = lMachines.size();
-        if(lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
+        mPendingCompletions = pMachines.size();
+        if(pMachines.find(PM_LOCAL_MACHINE) == pMachines.end())
             ++mPendingCompletions;
     }
 
-	return pmSuccess;
+	return mDevices;
 }
 
 pmSubtaskManager* pmLocalTask::GetSubtaskManager()

@@ -181,10 +181,12 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
     , mResourceLock __LOCK_NAME__("pmPushSchedulingManager::mResourceLock")
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
-	ulong lPartitionCount = mLocalTask->GetAssignedDeviceCount();
+	ulong lDeviceCount = mLocalTask->GetAssignedDeviceCount();
 
-	if(lSubtaskCount == 0 || lPartitionCount == 0 || lSubtaskCount < lPartitionCount)
+	if(lSubtaskCount == 0 || lDeviceCount == 0)
 		PMTHROW(pmFatalErrorException());
+    
+    ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
 
 	ulong lPartitionSize = lSubtaskCount/lPartitionCount;
 	ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
@@ -195,7 +197,7 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 	std::vector<pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
 	std::vector<pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
 
-    for(ulong i=0; i<lPartitionCount; ++i, ++lIter)
+    for(ulong i = 0; i < lPartitionCount; ++i, ++lIter)
     {
         if(i < lLeftoverSubtasks)
             lLastSubtask = lFirstSubtask + lPartitionSize;
@@ -505,7 +507,10 @@ pmStatus pmPushSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 	FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	if(mAllottedUnassignedPartition.find(pDevice) == mAllottedUnassignedPartition.end())
-		PMTHROW(pmFatalErrorException());
+    {
+        pSubtaskCount = 0;
+		return pmSuccess;
+    }
 
 	if(mAssignedPartitions.find(pDevice) != mAssignedPartitions.end())	// This device already has a partition waiting to be acknowledged
     {
@@ -753,10 +758,12 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
     , mAssignmentResourceLock __LOCK_NAME__("pmPullSchedulingManager::mAssignmentResourceLock")
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
-	ulong lPartitionCount = mLocalTask->GetAssignedDeviceCount();
+	ulong lDeviceCount = mLocalTask->GetAssignedDeviceCount();
 
-	if(lSubtaskCount == 0 || lPartitionCount == 0 || lSubtaskCount < lPartitionCount)
+	if(lSubtaskCount == 0 || lDeviceCount == 0)
 		PMTHROW(pmFatalErrorException());
+    
+    ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
 
 	ulong lPartitionSize = lSubtaskCount/lPartitionCount;
 	ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
@@ -789,7 +796,11 @@ pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 {
 	FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
 
-    assert(mIter != mSubtaskPartitions.end());
+    if(mIter == mSubtaskPartitions.end())
+    {
+        pSubtaskCount = 0;
+        return pmSuccess;
+    }
     
 	pmUnfinishedPartitionPtr lPartition = *mIter;
 
