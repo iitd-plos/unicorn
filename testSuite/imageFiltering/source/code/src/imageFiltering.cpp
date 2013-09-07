@@ -289,7 +289,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         exit(1);
 
 	// Output Mem contains the result image
-	// Number of subtasks is equal to the number of rows
+	// Number of subtasks is equal to the number of tiles in the image
     unsigned int lSubtasks = (gImageWidth/TILE_DIM + (gImageWidth%TILE_DIM ? 1 : 0)) * (gImageHeight/TILE_DIM + (gImageHeight%TILE_DIM ? 1 : 0));
 	CREATE_TASK(0, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
 

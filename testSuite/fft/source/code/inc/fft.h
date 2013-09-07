@@ -1,9 +1,15 @@
 
 namespace fft
 {
+
+#define USE_SQUARE_MATRIX
     
 #define DEFAULT_POW_X 10
-#define DEFAULT_POW_Y 10
+    
+#ifndef USE_SQUARE_MATRIX
+#define DEFAULT_POW_Y 11
+#endif
+
 #define DEFAULT_INPLACE_VALUE 0
 
 #define ROWS_PER_FFT_SUBTASK 128  // must be a power of 2

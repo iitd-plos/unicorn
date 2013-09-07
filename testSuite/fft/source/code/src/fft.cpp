@@ -146,6 +146,16 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
 	return pmSuccess;
 }
 
+#ifdef USE_SQUARE_MATRIX
+#define READ_NON_COMMON_ARGS \
+    int lPowX = DEFAULT_POW_X; \
+    bool lInplace = (bool)DEFAULT_INPLACE_VALUE; \
+    FETCH_INT_ARG(lPowX, pCommonArgs, argc, argv); \
+    FETCH_BOOL_ARG(lInplace, pCommonArgs + 1, argc, argv); \
+    int lPowY = lPowX; \
+    size_t lElemsX = 1 << lPowX; \
+    size_t lElemsY = lElemsX;
+#else
 #define READ_NON_COMMON_ARGS \
     int lPowX = DEFAULT_POW_X; \
     int lPowY = DEFAULT_POW_Y; \
@@ -155,6 +165,7 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
     FETCH_BOOL_ARG(lInplace, pCommonArgs + 2, argc, argv); \
     size_t lElemsX = 1 << lPowX; \
     size_t lElemsY = 1 << lPowY;
+#endif
 
 // Returns execution time on success; 0 on error
 double DoSerialProcess(int argc, char** argv, int pCommonArgs)
