@@ -896,10 +896,7 @@ pmStatus pmSubscriptionManager::FetchInputMemSubscription(pmSubtask& pSubtask, p
         size_t lOffset = pSubscriptionInfo.offset;
         size_t lLength = pSubscriptionInfo.length;
 
-    #ifdef SUPPORT_LAZY_MEMORY
-        if(lIsLazy)
-            lMemSection->GetPageAlignedAddresses(lOffset, lLength);
-    #endif
+        lMemSection->GetPageAlignedAddresses(lOffset, lLength);
         
         MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, pPriority, lOffset, lLength, lReceiveVector);
         pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());
@@ -920,10 +917,7 @@ pmStatus pmSubscriptionManager::FetchOutputMemSubscription(pmSubtask& pSubtask, 
         size_t lOffset = pSubscriptionInfo.offset;
         size_t lLength = pSubscriptionInfo.length;
         
-    #ifdef SUPPORT_LAZY_MEMORY
-        if(lIsLazy)
-            lMemSection->GetPageAlignedAddresses(lOffset, lLength);
-    #endif
+        lMemSection->GetPageAlignedAddresses(lOffset, lLength);
         
         MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, pPriority, lOffset, lLength, lReceiveVector);
         pData.receiveCommandVector.insert(pData.receiveCommandVector.end(), lReceiveVector.begin(), lReceiveVector.end());

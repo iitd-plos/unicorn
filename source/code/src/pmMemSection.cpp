@@ -668,7 +668,8 @@ uint pmMemSection::GetLazyForwardPrefetchPageCount()
 {
     return LAZY_FORWARD_PREFETCH_PAGE_COUNT;
 }
-
+#endif
+    
 void pmMemSection::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
 {
     size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
@@ -687,7 +688,6 @@ void pmMemSection::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
     pLength = lEndAddress - pOffset + 1;
     pOffset -= reinterpret_cast<size_t>(GetMem());
 }
-#endif
     
 pmStatus pmMemSection::TransferOwnershipPostTaskCompletion(vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
 {

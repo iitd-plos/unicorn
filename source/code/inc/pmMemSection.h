@@ -140,9 +140,10 @@ class pmMemSection : public pmBase
 #ifdef SUPPORT_LAZY_MEMORY
         void* GetReadOnlyLazyMemoryMapping();
         uint GetLazyForwardPrefetchPageCount();
-        void GetPageAlignedAddresses(size_t& pOffset, size_t& pLength);
 #endif
             
+        void GetPageAlignedAddresses(size_t& pOffset, size_t& pLength);
+
 #ifdef ENABLE_MEM_PROFILING
         void RecordMemReceive(size_t pReceiveSize);
         void RecordMemTransfer(size_t pTransferSize);
