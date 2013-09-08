@@ -137,8 +137,8 @@ struct Level1Value
     double singleGpuTime;
     
     Level1Value()
-    : sequentialTime(std::numeric_limits<double>::max())
-    , singleGpuTime(std::numeric_limits<double>::max())
+    : sequentialTime(std::numeric_limits<double>::infinity())
+    , singleGpuTime(std::numeric_limits<double>::infinity())
     {}
 };
 
@@ -210,8 +210,8 @@ struct Level2InnerTaskKey
     size_t taskSequenceId;
     
     Level2InnerTaskKey()
-    : originatingHost(std::numeric_limits<size_t>::max())
-    , taskSequenceId(std::numeric_limits<size_t>::max())
+    : originatingHost(std::numeric_limits<size_t>::infinity())
+    , taskSequenceId(std::numeric_limits<size_t>::infinity())
     {}
 
     friend bool operator< (const Level2InnerTaskKey& pFirst, const Level2InnerTaskKey& pSecond)
@@ -229,7 +229,7 @@ struct Level2Value
     std::map<Level2InnerTaskKey, Level2InnerTaskValue> innerTaskMap;
 
     Level2Value()
-    : execTime(std::numeric_limits<double>::max())
+    : execTime(std::numeric_limits<double>::infinity())
     {}
 };
 

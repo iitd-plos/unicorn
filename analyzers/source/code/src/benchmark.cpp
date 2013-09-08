@@ -63,6 +63,9 @@
 #define TIMEOUT_IN_SECS 600
 #define NON_PMLIB_TASK_TIMEOUT_FACTOR 10
 
+#define RE_EXECUTE_FAILURES
+#define GENERATE_ESSENTIALS_ONLY
+
 Benchmark::keyValuePairs mGlobalConfiguration;
 
 template<typename calleeType>
@@ -306,7 +309,7 @@ void Benchmark::SelectSample(bool pMedianSample)
         if(mSamples[0].hostsMap != mSamples[i].hostsMap)
             throw std::exception();
     }
-    
+
 #if 0
     for(size_t i = 0; i < SAMPLE_COUNT; ++i)
     {
@@ -368,10 +371,11 @@ void Benchmark::SelectSample(bool pMedianSample)
             SampleFinder lParallelSampleFinder(pMedianSample);
             for(size_t i = 0; i < SAMPLE_COUNT; ++i)
             {
-                if(mSamples[i].results[lLevel1Key].second.find(lLevel2Key) == mSamples[i].results[lLevel1Key].second.end())
-                    throw std::exception();
+//                if(mSamples[i].results[lLevel1Key].second.find(lLevel2Key) == mSamples[i].results[lLevel1Key].second.end())
+//                    throw std::exception();
 
-                lParallelSampleFinder.AddData(mSamples[i].results[lLevel1Key].second[lLevel2Key].execTime);
+                if(mSamples[i].results[lLevel1Key].second.find(lLevel2Key) != mSamples[i].results[lLevel1Key].second.end())
+                    lParallelSampleFinder.AddData(mSamples[i].results[lLevel1Key].second[lLevel2Key].execTime);
             }
             
             mResults.results[lLevel1Key].second[lLevel2Key] = mSamples[lParallelSampleFinder.GetSampleIndex()].results[lLevel1Key].second[lLevel2Key];
@@ -647,7 +651,7 @@ void Benchmark::GenerateTable(std::ofstream& pHtmlStream, std::vector<size_t>& p
     
     const char* lDisplay[] = {"Absolute Values", "Speedup"};
     lPanelConf.push_back(std::make_pair("Display", std::vector<std::string>(lDisplay, lDisplay + (sizeof(lDisplay)/sizeof(lDisplay[0])))));
-    
+
     const char* lOverlap[] = {"Yes", "No"};
     lPanelConf.push_back(std::make_pair("Overlap&nbsp;Comp/Comm", std::vector<std::string>(lOverlap, lOverlap + (sizeof(lOverlap)/sizeof(lOverlap[0])))));
 
@@ -1706,22 +1710,25 @@ void Benchmark::GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pP
             StandardChart lGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Finishing Time (in s) --->")));
 
             const std::map<Level2InnerTaskKey, Level2InnerTaskValue>& lInnerTaskMap = lInnerIter->second.innerTaskMap;
-            const Level2InnerTaskValue& lInnerTaskVal = lInnerTaskMap.find(pInnerTask)->second;
-            std::map<size_t, DeviceStats>::const_iterator lDeviceIter = lInnerTaskVal.deviceStats.begin(), lDeviceEndIter = lInnerTaskVal.deviceStats.end();
-            
-            for(; lDeviceIter != lDeviceEndIter; ++lDeviceIter)
+            if(lInnerTaskMap.find(pInnerTask) != lInnerTaskMap.end())
             {
-                std::stringstream lDeviceName;
-                lDeviceName << "Device " << lDeviceIter->first;
+                const Level2InnerTaskValue& lInnerTaskVal = lInnerTaskMap.find(pInnerTask)->second;
+                std::map<size_t, DeviceStats>::const_iterator lDeviceIter = lInnerTaskVal.deviceStats.begin(), lDeviceEndIter = lInnerTaskVal.deviceStats.end();
                 
-                lGraph.curves.push_back(lDeviceName.str());
-                (*(lGraph.curves.rbegin())).points.push_back(std::make_pair(0, lDeviceIter->second.lastEventTimings.second));
+                for(; lDeviceIter != lDeviceEndIter; ++lDeviceIter)
+                {
+                    std::stringstream lDeviceName;
+                    lDeviceName << "Device " << lDeviceIter->first;
+                    
+                    lGraph.curves.push_back(lDeviceName.str());
+                    (*(lGraph.curves.rbegin())).points.push_back(std::make_pair(0, lDeviceIter->second.lastEventTimings.second));
+                }
+
+                lGraph.groups.push_back("");
+
+                EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lGraph), lChartTitle[(size_t)(lInnerIter->first.cluster)]);
             }
-
-            lGraph.groups.push_back("");
-
-            EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lGraph), lChartTitle[(size_t)(lInnerIter->first.cluster)]);
-            
+                
             ++lCount;
         }
     }
@@ -2141,6 +2148,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     {
         std::stringstream lStream;
         lStream << "source ~/.pmlibrc; ";
+        lStream << "mpirun -n 1 orte-clean; ";
         lStream << "mpirun -n " << 1 << " " << mExecPath << " 2 0 0 " << pSpaceSeparatedVaryingsStr << lFixedArgs;
         lStream << " > " << lTempFile.c_str() << " 2>&1";
 
@@ -2162,6 +2170,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     {
         std::stringstream lStream;
         lStream << "source ~/.pmlibrc; ";
+        lStream << "mpirun -n 1 orte-clean; ";
         lStream << "mpirun -n " << 1 << " " << mExecPath << " 3 0 0 " << pSpaceSeparatedVaryingsStr << lFixedArgs;
         lStream << " > " << lTempFile.c_str() << " 2>&1";
         
@@ -2203,6 +2212,11 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                     {
                         if((k == 1 || l == 1 || m == 1) && (((SchedulingPolicy)i == STATIC_BEST) || ((SchedulingPolicy)i == STATIC_EQUAL)))
                             continue;
+                        
+                    #ifdef GENERATE_ESSENTIALS_ONLY
+                        if(!((i == (size_t)PUSH || i == (size_t)PULL) && (k == 1) && (l == 0) && (m == 1)))
+                            continue;
+                    #endif
 
                         setenv("PMLIB_DISABLE_MA", ((k == 0) ? "1" : "0"), 1);
                         setenv("PMLIB_ENABLE_LAZY_MEM", ((l == 0) ? "0" : "1"), 1);
@@ -2219,6 +2233,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                         {
                             std::stringstream lStream;
                             lStream << "source ~/.pmlibrc; ";
+                            lStream << "mpirun -n " << pHosts << " orte-clean; ";
                             lStream << "mpirun -n " << pHosts << " " << lMpiOptions << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
                             lStream << lFixedArgs;
                             lStream << " > " << lTempFile.c_str() << " 2>&1";
@@ -2334,7 +2349,12 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
         if(CheckIfException(GetTempOutputFileName()))
         {
             std::cerr << "[ERROR]: Command hanged with exception - " << pCmd << std::endl;
+
+        #ifdef RE_EXECUTE_FAILURES
             ExecuteShellCommand(pCmd, pDisplayName, pOutputFile);
+        #else
+            RecordFailure(pCmd);
+        #endif
         }
         else
         {
@@ -2350,7 +2370,10 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
         if(lRetVal != 0 || WIFSIGNALED(lRetVal) || !WIFEXITED(lRetVal))
         {
             std::cerr << "[ERROR]: Command abnormally exited - " << pCmd << std::endl;
+
+        #ifdef RE_EXECUTE_FAILURES
             ExecuteShellCommand(pCmd, pDisplayName, pOutputFile);
+        #endif
         }
         else
         {
@@ -2483,12 +2506,12 @@ void Benchmark::GetAllBenchmarks(std::vector<Benchmark>& pBenchmarks)
         std::stringstream lConfigurationsKeyName;
         lConfigurationsKeyName << lName << "_Configurations";
 
-        size_t lConfigurations = 1;
+        size_t lConfigurations = 0;
         if(!GetGlobalConfiguration()[lConfigurationsKeyName.str()].empty())
             lConfigurations = atoi((GetGlobalConfiguration()[lConfigurationsKeyName.str()][0]).c_str());
 
         std::vector<std::string> lConfigurationalNames;
-        if(lConfigurations == 1)
+        if(lConfigurations == 0)
         {
             lConfigurationalNames.push_back(lName);
         }
