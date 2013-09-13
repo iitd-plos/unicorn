@@ -31,6 +31,8 @@
 namespace pm
 {
 
+using namespace reducer;
+    
 pmReducer::pmReducer(pmTask* pTask)
 	: mReductionsDone(0)
 	, mExternalReductionsRequired(0)
@@ -127,7 +129,7 @@ ulong pmReducer::GetMaxPossibleExternalReductionReceives(uint pFollowingMachineC
 	return lMaxReceives;
 }
 
-pmStatus pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+pmStatus pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -135,13 +137,16 @@ pmStatus pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 	{
 		mReduceState = false;
 
-		pStub->ReduceSubtasks(mTask, pSubtaskId, mLastSubtask.first, mLastSubtask.second);
+		pStub->ReduceSubtasks(mTask, pSubtaskId, pSplitInfo, mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get());
 
 		++mReductionsDone;
 	}
 	else
 	{
-		mLastSubtask = std::make_pair(pStub, pSubtaskId);
+		mLastSubtask.stub = pStub;
+        mLastSubtask.subtaskId = pSubtaskId;
+        mLastSubtask.splitInfo.reset(new pmSplitInfo(pSplitInfo->splitId, pSplitInfo->splitCount));
+
 		mReduceState = true;
 
 		CheckReductionFinishInternal();
@@ -164,11 +169,11 @@ pmStatus pmReducer::CheckReductionFinishInternal()
 	{
 		if(mSendToMachine)
 		{
-			if(mSendToMachine == PM_LOCAL_MACHINE || mLastSubtask.first == NULL)
+			if(mSendToMachine == PM_LOCAL_MACHINE || mLastSubtask.stub == NULL)
 				PMTHROW(pmFatalErrorException());
 
 			// Send mLastSubtaskId to machine mSendToMachine for reduction
-			return pmScheduler::GetScheduler()->ReduceRequestEvent(mLastSubtask.first, mTask, mSendToMachine, mLastSubtask.second);
+			return pmScheduler::GetScheduler()->ReduceRequestEvent(mLastSubtask.stub, mTask, mSendToMachine, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get());
 		}
 		else
 		{
@@ -186,16 +191,16 @@ void pmReducer::AddReductionFinishEvent()
         return;
     
     mAddedReductionFinishEvent = true;
-    mLastSubtask.first->ReductionFinishEvent(mTask);
+    mLastSubtask.stub->ReductionFinishEvent(mTask);
 }
     
 pmStatus pmReducer::HandleReductionFinish()
 {
-    return (static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.first, mLastSubtask.second);
+    return (static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get());
 }
 
 template<typename datatype>
-pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
     size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
     size_t lDataSize = sizeof(datatype);
@@ -205,13 +210,13 @@ pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, p
 
     pmSubscriptionManager& lSubscriptionManager = mTask->GetSubscriptionManager();
     
-    datatype* lShadowMem1 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub1, pSubtaskId1);
-    datatype* lShadowMem2 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub2, pSubtaskId2);
+    datatype* lShadowMem1 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub1, pSubtaskId1, pSplitInfo1);
+    datatype* lShadowMem2 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2);
 
 #ifdef SUPPORT_LAZY_MEMORY
     if(mTask->GetMemSectionRW()->IsLazyWriteOnly())
     {
-        const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pStub2, pSubtaskId2);
+        const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pStub2, pSubtaskId2, pSplitInfo2);
         
         std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
         
@@ -247,10 +252,10 @@ pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, p
         
         pmSubscriptionInfo lUnifiedSubscriptionInfo1, lUnifiedSubscriptionInfo2;
 
-        if(!lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub1, pSubtaskId1, lUnifiedSubscriptionInfo1))
+        if(!lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub1, pSubtaskId1, pSplitInfo1, lUnifiedSubscriptionInfo1))
             PMTHROW(pmFatalErrorException());
         
-        if(!lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub2, pSubtaskId2, lUnifiedSubscriptionInfo2))
+        if(!lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub2, pSubtaskId2, pSplitInfo2, lUnifiedSubscriptionInfo2))
             PMTHROW(pmFatalErrorException());
         
         if(lUnifiedSubscriptionInfo1.length != lUnifiedSubscriptionInfo2.length)
@@ -276,29 +281,29 @@ pmStatus pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, p
     return pmSuccess;
 }
 
-pmStatus pmReducer::ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+pmStatus pmReducer::ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
-    return ReduceSubtasks<int>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+    return ReduceSubtasks<int>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
 }
     
-pmStatus pmReducer::ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+pmStatus pmReducer::ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
-    return ReduceSubtasks<uint>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+    return ReduceSubtasks<uint>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
 }
 
-pmStatus pmReducer::ReduceLongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+pmStatus pmReducer::ReduceLongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
-    return ReduceSubtasks<long>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+    return ReduceSubtasks<long>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
 }
 
-pmStatus pmReducer::ReduceULongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+pmStatus pmReducer::ReduceULongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
-    return ReduceSubtasks<ulong>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+    return ReduceSubtasks<ulong>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
 }
 
-pmStatus pmReducer::ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType)
+pmStatus pmReducer::ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
-    return ReduceSubtasks<float>(pStub1, pSubtaskId1, pStub2, pSubtaskId2, pReductionType);
+    return ReduceSubtasks<float>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
 }
 
 }

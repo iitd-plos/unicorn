@@ -20,6 +20,7 @@
 		0EFEA57216EF141000DDB741 /* pmUtility.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFEA57016EF141000DDB741 /* pmUtility.cpp */; };
 		0EFF67BA1545CF7800ED4E8F /* pmRedistributor.h in Headers */ = {isa = PBXBuildFile; fileRef = 0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */; };
 		0EFF67BD1545CF9A00ED4E8F /* pmRedistributor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */; };
+		2B12642217DDF6AA00D34C09 /* pmSubtaskSplitter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B12642017DDF6AA00D34C09 /* pmSubtaskSplitter.cpp */; };
 		2B2E44041795C8B900309100 /* pmMemChunk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B2E44021795C8B900309100 /* pmMemChunk.cpp */; };
 		2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED2F151C7B07006AA45D /* pmBase.h */; };
 		2BCCED6F151C7B07006AA45D /* pmCallback.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED30151C7B07006AA45D /* pmCallback.h */; };
@@ -105,6 +106,8 @@
 		0EFEA57016EF141000DDB741 /* pmUtility.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmUtility.cpp; sourceTree = "<group>"; };
 		0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmRedistributor.h; sourceTree = "<group>"; };
 		0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmRedistributor.cpp; sourceTree = "<group>"; };
+		2B12642017DDF6AA00D34C09 /* pmSubtaskSplitter.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmSubtaskSplitter.cpp; sourceTree = "<group>"; };
+		2B12642417DDF6DB00D34C09 /* pmSubtaskSplitter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmSubtaskSplitter.h; sourceTree = "<group>"; };
 		2B2E44011795C6E800309100 /* pmMemChunk.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmMemChunk.h; sourceTree = "<group>"; };
 		2B2E44021795C8B900309100 /* pmMemChunk.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemChunk.cpp; sourceTree = "<group>"; };
 		2BCCED1D151C7AA1006AA45D /* pmlib.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -261,6 +264,7 @@
 				2BCCED47151C7B07006AA45D /* pmStubManager.h */,
 				2BCCED48151C7B07006AA45D /* pmSubscriptionManager.h */,
 				2BCCED49151C7B07006AA45D /* pmSubtaskManager.h */,
+				2B12642417DDF6DB00D34C09 /* pmSubtaskSplitter.h */,
 				2BCCED4A151C7B07006AA45D /* pmTask.h */,
 				2BCCED4B151C7B07006AA45D /* pmTaskExecStats.h */,
 				2BCCED4C151C7B07006AA45D /* pmTaskManager.h */,
@@ -310,6 +314,7 @@
 				2BCCED66151C7B07006AA45D /* pmStubManager.cpp */,
 				2BCCED67151C7B07006AA45D /* pmSubscriptionManager.cpp */,
 				2BCCED68151C7B07006AA45D /* pmSubtaskManager.cpp */,
+				2B12642017DDF6AA00D34C09 /* pmSubtaskSplitter.cpp */,
 				2BCCED69151C7B07006AA45D /* pmTask.cpp */,
 				2BCCED6A151C7B07006AA45D /* pmTaskExecStats.cpp */,
 				2BCCED6B151C7B07006AA45D /* pmTaskManager.cpp */,
@@ -457,6 +462,7 @@
 				0EB3339F16F28D120078AC9C /* pmDataTypes.cpp in Sources */,
 				0E7327BF16F7A409006FE28F /* pmRangeAccessor.cpp in Sources */,
 				2B2E44041795C8B900309100 /* pmMemChunk.cpp in Sources */,
+				2B12642217DDF6AA00D34C09 /* pmSubtaskSplitter.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

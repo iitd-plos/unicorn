@@ -300,7 +300,7 @@ pmStatus pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandl
     if((lInputMem == lOutputMem) || (!lInputMem && !lOutputMem))
         PMTHROW(pmFatalErrorException());
 
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.inputMemInfo, pTaskDetails.outputMemInfo, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, pTaskDetails.multiAssignEnabled, pTaskDetails.disjointReadWritesAcrossSubtasks, pTaskDetails.overlapComputeCommunication, pTaskDetails.canForciblyCancelSubtasks);
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, lInputMem, lOutputMem, pTaskDetails.inputMemInfo, pTaskDetails.outputMemInfo, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, pTaskDetails.multiAssignEnabled, pTaskDetails.disjointReadWritesAcrossSubtasks, pTaskDetails.overlapComputeCommunication, true, pTaskDetails.canSplitCpuSubtasks, pTaskDetails.canSplitGpuSubtasks);
 
 	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 
@@ -336,44 +336,44 @@ pmStatus pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandl
 	return pmSuccess;
 }
 
-pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo)
+pmStatus pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
     if(pSubscriptionType == OUTPUT_MEM_READ_WRITE_SUBSCRIPTION)
     {
-        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, OUTPUT_MEM_READ_SUBSCRIPTION, pSubscriptionInfo);
+        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_SUBSCRIPTION, pSubscriptionInfo);
         
-        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, pSubscriptionInfo);
+        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, pSubscriptionInfo);
     }
     else
     {
-        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSubscriptionType, pSubscriptionInfo);
+        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pSubscriptionType, pSubscriptionInfo);
     }
     
     return pmSuccess;
 }
 
-pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder)
+pmStatus pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, size_t pOffset, size_t pLength, unsigned int pOrder)
 {
     pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
-    lTask->GetRedistributor()->RedistributeData(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pOffset, pLength, pOrder);
+    lTask->GetRedistributor()->RedistributeData(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pOffset, pLength, pOrder);
     
     return pmSuccess;
 }
     
-pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf)
+pmStatus pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
-	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pCudaLaunchConf);
+	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pCudaLaunchConf);
 }
 
-pmStatus pmController::ReserveCudaGlobalMem_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pSize)
+pmStatus pmController::ReserveCudaGlobalMem_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
-	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().ReserveCudaGlobalMem(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSize);
+	return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().ReserveCudaGlobalMem(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pSize);
 }
 
 uint pmController::GetHostId_Public()
@@ -392,53 +392,53 @@ uint pmController::GetHostCount_Public()
 	return NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 }
     
-void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize)
+void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
     
-    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pScratchBufferInfo, pBufferSize);
+    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pScratchBufferInfo, pBufferSize);
     
     return NULL;
 }
-    
-pmStatus pmController::pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+
+pmStatus pmController::pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
     if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
         PMTHROW(pmFatalErrorException());
 
-    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceInts(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceInts(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
 }
 
-pmStatus pmController::pmReduceUInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+pmStatus pmController::pmReduceUInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
     if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
         PMTHROW(pmFatalErrorException());
 
-    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceUInts(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceUInts(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
 }
 
-pmStatus pmController::pmReduceLongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+pmStatus pmController::pmReduceLongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
     if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
         PMTHROW(pmFatalErrorException());
 
-    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceLongs(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceLongs(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
 }
 
-pmStatus pmController::pmReduceULongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+pmStatus pmController::pmReduceULongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
     if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
         PMTHROW(pmFatalErrorException());
 
-    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceULongs(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceULongs(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
 }
 
-pmStatus pmController::pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmReductionType pReductionType)
+pmStatus pmController::pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
     if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
         PMTHROW(pmFatalErrorException());
 
-    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceFloats(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pReductionType);
+    return (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceFloats(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
 }
 
 pmStatus pmController::MapFile_Public(const char* pPath)

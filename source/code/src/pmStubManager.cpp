@@ -79,6 +79,16 @@ pmExecutionStub* pmStubManager::GetStub(uint pIndex)
 	return mStubVector[pIndex];
 }
 
+pmExecutionStub* pmStubManager::GetCpuStub(uint pIndex)
+{
+    return GetStub(pIndex);
+}
+
+pmExecutionStub* pmStubManager::GetGpuStub(uint pIndex)
+{
+    return GetStub((uint)mProcessingElementsCPU + pIndex);
+}
+
 void pmStubManager::GetCpuIdInfo(uint pRegA, uint pRegC, uint& pEAX, uint& pEBX, uint& pECX, uint& pEDX)
 {
     asm volatile ("cpuid" : "=a" (pEAX), "=b" (pEBX), "=c" (pECX), "=d" (pEDX) : "a" (pRegA), "c" (pRegC));
@@ -138,12 +148,12 @@ pmStatus pmStubManager::CreateExecutionStubs()
     size_t lBufferLength = sizeof(lPhysicalMemory);
 
     if(sysctlbyname("hw.memsize", &lPhysicalMemory, &lBufferLength, NULL, 0) != 0)
-        mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
+        PMTHROW(pmFatalErrorException());
 #else
     size_t lPhysicalMemory = sysconf(_SC_PHYS_PAGES) * ::getpagesize();
 #endif
-
-	for(size_t i=0; i<mProcessingElementsCPU; ++i)
+    
+	for(size_t i = 0; i < mProcessingElementsCPU; ++i)
 		mStubVector.push_back(new pmStubCPU(i, (uint)(mStubVector.size())));
 
 	mProcessingElementsGPU = pmDispatcherGPU::GetDispatcherGPU()->ProbeProcessingElementsAndCreateStubs(mStubVector);
@@ -181,7 +191,7 @@ pmStatus pmStubManager::DestroyExecutionStubs()
 {
 	FreeGpuResources();
 
-	for(size_t i=0; i<mStubCount; ++i)
+	for(size_t i = 0; i < mStubCount; ++i)
 		delete mStubVector[i];
 
 	return pmSuccess;

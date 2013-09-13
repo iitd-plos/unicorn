@@ -2,8 +2,8 @@
 namespace imageFiltering
 {
 
-#define DEFAULT_IMAGE_PATH (char*)"../../images/default.bmp"
-//#define DEFAULT_IMAGE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/imageFiltering/images/default.bmp"
+//#define DEFAULT_IMAGE_PATH (char*)"../../images/default.bmp"
+#define DEFAULT_IMAGE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/imageFiltering/images/default.bmp"
 #define PIXEL_COUNT 3    // assumes 24-bit RGB
 #define IMAGE_SIZE (gImageWidth * gImageHeight * PIXEL_COUNT)
     
@@ -21,7 +21,7 @@ using namespace pm;
 
 #ifdef BUILD_CUDA
 #include <cuda.h>
-size_t computeSubtaskReservedMemRequirement(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId);
+size_t computeSubtaskReservedMemRequirement(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, int pSubscriptionStartCol, int pSubscriptionEndCol, int pSubscriptionStartRow, int pSubscriptionEndRow);
 pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
 int singleGpuImageFilter(void* pInvertedImageData, int pImageWidth, int pImageHeight, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, int pImageBytesPerLine, void* pOutputMem);
 #endif
@@ -36,6 +36,8 @@ typedef struct imageFilterTaskConf
     char imagePath[MAX_IMAGE_PATH_LENGTH];
     char filter[MAX_FILTER_DIM][MAX_FILTER_DIM];
 } imageFilterTaskConf;
+    
+bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, int* pStartCol, int* pEndCol, int* pStartRow, int* pEndRow);
 
 #pragma pack(push)
 #pragma pack(1)

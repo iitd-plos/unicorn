@@ -50,16 +50,17 @@ pmMachine::~pmMachine()
 
 pmMachine::operator uint()
 {
-	 return mMachineId;
+    return mMachineId;
 }
 
 
 /* class pmProcessingElement */
-pmProcessingElement::pmProcessingElement(pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex) : mMachine(pMachine)
+pmProcessingElement::pmProcessingElement(pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex)
+	: mMachine(pMachine)
+    , mDeviceIndexInMachine(pDeviceIndexInMachine)
+	, mGlobalDeviceIndex(pGlobalDeviceIndex)
+	, mDeviceType(pDeviceType)
 {
-	mDeviceIndexInMachine = pDeviceIndexInMachine;
-	mGlobalDeviceIndex = pGlobalDeviceIndex;
-	mDeviceType = pDeviceType;
 }
 
 pmProcessingElement::~pmProcessingElement()

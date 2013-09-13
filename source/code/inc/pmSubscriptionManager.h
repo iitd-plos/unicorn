@@ -85,11 +85,17 @@ namespace subscription
         subscriptionRecordType mOutputMemWriteSubscriptions;
     
         finalize_ptr<void, shadowMemDeallocator> mShadowMem;
+
+    #ifdef SUPPORT_LAZY_MEMORY
         std::vector<char> mWriteOnlyLazyDefaultValue;
         std::map<size_t, size_t> mWriteOnlyLazyUnprotectedPageRangesMap;
         size_t mWriteOnlyLazyUnprotectedPageCount;
+    #endif
     
         bool mReadyForExecution;    // a flag indicating that pmDataDistributionCB has already been executed (data may not be fetched)
+        bool mExplicitInputMemSubscription; // to support zero length subscriptions
+        bool mExplicitOutputMemReadSubscription; // to support zero length subscriptions
+        bool mExplicitOutputMemWriteSubscription; // to support zero length subscriptions
         size_t mReservedCudaGlobalMemSize;
         
 		pmStatus Initialize(pmTask* pTask);
@@ -101,66 +107,69 @@ namespace subscription
         pmMemSection* memSection;
     } shadowMemDetails;
 }
-
+    
 class pmSubscriptionManager : public pmBase
 {
     friend class subscription::shadowMemDeallocator;
     typedef std::map<void*, subscription::shadowMemDetails> shadowMemMapType;
     typedef std::map<ulong, subscription::pmSubtask> subtaskMapType;
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    typedef std::map<std::pair<ulong, pmSplitInfo>, subscription::pmSubtask> splitSubtaskMapType;
+#endif
+
 	public:
 		pmSubscriptionManager(pmTask* pTask);
 		virtual ~pmSubscriptionManager();
     
         void DropAllSubscriptions();
-
-        pmStatus EraseSubscription(pmExecutionStub* pStub, ulong pSubtaskId);
-		pmStatus InitializeSubtaskDefaults(pmExecutionStub* pStub, ulong pSubtaskId);
-        bool IsSubtaskInitialized(pmExecutionStub* pStub, ulong pSubtaskId);
-		pmStatus RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo);
-        pmStatus FreezeSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId);
-        pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmDeviceType pDeviceType, bool pPrefetch);
-		pmStatus SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmCudaLaunchConf& pCudaLaunchConf);
-        pmStatus ReserveCudaGlobalMem(pmExecutionStub* pStub, ulong pSubtaskId, size_t pSize);
-        pmStatus SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, char* pVal, size_t pLength);
-
-        void AddWriteOnlyLazyUnprotection(pmExecutionStub* pStub, ulong pSubtaskId, size_t pPageNum);
-        size_t GetWriteOnlyLazyUnprotectedPagesCount(pmExecutionStub* pStub, ulong pSubtaskId);
     
+        void FindSubtaskMemDependencies(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+
+        pmStatus EraseSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+		pmStatus InitializeSubtaskDefaults(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+		pmStatus RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo);
+        pmStatus FetchSubtaskSubscriptions(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmDeviceType pDeviceType, bool pPrefetch);
+		pmStatus SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf);
+        pmStatus ReserveCudaGlobalMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize);
+
     #ifdef SUPPORT_LAZY_MEMORY
-        const std::map<size_t, size_t>& GetWriteOnlyLazyUnprotectedPageRanges(pmExecutionStub* pStub, ulong pSubtaskId);
+        pmStatus SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, char* pVal, size_t pLength);
+
+        void AddWriteOnlyLazyUnprotection(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pPageNum);
+        size_t GetWriteOnlyLazyUnprotectedPagesCount(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+    
+        const std::map<size_t, size_t>& GetWriteOnlyLazyUnprotectedPageRanges(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void InitializeWriteOnlyLazyMemory(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pOffsetFromBase, void* pLazyPageAddr, size_t pLength);
     #endif
 
-		pmCudaLaunchConf& GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId);
-        size_t GetReservedCudaGlobalMemSize(pmExecutionStub* pStub, ulong pSubtaskId);
-        void InitializeWriteOnlyLazyMemory(pmExecutionStub* pStub, ulong pSubtaskId, size_t pOffsetFromBase, void* pLazyPageAddr, size_t pLength);
+		pmCudaLaunchConf& GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        size_t GetReservedCudaGlobalMemSize(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
     
-        void DropScratchBufferIfNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId);
-        void* GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
-        void* CheckAndGetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, size_t& pScratchBufferSize, pmScratchBufferInfo& pScratchBufferInfo);
+        void DropScratchBufferIfNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void* GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
+        void* CheckAndGetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t& pScratchBufferSize, pmScratchBufferInfo& pScratchBufferInfo);
 
-		bool GetInputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
-		bool GetOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, bool pReadSubscription, pmSubscriptionInfo& pSubscriptionInfo);
-        bool GetUnifiedOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSubscriptionInfo& pSubscriptionInfo);
+		bool GetInputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubscriptionInfo& pSubscriptionInfo);
+		bool GetOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pReadSubscription, pmSubscriptionInfo& pSubscriptionInfo);
+        bool GetUnifiedOutputMemSubscriptionForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubscriptionInfo& pSubscriptionInfo);
     
-        bool GetNonConsolidatedInputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
-        bool GetNonConsolidatedOutputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, bool pReadSubscriptions, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
+        bool GetNonConsolidatedInputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
+        bool GetNonConsolidatedOutputMemSubscriptionsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pReadSubscriptions, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd);
 
-        bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
+        bool SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmSubscriptionType pSubscriptionType);
 
-        pmStatus CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, void* pMem = NULL, size_t pMemLength = 0, size_t pWriteOnlyUnprotectedRanges = 0, uint* pUnprotectedRanges = NULL);
-        void* GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
+        pmStatus CreateSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, void* pMem = NULL, size_t pMemLength = 0, size_t pWriteOnlyUnprotectedRanges = 0, uint* pUnprotectedRanges = NULL);
+        void* GetSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
     
         void DestroySubtaskRangeShadowMem(pmExecutionStub* pStub, ulong pStartSubtaskId, ulong pEndSubtaskId);
-        void DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId);
-        void CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, subscription::subscriptionRecordType::const_iterator& pBeginIter, subscription::subscriptionRecordType::const_iterator& pEndIter, ulong pShadowMemOffset);
+        void DestroySubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, subscription::subscriptionRecordType::const_iterator& pBeginIter, subscription::subscriptionRecordType::const_iterator& pEndIter, ulong pShadowMemOffset);
     
-        void MarkSubtaskReadyForExecution(pmExecutionStub* pStub, ulong pSubtaskId);
-        bool IsSubtaskReadyForExecution(pmExecutionStub* pStub, ulong pSubtaskId);
-
         static pmMemSection* FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr);
 
 	private:
+        pmStatus FreezeSubtaskSubscriptions(subscription::pmSubtask& pSubtask);
         pmStatus WaitForSubscriptions(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub);
         pmStatus FetchInputMemSubscription(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, ushort pPriority, subscription::subscriptionData& pData);
         pmStatus FetchOutputMemSubscription(subscription::pmSubtask& pSubtask, pmDeviceType pDeviceType, pmSubscriptionInfo pSubscriptionInfo, ushort pPriority, subscription::subscriptionData& pData);
@@ -171,12 +180,19 @@ class pmSubscriptionManager : public pmBase
     #endif
 #endif
 
-        pmStatus DestroySubtaskShadowMemInternal(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub, ulong pSubtaskId);
-        bool SubtasksHaveMatchingSubscriptionsCommonStub(pmExecutionStub* pStub, ulong pSubtaskId1, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
-        bool SubtasksHaveMatchingSubscriptionsDifferentStubs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSubscriptionType pSubscriptionType);
+        pmStatus DestroySubtaskShadowMemInternal(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        bool SubtasksHaveMatchingSubscriptionsCommonStub(pmExecutionStub* pStub, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmSubscriptionType pSubscriptionType);
+        bool SubtasksHaveMatchingSubscriptionsDifferentStubs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmSubscriptionType pSubscriptionType);
         bool SubtasksHaveMatchingSubscriptionsInternal(subscription::pmSubtask& pSubtask1, subscription::pmSubtask& pSubtask2, pmSubscriptionType pSubscriptionType);
     
+        void GetSubtask(subscription::pmSubtask*& pSubtask, pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void GetSubtasks(subscription::pmSubtask*& pSubtask1, subscription::pmSubtask*& pSubtask2, pmExecutionStub* pStub, ulong pSubtaskId1, ulong pSubtaskId2, pmSplitInfo* pSplitInfo1, pmSplitInfo* pSplitInfo2);
+    
         std::vector<std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS> > mSubtaskMapVector;
+
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        std::vector<std::pair<splitSubtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS> > mSplitSubtaskMapVector;
+    #endif
 
 		pmTask* mTask;
     

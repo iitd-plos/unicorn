@@ -849,6 +849,18 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
                     if(!lTask)
                         abort();
                 
+                    const std::pair<void*, void*>& lPair = TLS_IMPLEMENTATION_CLASS::GetTls()->GetThreadLocalStoragePair(TLS_SPLIT_ID, TLS_SPLIT_COUNT);
+
+                    pmSplitInfo* lSplitInfoPtr = NULL;
+                    pmSplitInfo lSplitInfo;
+
+                    if(lPair.first && lPair.second)
+                    {
+                        lSplitInfoPtr = &lSplitInfo;
+                        lSplitInfo.splitId = *((uint*)lPair.first);
+                        lSplitInfo.splitCount = *((uint*)lPair.second);
+                    }
+                    
                 	size_t lPageSize = lMemoryManager->GetVirtualMemoryPageSize();
                     size_t lMemAddr = reinterpret_cast<size_t>((void*)(pSigInfo->si_addr));
                     size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
@@ -856,8 +868,8 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
                     size_t lOffset = lShadowMemOffset + lMemOffset;
 
                     lMemoryManager->SetLazyProtection(reinterpret_cast<void*>(lPageAddr), lPageSize, true, true);
-                    lTask->GetSubscriptionManager().AddWriteOnlyLazyUnprotection(lStub, lSubtaskId, lMemOffset / lPageSize);
-                    lTask->GetSubscriptionManager().InitializeWriteOnlyLazyMemory(lStub, lSubtaskId, lOffset, reinterpret_cast<void*>(lPageAddr), lPageSize);
+                    lTask->GetSubscriptionManager().AddWriteOnlyLazyUnprotection(lStub, lSubtaskId, lSplitInfoPtr, lMemOffset / lPageSize);
+                    lTask->GetSubscriptionManager().InitializeWriteOnlyLazyMemory(lStub, lSubtaskId, lSplitInfoPtr, lOffset, reinterpret_cast<void*>(lPageAddr), lPageSize);
                 }
             }
             else

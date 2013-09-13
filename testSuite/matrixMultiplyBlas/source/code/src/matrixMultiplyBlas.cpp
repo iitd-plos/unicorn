@@ -32,7 +32,30 @@ void serialMatrixMultiply(MATRIX_DATA_TYPE* pMatrixA, MATRIX_DATA_TYPE* pMatrixB
     CBLAS_GEMM(CblasRowMajor, CblasNoTrans, CblasNoTrans, (int)pDim1, (int)pDim3, (int)pDim2, 1.0f, pMatrixA, (int)pRowStepElems, pMatrixB, (int)pRowStepElems, 0.0f, pMatrixC, (int)pRowStepElems);
 }
 
-pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
+bool GetSplitData(size_t* pBlockOffset, size_t* pBlockWidth, matrixMultiplyTaskConf* pTaskConf, pmSplitInfo* pSplitInfo)
+{
+    *pBlockOffset = 0;
+    *pBlockWidth = pTaskConf->blockDim;
+    if(pSplitInfo)
+    {
+        size_t lSplitCount = ((pTaskConf->blockDim < pSplitInfo->splitCount) ? pTaskConf->blockDim : pSplitInfo->splitCount);
+        
+        if(pSplitInfo->splitId > lSplitCount - 1)
+            return false;
+        
+        size_t lSplittedBlockSize = (pTaskConf->blockDim / lSplitCount);
+        *pBlockOffset = pSplitInfo->splitId * lSplittedBlockSize;
+
+        if(pSplitInfo->splitId == lSplitCount - 1)
+            *pBlockWidth = (pTaskConf->blockDim - (pSplitInfo->splitId * lSplittedBlockSize));
+        else
+            *pBlockWidth = lSplittedBlockSize;
+    }
+    
+    return true;
+}
+    
+pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLazyMemInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
@@ -40,25 +63,36 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyI
     size_t lBlocksPerDim = (lTaskConf->matrixDim / lTaskConf->blockDim);
     size_t lBlockRow = (pSubtaskId / lBlocksPerDim);
     size_t lBlockCol = (pSubtaskId % lBlocksPerDim);
+    
+    size_t lBlockOffset, lBlockWidth;
+    if(!GetSplitData(&lBlockOffset, &lBlockWidth, lTaskConf, pSplitInfo))
+    {
+        lSubscriptionInfo.offset = lSubscriptionInfo.length = 0;
+
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        
+        return pmSuccess;
+    }
 
 	// Subscribe to entire lBlockRow of the first matrix
     for(size_t i = 0; i < lTaskConf->blockDim; ++i)
     {
         lSubscriptionInfo.offset = ((lBlockRow * lTaskConf->blockDim) + i) * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
         lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
     }
 
-	// Subscribe to entire lBlockCol of the second matrix
+	// Subscribe to entire lBlockCol of the second matrix (appropriately equal split)
     for(size_t i = 0; i < lTaskConf->matrixDim; ++i)
     {
-        lSubscriptionInfo.offset = (lTaskConf->matrixDim * lTaskConf->matrixDim + i * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim) * sizeof(MATRIX_DATA_TYPE);
-        lSubscriptionInfo.length = lTaskConf->blockDim * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+        lSubscriptionInfo.offset = (lTaskConf->matrixDim * lTaskConf->matrixDim + i * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim + lBlockOffset) * sizeof(MATRIX_DATA_TYPE);
+        lSubscriptionInfo.length = lBlockWidth * sizeof(MATRIX_DATA_TYPE);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
     }
 
-	// Subscribe to one block of the output matrix
-    SUBSCRIBE_BLOCK(lBlockRow, lBlockCol, lTaskConf->blockDim, lTaskConf->matrixDim, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION)
+	// Subscribe to one block of the output matrix (with equal split)
+    SUBSCRIBE_BLOCK(lBlockRow, lBlockCol, lBlockOffset, lBlockWidth, lTaskConf->blockDim, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_WRITE_SUBSCRIPTION)
 
 	return pmSuccess;
 }
@@ -71,11 +105,15 @@ pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
     size_t lBlockRow = (pSubtaskInfo.subtaskId / lBlocksPerDim);
     size_t lBlockCol = (pSubtaskInfo.subtaskId % lBlocksPerDim);
 
+    size_t lBlockOffset, lBlockWidth;
+    if(!GetSplitData(&lBlockOffset, &lBlockWidth, lTaskConf, pSubtaskInfo.splitInfo))
+        return pmSuccess;
+        
     MATRIX_DATA_TYPE* lMatrix1 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem);
-    MATRIX_DATA_TYPE* lMatrix2 = ((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem)) + (lTaskConf->matrixDim * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim) - (lBlockRow * lTaskConf->blockDim * lTaskConf->matrixDim);
+    MATRIX_DATA_TYPE* lMatrix2 = ((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem)) + (lTaskConf->matrixDim * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim + lBlockOffset) - (lBlockRow * lTaskConf->blockDim * lTaskConf->matrixDim);
     MATRIX_DATA_TYPE* lMatrix3 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.outputMem);
     
-	serialMatrixMultiply(lMatrix1, lMatrix2, lMatrix3, lTaskConf->blockDim, lTaskConf->matrixDim, lTaskConf->blockDim, lTaskConf->matrixDim);
+	serialMatrixMultiply(lMatrix1, lMatrix2, lMatrix3, lTaskConf->blockDim, lTaskConf->matrixDim, lBlockWidth, lTaskConf->matrixDim);
 
 	return pmSuccess;
 }
@@ -148,6 +186,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	lTaskDetails.taskConf = (void*)(&lTaskConf);
 	lTaskDetails.taskConfLength = sizeof(lTaskConf);
 
+    lTaskDetails.canSplitCpuSubtasks = true;
+    
 	double lStartTime = getCurrentTimeInSecs();
 
 	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );

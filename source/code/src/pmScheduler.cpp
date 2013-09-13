@@ -130,7 +130,7 @@ pmScheduler::pmScheduler()
     mSubtasksAssigned = 0;
     mAcknowledgementsSent = 0;
 #endif
-    
+
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::REMOTE_SUBTASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::OWNERSHIP_DATA_STRUCT);
@@ -293,8 +293,11 @@ pmStatus pmScheduler::SubmitTaskEvent(pmLocalTask* pLocalTask)
 pmStatus pmScheduler::PushEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange)
 {
 #ifdef TRACK_SUBTASK_EXECUTION
-	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
-    mSubtasksAssigned += pRange.endSubtask - pRange.startSubtask + 1;
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+        mSubtasksAssigned += pRange.endSubtask - pRange.startSubtask + 1;
+    }
 #endif
 
 	schedulerEvent lEvent;
@@ -401,9 +404,13 @@ pmStatus pmScheduler::StealFailedReturnEvent(pmProcessingElement* pStealingDevic
 pmStatus pmScheduler::AcknowledgementSendEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap)
 {
 #ifdef TRACK_SUBTASK_EXECUTION
-	FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
-    mAcknowledgementsSent += (pRange.endSubtask - pRange.startSubtask + 1);
-    std::cout << "Device " << pDevice->GetGlobalDeviceIndex() << " sent " << (pRange.endSubtask - pRange.startSubtask + 1) << " acknowledgements for subtasks [" << pRange.startSubtask << " - " << pRange.endSubtask << "]" << std::endl;
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+
+        mAcknowledgementsSent += (pRange.endSubtask - pRange.startSubtask + 1);
+        std::cout << "Device " << pDevice->GetGlobalDeviceIndex() << " sent " << (pRange.endSubtask - pRange.startSubtask + 1) << " acknowledgements for subtasks [" << pRange.startSubtask << " - " << pRange.endSubtask << "]" << std::endl;
+    }
 #endif
 
 	schedulerEvent lEvent;
@@ -464,7 +471,7 @@ pmStatus pmScheduler::TaskCompleteEvent(pmLocalTask* pLocalTask)
 	return SwitchThread(lEvent, pLocalTask->GetPriority());
 }
 
-pmStatus pmScheduler::ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId)
+pmStatus pmScheduler::ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
 	schedulerEvent lEvent;
 	lEvent.eventId = SUBTASK_REDUCE;
@@ -472,6 +479,8 @@ pmStatus pmScheduler::ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask*
 	lEvent.subtaskReduceDetails.machine = pDestMachine;
     lEvent.subtaskReduceDetails.reducingStub = pReducingStub;
 	lEvent.subtaskReduceDetails.subtaskId = pSubtaskId;
+    
+    pmSplitData::ConvertSplitInfoToSplitData(lEvent.subtaskReduceDetails.splitData, pSplitInfo);
 
 	return SwitchThread(lEvent, pTask->GetPriority());
 }
@@ -756,9 +765,11 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 		case SUBTASK_REDUCE:
         {
             subtaskReduce& lEventDetails = pEvent.subtaskReduceDetails;
+            
+            std::auto_ptr<pmSplitInfo> lSplitInfoAutoPtr(lEventDetails.splitData.operator auto_ptr<pmSplitInfo>());
 
             pmCommunicatorCommand::subtaskReducePacked::subtaskReduceInfo* lInfo = new pmCommunicatorCommand::subtaskReducePacked::subtaskReduceInfo();
-            pmCommunicatorCommand::subtaskReducePacked::CreateSubtaskReducePacked(lEventDetails.reducingStub, lEventDetails.task, lEventDetails.subtaskId, *lInfo);
+            pmCommunicatorCommand::subtaskReducePacked::CreateSubtaskReducePacked(lEventDetails.reducingStub, lEventDetails.task, lEventDetails.subtaskId, lSplitInfoAutoPtr.get(), *lInfo);
 
             pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(pmCommunicatorCommand::SUBTASK_REDUCE_TAG, pmCommunicatorCommand::SUBTASK_REDUCE_PACKED, lEventDetails.machine, lInfo, lEventDetails.task->GetPriority());
 
@@ -1439,7 +1450,7 @@ pmStatus pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessi
         lRangeOwner.memIdentifier.memOwnerHost = *(lMemSection->GetMemOwnerHost());
         lRangeOwner.memIdentifier.generationNumber = lMemSection->GetGenerationNumber();
         
-        for(size_t i=0; i<pDataElements; ++i)
+        for(size_t i = 0; i < pDataElements; ++i)
         {
             lRangeOwner.host = pDevice->GetMachine();
             lRangeOwner.hostOffset = pOwnershipData[i].offset;
@@ -1771,8 +1782,8 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                     pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetStub((uint)0);
                 
                     pmSubscriptionManager& lSubscriptionManager = lTask->GetSubscriptionManager();
-                    lSubscriptionManager.EraseSubscription(lStub, lData->reduceStruct.subtaskId);
-                    lSubscriptionManager.InitializeSubtaskDefaults(lStub, lData->reduceStruct.subtaskId);
+                    lSubscriptionManager.EraseSubscription(lStub, lData->reduceStruct.subtaskId, NULL);
+                    lSubscriptionManager.InitializeSubtaskDefaults(lStub, lData->reduceStruct.subtaskId, NULL);
                 
                     pmSubscriptionInfo lSubscriptionInfo;
                     unsigned int i, index;
@@ -1780,30 +1791,30 @@ pmStatus pmScheduler::HandleCommandCompletion(pmCommandPtr pCommand)
                     {
                         lSubscriptionInfo.offset = lData->subscriptions[index].offset;
                         lSubscriptionInfo.length = lData->subscriptions[index].length;
-                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, NULL, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
                     }
 
                     for(i = 0; i < lData->reduceStruct.outputMemReadSubscriptionCount; ++i, ++index)
                     {
                         lSubscriptionInfo.offset = lData->subscriptions[index].offset;
                         lSubscriptionInfo.length = lData->subscriptions[index].length;
-                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, OUTPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, NULL, OUTPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
                     }
                 
                     for(i = 0; i < lData->reduceStruct.outputMemWriteSubscriptionCount; ++i, ++index)
                     {
                         lSubscriptionInfo.offset = lData->subscriptions[index].offset;
                         lSubscriptionInfo.length = lData->subscriptions[index].length;
-                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+                        lSubscriptionManager.RegisterSubscription(lStub, lData->reduceStruct.subtaskId, NULL, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
                     }
                 
                     size_t lUnprotectedRanges = lData->reduceStruct.writeOnlyUnprotectedPageRangesCount;
                     size_t lUnprotectedLength = lUnprotectedRanges * 2 * sizeof(uint);
                     void* lMem = reinterpret_cast<void*>(reinterpret_cast<size_t>(lData->subtaskMem.ptr) + lUnprotectedLength);
 
-                    lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, lMem, lData->subtaskMem.length - lUnprotectedLength, lUnprotectedRanges, (uint*)lData->subtaskMem.ptr);
+                    lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, NULL, lMem, lData->subtaskMem.length - lUnprotectedLength, lUnprotectedRanges, (uint*)lData->subtaskMem.ptr);
 
-					lReducer->AddSubtask(lStub, lData->reduceStruct.subtaskId);
+					lReducer->AddSubtask(lStub, lData->reduceStruct.subtaskId, NULL);
 
 					/* The allocations are done in pmNetwork in UnknownLengthReceiveThread */					
 					delete[] (char*)(lData->subtaskMem.ptr);

@@ -94,6 +94,7 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmStubManager.o \
 	$(OUTDIR)/pmSubscriptionManager.o \
 	$(OUTDIR)/pmSubtaskManager.o \
+	$(OUTDIR)/pmSubtaskSplitter.o \
 	$(OUTDIR)/pmTask.o \
 	$(OUTDIR)/pmTaskExecStats.o \
 	$(OUTDIR)/pmTaskManager.o \

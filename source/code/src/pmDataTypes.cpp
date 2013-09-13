@@ -92,6 +92,56 @@ pmRecordProfileEventAutoPtr::~pmRecordProfileEventAutoPtr()
 #endif
 
 #ifdef DUMP_EVENT_TIMELINE
+    
+#ifdef SUPPORT_SPLIT_SUBTASKS
+/* class pmSplitSubtaskExecutionTimelineAutoPtr */
+pmSplitSubtaskExecutionTimelineAutoPtr::pmSplitSubtaskExecutionTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pSubtaskId, uint pSplitId, uint pSplitCount)
+    : mTask(pTask)
+    , mEventTimeline(pEventTimeline)
+    , mSubtaskId(pSubtaskId)
+    , mSplitId(pSplitId)
+    , mSplitCount(pSplitCount)
+    , mCancelledOrException(true)
+{
+    mEventTimeline->RecordEvent(GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), true);
+}
+
+pmSplitSubtaskExecutionTimelineAutoPtr::~pmSplitSubtaskExecutionTimelineAutoPtr()
+{
+    if(mCancelledOrException)
+    {
+        mEventTimeline->RenameEvent(GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), GetCancelledEventName(mSubtaskId, mSplitId, mSplitCount, mTask));
+        mEventTimeline->RecordEvent(GetCancelledEventName(mSubtaskId, mSplitId, mSplitCount, mTask), false);
+    }
+    else
+    {
+        mEventTimeline->RecordEvent(GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), false);
+    }
+}
+
+void pmSplitSubtaskExecutionTimelineAutoPtr::SetGracefulCompletion()
+{
+    mCancelledOrException = false;
+}
+    
+std::string pmSplitSubtaskExecutionTimelineAutoPtr::GetEventName(ulong pSubtaskId, uint pSplitId, uint pSplitCount, pmTask* pTask)
+{
+    std::stringstream lEventName;
+    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pSubtaskId << " (Split " << pSplitId << " of " << pSplitCount << ")";
+    
+    return lEventName.str();
+}
+
+std::string pmSplitSubtaskExecutionTimelineAutoPtr::GetCancelledEventName(ulong pSubtaskId, uint pSplitId, uint pSplitCount, pmTask* pTask)
+{
+    std::stringstream lEventName;
+    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pSubtaskId << " (Split " << pSplitId << " of " << pSplitCount << ")_Cancelled";
+
+    return lEventName.str();
+}
+#endif
+
+
 /* class pmSubtaskRangeExecutionTimelineAutoPtr */
 pmSubtaskRangeExecutionTimelineAutoPtr::pmSubtaskRangeExecutionTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pStartSubtask, ulong pEndSubtask)
     : mTask(pTask)
@@ -402,6 +452,17 @@ bool pmDestroyOnException::ShouldDelete()
 {
     return mDestroy;
 }
+
+    
+#ifdef SUPPORT_SPLIT_SUBTASKS
+bool operator<(const pmSplitInfo& pInfo1, const pmSplitInfo& pInfo2)
+{
+    if(pInfo1.splitId == pInfo2.splitId)
+        return (pInfo1.splitCount < pInfo2.splitCount);
+        
+    return (pInfo1.splitId < pInfo2.splitId);
+}
+#endif
 
 }   // end namespace pm
 

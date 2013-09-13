@@ -46,7 +46,7 @@ pmRedistributor::~pmRedistributor()
 {
 }
 
-pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, ulong pOffset, ulong pLength, uint pOrder)
+pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, ulong pOffset, ulong pLength, uint pOrder)
 {
     if(!pLength)
         return pmSuccess;
@@ -56,7 +56,7 @@ pmStatus pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtas
 #endif
 
     pmSubscriptionInfo lOutputMemSubscriptionInfo;
-    if(!mTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, false, lOutputMemSubscriptionInfo))
+    if(!mTask->GetSubscriptionManager().GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, false, lOutputMemSubscriptionInfo))
         return pmInvalidOffset;
 
     size_t lGlobalOffset = lOutputMemSubscriptionInfo.offset + pOffset;

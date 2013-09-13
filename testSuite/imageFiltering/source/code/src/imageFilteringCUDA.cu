@@ -220,27 +220,14 @@ void prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImag
     CUDA_ERROR_CHECK("cudaUnbindTexture", cudaUnbindTexture(gInvertedTextureRef));
 }
     
-size_t computeSubtaskReservedMemRequirement(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
+size_t computeSubtaskReservedMemRequirement(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, int pSubscriptionStartCol, int pSubscriptionEndCol, int pSubscriptionStartRow, int pSubscriptionEndRow)
 {
 	imageFilterTaskConf* lTaskConf = (imageFilterTaskConf*)(pTaskInfo.taskConf);
 
-    unsigned int lTilesPerRow = (lTaskConf->imageWidth/TILE_DIM + (lTaskConf->imageWidth%TILE_DIM ? 1 : 0));
-    
-    int lSubscriptionStartCol = (unsigned int)((pSubtaskId % lTilesPerRow) * TILE_DIM);
-    int lSubscriptionEndCol = lSubscriptionStartCol + TILE_DIM;
-    int lSubscriptionStartRow = (unsigned int)((pSubtaskId / lTilesPerRow) * TILE_DIM);
-    int lSubscriptionEndRow = lSubscriptionStartRow + TILE_DIM;
-
-    if(lSubscriptionEndCol > lTaskConf->imageWidth)
-        lSubscriptionEndCol = lTaskConf->imageWidth;
-
-    if(lSubscriptionEndRow > lTaskConf->imageHeight)
-        lSubscriptionEndRow = lTaskConf->imageHeight;
-    
-    int lStartCol = lSubscriptionStartCol - lTaskConf->filterRadius;
-    int lEndCol = lSubscriptionEndCol + lTaskConf->filterRadius;
-    int lStartRow = lSubscriptionStartRow - lTaskConf->filterRadius;
-    int lEndRow = lSubscriptionEndRow + lTaskConf->filterRadius;
+    int lStartCol = pSubscriptionStartCol - lTaskConf->filterRadius;
+    int lEndCol = pSubscriptionEndCol + lTaskConf->filterRadius;
+    int lStartRow = pSubscriptionStartRow - lTaskConf->filterRadius;
+    int lEndRow = pSubscriptionEndRow + lTaskConf->filterRadius;
     
     if(lStartCol < 0) lStartCol = 0;
     if(lStartRow < 0) lStartRow = 0;
@@ -257,18 +244,9 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
 {
 	imageFilterTaskConf* lTaskConf = (imageFilterTaskConf*)(pTaskInfo.taskConf);
     
-    unsigned int lTilesPerRow = (lTaskConf->imageWidth/TILE_DIM + (lTaskConf->imageWidth%TILE_DIM ? 1 : 0));
-    
-    int lSubscriptionStartCol = (unsigned int)((pSubtaskInfo.subtaskId % lTilesPerRow) * TILE_DIM);
-    int lSubscriptionEndCol = lSubscriptionStartCol + TILE_DIM;
-    int lSubscriptionStartRow = (unsigned int)((pSubtaskInfo.subtaskId / lTilesPerRow) * TILE_DIM);
-    int lSubscriptionEndRow = lSubscriptionStartRow + TILE_DIM;
-    
-    if(lSubscriptionEndCol > lTaskConf->imageWidth)
-        lSubscriptionEndCol = lTaskConf->imageWidth;
-    
-    if(lSubscriptionEndRow > lTaskConf->imageHeight)
-        lSubscriptionEndRow = lTaskConf->imageHeight;
+    int lSubscriptionStartCol, lSubscriptionEndCol, lSubscriptionStartRow, lSubscriptionEndRow;
+    if(!GetSubtaskSubscription(lTaskConf, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
+        return pmSuccess;
     
     int lStartCol = lSubscriptionStartCol - lTaskConf->filterRadius;
     int lEndCol = lSubscriptionEndCol + lTaskConf->filterRadius;

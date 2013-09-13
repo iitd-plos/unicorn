@@ -23,6 +23,7 @@
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
+#include "pmSignalWait.h"
 
 #include <vector>
 #include <map>

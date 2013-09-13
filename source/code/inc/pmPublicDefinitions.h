@@ -116,6 +116,15 @@ namespace pm
     } pmGpuContext;
 
 	/** Some utility typedefs */
+    typedef struct pmSplitInfo
+    {
+        unsigned int splitId;
+        unsigned int splitCount;
+        
+        pmSplitInfo();
+        pmSplitInfo(unsigned int pSplitId, unsigned int pSplitCount);
+    } pmSplitInfo;
+
 	typedef struct pmSubtaskInfo
 	{
 		unsigned long subtaskId;
@@ -128,6 +137,7 @@ namespace pm
         size_t outputMemReadLength;
         size_t outputMemWriteLength;
         pmGpuContext gpuContext;
+        pmSplitInfo* splitInfo;
         
         pmSubtaskInfo();
 	} pmSubtaskInfo;
@@ -144,6 +154,17 @@ namespace pm
         
         pmTaskInfo();
 	} pmTaskInfo;
+    
+    typedef struct pmLazyMemInfo
+    {
+        pmRawMemPtr lazyInputMem;
+        pmRawMemPtr lazyOutputMem;
+		size_t lazyInputMemLength;
+        size_t lazyOutputMemLength;
+        
+        pmLazyMemInfo();
+        pmLazyMemInfo(pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, size_t pLazyInputMemLength, size_t pLazyOutputMemLength);
+    } pmLazyMemInfo;
 
 	typedef enum pmMemInfo
 	{
@@ -163,7 +184,7 @@ namespace pm
         OUTPUT_MEM_WRITE_SUBSCRIPTION,
         OUTPUT_MEM_READ_WRITE_SUBSCRIPTION
     } pmSubscriptionType;
-
+    
 	typedef struct pmDataTransferInfo
 	{
 		pmMemHandle memHandle;
@@ -214,7 +235,7 @@ namespace pm
     
 
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
-	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId);
+	typedef pmStatus (*pmDataDistributionCallback)(pmTaskInfo pTaskInfo, pmLazyMemInfo pLazyMemInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo);
 	typedef pmStatus (*pmSubtaskCallback_CPU)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef void (*pmSubtaskCallback_GPU_CUDA)(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);	// pointer to CUDA kernel
 	typedef pmStatus (*pmSubtaskCallback_GPU_Custom)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
@@ -275,7 +296,7 @@ namespace pm
      *  This function can only be called from DataDistribution callback. The effect
      *  of calling this function otherwise is undefined.
      */
-	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo pSubscriptionInfo);
+	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo);
     
 	/** The memory redistribution API. It establishes memory ordering for the
 	 *	output section computed by a subtask in the final task memory. Order 0 is assumed
@@ -284,7 +305,7 @@ namespace pm
      *  produce data for that order. This function can only be called from DataRedistribution
      *  callback. The effect of calling this function otherwise is undefined.
      */
-    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pOffset, size_t pLength, unsigned int pOrder);
+    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, size_t pOffset, size_t pLength, unsigned int pOrder);
 
     /** The CUDA launch configuration structure */
     typedef struct pmCudaLaunchConf
@@ -305,7 +326,7 @@ namespace pm
      *  This function can only be called from DataDistribution callback. The effect
      *  of calling this function otherwise is undefined.
      */
-    pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmCudaLaunchConf pCudaLaunchConf);
+    pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf);
     
     /** If subtask_gpu_custom is set, application may need to allocate a CUDA buffer in the custom callback.
      *  cudaMalloc and like functions are synchronous and they interrupt any possibility of asynchronous launches,
@@ -314,7 +335,7 @@ namespace pm
      *  This function can only be called from DataDistribution callback. The effect of calling this function otherwise
      *  is undefined.
      */
-    pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, size_t pSize);
+    pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize);
 	
 	/** The task details structure used for task submission */
 	typedef struct pmTaskDetails
@@ -334,7 +355,8 @@ namespace pm
         bool multiAssignEnabled;                /* By default, this is true */
         bool disjointReadWritesAcrossSubtasks;  /* By default, this is false. Applies only to output memory of the task (only if it is RW). */
         bool overlapComputeCommunication;       /* By default, this is true */
-        bool canForciblyCancelSubtasks;         /* By default, this is true. Applies only if multiAssignEnabled is true. */
+        bool canSplitCpuSubtasks;               /* By default, this is false */
+        bool canSplitGpuSubtasks;               /* By default, this is false */
 		pmClusterHandle cluster;                /* Unused */
 
 		pmTaskDetails();
@@ -374,13 +396,13 @@ namespace pm
     #ifdef __CUDACC__
     __host__ __device__
     #endif
-    inline void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize, pmGpuContext* pGpuContext)
+    inline void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferInfo& pScratchBufferInfo, size_t pBufferSize, pmGpuContext* pGpuContext)
     {
     #if defined(__CUDA_ARCH__)
         return (pGpuContext ? pGpuContext->scratchBuffer : NULL);
     #else
-        void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
-        return pmGetScratchBufferHostFunc(pTaskHandle, pDeviceHandle, pSubtaskId, pScratchBufferInfo, pBufferSize);
+        void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferInfo& pScratchBufferInfo, size_t pBufferSize);
+        return pmGetScratchBufferHostFunc(pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pScratchBufferInfo, pBufferSize);
     #endif
     }
 

@@ -28,16 +28,20 @@ pmStatus matrixMultiply_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevic
     size_t lBlockRow = (pSubtaskInfo.subtaskId / lBlocksPerDim);
     size_t lBlockCol = (pSubtaskInfo.subtaskId % lBlocksPerDim);
 
+    size_t lBlockOffset, lBlockWidth;
+    if(!GetSplitData(&lBlockOffset, &lBlockWidth, lTaskConf, pSubtaskInfo.splitInfo))
+        return pmSuccess;
+
     MATRIX_DATA_TYPE* lMatrix1 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem);
-    MATRIX_DATA_TYPE* lMatrix2 = ((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem)) + (lTaskConf->matrixDim * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim) - (lBlockRow * lTaskConf->blockDim * lTaskConf->matrixDim);
+    MATRIX_DATA_TYPE* lMatrix2 = ((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem)) + (lTaskConf->matrixDim * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim + lBlockOffset) - (lBlockRow * lTaskConf->blockDim * lTaskConf->matrixDim);
     MATRIX_DATA_TYPE* lMatrix3 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.outputMem);
-    
+
     CUBLAS_ERROR_CHECK("cublasSetStream", cublasSetStream(lCublasHandle, (cudaStream_t)pCudaStream));
 
     CUBLAS_ERROR_CHECK("cublasSetPointerMode", cublasSetPointerMode(lCublasHandle, CUBLAS_POINTER_MODE_HOST));
 
-    CUBLAS_ERROR_CHECK("cublas_gemm", CUBLAS_GEMM(lCublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, (int)lTaskConf->blockDim, (int)lTaskConf->blockDim, (int)lTaskConf->matrixDim, &gOne, lMatrix2, (int)lTaskConf->matrixDim, lMatrix1, (int)lTaskConf->matrixDim, &gZero, lMatrix3, (int)lTaskConf->matrixDim));
-    
+    CUBLAS_ERROR_CHECK("cublas_gemm", CUBLAS_GEMM(lCublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, (int)lTaskConf->blockDim, (int)lBlockWidth, (int)lTaskConf->matrixDim, &gOne, lMatrix2, (int)lTaskConf->matrixDim, lMatrix1, (int)lTaskConf->matrixDim, &gZero, lMatrix3, (int)lTaskConf->matrixDim));
+
     return pmSuccess;
 }
     

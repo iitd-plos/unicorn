@@ -25,6 +25,7 @@
 #include "pmScheduler.h"
 #include "pmTaskExecStats.h"
 #include "pmSubscriptionManager.h"
+#include "pmSubtaskSplitter.h"
 
 #ifdef ENABLE_TASK_PROFILING
     #include "pmTaskProfiler.h"
@@ -56,7 +57,7 @@ extern pmCluster* PM_GLOBAL_CLUSTER;
 class pmTask : public pmBase
 {
 	protected:
-		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pDisjointReadWritesAcrossSubtasks, bool pOverlapComputeCommunication, bool pCanForciblyCancelSubtasks);
+		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pDisjointReadWritesAcrossSubtasks, bool pOverlapComputeCommunication, bool pCanForciblyCancelSubtasks, bool pCanSplitCpuSubtasks, bool pCanSplitGpuSubtasks);
 
 	public:
 		virtual ~pmTask();
@@ -75,8 +76,13 @@ class pmTask : public pmBase
 		scheduler::schedulingModel GetSchedulingModel();
 		pmTaskExecStats& GetTaskExecStats();
 		pmTaskInfo& GetTaskInfo();
-		pmStatus GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool pMultiAssign, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly);
+		pmStatus GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly);
 		pmSubscriptionManager& GetSubscriptionManager();
+
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        pmSubtaskSplitter& GetSubtaskSplitter();
+    #endif
+    
         pmReducer* GetReducer();
         pmRedistributor* GetRedistributor();
 		bool HasSubtaskExecutionFinished();
@@ -84,6 +90,8 @@ class pmTask : public pmBase
 		ulong GetSubtasksExecuted();
 		bool DoSubtasksNeedShadowMemory();
         bool CanForciblyCancelSubtasks();
+        bool CanSplitCpuSubtasks();
+        bool CanSplitGpuSubtasks();
     
         virtual pmStatus MarkSubtaskExecutionFinished();
         virtual void TerminateTask();
@@ -142,7 +150,13 @@ class pmTask : public pmBase
         bool mOverlapComputeCommunication;
         void* mReadOnlyMemAddrForSubtasks;  // Stores the read only lazy memory address (if present)
         bool mCanForciblyCancelSubtasks;
+        bool mCanSplitCpuSubtasks;
+        bool mCanSplitGpuSubtasks;
     
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        pmSubtaskSplitter mSubtaskSplitter;
+    #endif
+
 #ifdef ENABLE_TASK_PROFILING
         pmTaskProfiler mTaskProfiler;
 #endif
@@ -179,7 +193,7 @@ class pmTask : public pmBase
 class pmLocalTask : public pmTask
 {
 	public:
-		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true, bool pDisjointReadWritesAcrossSubtasks = false, bool pOverlapComputeCommunication = true, bool pCanForciblyCancelSubtasks = true);
+		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost = PM_LOCAL_MACHINE,	pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true, bool pDisjointReadWritesAcrossSubtasks = false, bool pOverlapComputeCommunication = true, bool pCanForciblyCancelSubtasks = true, bool pCanSplitCpuSubtasks = false, bool pCanSplitGpuSubtasks = false);
 
 		const std::vector<pmProcessingElement*>& FindCandidateProcessingElements(std::set<pmMachine*>& pMachines);
 
@@ -193,7 +207,7 @@ class pmLocalTask : public pmTask
         void MarkUserSideTaskCompletion();
     
         void TaskRedistributionDone(pmMemSection* pRedistributedMemSection);
-        pmStatus SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId);
+        pmStatus SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
     
         virtual pmStatus MarkSubtaskExecutionFinished();
         virtual void TerminateTask();
@@ -232,7 +246,7 @@ class pmLocalTask : public pmTask
 class pmRemoteTask : public pmTask
 {
 	public:
-		pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true, bool pDisjointReadWritesAcrossSubtasks = false, bool pOverlapComputeCommunication = true, bool pCanForciblyCancelSubtasks = true);
+		pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, bool pMultiAssignEnabled = true, bool pDisjointReadWritesAcrossSubtasks = false, bool pOverlapComputeCommunication = true, bool pCanForciblyCancelSubtasks = true, bool pCanSplitCpuSubtasks = false, bool pCanSplitGpuSubtasks = false);
 
 		pmStatus AddAssignedDevice(pmProcessingElement* pDevice);
 		std::vector<pmProcessingElement*>& GetAssignedDevices();

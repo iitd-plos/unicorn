@@ -48,7 +48,7 @@ pmDataDistributionCB::~pmDataDistributionCB()
 {
 }
 
-pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId)
+pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_PARTITIONING);
@@ -63,21 +63,26 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
     void* lInputMem = (lInputMemSection && lInputMemSection->IsLazy()) ? (lInputMemSection->GetMem()) : NULL;
     void* lOutputMem = (lOutputMemSection && lOutputMemSection->IsLazy()) ? (lOutputMemSection->GetMem()) : NULL;
     
+    size_t lInputMemSize = ((lInputMem && lInputMemSection) ? lInputMemSection->GetLength() : 0);
+    size_t lOutputMemSize = ((lOutputMem && lOutputMemSection) ? lOutputMemSection->GetLength() : 0);
+    
+    pmLazyMemInfo lLazyMemInfo(lInputMem, lOutputMem, lInputMemSize, lOutputMemSize);
+    
     pmStatus lStatus = pmStatusUnavailable;
     pmJmpBufAutoPtr lJmpBufAutoPtr;
 
     sigjmp_buf lJmpBuf;
-    int lJmpVal = sigsetjmp(lJmpBuf, 0);
+    int lJmpVal = sigsetjmp(lJmpBuf, 1);
 
     if(!lJmpVal)
     {
         lJmpBufAutoPtr.Reset(&lJmpBuf, pStub);
-        lStatus = mCallback(pTask->GetTaskInfo(), lInputMem, lOutputMem, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId);
+        lStatus = mCallback(pTask->GetTaskInfo(), lLazyMemInfo, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId, pSplitInfo);
     }
     else
     {
         lJmpBufAutoPtr.SetHasJumped();
-        PMTHROW_NODUMP(pmPrematureExitException(true));
+         PMTHROW_NODUMP(pmPrematureExitException(true));
     }
     
     return lStatus;
@@ -133,8 +138,18 @@ bool pmSubtaskCB::HasCustomGpuCallback()
     return false;
 #endif
 }
+    
+bool pmSubtaskCB::HasBothCpuAndGpuCallbacks()
+{
+#ifdef SUPPORT_CUDA
+    if(IsCallbackDefinedForDevice(CPU) && IsCallbackDefinedForDevice(GPU_CUDA))
+        return true;
+#endif
+    
+    return false;
+}
 
-pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly)
+pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly)
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
@@ -154,7 +169,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
             pmJmpBufAutoPtr lJmpBufAutoPtr;
             
             sigjmp_buf lJmpBuf;
-            int lJmpVal = sigsetjmp(lJmpBuf, 0);
+            int lJmpVal = sigsetjmp(lJmpBuf, 1);
             
             if(!lJmpVal)
             {
@@ -176,7 +191,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			if(!mCallback_GPU_CUDA && !mCallback_GPU_Custom)
 				return pmSuccess;
             
-			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskId);
+			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskId, pSplitInfo);
 
             // pTaskInfo is task info with CUDA pointers; pTask->GetTaskInfo() is with CPU pointers
             lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pTask->GetTaskInfo(), pTaskInfo, pSubtaskInfo, lCudaLaunchConf, pOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
@@ -189,7 +204,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			PMTHROW(pmFatalErrorException());
 	}
     
-    pTask->GetSubscriptionManager().DropScratchBufferIfNotRequiredPostSubtaskExec(pStub, pSubtaskId);
+    pTask->GetSubscriptionManager().DropScratchBufferIfNotRequiredPostSubtaskExec(pStub, pSubtaskId, pSplitInfo);
 
 	return pmSuccess;
 }
@@ -205,7 +220,7 @@ pmDataReductionCB::~pmDataReductionCB()
 {
 }
 
-pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, bool pMultiAssign2)
+pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2)
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
@@ -217,8 +232,8 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong
     bool lOutputMemWriteOnly = false;
 
 	pmSubtaskInfo lSubtaskInfo1, lSubtaskInfo2;
-	pTask->GetSubtaskInfo(pStub1, pSubtaskId1, pMultiAssign1, lSubtaskInfo1, lOutputMemWriteOnly);
-	pTask->GetSubtaskInfo(pStub2, pSubtaskId2, pMultiAssign2, lSubtaskInfo2, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pStub1, pSubtaskId1, pSplitInfo1, pMultiAssign1, lSubtaskInfo1, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pStub2, pSubtaskId2, pSplitInfo2, pMultiAssign2, lSubtaskInfo2, lOutputMemWriteOnly);
     
 	return mCallback(pTask->GetTaskInfo(), pStub1->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo1, pStub2->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo2);
 }
@@ -234,7 +249,7 @@ pmDataRedistributionCB::~pmDataRedistributionCB()
 {
 }
 
-pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign)
+pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign)
 {
 	if(!mCallback)
 		return pmSuccess;
@@ -242,7 +257,7 @@ pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, u
     bool lOutputMemWriteOnly = false;
 
 	pmSubtaskInfo lSubtaskInfo;
-	pTask->GetSubtaskInfo(pStub, pSubtaskId, pMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
+	pTask->GetSubtaskInfo(pStub, pSubtaskId, pSplitInfo, pMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
 
 	pmStatus lStatus = mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
     

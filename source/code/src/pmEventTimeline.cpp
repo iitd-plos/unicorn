@@ -53,7 +53,10 @@ void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     if(pStart && mEventMap.find(pEventName) != mEventMap.end())
+    {
+        std::cout << "EVENT " << pEventName << std::endl;
         PMTHROW(pmFatalErrorException());
+    }
     
     if(!pStart && (mEventMap.find(pEventName) == mEventMap.end() || mEventMap[pEventName].second != -1.0))
         PMTHROW(pmFatalErrorException());

@@ -48,6 +48,9 @@ class pmStubManager : public pmBase
 		pmExecutionStub* GetStub(pmProcessingElement* pDevice);
 		pmExecutionStub* GetStub(uint pIndex);
     
+        pmExecutionStub* GetCpuStub(uint pIndex);
+        pmExecutionStub* GetGpuStub(uint pIndex);
+
         void WaitForAllStubsToFinish();
 
 	private:

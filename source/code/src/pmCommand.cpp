@@ -453,6 +453,12 @@ pmCommunicatorCommand::remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTas
     
     if(pLocalTask->CanForciblyCancelSubtasks())
         flags |= TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL;
+    
+    if(pLocalTask->CanSplitCpuSubtasks())
+        flags |= TASK_CAN_SPLIT_CPU_SUBTASKS_FLAG_VAL;
+
+    if(pLocalTask->CanSplitGpuSubtasks())
+        flags |= TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL;
 
 	strncpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN-1);
 	callbackKey[MAX_CB_KEY_LEN-1] = '\0';
@@ -505,12 +511,12 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked()
 	memset(this, 0, sizeof(*this));
 }
 
-void pmCommunicatorCommand::subtaskReducePacked::CreateSubtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, subtaskReduceInfo& pInfo)
+void pmCommunicatorCommand::subtaskReducePacked::CreateSubtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, subtaskReduceInfo& pInfo)
 {
-    pInfo.packedData = new subtaskReducePacked(pReducingStub, pTask, pSubtaskId, pInfo.subscriptionsVector, pInfo.allocatedSubtaskMem);
+    pInfo.packedData = new subtaskReducePacked(pReducingStub, pTask, pSubtaskId, pSplitInfo, pInfo.subscriptionsVector, pInfo.allocatedSubtaskMem);
 }
 
-pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, std::vector<ownershipDataStruct>* pSubscriptionsVector, char* pAllocatedSubtaskMem)
+pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, std::vector<ownershipDataStruct>* pSubscriptionsVector, char* pAllocatedSubtaskMem)
 {
 #ifdef _DEBUG
     if(pAllocatedSubtaskMem || pSubscriptionsVector)
@@ -532,7 +538,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
     this->reduceStruct.writeOnlyUnprotectedPageRangesCount = 0;
 
     subscription::subscriptionRecordType::const_iterator lIter;
-    if(lSubscriptionManager.GetNonConsolidatedInputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, lBeginIter, lEndIter))
+    if(lSubscriptionManager.GetNonConsolidatedInputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, pSplitInfo, lBeginIter, lEndIter))
     {
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
         {
@@ -545,7 +551,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
         }
     }
 
-    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, true, lBeginIter, lEndIter))
+    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, pSplitInfo, true, lBeginIter, lEndIter))
     {
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
         {
@@ -559,7 +565,7 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
     }
 
     size_t lTotalWriteSubscriptionLength = 0;
-    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, false, lBeginIter, lEndIter))
+    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pReducingStub, pSubtaskId, pSplitInfo, false, lBeginIter, lEndIter))
     {
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
         {
@@ -575,19 +581,19 @@ pmCommunicatorCommand::subtaskReducePacked::subtaskReducePacked(pmExecutionStub*
     }
 
     pmSubscriptionInfo lUnifiedSubscriptionInfo;
-    lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pReducingStub, pSubtaskId, lUnifiedSubscriptionInfo);
+    lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pReducingStub, pSubtaskId, pSplitInfo, lUnifiedSubscriptionInfo);
     
     this->subscriptions = &(*pSubscriptionsVector)[0];
     
-    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pReducingStub, pSubtaskId);
+    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pReducingStub, pSubtaskId, pSplitInfo);
     
 #ifdef SUPPORT_LAZY_MEMORY
     if(pTask->GetMemSectionRW()->IsLazyWriteOnly())
     {
         size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
-        const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pReducingStub, pSubtaskId);
+        const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pReducingStub, pSubtaskId, pSplitInfo);
         size_t lRangesSize = lMap.size() * 2 * sizeof(uint);
-        size_t lUnprotectedLength = lRangesSize + std::min(lSubscriptionManager.GetWriteOnlyLazyUnprotectedPagesCount(pReducingStub, pSubtaskId) * lPageSize, lUnifiedSubscriptionInfo.length);
+        size_t lUnprotectedLength = lRangesSize + std::min(lSubscriptionManager.GetWriteOnlyLazyUnprotectedPagesCount(pReducingStub, pSubtaskId, pSplitInfo) * lPageSize, lUnifiedSubscriptionInfo.length);
 
         this->subtaskMem.ptr = pAllocatedSubtaskMem = new char[lUnprotectedLength];
         this->subtaskMem.length = (uint)lUnprotectedLength;

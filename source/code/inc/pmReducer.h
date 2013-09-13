@@ -33,6 +33,18 @@ class pmTask;
 class pmMachine;
 class pmExecutionStub;
 
+namespace reducer
+{
+
+struct lastSubtaskData
+{
+    pmExecutionStub* stub;
+    ulong subtaskId;
+    std::auto_ptr<pmSplitInfo> splitInfo;
+};
+
+}
+    
 class pmReducer : public pmBase
 {
 	public:
@@ -41,13 +53,13 @@ class pmReducer : public pmBase
 
 		pmStatus CheckReductionFinish();
         pmStatus HandleReductionFinish();
-		pmStatus AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
+		pmStatus AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
 
-        pmStatus ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
-        pmStatus ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
-        pmStatus ReduceLongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
-        pmStatus ReduceULongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
-        pmStatus ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
+        pmStatus ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        pmStatus ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        pmStatus ReduceLongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        pmStatus ReduceULongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        pmStatus ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
 
 	private:
 		pmStatus PopulateExternalMachineList();
@@ -56,9 +68,9 @@ class pmReducer : public pmBase
         void AddReductionFinishEvent();
 
         template<typename datatype>
-        pmStatus ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmReductionType pReductionType);
+        pmStatus ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
 
-		std::pair<pmExecutionStub*, ulong> mLastSubtask;
+        reducer::lastSubtaskData mLastSubtask;
 
 		ulong mReductionsDone;
 		ulong mExternalReductionsRequired;

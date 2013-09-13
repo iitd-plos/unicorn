@@ -399,14 +399,14 @@ class pmCommunicatorCommand : public pmCommand
 			subtaskReducePacked();
 			~subtaskReducePacked();
         
-            static void CreateSubtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, subtaskReduceInfo& pInfo);
+            static void CreateSubtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, subtaskReduceInfo& pInfo);
 
 			subtaskReduceStruct reduceStruct;
             ownershipDataStruct* subscriptions;
 			dataPtr subtaskMem; // writeOnlyMemUnprotectedPageRanges followed by output mem write subscription only
         
         private:
-            subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, std::vector<ownershipDataStruct>* pSubscriptionsVector, char* pAllocatedSubtaskMem);
+            subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, std::vector<ownershipDataStruct>* pSubscriptionsVector, char* pAllocatedSubtaskMem);
 		} subtaskReducePacked;
 
 		typedef struct memoryReceiveStruct

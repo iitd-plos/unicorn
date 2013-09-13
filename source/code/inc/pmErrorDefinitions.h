@@ -30,6 +30,12 @@
 namespace pm
 {
 
+#ifdef EXIT_ON_EXCEPTION
+#define EXCEPTION_ACTION(x) _exit(1);
+#else
+#define EXCEPTION_ACTION(x) throw x;
+#endif
+    
 #ifdef DUMP_EXCEPTION_BACKTRACE
 #define PMTHROW(x) { \
 			char dInteger[64]; \
@@ -45,10 +51,10 @@ namespace pm
             for(int backtraceIndex = 0; backtraceIndex < dBacktraceFrames; ++backtraceIndex) \
                 std::cout << dBacktraceStrs[backtraceIndex] << std::endl; \
             free(dBacktraceStrs); \
-            throw x; \
+            EXCEPTION_ACTION(x); \
 		}
 #else
-#define PMTHROW(x) throw x;
+#define PMTHROW(x) EXCEPTION_ACTION(x);
 #endif
 
 #define PMTHROW_NODUMP(x) throw x;

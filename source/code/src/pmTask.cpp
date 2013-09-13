@@ -48,7 +48,7 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
-pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pDisjointReadWritesAcrossSubtasks, bool pOverlapComputeCommunication, bool pCanForciblyCancelSubtasks)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pDisjointReadWritesAcrossSubtasks, bool pOverlapComputeCommunication, bool pCanForciblyCancelSubtasks, bool pCanSplitCpuSubtasks, bool pCanSplitGpuSubtasks)
 	: mTaskId(pTaskId)
 	, mMemRO(pMemRO)
 	, mCallbackUnit(pCallbackUnit)
@@ -66,6 +66,11 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
     , mOverlapComputeCommunication(pOverlapComputeCommunication)
     , mReadOnlyMemAddrForSubtasks(NULL)
     , mCanForciblyCancelSubtasks(pCanForciblyCancelSubtasks)
+    , mCanSplitCpuSubtasks(pCanSplitCpuSubtasks)
+    , mCanSplitGpuSubtasks(pCanSplitGpuSubtasks)
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    , mSubtaskSplitter(this)
+#endif
 	, mSubtasksExecuted(0)
 	, mSubtaskExecutionFinished(false)
     , mExecLock __LOCK_NAME__("pmTask::mExecLock")
@@ -137,6 +142,24 @@ bool pmTask::IsMultiAssignEnabled()
 bool pmTask::CanForciblyCancelSubtasks()
 {
     return mCanForciblyCancelSubtasks;
+}
+
+bool pmTask::CanSplitCpuSubtasks()
+{
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    return (mCanSplitCpuSubtasks && !GetReducer() && !GetRedistributor() && mCallbackUnit && mCallbackUnit->GetSubtaskCB() && mCallbackUnit->GetSubtaskCB()->HasBothCpuAndGpuCallbacks());
+#else
+    return false;
+#endif
+}
+
+bool pmTask::CanSplitGpuSubtasks()
+{
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    return (mCanSplitGpuSubtasks && !mCanSplitCpuSubtasks && !GetReducer() && !GetRedistributor() && mCallbackUnit && mCallbackUnit->GetSubtaskCB() && mCallbackUnit->GetSubtaskCB()->HasBothCpuAndGpuCallbacks());
+#else
+    return false;
+#endif
 }
 
 void* pmTask::GetTaskConfiguration()
@@ -245,13 +268,13 @@ pmTaskInfo& pmTask::GetTaskInfo()
 	return mTaskInfo;
 }
 
-pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool pMultiAssign, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly)
+pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly)
 {
 	pmSubscriptionInfo lInputMemSubscriptionInfo, lOutputMemSubscriptionInfo;
 	void* lOutputMem;
 
 	pSubtaskInfo.subtaskId = pSubtaskId;
-	if(mMemRO && mReadOnlyMemAddrForSubtasks && mSubscriptionManager.GetInputMemSubscriptionForSubtask(pStub, pSubtaskId, lInputMemSubscriptionInfo))
+	if(mMemRO && mReadOnlyMemAddrForSubtasks && mSubscriptionManager.GetInputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, lInputMemSubscriptionInfo))
 	{
 		pSubtaskInfo.inputMem = (reinterpret_cast<char*>(mReadOnlyMemAddrForSubtasks) + lInputMemSubscriptionInfo.offset);
 		pSubtaskInfo.inputMemLength = lInputMemSubscriptionInfo.length;
@@ -262,10 +285,10 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool p
 		pSubtaskInfo.inputMemLength = 0;
 	}
 
-	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lOutputMemSubscriptionInfo))
+	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, lOutputMemSubscriptionInfo))
 	{
 		if(DoSubtasksNeedShadowMemory() || pMultiAssign)
-			pSubtaskInfo.outputMem = mSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
+			pSubtaskInfo.outputMem = mSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId, pSplitInfo);
 		else
 			pSubtaskInfo.outputMem = (reinterpret_cast<char*>(lOutputMem) + lOutputMemSubscriptionInfo.offset);
 
@@ -282,8 +305,8 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool p
         else
         {
             pmSubscriptionInfo lReadSubscriptionInfo, lWriteSubscriptionInfo;
-            mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, true, lReadSubscriptionInfo);
-            mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, false, lWriteSubscriptionInfo);
+            mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, true, lReadSubscriptionInfo);
+            mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, false, lWriteSubscriptionInfo);
         
             pSubtaskInfo.outputMemRead = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + lReadSubscriptionInfo.offset - lOutputMemSubscriptionInfo.offset);
             pSubtaskInfo.outputMemWrite = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + lWriteSubscriptionInfo.offset - lOutputMemSubscriptionInfo.offset);
@@ -299,7 +322,8 @@ pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, bool p
         pOutputMemWriteOnly = false;
 	}
     
-    pSubtaskInfo.gpuContext.scratchBuffer = NULL;
+    pSubtaskInfo.gpuContext.scratchBuffer = NULL;    
+    pSubtaskInfo.splitInfo = pSplitInfo;
 
 	return pmSuccess;
 }
@@ -332,7 +356,7 @@ void* pmTask::CheckOutSubtaskMemory(size_t pLength, bool pForceNonLazy)
         mCollectiveShadowMem = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(lTotalMemSize, lIsLazy);
     
         void* lAddr = mCollectiveShadowMem;
-        for(size_t i=0; i<mShadowMemCount; ++i)
+        for(size_t i = 0; i < mShadowMemCount; ++i)
         {
             mUnallocatedShadowMemPool.push_back(lAddr);
             lAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lAddr) + mIndividualShadowMemAllocationLength);
@@ -379,6 +403,13 @@ pmSubscriptionManager& pmTask::GetSubscriptionManager()
 {
 	return mSubscriptionManager;
 }
+
+#ifdef SUPPORT_SPLIT_SUBTASKS
+pmSubtaskSplitter& pmTask::GetSubtaskSplitter()
+{
+    return mSubtaskSplitter;
+}
+#endif
 
 pmReducer* pmTask::GetReducer()
 {
@@ -569,8 +600,8 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
 
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pDisjointReadWritesAcrossSubtasks /* = false */, bool pOverlapComputeCommunication /* = true */, bool pCanForciblyCancelSubtasks /* = true */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pDisjointReadWritesAcrossSubtasks, pOverlapComputeCommunication, pCanForciblyCancelSubtasks)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pDisjointReadWritesAcrossSubtasks /* = false */, bool pOverlapComputeCommunication /* = true */, bool pCanForciblyCancelSubtasks /* = true */, bool pCanSplitCpuSubtasks /* = false */, bool pCanSplitGpuSubtasks /* = false */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pDisjointReadWritesAcrossSubtasks, pOverlapComputeCommunication, pCanForciblyCancelSubtasks, pCanSplitCpuSubtasks, pCanSplitGpuSubtasks)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
     , mUserSideTaskCompleted(false)
@@ -692,7 +723,7 @@ void pmLocalTask::UserDeleteTask()
     TerminateTask();
 }
     
-pmStatus pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId)
+pmStatus pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
 #ifdef _DEBUG
     if(!DoSubtasksNeedShadowMemory())
@@ -700,14 +731,14 @@ pmStatus pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubt
 #endif
 
     pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
-    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId);
+    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId, pSplitInfo);
     pmMemSection* lMemRW = GetMemSectionRW();
     
     subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pStub, pSubtaskId, false, lBeginIter, lEndIter))
+    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pStub, pSubtaskId, pSplitInfo, false, lBeginIter, lEndIter))
     {
         pmSubscriptionInfo lUnifiedSubscriptionInfo;
-        lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, lUnifiedSubscriptionInfo);
+        lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, lUnifiedSubscriptionInfo);
 
         subscription::subscriptionRecordType::const_iterator lIter;
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
@@ -836,8 +867,8 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 
 /* class pmRemoteTask */
-pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pDisjointReadWritesAcrossSubtasks /* = false */, bool pOverlapComputeCommunication /* = true */, bool pCanForciblyCancelSubtasks /* = true */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pDisjointReadWritesAcrossSubtasks, pOverlapComputeCommunication, pCanForciblyCancelSubtasks)
+pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pDisjointReadWritesAcrossSubtasks /* = false */, bool pOverlapComputeCommunication /* = true */, bool pCanForciblyCancelSubtasks /* = true */, bool pCanSplitCpuSubtasks /* = false */, bool pCanSplitGpuSubtasks /* = false */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pDisjointReadWritesAcrossSubtasks, pOverlapComputeCommunication, pCanForciblyCancelSubtasks, pCanSplitCpuSubtasks, pCanSplitGpuSubtasks)
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)

@@ -35,6 +35,8 @@ typedef enum pmTlsKey
 {
     TLS_EXEC_STUB,
     TLS_CURRENT_SUBTASK_ID,
+    TLS_SPLIT_ID,
+    TLS_SPLIT_COUNT,
     TLS_MAX_KEYS
 } pmTlsKey;
     

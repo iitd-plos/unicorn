@@ -51,7 +51,7 @@ class pmDataDistributionCB : public pmCallback
 		pmDataDistributionCB(pmDataDistributionCallback pCallback);
 		virtual ~pmDataDistributionCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
 
 	private:
 		pmDataDistributionCallback mCallback;
@@ -63,10 +63,11 @@ class pmSubtaskCB : public pmCallback
 		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom);
 		virtual ~pmSubtaskCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly);
 
 		virtual bool IsCallbackDefinedForDevice(pmDeviceType pDeviceType);
         virtual bool HasCustomGpuCallback();
+        virtual bool HasBothCpuAndGpuCallbacks();
 
 	private:
 		pmSubtaskCallback_CPU mCallback_CPU;
@@ -80,7 +81,7 @@ class pmDataReductionCB : public pmCallback
 		pmDataReductionCB(pmDataReductionCallback pCallback);
 		virtual ~pmDataReductionCB();
 
-		virtual pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, bool pMultiAssign2);
+		virtual pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2);
 
 	private:
 		pmDataReductionCallback mCallback;
@@ -92,7 +93,7 @@ class pmDataRedistributionCB : public pmCallback
 		pmDataRedistributionCB(pmDataRedistributionCallback pCallback);
 		virtual ~pmDataRedistributionCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, bool pMultiAssign);
+		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign);
 
 	private:
 		pmDataRedistributionCallback mCallback;

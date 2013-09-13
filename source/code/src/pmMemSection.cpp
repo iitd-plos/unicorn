@@ -669,7 +669,7 @@ uint pmMemSection::GetLazyForwardPrefetchPageCount()
     return LAZY_FORWARD_PREFETCH_PAGE_COUNT;
 }
 #endif
-    
+
 void pmMemSection::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
 {
     size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();

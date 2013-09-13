@@ -21,6 +21,7 @@
 #ifndef __PM_DATA_TYPES__
 #define __PM_DATA_TYPES__
 
+#include "pmPublicDefinitions.h"
 #include "pmInternalDefinitions.h"
 
 #include <stdlib.h>
@@ -63,6 +64,34 @@ namespace pm
             bool mHasJumped;
     };
     
+    struct pmSplitData
+    {
+        bool valid;
+        uint splitId;
+        uint splitCount;
+        
+        operator std::auto_ptr<pmSplitInfo>()
+        {
+            return std::auto_ptr<pmSplitInfo>(valid ? new pmSplitInfo(splitId, splitCount) : NULL);
+        }
+        
+        /* Can't make a constructor because this class is added to unions and needs to be default constructible */
+        static void ConvertSplitInfoToSplitData(pmSplitData& pSplitData, pmSplitInfo* pSplitInfo)
+        {
+            pSplitData.valid = (pSplitInfo != NULL);
+            
+            if(pSplitInfo)
+            {
+                pSplitData.splitId = pSplitInfo->splitId;
+                pSplitData.splitCount = pSplitInfo->splitCount;
+            }
+        }
+    };
+
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    bool operator<(const pmSplitInfo& pInfo1, const pmSplitInfo& pInfo2);
+#endif
+
 #ifdef SUPPORT_CUDA
     typedef struct pmLastCudaExecutionRecord
     {
@@ -148,6 +177,28 @@ namespace pm
 #ifdef DUMP_EVENT_TIMELINE
     class pmEventTimeline;
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    class pmSplitSubtaskExecutionTimelineAutoPtr
+    {
+        public:
+            pmSplitSubtaskExecutionTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pSubtaskId, uint pSplitId, uint pSplitCount);
+            ~pmSplitSubtaskExecutionTimelineAutoPtr();
+        
+            void SetGracefulCompletion();
+        
+            std::string GetEventName(ulong pSubtaskId, uint pSplitId, uint pSplitCount, pmTask* pTask);
+            std::string GetCancelledEventName(ulong pSubtaskId, uint pSplitId, uint pSplitCount, pmTask* pTask);
+
+        private:
+            pmTask* mTask;
+            pmEventTimeline* mEventTimeline;
+            ulong mSubtaskId;
+            uint mSplitId;
+            uint mSplitCount;
+            bool mCancelledOrException;
+    };
+#endif
+    
     class pmSubtaskRangeExecutionTimelineAutoPtr
     {
         public:
@@ -195,6 +246,25 @@ namespace pm
         {}
         */
     } pmSubtaskRange;
+
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    typedef struct pmSplitSubtask
+    {
+        pmTask* task;
+        pmExecutionStub* sourceStub;
+        ulong subtaskId;
+        uint splitId;
+        uint splitCount;
+        
+        pmSplitSubtask(pmTask* pTask, pmExecutionStub* pSourceStub, ulong pSubtaskId, uint pSplitId, uint pSplitCount)
+        : task(pTask)
+        , sourceStub(pSourceStub)
+        , subtaskId(pSubtaskId)
+        , splitId(pSplitId)
+        , splitCount(pSplitCount)
+        {}
+    } pmSplitSubtask;
+#endif
     
     #define STATIC_ACCESSOR(type, className, funcName) \
     type& className::funcName() \

@@ -5,8 +5,8 @@ namespace luDecomposition
 #define DEFAULT_POW_DIM 12
 const size_t BLOCK_DIM = 1024;   // Must be a power of 2
 
-#define MATRIX_DATA_TYPE_FLOAT
-//#define MATRIX_DATA_TYPE_DOUBLE
+//#define MATRIX_DATA_TYPE_FLOAT
+#define MATRIX_DATA_TYPE_DOUBLE
     
 // For double precision build, compile CUDA for correct architecture e.g. Add this line to Makefile for Kepler GK105 "CUDAFLAGS += -gencode arch=compute_30,code=sm_30"
 
@@ -24,16 +24,22 @@ const size_t BLOCK_DIM = 1024;   // Must be a power of 2
     
 #define BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, matrixDim) (((blockRow) + (blockCol) * (matrixDim)) * BLOCK_DIM)
 
-#define SUBSCRIBE_BLOCK(blockRow, blockCol, matrixDim, subtaskId, subscriptionType) \
+#define SUBSCRIBE_SPLIT_BLOCK(blockRow, blockCol, startCol, endCol, startRow, endRow, matrixDim, subtaskId, splitInfo, subscriptionType) \
 { \
-    size_t dBlockOffset = BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, matrixDim) * sizeof(MATRIX_DATA_TYPE); \
-    for(size_t col = 0; col < BLOCK_DIM; ++col) \
+    size_t dBlockOffset = (startRow + BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, matrixDim)) * sizeof(MATRIX_DATA_TYPE); \
+    for(size_t col = startCol; col < endCol; ++col) \
     { \
         lSubscriptionInfo.offset = dBlockOffset + col * matrixDim * sizeof(MATRIX_DATA_TYPE); \
-        lSubscriptionInfo.length = BLOCK_DIM * sizeof(MATRIX_DATA_TYPE); \
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, subscriptionType, lSubscriptionInfo); \
+        lSubscriptionInfo.length = (endRow - startRow) * sizeof(MATRIX_DATA_TYPE); \
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, subscriptionType, lSubscriptionInfo); \
     } \
 }
+
+#define SUBSCRIBE_BLOCK(blockRow, blockCol, matrixDim, subtaskId, splitInfo, subscriptionType) SUBSCRIBE_SPLIT_BLOCK(blockRow, blockCol, 0, BLOCK_DIM, 0, BLOCK_DIM, matrixDim, subtaskId, splitInfo, subscriptionType)
+    
+#define SUBSCRIBE_SPLIT_COL_BLOCK(blockRow, blockCol, startCol, endCol, matrixDim, subtaskId, splitInfo, subscriptionType) SUBSCRIBE_SPLIT_BLOCK(blockRow, blockCol, startCol, endCol, 0, BLOCK_DIM, matrixDim, subtaskId, splitInfo, subscriptionType)
+
+#define SUBSCRIBE_SPLIT_ROW_BLOCK(blockRow, blockCol, startRow, endRow, matrixDim, subtaskId, splitInfo, subscriptionType) SUBSCRIBE_SPLIT_BLOCK(blockRow, blockCol, 0, BLOCK_DIM, startRow, endRow, matrixDim, subtaskId, splitInfo, subscriptionType)
 
 using namespace pm;
 

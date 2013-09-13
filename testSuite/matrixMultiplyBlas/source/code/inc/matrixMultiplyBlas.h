@@ -21,23 +21,23 @@ namespace matrixMultiplyBlas
 #error "MATRIX_DATA_TYPE not defined"
 #endif
 
-#define BLOCK_DIM 2048
+#define BLOCK_DIM 4096
 
 #define BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) (((blockRow) * (matrixDim) + (blockCol)) * (blockDim))
 
-#define SUBSCRIBE_BLOCK(blockRow, blockCol, blockDim, matrixDim, subtaskId, subscriptionType) \
+#define SUBSCRIBE_BLOCK(blockRow, blockCol, blockOffset, blockWidth, blockDim, matrixDim, subtaskId, splitInfo, subscriptionType) \
 { \
-    size_t dBlockOffset = BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) * sizeof(MATRIX_DATA_TYPE); \
+    size_t dBlockOffset = (BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) + (blockOffset)) * sizeof(MATRIX_DATA_TYPE); \
     for(size_t row = 0; row < (blockDim); ++row) \
     { \
         lSubscriptionInfo.offset = dBlockOffset + row * matrixDim * sizeof(MATRIX_DATA_TYPE); \
-        lSubscriptionInfo.length = (blockDim) * sizeof(MATRIX_DATA_TYPE); \
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, subscriptionType, lSubscriptionInfo); \
+        lSubscriptionInfo.length = (blockWidth) * sizeof(MATRIX_DATA_TYPE); \
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, subscriptionType, lSubscriptionInfo); \
     } \
 }
 
 using namespace pm;
-
+    
 #ifdef BUILD_CUDA
 #include <cuda.h>
 pmStatus matrixMultiply_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
@@ -50,4 +50,6 @@ typedef struct matrixMultiplyTaskConf
     size_t blockDim;
 } matrixMultiplyTaskConf;
 
+bool GetSplitData(size_t* pBlockOffset, size_t* pBlockWidth, matrixMultiplyTaskConf* pTaskConf, pmSplitInfo* pSplitInfo);
+    
 }

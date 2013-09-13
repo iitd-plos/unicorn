@@ -324,7 +324,8 @@ void pmDispatcherCUDA::ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, p
 {
     pInputMem = pOutputMem = pScratchMem = 0;
     pUseLastSubtaskInputMem = false;
-    
+
+#if 0
     if(pSubtaskInfo.inputMem && pSubtaskInfo.inputMemLength != 0)
     {
         if(!(pLastSubtaskIdIfSameTask && SubtasksHaveMatchingSubscriptions(pStub, pOriginatingMachineIndex, pSequenceNumber, *pLastSubtaskIdIfSameTask, pSubtaskInfo.subtaskId, INPUT_MEM_READ_SUBSCRIPTION)))
@@ -332,6 +333,9 @@ void pmDispatcherCUDA::ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, p
         else
             pUseLastSubtaskInputMem = true;
     }
+#else
+    pInputMem = pSubtaskInfo.inputMemLength;
+#endif
 
     // Shadow mem has not been created at this time; so pSubtaskInfo.outputMem may be NULL even when pSubtaskInfo.outputMemLength is non zero
 	if(pSubtaskInfo.outputMemLength != 0)
@@ -339,7 +343,7 @@ void pmDispatcherCUDA::ComputeMemoryRequiredForSubtask(pmExecutionStub* pStub, p
 
     pmScratchBufferInfo lScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
     size_t lScratchBufferSize = 0;
-    void* lCpuScratchBuffer = CheckAndGetScratchBuffer(pStub, pOriginatingMachineIndex, pSequenceNumber, pSubtaskInfo.subtaskId, lScratchBufferSize, lScratchBufferInfo);
+    void* lCpuScratchBuffer = CheckAndGetScratchBuffer(pStub, pOriginatingMachineIndex, pSequenceNumber, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lScratchBufferSize, lScratchBufferInfo);
     if(lCpuScratchBuffer && lScratchBufferSize)
         pScratchMem = lScratchBufferSize;
 }
@@ -403,7 +407,7 @@ pmStatus pmDispatcherCUDA::ExecuteKernel(pmExecutionStub* pStub, pmTaskInfo& pTa
         pmJmpBufAutoPtr lJmpBufAutoPtr;
         
         sigjmp_buf lJmpBuf;
-        int lJmpVal = sigsetjmp(lJmpBuf, 0);
+        int lJmpVal = sigsetjmp(lJmpBuf, 1);
         
         if(!lJmpVal)
         {

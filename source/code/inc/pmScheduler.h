@@ -190,6 +190,7 @@ typedef struct subtaskReduce
 	pmMachine* machine;
     pmExecutionStub* reducingStub;
 	ulong subtaskId;
+    pmSplitData splitData;
 } subtaskReduce;
 
 typedef struct commandCompletion
@@ -305,7 +306,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus TaskCancelEvent(pmTask* pTask);
         pmStatus TaskFinishEvent(pmTask* pTask);
         pmStatus TaskCompleteEvent(pmLocalTask* pLocalTask);
-		pmStatus ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId);
+		pmStatus ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
 		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
 		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
         pmStatus RangeCancellationEvent(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
