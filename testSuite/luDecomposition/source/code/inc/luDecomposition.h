@@ -5,8 +5,8 @@ namespace luDecomposition
 #define DEFAULT_POW_DIM 12
 const size_t BLOCK_DIM = 1024;   // Must be a power of 2
 
-//#define MATRIX_DATA_TYPE_FLOAT
-#define MATRIX_DATA_TYPE_DOUBLE
+#define MATRIX_DATA_TYPE_FLOAT
+//#define MATRIX_DATA_TYPE_DOUBLE
     
 // For double precision build, compile CUDA for correct architecture e.g. Add this line to Makefile for Kepler GK105 "CUDAFLAGS += -gencode arch=compute_30,code=sm_30"
 

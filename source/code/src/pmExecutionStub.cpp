@@ -1372,7 +1372,7 @@ void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pm
 
 void pmExecutionStub::DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
-    pmSplitData lSplitData;
+    pmSplitData lSplitData = {false, 0, 0};
     pmSplitData::ConvertSplitInfoToSplitData(lSplitData, pSplitInfo);
     
     mDeferredShadowMemCommits[pTask].push_back(std::make_pair(pSubtaskId, lSplitData));

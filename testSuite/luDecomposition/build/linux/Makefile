@@ -24,7 +24,7 @@ CUDA_OBJECTS = $(SAMPLE_NAME)CUDA.o
 ENABLE_BLAS=1
 
 ifeq ($(BUILD_CUDA), 1)
-CUDAFLAGS += -gencode arch=compute_30,code=sm_30
+#CUDAFLAGS += -gencode arch=compute_30,code=sm_30
 endif
 
 include ../../../common/build/linux/Makefile.common
