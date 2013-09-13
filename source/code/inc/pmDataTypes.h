@@ -27,6 +27,7 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
+#include <memory>
 #include <vector>
 #include <map>
 
