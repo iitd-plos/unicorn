@@ -24,6 +24,7 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 
+#include <limits>
 #include <set>
 #include <list>
 
