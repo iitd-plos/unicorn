@@ -98,7 +98,7 @@ size_t pmDispatcherGPU::ProbeProcessingElementsAndCreateStubs(std::vector<pmExec
 	if(mDispatcherCUDA)
 	{
 		lCountCUDA = mDispatcherCUDA->GetCountCUDA();
-		for(size_t i=0; i<lCountCUDA; ++i)
+		for(size_t i = 0; i < lCountCUDA; ++i)
 			pStubVector.push_back(new pmStubCUDA(i, (uint)pStubVector.size()));
 	}
 
