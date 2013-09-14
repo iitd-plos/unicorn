@@ -323,6 +323,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 
         void FreeTaskResourcesOnLocalStubs(pmTask* pTask);
         void CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask, bool pTaskListeningOnCancellation);
+        void CancelAllSubtaskSplitDummyEventsOnLocalStubs(pmTask* pTask);
         void CommitShadowMemPendingOnAllStubs(pmTask* pTask);
 		pmStatus CancelTask(pmLocalTask* pLocalTask);
 

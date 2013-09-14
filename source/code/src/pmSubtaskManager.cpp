@@ -26,6 +26,10 @@
 #include "pmNetwork.h"
 #include "pmLogger.h"
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+#include "pmSubtaskSplitter.h"
+#endif
+
 #include <sstream>
 
 #include <string.h>
@@ -108,6 +112,69 @@ bool pmSubtaskManager::execCountSorter::operator() (pmProcessingElement* pDevice
     return mDeviceExecutionProfile[lIndex1] < mDeviceExecutionProfile[lIndex2];
 }
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+void pmSubtaskManager::MakeDeviceGroups(pmLocalTask* pLocalTask, std::vector<pmProcessingElement*>& pDevices, std::vector<std::vector<pmProcessingElement*> >& pDeviceGroups, std::map<pmProcessingElement*, std::vector<pmProcessingElement*>* >& pQueryMap, ulong& pUnsplittedDevices)
+{
+    pmDeviceType lSplittingType = MAX_DEVICE_TYPES;
+    pmSubtaskSplitter& lSubtaskSplitter = pLocalTask->GetSubtaskSplitter();
+    for(size_t i = 0; i < MAX_DEVICE_TYPES; ++i)
+    {
+        if(lSubtaskSplitter.IsSplitting((pmDeviceType)i))
+        {
+            lSplittingType = (pmDeviceType)i;
+            break;
+        }
+    }
+
+    if(lSplittingType != MAX_DEVICE_TYPES)
+    {
+        size_t lSplitFactor = lSubtaskSplitter.GetSplitFactor();
+        std::map<pmMachine*, std::vector<pmProcessingElement*>* > lMachineInfo; // Machine versus pointer to vector of devices which are splitting
+
+        std::vector<pmProcessingElement*>::iterator lIter = pDevices.begin(), lEndIter = pDevices.end();
+        for(; lIter != lEndIter; ++lIter)
+        {
+            if((*lIter)->GetType() == lSplittingType)
+            {
+                pmMachine* lMachine = (*lIter)->GetMachine();
+                
+                std::map<pmMachine*, std::vector<pmProcessingElement*>* >::iterator lMachineInfoIter = lMachineInfo.find(lMachine);
+                if(lMachineInfoIter == lMachineInfo.end() || lMachineInfoIter->second->size() == lSplitFactor)
+                {
+                    std::vector<pmProcessingElement*> lDevices;
+                    lDevices.push_back((*lIter));
+                    
+                    pDeviceGroups.push_back(lDevices);
+                    lMachineInfo[lMachine] = &pDeviceGroups.back();
+                }
+                else
+                {
+                    lMachineInfoIter->second->push_back((*lIter));
+                }
+            }
+            else
+            {
+                std::vector<pmProcessingElement*> lDevices;
+                lDevices.push_back((*lIter));
+
+                pDeviceGroups.push_back(lDevices);
+                ++pUnsplittedDevices;
+            }
+        }
+        
+        std::vector<std::vector<pmProcessingElement*> >::iterator lGroupIter = pDeviceGroups.begin(), lGroupEndIter = pDeviceGroups.end();
+        for(; lGroupIter != lGroupEndIter; ++lGroupIter)
+        {
+            std::vector<pmProcessingElement*>* lVectorPtr = &(*lGroupIter);
+
+            std::vector<pmProcessingElement*>::iterator lInnerGroupIter = (*lGroupIter).begin(), lInnerGroupEndIter = (*lGroupIter).end();
+            for(; lInnerGroupIter != lInnerGroupEndIter; ++lInnerGroupIter)
+                pQueryMap[(*lInnerGroupIter)] = lVectorPtr;
+        }
+    }
+}
+#endif
+
 // This method must only be called from RegisterSubtaskCompletion method of the subclasses as that acquires the lock and ensures synchronization
 pmStatus pmSubtaskManager::UpdateExecutionProfile(pmProcessingElement* pDevice, ulong pSubtaskCount)
 {
@@ -187,22 +254,27 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 		PMTHROW(pmFatalErrorException());
     
     ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
-
-	ulong lPartitionSize = lSubtaskCount/lPartitionCount;
+	ulong lPartitionSize = lSubtaskCount / lPartitionCount;
 	ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
-
-	ulong lFirstSubtask = 0;
-	ulong lLastSubtask = 0;
+	ulong lFirstSubtask = 0, lLastSubtask = 0;
 	
 	std::vector<pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
-	std::vector<pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+#if 0
+    std::vector<std::vector<pmProcessingElement*> > lDeviceGroups;
+    std::map<pmProcessingElement*, std::vector<pmProcessingElement*>* > lQueryMap;
+    ulong lUnsplittedDevices = 0;
+
+    MakeDeviceGroups(pLocalTask, lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
+#endif
+#endif
+
+	std::vector<pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
     for(ulong i = 0; i < lPartitionCount; ++i, ++lIter)
     {
-        if(i < lLeftoverSubtasks)
-            lLastSubtask = lFirstSubtask + lPartitionSize;
-        else
-            lLastSubtask = lFirstSubtask + lPartitionSize - 1;
+        size_t lCount = ((i < lLeftoverSubtasks) ? (lPartitionSize + 1) : (lPartitionSize));
+        lLastSubtask = lFirstSubtask + lCount - 1;
 
         pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
 

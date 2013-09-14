@@ -275,6 +275,12 @@ void pmExecutionStub::SplitSubtaskCheckEvent(pmTask* pTask)
     
     SwitchThread(lEvent, pTask->GetPriority());
 }
+    
+void pmExecutionStub::RemoveSplitSubtaskCheckEvent(pmTask* pTask)
+{
+    DeleteMatchingCommands(pTask->GetPriority(), splitSubtaskCheckEventMatchFunc, pTask);
+    WaitIfCurrentCommandMatches(splitSubtaskCheckEventMatchFunc, pTask);
+}
 #endif
     
 void pmExecutionStub::PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus)
@@ -2412,6 +2418,15 @@ bool execEventMatchFunc(stubEvent& pEvent, void* pCriterion)
 	return false;
 }
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+bool splitSubtaskCheckEventMatchFunc(stubEvent& pEvent, void* pCriterion)
+{
+	if(pEvent.eventId == SPLIT_SUBTASK_CHECK && pEvent.execDetails.range.task == (pmTask*)pCriterion)
+		return true;
+
+	return false;
+}
+#endif
 
 /* struct currentSubtaskRnageTerminus */
 pmExecutionStub::currentSubtaskRangeTerminus::currentSubtaskRangeTerminus(bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmExecutionStub* pStub)

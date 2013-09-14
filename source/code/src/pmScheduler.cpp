@@ -725,6 +725,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             taskCancel& lEventDetails = pEvent.taskCancelDetails;
             pmTask* lTask = lEventDetails.task;
 
+            CancelAllSubtaskSplitDummyEventsOnLocalStubs(lTask);
             CancelAllSubtasksExecutingOnLocalStubs(lTask, false);
             break;
         }
@@ -745,6 +746,7 @@ pmStatus pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             
             if(lTask->IsMultiAssignEnabled())
             {
+                CancelAllSubtaskSplitDummyEventsOnLocalStubs(lTask);
                 CancelAllSubtasksExecutingOnLocalStubs(lTask, true);
                 lTask->MarkAllStubsScannedForCancellationMessages();
             }
@@ -919,6 +921,13 @@ void pmScheduler::CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask, bool pTa
     uint lStubCount = (uint)(lManager->GetStubCount());
     for(uint i = 0; i < lStubCount; ++i)
         lManager->GetStub(i)->CancelAllSubtasks(pTask, pTaskListeningOnCancellation);
+}
+    
+void pmScheduler::CancelAllSubtaskSplitDummyEventsOnLocalStubs(pmTask* pTask)
+{
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    pTask->GetSubtaskSplitter().FreezeDummyEvents();
+#endif
 }
 
 void pmScheduler::CommitShadowMemPendingOnAllStubs(pmTask* pTask)

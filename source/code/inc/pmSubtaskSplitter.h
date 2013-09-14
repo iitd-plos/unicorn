@@ -84,6 +84,9 @@ public:
     
     bool Negotiate(ulong pSubtaskId);
     void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
+    
+    size_t GetSplitFactor();
+    void FreezeDummyEvents();
 
 private:
     void FindConcernedStubs(pmDeviceType pDeviceType);
@@ -94,7 +97,8 @@ private:
     uint mSplitFactor;
 
     std::vector<pmExecutionStub*> mConcernedStubs;
-    
+
+    bool mDummyEventsFreezed;
     std::set<pmExecutionStub*> mStubsWithDummyEvent;    // SPLIT_SUBTASK_CHECK
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mDummyEventLock;
 

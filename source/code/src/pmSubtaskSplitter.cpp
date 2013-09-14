@@ -36,6 +36,7 @@ using namespace splitter;
 pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
     : mTask(pTask)
     , mSplitFactor(1)
+    , mDummyEventsFreezed(false)
 {
     if(mTask->CanSplitCpuSubtasks())
     {
@@ -44,13 +45,18 @@ pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
         if(mSplitFactor != 1)
             FindConcernedStubs(CPU);
     }
-    else
+    else if(mTask->CanSplitGpuSubtasks())
     {
         mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsGPU();
 
         if(mSplitFactor != 1)
             FindConcernedStubs(GPU_CUDA);
     }
+}
+    
+size_t pmSubtaskSplitter::GetSplitFactor()
+{
+    return mSplitFactor;
 }
 
 bool pmSubtaskSplitter::IsSplitting(pmDeviceType pDeviceType)
@@ -88,8 +94,8 @@ std::auto_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtask
         if(!mSplitRecordList.empty())
         {
             lModifiableSplitRecord = &mSplitRecordList.back();
-        
-            if(lModifiableSplitRecord->splitId == lModifiableSplitRecord->splitCount)
+            
+            if(lModifiableSplitRecord->splitId == lModifiableSplitRecord->splitCount || lModifiableSplitRecord->reassigned)
                 lModifiableSplitRecord = NULL;
         }
         
@@ -187,7 +193,7 @@ void pmSubtaskSplitter::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
         lPendingSplits = !mSplitRecordList.empty();
     }
 
-    if(lPendingSplits)
+    if(lPendingSplits && !mDummyEventsFreezed)
         AddDummyEventToStub(pStub);
 }
     
@@ -224,6 +230,9 @@ void pmSubtaskSplitter::AddDummyEventToRequiredStubs()
 {
     FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
     
+    if(mDummyEventsFreezed)
+        return;
+    
     std::vector<pmExecutionStub*>::iterator lIter = mConcernedStubs.begin(), lEndIter = mConcernedStubs.end();
     for(; lIter != lEndIter; ++lIter)
     {
@@ -237,6 +246,23 @@ void pmSubtaskSplitter::AddDummyEventToStub(pmExecutionStub* pStub)
 {
     pStub->SplitSubtaskCheckEvent(mTask);
     mStubsWithDummyEvent.insert(pStub);
+}
+    
+void pmSubtaskSplitter::FreezeDummyEvents()
+{
+    std::set<pmExecutionStub*> lPendingStubs;
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
+        
+        mDummyEventsFreezed = true;
+        lPendingStubs = mStubsWithDummyEvent;
+    }
+    
+    std::set<pmExecutionStub*>::iterator lIter = lPendingStubs.begin(), lEndIter = lPendingStubs.end();
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter)->RemoveSplitSubtaskCheckEvent(mTask);
 }
     
 bool pmSubtaskSplitter::Negotiate(ulong pSubtaskId)

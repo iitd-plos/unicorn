@@ -206,6 +206,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
     #ifdef SUPPORT_SPLIT_SUBTASKS
         void SplitSubtaskCheckEvent(pmTask* pTask);
+        void RemoveSplitSubtaskCheckEvent(pmTask* pTask);
     #endif
 
         pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
@@ -461,7 +462,8 @@ class pmStubCUDA : public pmStubGPU
 #endif
 
 bool execEventMatchFunc(execStub::stubEvent& pEvent, void* pCriterion);
-
+bool splitSubtaskCheckEventMatchFunc(execStub::stubEvent& pEvent, void* pCriterion);
+    
 } // end namespace pm
 
 #endif

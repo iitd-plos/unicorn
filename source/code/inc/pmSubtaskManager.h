@@ -70,9 +70,13 @@ class pmSubtaskManager : public pmBase
 
         pmStatus UpdateExecutionProfile(pmProcessingElement* pDevice, ulong pSubtaskCount);
     
-#ifdef DUMP_SUBTASK_EXECUTION_PROFILE
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        void MakeDeviceGroups(pmLocalTask* pLocalTask, std::vector<pmProcessingElement*>& pDevices, std::vector<std::vector<pmProcessingElement*> >& pDeviceGroups, std::map<pmProcessingElement*, std::vector<pmProcessingElement*>* >& pQueryMap, ulong& pUnsplittedDevices);
+    #endif
+    
+    #ifdef DUMP_SUBTASK_EXECUTION_PROFILE
         pmStatus PrintExecutionProfile();
-#endif
+    #endif
     
 		pmLocalTask* mLocalTask;
 		pmStatus mTaskStatus;
