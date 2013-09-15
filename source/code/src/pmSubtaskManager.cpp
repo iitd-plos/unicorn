@@ -115,16 +115,8 @@ bool pmSubtaskManager::execCountSorter::operator() (pmProcessingElement* pDevice
 #ifdef SUPPORT_SPLIT_SUBTASKS
 void pmSubtaskManager::MakeDeviceGroups(std::vector<pmProcessingElement*>& pDevices, std::vector<std::vector<pmProcessingElement*> >& pDeviceGroups, std::map<pmProcessingElement*, std::vector<pmProcessingElement*>* >& pQueryMap, ulong& pUnsplittedDevices)
 {
-    pmDeviceType lSplittingType = MAX_DEVICE_TYPES;
     pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
-    for(size_t i = 0; i < MAX_DEVICE_TYPES; ++i)
-    {
-        if(lSubtaskSplitter.IsSplitting((pmDeviceType)i))
-        {
-            lSplittingType = (pmDeviceType)i;
-            break;
-        }
-    }
+    pmDeviceType lSplittingType = lSubtaskSplitter.GetSplittingType();
 
     if(lSplittingType != MAX_DEVICE_TYPES)
     {

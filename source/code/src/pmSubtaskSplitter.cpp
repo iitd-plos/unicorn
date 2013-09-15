@@ -37,6 +37,7 @@ pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
     : mTask(pTask)
     , mSplitFactor(1)
     , mSplitGroups(1)
+    , mSplittingType(MAX_DEVICE_TYPES)
 {
     pmDeviceType lDeviceType = MAX_DEVICE_TYPES;
 
@@ -53,6 +54,8 @@ pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
 
     if(mSplitFactor != 1 && lDeviceType != MAX_DEVICE_TYPES)
     {
+        mSplittingType = lDeviceType;
+
         for(uint i = 0; i < mSplitGroups; ++i)
         {
             pmSplitGroup lSplitGroup(this);
@@ -62,6 +65,11 @@ pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
         FindConcernedStubs(lDeviceType);
     }
 }
+
+pmDeviceType pmSubtaskSplitter::GetSplittingType()
+{
+    return mSplittingType;
+}
     
 size_t pmSubtaskSplitter::GetSplitFactor()
 {
@@ -70,23 +78,7 @@ size_t pmSubtaskSplitter::GetSplitFactor()
 
 bool pmSubtaskSplitter::IsSplitting(pmDeviceType pDeviceType)
 {
-    switch(pDeviceType)
-    {
-        case CPU:
-            return mTask->CanSplitCpuSubtasks() && (mSplitFactor != 1);
-            
-            break;
-            
-        case GPU_CUDA:
-            return mTask->CanSplitGpuSubtasks() && (mSplitFactor != 1);
-
-            break;
-            
-        default:
-            PMTHROW(pmFatalErrorException());
-    }
-    
-    return false;
+    return (mSplittingType == pDeviceType);
 }
     
 bool pmSubtaskSplitter::IsSplitGroupLeader(pmExecutionStub* pStub)

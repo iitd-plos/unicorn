@@ -1291,7 +1291,7 @@ void pmExecutionStub::ExecutePendingSplit(std::auto_ptr<pmSplitSubtask> pSplitSu
         lExecTimelineAutoPtr.SetGracefulCompletion();
     #endif
 
-        pSplitSubtaskAutoPtr->task->GetTaskExecStats().RecordStubExecutionStats(this, 1, pSplitSubtaskAutoPtr->splitCount * lCommand->GetExecutionTimeInSecs());
+        pSplitSubtaskAutoPtr->task->GetTaskExecStats().RecordStubExecutionStats(this, 1, lCommand->GetExecutionTimeInSecs());   // Exec time of the split group
     }
 
     pSplitSubtaskAutoPtr->task->GetSubtaskSplitter().FinishedSplitExecution(pSplitSubtaskAutoPtr->subtaskId, pSplitSubtaskAutoPtr->splitId, this, lPrematureTermination);

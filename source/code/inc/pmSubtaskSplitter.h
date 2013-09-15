@@ -115,6 +115,7 @@ class pmSubtaskSplitter : public pmBase
 public:
     pmSubtaskSplitter(pmTask* pTask);
 
+    pmDeviceType GetSplittingType();
     bool IsSplitting(pmDeviceType pDeviceType);
     size_t GetSplitFactor();
     
@@ -134,6 +135,7 @@ private:
     pmTask* mTask;
     uint mSplitFactor;
     uint mSplitGroups;
+    pmDeviceType mSplittingType;
 
     std::vector<pmSplitGroup> mSplitGroupVector;
     std::map<pmExecutionStub*, uint> mSplitGroupMap;

@@ -238,16 +238,17 @@ std::vector<pmProcessingElement*>& pmTask::GetStealListForDevice(pmProcessingEle
 {
     FINALIZE_RESOURCE_PTR(dStealListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealListLock, Lock(), Unlock());
 
-    if(mStealListForDevice.find(pDevice) == mStealListForDevice.end())
+    std::map<pmProcessingElement*, std::vector<pmProcessingElement*> >::iterator lIter = mStealListForDevice.find(pDevice);
+    if(lIter == mStealListForDevice.end())
     {
         std::vector<pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
 
         std::srand((uint)reinterpret_cast<size_t>(pDevice));
-        mStealListForDevice[pDevice] = lDevices;
-        RandomizeDevices(mStealListForDevice[pDevice]);
+        lIter = mStealListForDevice.insert(std::make_pair(pDevice, lDevices)).first;
+        RandomizeDevices(lIter->second);
     }
     
-    return mStealListForDevice[pDevice];    
+    return lIter->second;
 }
 
 pmStatus pmTask::BuildTaskInfo()
