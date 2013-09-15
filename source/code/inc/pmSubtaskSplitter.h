@@ -118,6 +118,8 @@ public:
     bool IsSplitting(pmDeviceType pDeviceType);
     size_t GetSplitFactor();
     
+    bool IsSplitGroupLeader(pmExecutionStub* pDevice);
+    
     std::auto_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
     void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
     

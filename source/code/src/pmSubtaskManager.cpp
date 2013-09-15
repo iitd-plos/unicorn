@@ -1067,13 +1067,14 @@ pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(mUseSplits)
     {
-        bool lSplittingDevice = mLocalTask->GetSubtaskSplitter().IsSplitting(pDevice->GetType());
+        pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
+        bool lSplittingDevice = lSubtaskSplitter.IsSplitting(pDevice->GetType());
         
         FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
 
         if(lSplittingDevice)
         {
-            if(mSplittedGroupIter == mSplittedGroupSubtaskPartitions.end())
+            if(mSplittedGroupIter == mSplittedGroupSubtaskPartitions.end() || !lSubtaskSplitter.IsSplitGroupLeader(pDevice))
             {
                 pSubtaskCount = 0;
                 return pmSuccess;
