@@ -89,9 +89,9 @@ bool pmSubtaskSplitter::IsSplitting(pmDeviceType pDeviceType)
     return false;
 }
     
-bool pmSubtaskSplitter::IsSplitGroupLeader(pmExecutionStub* pDevice)
+bool pmSubtaskSplitter::IsSplitGroupLeader(pmExecutionStub* pStub)
 {
-    return (mSplitGroupVector[mSplitGroupMap[pStub]].mConcernedStubs[0] == pDevice);
+    return (mSplitGroupVector[mSplitGroupMap[pStub]].mConcernedStubs[0] == pStub);
 }
 
 void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)

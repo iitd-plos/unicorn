@@ -944,6 +944,13 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
     {
         mUseSplits = true;
 
+        std::vector<std::vector<pmProcessingElement*> >::iterator lIter = lDeviceGroups.begin(), lEndIter = lDeviceGroups.end();
+        for(; lIter != lEndIter; ++lIter)
+        {
+            if((*lIter).size() > 1)
+                mSplitGroupLeaders.insert((*lIter)[0]);
+        }
+        
         ulong lUnsplittedGroups = lUnsplittedDevices;
         ulong lSplittedGroups = lDeviceGroups.size() - lUnsplittedGroups;
         
@@ -1067,14 +1074,13 @@ pmStatus pmPullSchedulingManager::AssignSubtasksToDevice(pmProcessingElement* pD
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(mUseSplits)
     {
-        pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
-        bool lSplittingDevice = lSubtaskSplitter.IsSplitting(pDevice->GetType());
+        bool lSplittingDevice = mLocalTask->GetSubtaskSplitter().IsSplitting(pDevice->GetType());
         
         FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
 
         if(lSplittingDevice)
         {
-            if(mSplittedGroupIter == mSplittedGroupSubtaskPartitions.end() || !lSubtaskSplitter.IsSplitGroupLeader(pDevice))
+            if((mSplittedGroupIter == mSplittedGroupSubtaskPartitions.end()) || (mSplitGroupLeaders.find(pDevice) == mSplitGroupLeaders.end()))
             {
                 pSubtaskCount = 0;
                 return pmSuccess;

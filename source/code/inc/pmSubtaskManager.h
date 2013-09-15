@@ -169,6 +169,7 @@ class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager
     #ifdef SUPPORT_SPLIT_SUBTASKS
         std::set<pmUnfinishedPartitionPtr> mSplittedGroupSubtaskPartitions;		// Collection of partitions to be assigned to splitting devices
 		std::set<pmUnfinishedPartitionPtr>::iterator mSplittedGroupIter;
+        std::set<pmProcessingElement*> mSplitGroupLeaders;
         bool mUseSplits;
     #endif
 
