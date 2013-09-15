@@ -170,7 +170,7 @@ typedef struct stubEvent : public pmBasicThreadEvent
 class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEvent>
 {
 #ifdef SUPPORT_SPLIT_SUBTASKS
-    friend class pmSubtaskSplitter;
+    friend class pmSplitGroup;
 #endif
     
 	public:

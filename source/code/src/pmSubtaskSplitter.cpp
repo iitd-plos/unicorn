@@ -37,21 +37,29 @@ pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
     : mTask(pTask)
     , mSplitFactor(1)
     , mSplitGroups(1)
-    , mDummyEventsFreezed(false)
 {
+    pmDeviceType lDeviceType = MAX_DEVICE_TYPES;
+
     if(mTask->CanSplitCpuSubtasks())
     {
         mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsCPU() / mSplitGroups;
-        
-        if(mSplitFactor != 1)
-            FindConcernedStubs(CPU);
+        lDeviceType = CPU;
     }
     else if(mTask->CanSplitGpuSubtasks())
     {
         mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsGPU() / mSplitGroups;
+        lDeviceType = GPU_CUDA;
+    }
 
-        if(mSplitFactor != 1)
-            FindConcernedStubs(GPU_CUDA);
+    if(mSplitFactor != 1 && lDeviceType != MAX_DEVICE_TYPES)
+    {
+        for(uint i = 0; i < mSplitGroups; ++i)
+        {
+            pmSplitGroup lSplitGroup(this);
+            mSplitGroupVector.push_back(lSplitGroup);
+        }
+    
+        FindConcernedStubs(lDeviceType);
     }
 }
     
@@ -80,8 +88,79 @@ bool pmSubtaskSplitter::IsSplitting(pmDeviceType pDeviceType)
     
     return false;
 }
+
+void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
+{
+    pmStubManager* lStubManager = pmStubManager::GetStubManager();
+    
+    switch(pDeviceType)
+    {
+        case CPU:
+        {
+            size_t lCount = lStubManager->GetProcessingElementsCPU();
+            for(size_t i = 0; i < lCount; ++i)
+            {
+                pmExecutionStub* lStub = lStubManager->GetCpuStub(i);
+                size_t lSplitGroupIndex = (size_t)(i / mSplitFactor);
+                
+                mSplitGroupVector[lSplitGroupIndex].mConcernedStubs.push_back(lStub);
+                mSplitGroupMap[lStub] = lSplitGroupIndex;
+            }
+            
+            break;
+        }
+            
+        case GPU_CUDA:
+        {
+            size_t lCount = lStubManager->GetProcessingElementsGPU();
+            for(size_t i = 0; i < lCount; ++i)
+            {
+                pmExecutionStub* lStub = lStubManager->GetGpuStub(i);
+                size_t lSplitGroupIndex = (size_t)(i / mSplitFactor);
+                
+                mSplitGroupVector[lSplitGroupIndex].mConcernedStubs.push_back(lStub);
+                mSplitGroupMap[lStub] = lSplitGroupIndex;
+            }
+
+            break;
+        }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+}
     
 std::auto_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
+{
+    return mSplitGroupVector[mSplitGroupMap[pSourceStub]].GetPendingSplit(pSubtaskId, pSourceStub);
+}
+    
+void pmSubtaskSplitter::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination)
+{
+    mSplitGroupVector[mSplitGroupMap[pStub]].FinishedSplitExecution(pSubtaskId, pSplitId, pStub, pPrematureTermination);
+}
+
+bool pmSubtaskSplitter::Negotiate(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    return mSplitGroupVector[mSplitGroupMap[pStub]].Negotiate(pSubtaskId);
+}
+    
+void pmSubtaskSplitter::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
+{
+    mSplitGroupVector[mSplitGroupMap[pStub]].StubHasProcessedDummyEvent(pStub);
+}
+
+void pmSubtaskSplitter::FreezeDummyEvents()
+{
+    std::vector<pmSplitGroup>::iterator lIter = mSplitGroupVector.begin(), lEndIter = mSplitGroupVector.end();
+    
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter).FreezeDummyEvents();
+}
+
+    
+/* class pmSplitGroup */
+std::auto_ptr<pmSplitSubtask> pmSplitGroup::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
 {
     const splitRecord* lSplitRecord = NULL;
     uint lSplitId = std::numeric_limits<uint>::max();
@@ -105,7 +184,7 @@ std::auto_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtask
             if(!pSubtaskId)
                 return std::auto_ptr<pmSplitSubtask>(NULL);
          
-            splitRecord lRecord(pSourceStub, *pSubtaskId, mSplitFactor);
+            splitRecord lRecord(pSourceStub, *pSubtaskId, mSubtaskSplitter->mSplitFactor);
             mSplitRecordList.push_back(lRecord);
             
             lModifiableSplitRecord = &mSplitRecordList.back();
@@ -119,12 +198,12 @@ std::auto_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtask
         lSplitRecord = lModifiableSplitRecord;
     }
 
-    AddDummyEventToRequiredStubs(pSourceStub);
+    AddDummyEventToRequiredStubs();
 
-    return std::auto_ptr<pmSplitSubtask>(new pmSplitSubtask(mTask, lSplitRecord->sourceStub, lSplitRecord->subtaskId, lSplitId, lSplitRecord->splitCount));
+    return std::auto_ptr<pmSplitSubtask>(new pmSplitSubtask(mSubtaskSplitter->mTask, lSplitRecord->sourceStub, lSplitRecord->subtaskId, lSplitId, lSplitRecord->splitCount));
 }
     
-void pmSubtaskSplitter::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination)
+void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination)
 {
     bool lCompleted = false;
     splitter::splitRecord lSplitRecord;
@@ -172,14 +251,14 @@ void pmSubtaskSplitter::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, 
         {
             pmSplitInfo lSplitInfo(lSplitRecord.splitId, lSplitRecord.splitCount);
 
-            (*lInnerIter).first->CommonPostNegotiationOnCPU(mTask, pSubtaskId, false, &lSplitInfo);
+            (*lInnerIter).first->CommonPostNegotiationOnCPU(mSubtaskSplitter->mTask, pSubtaskId, false, &lSplitInfo);
         }
 
-        pStub->HandleSplitSubtaskExecutionCompletion(mTask, lSplitRecord, pmSuccess);
+        pStub->HandleSplitSubtaskExecutionCompletion(mSubtaskSplitter->mTask, lSplitRecord, pmSuccess);
     }
 }
 
-void pmSubtaskSplitter::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
+void pmSplitGroup::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
 {
     FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
     
@@ -198,57 +277,14 @@ void pmSubtaskSplitter::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
         AddDummyEventToStub(pStub);
 }
     
-void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
-{
-    pmStubManager* lStubManager = pmStubManager::GetStubManager();
-    
-    mConcernedStubs.reserve(mSplitGroups);
-
-    switch(pDeviceType)
-    {
-        case CPU:
-        {
-            size_t lCount = lStubManager->GetProcessingElementsCPU();
-            for(size_t i = 0; i < lCount; ++i)
-            {
-                pmExecutionStub* lStub = lStubManager->GetCpuStub(i);
-                size_t lSplitGroupIndex = (size_t)(i / mSplitFactor);
-                
-                mConcernedStubs[lSplitGroupIndex].push_back(lStub);
-                mSplitGroupsMap[lStub] = lSplitGroupIndex;
-            }
-            
-            break;
-        }
-            
-        case GPU_CUDA:
-        {
-            size_t lCount = lStubManager->GetProcessingElementsGPU();
-            for(size_t i = 0; i < lCount; ++i)
-            {
-                pmExecutionStub* lStub = lStubManager->GetGpuStub(i);
-                size_t lSplitGroupIndex = (size_t)(i / mSplitFactor);
-                
-                mConcernedStubs[lSplitGroupIndex].push_back(lStub);
-                mSplitGroupsMap[lStub] = lSplitGroupIndex;
-            }
-
-            break;
-        }
-            
-        default:
-            PMTHROW(pmFatalErrorException());
-    }
-}
-    
-void pmSubtaskSplitter::AddDummyEventToRequiredStubs(pmExecutionStub* pSourceStub)
+void pmSplitGroup::AddDummyEventToRequiredStubs()
 {
     FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
     
     if(mDummyEventsFreezed)
         return;
     
-    std::vector<pmExecutionStub*>::iterator lIter = mConcernedStubs[mSplitGroupsMap[pSourceStub]].begin(), lEndIter = mConcernedStubs[mSplitGroupsMap[pSourceStub]].end();
+    std::vector<pmExecutionStub*>::iterator lIter = mConcernedStubs.begin(), lEndIter = mConcernedStubs.end();
     for(; lIter != lEndIter; ++lIter)
     {
         if(mStubsWithDummyEvent.find(*lIter) == mStubsWithDummyEvent.end())
@@ -256,14 +292,14 @@ void pmSubtaskSplitter::AddDummyEventToRequiredStubs(pmExecutionStub* pSourceStu
     }
 }
 
-/* This method must be called with mDummyEventLock acquired */
-void pmSubtaskSplitter::AddDummyEventToStub(pmExecutionStub* pStub)
+/* This method must be called with pmSplitGroup's mDummyEventLock acquired */
+void pmSplitGroup::AddDummyEventToStub(pmExecutionStub* pStub)
 {
-    pStub->SplitSubtaskCheckEvent(mTask);
+    pStub->SplitSubtaskCheckEvent(mSubtaskSplitter->mTask);
     mStubsWithDummyEvent.insert(pStub);
 }
     
-void pmSubtaskSplitter::FreezeDummyEvents()
+void pmSplitGroup::FreezeDummyEvents()
 {
     std::set<pmExecutionStub*> lPendingStubs;
 
@@ -277,10 +313,10 @@ void pmSubtaskSplitter::FreezeDummyEvents()
     
     std::set<pmExecutionStub*>::iterator lIter = lPendingStubs.begin(), lEndIter = lPendingStubs.end();
     for(; lIter != lEndIter; ++lIter)
-        (*lIter)->RemoveSplitSubtaskCheckEvent(mTask);
+        (*lIter)->RemoveSplitSubtaskCheckEvent(mSubtaskSplitter->mTask);
 }
     
-bool pmSubtaskSplitter::Negotiate(ulong pSubtaskId)
+bool pmSplitGroup::Negotiate(ulong pSubtaskId)
 {
     bool lRetVal = false;
     std::vector<std::pair<pmExecutionStub*, bool> > lStubVector;
@@ -307,7 +343,7 @@ bool pmSubtaskSplitter::Negotiate(ulong pSubtaskId)
     if(lRetVal)
     {
         pmSubtaskRange lRange;
-        lRange.task = mTask;
+        lRange.task = mSubtaskSplitter->mTask;
         lRange.originalAllottee = NULL;
         lRange.startSubtask = pSubtaskId;
         lRange.endSubtask = pSubtaskId;

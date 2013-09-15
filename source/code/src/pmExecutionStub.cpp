@@ -356,7 +356,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                 if(pRange.startSubtask != pRange.endSubtask)
                     PMTHROW(pmFatalErrorException());
                 
-                if(pRange.task->GetSubtaskSplitter().Negotiate(pRange.startSubtask))
+                if(pRange.task->GetSubtaskSplitter().Negotiate(this, pRange.startSubtask))
                 {
                 #ifdef TRACK_MULTI_ASSIGN
                     std::cout << "[Host " << pmGetHostId() << "]: Split subtask negotiation success from device " << GetProcessingElement()->GetGlobalDeviceIndex() << " to device " << pRequestingDevice->GetGlobalDeviceIndex() << "; Negotiated range [" << pRange.startSubtask << ", " << pRange.endSubtask << "]" << std::endl;
@@ -387,13 +387,13 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                                 lNegotiationStatus = true;
 
                                 for(ulong i = pRange.startSubtask; i < lTaskEvent.execDetails.range.startSubtask; ++i)
-                                    pRange.task->GetSubtaskSplitter().Negotiate(i);
+                                    pRange.task->GetSubtaskSplitter().Negotiate(this, i);
                             }
                         }
                         else
                         {
                             for(ulong i = pRange.startSubtask; i <= pRange.endSubtask; ++i)
-                                lNegotiationStatus |= pRange.task->GetSubtaskSplitter().Negotiate(i);
+                                lNegotiationStatus |= pRange.task->GetSubtaskSplitter().Negotiate(this, i);
                         }
                         
                         if(lNegotiationStatus)

@@ -72,33 +72,31 @@ struct splitRecord
 
 }
     
-class pmSubtaskSplitter : public pmBase
+class pmSubtaskSplitter;
+    
+class pmSplitGroup
 {
-public:
-    pmSubtaskSplitter(pmTask* pTask);
+    friend class pmSubtaskSplitter;
 
-    bool IsSplitting(pmDeviceType pDeviceType);
+public:
+    pmSplitGroup(const pmSubtaskSplitter* pSubtaskSplitter)
+    : mDummyEventsFreezed(false)
+    , mSubtaskSplitter(pSubtaskSplitter)
+    {}
     
     std::auto_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
     void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
-    
+
     bool Negotiate(ulong pSubtaskId);
     void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
-    
-    size_t GetSplitFactor();
+
     void FreezeDummyEvents();
 
 private:
-    void FindConcernedStubs(pmDeviceType pDeviceType);
-    void AddDummyEventToRequiredStubs(pmExecutionStub* pSourceStub);
+    void AddDummyEventToRequiredStubs();
     void AddDummyEventToStub(pmExecutionStub* pStub);
-    
-    pmTask* mTask;
-    uint mSplitFactor;
-    uint mSplitGroups;
 
-    std::vector<std::vector<pmExecutionStub*> > mConcernedStubs;    // Stubs in each split group
-    std::map<pmExecutionStub*, uint> mSplitGroupsMap;
+    std::vector<pmExecutionStub*> mConcernedStubs;    // Stubs in each split group
 
     bool mDummyEventsFreezed;
     std::set<pmExecutionStub*> mStubsWithDummyEvent;    // SPLIT_SUBTASK_CHECK
@@ -106,6 +104,37 @@ private:
 
     std::list<splitter::splitRecord> mSplitRecordList;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mSplitRecordListLock;
+    
+    const pmSubtaskSplitter* mSubtaskSplitter;
+};
+    
+class pmSubtaskSplitter : public pmBase
+{
+    friend class pmSplitGroup;
+
+public:
+    pmSubtaskSplitter(pmTask* pTask);
+
+    bool IsSplitting(pmDeviceType pDeviceType);
+    size_t GetSplitFactor();
+    
+    std::auto_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
+    void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
+    
+    bool Negotiate(pmExecutionStub* pStub, ulong pSubtaskId);
+    void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
+    
+    void FreezeDummyEvents();
+
+private:
+    void FindConcernedStubs(pmDeviceType pDeviceType);
+
+    pmTask* mTask;
+    uint mSplitFactor;
+    uint mSplitGroups;
+
+    std::vector<pmSplitGroup> mSplitGroupVector;
+    std::map<pmExecutionStub*, uint> mSplitGroupMap;
 };
 
 } // end namespace pm
