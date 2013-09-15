@@ -158,6 +158,7 @@ namespace pm
             SHADOW_MEM_COMMIT,
             SUBTASK_STEAL_WAIT,
             SUBTASK_STEAL_SERVE,
+            STUB_WAIT_ON_NETWORK,
             UNIVERSAL, /* For internal use only */
             MAX_PROFILE_TYPES
         };

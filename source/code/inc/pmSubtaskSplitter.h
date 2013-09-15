@@ -90,13 +90,15 @@ public:
 
 private:
     void FindConcernedStubs(pmDeviceType pDeviceType);
-    void AddDummyEventToRequiredStubs();
+    void AddDummyEventToRequiredStubs(pmExecutionStub* pSourceStub);
     void AddDummyEventToStub(pmExecutionStub* pStub);
     
     pmTask* mTask;
     uint mSplitFactor;
+    uint mSplitGroups;
 
-    std::vector<pmExecutionStub*> mConcernedStubs;
+    std::vector<std::vector<pmExecutionStub*> > mConcernedStubs;    // Stubs in each split group
+    std::map<pmExecutionStub*, uint> mSplitGroupsMap;
 
     bool mDummyEventsFreezed;
     std::set<pmExecutionStub*> mStubsWithDummyEvent;    // SPLIT_SUBTASK_CHECK

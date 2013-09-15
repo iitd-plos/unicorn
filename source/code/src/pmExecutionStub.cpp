@@ -1691,6 +1691,13 @@ pmStatus pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, p
 
 void pmExecutionStub::WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>& pNetworkCommands)
 {
+    if(pNetworkCommands.empty())
+        return;
+    
+#ifdef ENABLE_TASK_PROFILING
+    pmTask* lTask = NULL;
+#endif
+
     pmAccumulatorCommandPtr lAccumulatorCommand;
 
     // Auto lock/unlock scope
@@ -1699,10 +1706,18 @@ void pmExecutionStub::WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>&
         if(!mCurrentSubtaskRangeStats || mCurrentSubtaskRangeStats->accumulatorCommandPtr != NULL)
             PMTHROW(pmFatalErrorException());
 
+    #ifdef ENABLE_TASK_PROFILING
+        lTask = mCurrentSubtaskRangeStats->task;
+    #endif
+
         lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
         mCurrentSubtaskRangeStats->accumulatorCommandPtr = &lAccumulatorCommand;
     }
     
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::STUB_WAIT_ON_NETWORK);
+#endif
+
     guarded_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, pmAccumulatorCommandPtr> lGuardedPtr(&mCurrentSubtaskRangeLock, &(mCurrentSubtaskRangeStats->accumulatorCommandPtr), &lAccumulatorCommand);
 
     pmStatus lStatus = lAccumulatorCommand->WaitForFinish();

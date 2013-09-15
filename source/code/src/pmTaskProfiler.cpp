@@ -45,6 +45,7 @@ static const char* profileName[] =
     (char*)"SHADOW_MEM_COMMIT",
     (char*)"SUBTASK_STEAL_WAIT",
     (char*)"SUBTASK_STEAL_SERVE",
+    (char*)"STUB_WAIT_ON_NETWORK",
     (char*)"UNIVERSAL"
 };
 

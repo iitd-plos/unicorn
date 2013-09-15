@@ -36,18 +36,19 @@ using namespace splitter;
 pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
     : mTask(pTask)
     , mSplitFactor(1)
+    , mSplitGroups(1)
     , mDummyEventsFreezed(false)
 {
     if(mTask->CanSplitCpuSubtasks())
     {
-        mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsCPU();
+        mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsCPU() / mSplitGroups;
         
         if(mSplitFactor != 1)
             FindConcernedStubs(CPU);
     }
     else if(mTask->CanSplitGpuSubtasks())
     {
-        mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsGPU();
+        mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsGPU() / mSplitGroups;
 
         if(mSplitFactor != 1)
             FindConcernedStubs(GPU_CUDA);
@@ -118,7 +119,7 @@ std::auto_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtask
         lSplitRecord = lModifiableSplitRecord;
     }
 
-    AddDummyEventToRequiredStubs();
+    AddDummyEventToRequiredStubs(pSourceStub);
 
     return std::auto_ptr<pmSplitSubtask>(new pmSplitSubtask(mTask, lSplitRecord->sourceStub, lSplitRecord->subtaskId, lSplitId, lSplitRecord->splitCount));
 }
@@ -200,6 +201,8 @@ void pmSubtaskSplitter::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
 void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
 {
     pmStubManager* lStubManager = pmStubManager::GetStubManager();
+    
+    mConcernedStubs.reserve(mSplitGroups);
 
     switch(pDeviceType)
     {
@@ -207,7 +210,13 @@ void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
         {
             size_t lCount = lStubManager->GetProcessingElementsCPU();
             for(size_t i = 0; i < lCount; ++i)
-                mConcernedStubs.push_back(lStubManager->GetCpuStub(i));
+            {
+                pmExecutionStub* lStub = lStubManager->GetCpuStub(i);
+                size_t lSplitGroupIndex = (size_t)(i / mSplitFactor);
+                
+                mConcernedStubs[lSplitGroupIndex].push_back(lStub);
+                mSplitGroupsMap[lStub] = lSplitGroupIndex;
+            }
             
             break;
         }
@@ -216,7 +225,13 @@ void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
         {
             size_t lCount = lStubManager->GetProcessingElementsGPU();
             for(size_t i = 0; i < lCount; ++i)
-                mConcernedStubs.push_back(lStubManager->GetGpuStub(i));
+            {
+                pmExecutionStub* lStub = lStubManager->GetGpuStub(i);
+                size_t lSplitGroupIndex = (size_t)(i / mSplitFactor);
+                
+                mConcernedStubs[lSplitGroupIndex].push_back(lStub);
+                mSplitGroupsMap[lStub] = lSplitGroupIndex;
+            }
 
             break;
         }
@@ -226,14 +241,14 @@ void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
     }
 }
     
-void pmSubtaskSplitter::AddDummyEventToRequiredStubs()
+void pmSubtaskSplitter::AddDummyEventToRequiredStubs(pmExecutionStub* pSourceStub)
 {
     FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
     
     if(mDummyEventsFreezed)
         return;
     
-    std::vector<pmExecutionStub*>::iterator lIter = mConcernedStubs.begin(), lEndIter = mConcernedStubs.end();
+    std::vector<pmExecutionStub*>::iterator lIter = mConcernedStubs[mSplitGroupsMap[pSourceStub]].begin(), lEndIter = mConcernedStubs[mSplitGroupsMap[pSourceStub]].end();
     for(; lIter != lEndIter; ++lIter)
     {
         if(mStubsWithDummyEvent.find(*lIter) == mStubsWithDummyEvent.end())
