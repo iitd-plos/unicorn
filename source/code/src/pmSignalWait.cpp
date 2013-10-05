@@ -20,16 +20,24 @@
 
 #include "pmSignalWait.h"
 #include TIMER_IMPLEMENTATION_HEADER
+
+#ifndef MACOS
 #include STANDARD_ERROR_HEADER
+#endif
 
 #ifdef TRACK_THREADS
 #include <pthread.h>
+#endif
+
+#ifdef DUMP_THREADS
+#include "pmLogger.h"
 #endif
 
 namespace pm
 {
 
 #ifdef DUMP_THREADS
+void __dump_thread_state(bool pWait);
 void __dump_thread_state(bool pWait)
 {
     char lStr[512];

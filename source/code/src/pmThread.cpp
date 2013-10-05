@@ -18,6 +18,10 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
+#ifdef DUMP_THREADS
+#include "pmLogger.h"
+#endif
+
 namespace pm
 {
 
@@ -35,31 +39,26 @@ pmPThread<T, P>::~pmPThread()
 }
 
 template<typename T, typename P>
-pmStatus pmPThread<T, P>::TerminateThread()
+void pmPThread<T, P>::TerminateThread()
 {
-	typename pmThread<T, P>::internalType lInternalCommand;
-	lInternalCommand.msg = pmThread<T, P>::TERMINATE;
+    std::shared_ptr<T> lSharedPtr(new T());
+    lSharedPtr->msg = thread::TERMINATE;
 
-	SubmitCommand(lInternalCommand, RESERVED_PRIORITY);
+	SubmitCommand(lSharedPtr, RESERVED_PRIORITY);
 
-	THROW_ON_NON_ZERO_RET_VAL( pthread_join(mThread, NULL), pmThreadFailureException, pmThreadFailureException::THREAD_CANCEL_ERROR );
-	//THROW_ON_NON_ZERO_RET_VAL( pthread_cancel(mThread), pmThreadFailureException, pmThreadFailureException::THREAD_CANCEL_ERROR );
-
-	return pmSuccess;
+	THROW_ON_NON_ZERO_RET_VAL( pthread_join(mThread, NULL), pmThreadFailureException, pmThreadFailureException::THREAD_JOIN_ERROR );
 }
 
 template<typename T, typename P>
-pmStatus pmPThread<T, P>::SwitchThread(T& pCommand, P pPriority)
+void pmPThread<T, P>::SwitchThread(const std::shared_ptr<T>& pCommand, P pPriority)
 {
-	typename pmThread<T, P>::internalType lInternalCommand;
-	lInternalCommand.msg = pmThread<T, P>::DISPATCH_COMMAND;
-	lInternalCommand.cmd = pCommand;
+    pCommand->msg = thread::DISPATCH_COMMAND;
 
-	return SubmitCommand(lInternalCommand, pPriority);
+	SubmitCommand(pCommand, pPriority);
 }
 
 template<typename T, typename P>
-pmStatus pmPThread<T, P>::ThreadCommandLoop()
+void pmPThread<T, P>::ThreadCommandLoop()
 {
 	while(1)
 	{
@@ -67,24 +66,28 @@ pmStatus pmPThread<T, P>::ThreadCommandLoop()
 
         while(this->mSafePQ.GetSize() != 0)
         {
-            if(this->mSafePQ.GetTopItem(mCurrentCommand) == pmSuccess)
+            std::shared_ptr<T> lCurrentCommand;
+            if(this->mSafePQ.GetTopItem(lCurrentCommand) == pmSuccess)
             {
-                switch(mCurrentCommand.msg)
+                switch(lCurrentCommand->msg)
                 {
-                    case pmThread<T, P>::TERMINATE:
+                    case thread::TERMINATE:
                     {
-                        #ifdef DUMP_THREADS
+                    #ifdef DUMP_THREADS
                         pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Thread Exiting");
-                        #endif
+                    #endif
 
-                        return pmSuccess;
+                        return;
                     }
                     
-                    case pmThread<T, P>::DISPATCH_COMMAND:
+                    case thread::DISPATCH_COMMAND:
                     {
-                        ThreadSwitchCallback(mCurrentCommand.cmd);
+                        ThreadSwitchCallback(lCurrentCommand);
                         break;
                     }
+                        
+                    default:
+                        PMTHROW(pmFatalErrorException());
                 }
                 
                 this->mSafePQ.MarkProcessingFinished();
@@ -93,8 +96,6 @@ pmStatus pmPThread<T, P>::ThreadCommandLoop()
         
         mReverseSignalWait.Signal();
 	}
-
-	return pmSuccess;
 }
 
 template<typename T, typename P>
@@ -111,65 +112,45 @@ void pmPThread<T, P>::InterruptThread()
 }
 
 template<typename T, typename P>
-pmStatus pmPThread<T, P>::WaitIfCurrentCommandMatches(typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
+void pmPThread<T, P>::WaitIfCurrentCommandMatches(typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
-	typename pmThread<T, P>::internalMatchCriterion lInternalMatchCriterion;
-	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
-	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
-
-    return this->mSafePQ.WaitIfMatchingItemBeingProcessed(mCurrentCommand, internalMatchFunc, (void*)(&lInternalMatchCriterion));
+    this->mSafePQ.WaitIfMatchingItemBeingProcessed(pMatchFunc, pMatchCriterion);
 }
     
 template<typename T, typename P>
-pmStatus pmPThread<T, P>::WaitForQueuedCommands()
+void pmPThread<T, P>::WaitForQueuedCommands()
 {
     while(!this->mSafePQ.IsEmpty())
         mReverseSignalWait.Wait();
-    
-    return pmSuccess;
 }
 
 template<typename T, typename P>
-pmStatus pmPThread<T, P>::SubmitCommand(typename pmThread<T, P>::internalType& pInternalCommand, P pPriority)
+void pmPThread<T, P>::SubmitCommand(const std::shared_ptr<T>& pInternalCommand, P pPriority)
 {
 	this->mSafePQ.InsertItem(pInternalCommand, pPriority);
     mSignalWait.Signal();
-
-	return pmSuccess;
 }
 
 template<typename T, typename P>
-pmStatus pmThread<T, P>::DeleteAndGetFirstMatchingCommand(P pPriority, typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem, bool pTemporarilyUnblockSecondaryCommands /* = false */)
+pmStatus pmThread<T, P>::DeleteAndGetFirstMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion, std::shared_ptr<T>& pCommand, bool pTemporarilyUnblockSecondaryCommands /* = false */)
 {
-	typename pmThread<T, P>::internalMatchCriterion lInternalMatchCriterion;
-	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
-	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
-
-	typename pmThread<T, P>::internalType lInternalItem;
-	pmStatus lStatus = this->mSafePQ.DeleteAndGetFirstMatchingItem(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion), lInternalItem, pTemporarilyUnblockSecondaryCommands);
-	pItem = lInternalItem.cmd;
-
-	return lStatus;
+	return this->mSafePQ.DeleteAndGetFirstMatchingItem(pPriority, pMatchFunc, pMatchCriterion, pCommand, pTemporarilyUnblockSecondaryCommands);
 }
 
 template<typename T, typename P>
-pmStatus pmThread<T, P>::DeleteMatchingCommands(P pPriority, typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion)
+void pmThread<T, P>::DeleteMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
-	typename pmThread<T, P>::internalMatchCriterion lInternalMatchCriterion;
-	lInternalMatchCriterion.clientMatchFunc = pMatchFunc;
-	lInternalMatchCriterion.clientMatchCriterion = pMatchCriterion;
-
-	return this->mSafePQ.DeleteMatchingItems(pPriority, internalMatchFunc, (void*)(&lInternalMatchCriterion));
+	this->mSafePQ.DeleteMatchingItems(pPriority, pMatchFunc, pMatchCriterion);
 }
 
 template<typename T, typename P>
-pmStatus pmThread<T, P>::UnblockSecondaryCommands()
+void pmThread<T, P>::UnblockSecondaryCommands()
 {
-    return this->mSafePQ.UnblockSecondaryOperations();
+    this->mSafePQ.UnblockSecondaryOperations();
 }
     
 template<typename T, typename P>
-pmStatus pmPThread<T, P>::SetProcessorAffinity(int pProcessorId)
+void pmPThread<T, P>::SetProcessorAffinity(int pProcessorId)
 {
 #ifdef LINUX
 	pthread_t lThread = pthread_self();
@@ -186,8 +167,6 @@ pmStatus pmPThread<T, P>::SetProcessorAffinity(int pProcessorId)
 		PMTHROW(pmFatalErrorException());
 #endif
 #endif
-
-	return pmSuccess;
 }
 
 template<typename T, typename P>
@@ -197,18 +176,6 @@ void* ThreadLoop(void* pThreadData)
 	lObjectPtr->ThreadCommandLoop();
 
 	return NULL;
-}
-
-template<typename T>
-bool internalMatchFunc(T& pInternalCommand, void* pCriterion)
-{
-	typedef typename T::outerType::internalMatchCriterion matchCriterion;
-    
-    if(pInternalCommand.msg != T::outerType::DISPATCH_COMMAND)
-        return false;
-
-	matchCriterion* lInternalMatchCriterion = (matchCriterion*)(pCriterion);
-	return (lInternalMatchCriterion->clientMatchFunc)(pInternalCommand.cmd, lInternalMatchCriterion->clientMatchCriterion);
 }
 
 } // end namespace pm

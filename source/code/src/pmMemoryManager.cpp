@@ -256,12 +256,12 @@ void* pmLinuxMemoryManager::AllocateMemory(pmMemSection* pMemSection, size_t& pL
     return lPtr;
 }
 
-void* pmLinuxMemoryManager::CreateCheckOutMemory(size_t pLength, bool pIsLazy)
+void* pmLinuxMemoryManager::CreateCheckOutMemory(size_t pLength)
 {
     size_t lPageCount = 0;
     FindAllocationSize(pLength, lPageCount);
 
-#ifdef MACOS
+#if 0
     if(pIsLazy && lPageCount < 31)
     {
     #ifdef _DEBUG
@@ -322,12 +322,12 @@ pmStatus pmLinuxMemoryManager::DeallocateMemory(void* pMem)
 size_t pmLinuxMemoryManager::FindAllocationSize(size_t pLength, size_t& pPageCount)
 {
 	size_t lPageSize = GetVirtualMemoryPageSize();
-	pPageCount = ((pLength/lPageSize) + ((pLength%lPageSize != 0)?1:0));
+	pPageCount = ((pLength / lPageSize) + ((pLength % lPageSize != 0) ? 1 : 0));
 
-	return (pPageCount*lPageSize);
+	return (pPageCount * lPageSize);
 }
 
-size_t pmLinuxMemoryManager::GetVirtualMemoryPageSize()
+size_t pmLinuxMemoryManager::GetVirtualMemoryPageSize() const
 {
 	return mPageSize;
 }
@@ -483,38 +483,19 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
 
     pmTask* lLockingTask = pMemSection->GetLockingTask();
     
-	pmCommunicatorCommand::memoryTransferRequest* lData = new pmCommunicatorCommand::memoryTransferRequest();
-	lData->sourceMemIdentifier.memOwnerHost = pRangeOwner.memIdentifier.memOwnerHost;
-	lData->sourceMemIdentifier.generationNumber = pRangeOwner.memIdentifier.generationNumber;
-	lData->destMemIdentifier.memOwnerHost = *(pMemSection->GetMemOwnerHost());
-	lData->destMemIdentifier.generationNumber = pMemSection->GetGenerationNumber();
-    lData->receiverOffset = pOffset;
-	lData->offset = pRangeOwner.hostOffset;
-	lData->length = pLength;
-	lData->destHost = *PM_LOCAL_MACHINE;
-    lData->isForwarded = 0;
-    lData->isTaskOriginated = (ushort)(lLockingTask != NULL);
+    uint lOriginatingHost = lLockingTask ? (uint)(*(lLockingTask->GetOriginatingHost())) : std::numeric_limits<uint>::max();
+    ulong lSequenceNumber = lLockingTask ? lLockingTask->GetSequenceNumber() : std::numeric_limits<ulong>::max();
 
-    if(lLockingTask)
-    {
-        lData->originatingHost = (uint)(*(lLockingTask->GetOriginatingHost()));
-        lData->sequenceNumber = lLockingTask->GetSequenceNumber();
-    }
-    else
-    {
-        lData->originatingHost = std::numeric_limits<uint>::max();
-        lData->sequenceNumber = std::numeric_limits<ulong>::max();
-    }
+	finalize_ptr<communicator::memoryTransferRequest> lData(new communicator::memoryTransferRequest(communicator::memoryIdentifierStruct(pRangeOwner.memIdentifier.memOwnerHost, pRangeOwner.memIdentifier.generationNumber), communicator::memoryIdentifierStruct(*pMemSection->GetMemOwnerHost(), pMemSection->GetGenerationNumber()), pOffset, pRangeOwner.hostOffset, pLength, *PM_LOCAL_MACHINE, 0, (ushort)(lLockingTask != NULL), lOriginatingHost, lSequenceNumber, pPriority));
     
-    lData->priority = pPriority;
-    
-	pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+	pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand<communicator::memoryTransferRequest>::CreateSharedPtr(pPriority, communicator::SEND, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 
 	pmCommunicator::GetCommunicator()->Send(lSendCommand);
 
     MEM_REQ_DUMP(pMemSection, pMem, pOffset, pRangeOwner.hostOffset, pLength, (uint)(*pRangeOwner.host));
-        
-	lFetchData.receiveCommand = pmCommunicatorCommand::CreateSharedPtr(pPriority, pmCommunicatorCommand::RECEIVE, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, pmCommunicatorCommand::BYTE, NULL, 0, NULL, 0);	// Dummy command just to allow threads to wait on it
+    
+    finalize_ptr<char> lDummyAutoPtr;
+	lFetchData.receiveCommand = pmCommunicatorCommand<char>::CreateSharedPtr(pPriority, communicator::RECEIVE, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::BYTE, lDummyAutoPtr, 0);	// Dummy command just to allow threads to wait on it
     
 	char* lAddr = (char*)pMem + lData->receiverOffset;
     pInFlightMap[lAddr] = std::make_pair(lData->length, lFetchData);
@@ -567,7 +548,8 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
             pMemSection->RecordMemReceive(pLength);
     #endif
 
-        lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
+        pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
+        lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
 
         lMap.erase(lIter);
     }
@@ -621,7 +603,8 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulo
                 pMemSection->RecordMemReceive(pLength);
         #endif
 
-            lData.receiveCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lData.receiveCommand));
+            pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
+            lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
 
             lSpecifics.mInFlightMemoryMap.erase(lBaseIter);
         }
@@ -866,10 +849,12 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
                     size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
                     size_t lMemOffset = (lPageAddr - reinterpret_cast<size_t>(lShadowMemBaseAddr));
                     size_t lOffset = lShadowMemOffset + lMemOffset;
+                    
+                    uint lMemSectionIndex = lTask->GetMemSectionIndex(lMemSection);
 
                     lMemoryManager->SetLazyProtection(reinterpret_cast<void*>(lPageAddr), lPageSize, true, true);
-                    lTask->GetSubscriptionManager().AddWriteOnlyLazyUnprotection(lStub, lSubtaskId, lSplitInfoPtr, lMemOffset / lPageSize);
-                    lTask->GetSubscriptionManager().InitializeWriteOnlyLazyMemory(lStub, lSubtaskId, lSplitInfoPtr, lOffset, reinterpret_cast<void*>(lPageAddr), lPageSize);
+                    lTask->GetSubscriptionManager().AddWriteOnlyLazyUnprotection(lStub, lSubtaskId, lSplitInfoPtr, lMemSectionIndex, lMemOffset / lPageSize);
+                    lTask->GetSubscriptionManager().InitializeWriteOnlyLazyMemory(lStub, lSubtaskId, lSplitInfoPtr, lMemSectionIndex, lOffset, reinterpret_cast<void*>(lPageAddr), lPageSize);
                 }
             }
             else

@@ -32,6 +32,19 @@ int singleGpuMatrixTranspose(bool pInplace, MATRIX_DATA_TYPE* pInputMatrix, MATR
 #else
 #endif
 #endif
+    
+enum inplaceMemIndex
+{
+    INPLACE_MEM_INDEX = 0,
+    INPLACE_MAX_MEM_INDICES
+};
+    
+enum memIndex
+{
+    INPUT_MEM_INDEX = 0,
+    OUTPUT_MEM_INDEX,
+    MAX_MEM_INDICES
+};
 
 typedef struct matrixTransposeTaskConf
 {

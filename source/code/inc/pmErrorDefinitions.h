@@ -30,8 +30,12 @@
 namespace pm
 {
 
+typedef unsigned short int ushort;
+typedef unsigned int uint;
+typedef unsigned long ulong;
+
 #ifdef EXIT_ON_EXCEPTION
-#define EXCEPTION_ACTION(x) _exit(1);
+#define EXCEPTION_ACTION(x) exit(1);
 #else
 #define EXCEPTION_ACTION(x) throw x;
 #endif
@@ -68,12 +72,7 @@ namespace pm
 	{
 		public:
 			virtual pmStatus GetStatusCode() {return pmFatalError;}
-	};
-
-	class pmMpiInitException : public pmException
-	{
-		public:
-			pmStatus GetStatusCode() {return pmNetworkInitError;}
+            virtual ~pmException() {}
 	};
 
 	class pmInvalidCommandIdException : public pmException
@@ -106,7 +105,7 @@ namespace pm
 				COND_VAR_WAIT_FAILURE,
 				COND_VAR_DESTROY_FAILURE,
 				THREAD_CREATE_ERROR,
-				THREAD_CANCEL_ERROR,
+				THREAD_JOIN_ERROR,
 				THREAD_AFFINITY_ERROR,
                 SIGNAL_RAISE_ERROR,
                 TLS_KEY_ERROR
@@ -190,6 +189,8 @@ namespace pm
 		public:
 			typedef enum failureTypes
 			{
+                INIT_ERROR,
+                FINALIZE_ERROR,
 				REQUEST_CREATION_ERROR,
 				REQUEST_FREE_ERROR,
 				SEND_ERROR,
@@ -380,6 +381,14 @@ namespace pm
     private:
         bool mSubtaskLockAcquired;
     };
+
+	class pmUserErrorException : public pmException
+	{
+		public:
+			pmStatus GetStatusCode() {return pmUserError;}
+
+		private:
+	};
 
 } // end namespace pm
 

@@ -45,12 +45,7 @@ pmTimedEventManager::~pmTimedEventManager()
 
 void pmTimedEventManager::AddTaskTimeOutEvent(pmLocalTask* pLocalTask, ulong pTaskTimeOutTriggerTime)
 {
-    timedEvent lEvent;
-    lEvent.eventId = TASK_TIME_OUT;
-    lEvent.triggerTime = pTaskTimeOutTriggerTime;
-    lEvent.taskTimeOutDetails.mLocalTask = pLocalTask;
-    
-    SwitchThread(lEvent, pTaskTimeOutTriggerTime);
+    SwitchThread(std::shared_ptr<timedEvent>(new taskTimeOutEvent(TASK_TIME_OUT, pTaskTimeOutTriggerTime, pLocalTask)), pTaskTimeOutTriggerTime);
 
     mSignalWait.Signal();
 }
@@ -60,56 +55,62 @@ void pmTimedEventManager::ClearTaskTimeOutEvent(pmLocalTask* pLocalTask, ulong p
     SIGNAL_WAIT_IMPLEMENTATION_CLASS lSignalWait;
 
     ulong lTriggerTime = GetIntegralCurrentTimeInSecs();
-    
-    timedEvent lEvent;
-    lEvent.eventId = CLEAR_TASK_TIME_OUT;
-    lEvent.triggerTime = lTriggerTime;
-    lEvent.clearTaskTimeOutDetails.mLocalTask = pLocalTask;
-    lEvent.clearTaskTimeOutDetails.mTaskTimeOutTriggerTime = pTaskTimeOutTriggerTime;
-    lEvent.clearTaskTimeOutDetails.mClearTimeOutSignalWait = &lSignalWait;
-    
-    SwitchThread(lEvent, lTriggerTime);
+    SwitchThread(std::shared_ptr<timedEvent>(new clearTaskTimeOutEvent(CLEAR_TASK_TIME_OUT, lTriggerTime, pLocalTask, pTaskTimeOutTriggerTime, &lSignalWait)), lTriggerTime);
 
     mSignalWait.Signal();
     lSignalWait.Wait();
 }
     
-pmStatus pmTimedEventManager::ThreadSwitchCallback(timedEvent& pEvent)
+void pmTimedEventManager::ThreadSwitchCallback(std::shared_ptr<timedEvent>& pEvent)
 {
     ulong lTime = GetIntegralCurrentTimeInSecs();
-    if(lTime < pEvent.triggerTime)
+    if(lTime < pEvent->triggerTime)
     {
-        if(!mSignalWait.WaitWithTimeOut(pEvent.triggerTime))
+        if(!mSignalWait.WaitWithTimeOut(pEvent->triggerTime))
         {
-            SwitchThread(pEvent, pEvent.triggerTime);
-            return pmSuccess;
+            SwitchThread(pEvent, pEvent->triggerTime);
+            return;
         }
     }
         
-    switch(pEvent.eventId)
+    switch(pEvent->eventId)
     {
         case TASK_TIME_OUT:
-            pmScheduler::GetScheduler()->TaskCancelEvent(pEvent.taskTimeOutDetails.mLocalTask);
+        {
+            taskTimeOutEvent& lEvent = static_cast<taskTimeOutEvent&>(*pEvent);
+            pmScheduler::GetScheduler()->TaskCancelEvent(lEvent.mLocalTask);
+
             break;
+        }
 
         case CLEAR_TASK_TIME_OUT:
-            DeleteMatchingCommands(pEvent.clearTaskTimeOutDetails.mTaskTimeOutTriggerTime, timeOutClearMatchFunc, pEvent.clearTaskTimeOutDetails.mLocalTask);
-            pEvent.clearTaskTimeOutDetails.mClearTimeOutSignalWait->Signal();
+        {
+            clearTaskTimeOutEvent& lEvent = static_cast<clearTaskTimeOutEvent&>(*pEvent);
+            
+            DeleteMatchingCommands(lEvent.mTaskTimeOutTriggerTime, timeOutClearMatchFunc, lEvent.mLocalTask);
+            lEvent.mClearTimeOutSignalWait->Signal();
+         
             break;
+        }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
     }
-    
-    return pmSuccess;
 }
 
-bool timeOutClearMatchFunc(timed::timedEvent& pEvent, void* pCriterion)
+bool timeOutClearMatchFunc(const timed::timedEvent& pEvent, void* pCriterion)
 {
     switch(pEvent.eventId)
     {
         case timed::TASK_TIME_OUT:
-            if(pEvent.taskTimeOutDetails.mLocalTask == (pmTask*)pCriterion)
+        {
+            const taskTimeOutEvent& lEvent = static_cast<const taskTimeOutEvent&>(pEvent);
+
+            if(lEvent.mLocalTask == (pmTask*)pCriterion)
                 return true;
 
             break;
+        }
         
         default:
             return false;

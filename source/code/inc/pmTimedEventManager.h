@@ -24,7 +24,8 @@
 #include "pmBase.h"
 #include "pmThread.h"
 #include "pmSignalWait.h"
-#include <tr1/memory>
+#include "pmTask.h"
+#include <memory>
 
 namespace pm
 {
@@ -34,31 +35,45 @@ namespace timed
     enum eventIdentifier
     {
         TASK_TIME_OUT,
-        CLEAR_TASK_TIME_OUT
+        CLEAR_TASK_TIME_OUT,
+        MAX_TIMED_EVENTS
     };
     
-    struct taskTimeOut
-    {
-        pmLocalTask* mLocalTask;
-    };    
-
-    struct clearTaskTimeOut
-    {
-        pmLocalTask* mLocalTask;
-        ulong mTaskTimeOutTriggerTime;
-        SIGNAL_WAIT_IMPLEMENTATION_CLASS* mClearTimeOutSignalWait;
-    };    
-
     struct timedEvent : public pmBasicThreadEvent
     {
         eventIdentifier eventId;
         ulong triggerTime;
-        union
-        {
-            taskTimeOut taskTimeOutDetails;
-            clearTaskTimeOut clearTaskTimeOutDetails;
-        };
+        
+        timedEvent(eventIdentifier pEventId = MAX_TIMED_EVENTS, ulong pTriggerTime = 0)
+        : eventId(pEventId)
+        , triggerTime(pTriggerTime)
+        {}
     };
+
+    struct taskTimeOutEvent : public timedEvent
+    {
+        pmLocalTask* mLocalTask;
+        
+        taskTimeOutEvent(eventIdentifier pEventId, ulong pTriggerTime, pmLocalTask* pLocalTask)
+        : timedEvent(pEventId, pTriggerTime)
+        , mLocalTask(pLocalTask)
+        {}
+    };    
+
+    struct clearTaskTimeOutEvent : public timedEvent
+    {
+        pmLocalTask* mLocalTask;
+        ulong mTaskTimeOutTriggerTime;
+        SIGNAL_WAIT_IMPLEMENTATION_CLASS* mClearTimeOutSignalWait;
+        
+        clearTaskTimeOutEvent(eventIdentifier pEventId, ulong pTriggerTime, pmLocalTask* pLocalTask, ulong pTaskTimeOutTriggerTime, SIGNAL_WAIT_IMPLEMENTATION_CLASS* pClearTimeOutSignalWait)
+        : timedEvent(pEventId, pTriggerTime)
+        , mLocalTask(pLocalTask)
+        , mTaskTimeOutTriggerTime(pTaskTimeOutTriggerTime)
+        , mClearTimeOutSignalWait(pClearTimeOutSignalWait)
+        {}
+    };    
+
 };
 
 class pmTimedEventManager : public THREADING_IMPLEMENTATION_CLASS<timed::timedEvent, ulong>
@@ -72,12 +87,12 @@ public:
     
 private:
     pmTimedEventManager();
-    virtual pmStatus ThreadSwitchCallback(timed::timedEvent& pEvent);
+    virtual void ThreadSwitchCallback(std::shared_ptr<timed::timedEvent>& pEvent);
 
     SIGNAL_WAIT_IMPLEMENTATION_CLASS mSignalWait;
 };
     
-bool timeOutClearMatchFunc(timed::timedEvent& pEvent, void* pCriterion);
+bool timeOutClearMatchFunc(const timed::timedEvent& pEvent, void* pCriterion);
     
 } // end namespace pm
 

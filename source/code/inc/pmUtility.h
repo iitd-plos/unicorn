@@ -27,7 +27,7 @@
 
 #include <string>
 #include <map>
-#include <tr1/memory>
+#include <memory>
 
 namespace pm
 {
@@ -37,7 +37,7 @@ class pmMachine;
 class pmUtility : public pmBase
 {
     typedef std::map<std::string, std::pair<void*, size_t> > fileMappingsMapType;
-    typedef std::map<std::string, std::pair<size_t, std::tr1::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> > > pendingResponsesMapType;
+    typedef std::map<std::string, std::pair<size_t, std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> > > pendingResponsesMapType;
 
 public:
     static void MapFileOnAllMachines(const char* pPath);
@@ -47,8 +47,8 @@ public:
     static void MapFile(const char* pPath);
     static void UnmapFile(const char* pPath);
     
-    static void SendFileMappingAcknowledgement(const char* pPath, pmMachine* pSourceHost);
-    static void SendFileUnmappingAcknowledgement(const char* pPath, pmMachine* pSourceHost);
+    static void SendFileMappingAcknowledgement(const char* pPath, const pmMachine* pSourceHost);
+    static void SendFileUnmappingAcknowledgement(const char* pPath, const pmMachine* pSourceHost);
 
     static void RegisterFileMappingResponse(const char* pPath);
     static void RegisterFileUnmappingResponse(const char* pPath);

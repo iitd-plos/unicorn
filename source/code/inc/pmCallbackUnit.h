@@ -36,36 +36,35 @@ namespace pm
 
 class pmCallbackUnit : public pmBase
 {
-    typedef std::map<std::string, pmCallbackUnit*> keyMapType;
+    typedef std::map<std::string, const pmCallbackUnit*> keyMapType;
 
 	public:
-		pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
-			pmDataRedistributionCB* pDataRedistributionCB, pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB);
+		pmCallbackUnit(const char* pKey, finalize_ptr<pmDataDistributionCB>&& pDataDistributionCB, finalize_ptr<pmSubtaskCB>&& pSubtaskCB, finalize_ptr<pmDataReductionCB>&& pDataReductionCB, finalize_ptr<pmDeviceSelectionCB>&& pDeviceSelectionCB, finalize_ptr<pmDataRedistributionCB>&& pDataRedistributionCB, finalize_ptr<pmPreDataTransferCB>&& pPreDataTransferCB, finalize_ptr<pmPostDataTransferCB>&& pPostDataTransferCB);
 
-		virtual ~pmCallbackUnit();
+		~pmCallbackUnit();
 
-		pmDataDistributionCB* GetDataDistributionCB();
-		pmSubtaskCB* GetSubtaskCB();
-		pmDataReductionCB* GetDataReductionCB();
-		pmDataRedistributionCB* GetDataRedistributionCB();
-		pmDeviceSelectionCB* GetDeviceSelectionCB();
-		pmPreDataTransferCB* GetPreDataTransferCB();
-		pmPostDataTransferCB* GetPostDataTransferCB();
+		const pmDataDistributionCB* GetDataDistributionCB() const;
+		const pmSubtaskCB* GetSubtaskCB() const;
+		const pmDataReductionCB* GetDataReductionCB() const;
+		const pmDataRedistributionCB* GetDataRedistributionCB() const;
+		const pmDeviceSelectionCB* GetDeviceSelectionCB() const;
+		const pmPreDataTransferCB* GetPreDataTransferCB() const;
+		const pmPostDataTransferCB* GetPostDataTransferCB() const;
 
-		const char* GetKey();
+		const char* GetKey() const;
 
-		static pmCallbackUnit* FindCallbackUnit(char* pKey);
+		static const pmCallbackUnit* FindCallbackUnit(char* pKey);
 
 	private:
-		pmDataDistributionCB* mDataDistributionCB;
-		pmSubtaskCB* mSubtaskCB;
-		pmDataReductionCB* mDataReductionCB;
-		pmDataRedistributionCB* mDataRedistributionCB;
-		pmDeviceSelectionCB* mDeviceSelectionCB;
-		pmPreDataTransferCB* mPreDataTransferCB;
-		pmPostDataTransferCB* mPostDataTransferCB;
+		finalize_ptr<pmDataDistributionCB> mDataDistributionCB;
+		finalize_ptr<pmSubtaskCB> mSubtaskCB;
+		finalize_ptr<pmDataReductionCB> mDataReductionCB;
+		finalize_ptr<pmDataRedistributionCB> mDataRedistributionCB;
+		finalize_ptr<pmDeviceSelectionCB> mDeviceSelectionCB;
+		finalize_ptr<pmPreDataTransferCB> mPreDataTransferCB;
+		finalize_ptr<pmPostDataTransferCB> mPostDataTransferCB;
 
-		std::string mKey;
+		const std::string mKey;
 
 		static keyMapType& GetKeyMap();
 		static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetResourceLock();

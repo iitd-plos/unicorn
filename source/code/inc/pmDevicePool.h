@@ -23,8 +23,7 @@
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
-#include "pmScheduler.h"
-#include "pmCommand.h"
+#include "pmCommunicator.h"
 
 #include <vector>
 #include <set>
@@ -64,29 +63,38 @@ class pmMachinePool : public pmBase
 			double receiveTime;
 			ulong sendCount;
 			ulong receiveCount;
+            
+            pmMachineData(uint pCpuCores, uint pGpuCards)
+            : cpuCores(pCpuCores)
+            , gpuCards(pGpuCards)
+            , dataSent(0)
+            , dataReceived(0)
+            , sendTime(0)
+            , receiveTime(0)
+            , sendCount(0)
+            , receiveCount(0)
+            {}
 		} pmMachineData;
-
-		virtual ~pmMachinePool();
 
 		static pmMachinePool* GetMachinePool();
 
-		pmMachine* GetMachine(uint pIndex);
+		const pmMachine* GetMachine(uint pIndex) const;
 		pmMachineData& GetMachineData(uint pIndex);
-		pmMachineData& GetMachineData(pmMachine* pMachine);
+		pmMachineData& GetMachineData(const pmMachine* pMachine);
 
-		pmStatus GetAllDevicesOnMachine(uint pMachineIndex, std::vector<pmProcessingElement*>& pDevices);
-		pmStatus GetAllDevicesOnMachine(pmMachine* pMachine, std::vector<pmProcessingElement*>& pDevices);
+		void GetAllDevicesOnMachine(uint pMachineIndex, std::vector<const pmProcessingElement*>& pDevices) const;
+		void GetAllDevicesOnMachine(const pmMachine* pMachine, std::vector<const pmProcessingElement*>& pDevices) const;
 
-		uint GetFirstDeviceIndexOnMachine(uint pMachineIndex);
-		uint GetFirstDeviceIndexOnMachine(pmMachine* pMachine);
+		uint GetFirstDeviceIndexOnMachine(uint pMachineIndex) const;
+		uint GetFirstDeviceIndexOnMachine(const pmMachine* pMachine) const;
 
-		pmStatus RegisterSendCompletion(pmMachine* pMachine, ulong pDataSent, double pSendTime);
-		pmStatus RegisterReceiveCompletion(pmMachine* pMachine, ulong pDataReceived, double pReceiveTime);
+		void RegisterSendCompletion(const pmMachine* pMachine, ulong pDataSent, double pSendTime);
+		void RegisterReceiveCompletion(const pmMachine* pMachine, ulong pDataReceived, double pReceiveTime);
 
 	private:
 		pmMachinePool();
 
-		pmStatus All2AllMachineData(pmCommunicatorCommand::machinePool* pAll2AllBuffer);
+		void All2AllMachineData(size_t pMachineCount);
 
 		std::vector<uint> mFirstDeviceIndexOnMachine;
 		std::vector<pmMachine> mMachinesVector;
@@ -101,27 +109,31 @@ class pmDevicePool : public pmBase
 		{
 			std::string name;
 			std::string description;	/* All other parameters in a comma separated string */
+            
+            pmDeviceData(const std::string& pName, const std::string& pDescription)
+            : name(pName)
+            , description(pDescription)
+            {}
 		} pmDeviceData;
-
-		virtual ~pmDevicePool();
 
 		static pmDevicePool* GetDevicePool();
 
-		uint GetDeviceCount();
+		uint GetDeviceCount() const;
 
-		pmStatus CreateMachineDevices(pmMachine* pMachine, uint pCpuDeviceCount, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount);
+		void CreateMachineDevices(const pmMachine* pMachine, uint pCpuDeviceCount, const communicator::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount);
 
-		pmDeviceData& GetDeviceData(pmProcessingElement* pDevice);
+		const pmDeviceData& GetDeviceData(const pmProcessingElement* pDevice) const;
 
-		pmProcessingElement* GetDeviceAtMachineIndex(pmMachine* pMachine, uint pDeviceIndexOnMachine);
-		pmProcessingElement* GetDeviceAtGlobalIndex(uint pGlobalDeviceIndex);
+		const pmProcessingElement* GetDeviceAtMachineIndex(const pmMachine* pMachine, uint pDeviceIndexOnMachine) const;
+		const pmProcessingElement* GetDeviceAtGlobalIndex(uint pGlobalDeviceIndex) const;
 
-		pmStatus BroadcastDeviceData(pmMachine* pMachine, pmCommunicatorCommand::devicePool* pDeviceArray, uint pDeviceCount);
+        void BroadcastAndCreateDeviceData(const pmMachine* pMachine, uint pDeviceCount, uint pCpuDeviceCount, uint pGlobalStartingDeviceIndex);
 
-		pmStatus GetAllDevicesOfTypeInCluster(pmDeviceType pType, pmCluster* pCluster, std::vector<pmProcessingElement*>& pDevices);
+		void GetAllDevicesOfTypeInCluster(pmDeviceType pType, const pmCluster* pCluster, std::vector<const pmProcessingElement*>& pDevices) const;
 		
 	private:
-		pmDevicePool();
+		pmDevicePool()
+        {}
 
 		std::vector<pmProcessingElement> mDevicesVector;
 		std::vector<pmDeviceData> mDeviceDataVector;

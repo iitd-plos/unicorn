@@ -96,6 +96,13 @@ const unsigned short TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL = 0x0004
 const unsigned short TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL = 0x0008;
 const unsigned short TASK_CAN_SPLIT_CPU_SUBTASKS_FLAG_VAL = 0x0010;
 const unsigned short TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL = 0x0020;
+const unsigned short DEFAULT_TASK_FLAGS_VAL = (TASK_MULTI_ASSIGN_FLAG_VAL | TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL | TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL);
+
+#define SUPPOR_CUDA
+
+#ifdef SUPPORT_CUDA
+const unsigned short UNALLOCATED_CUDA_MEM_PAGES = 51200;
+#endif
 
 #define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
 
@@ -105,8 +112,6 @@ const unsigned short TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL = 0x0020;
 
 #define MAX_SUBTASK_MULTI_ASSIGN_COUNT 3    // Max no. of devices to which a subtask may be assigned at any given time
 #define MAX_STEAL_CYCLES_PER_DEVICE 5   // Max no. of steal attempts from a device to any other device
-
-#define PROPAGATE_FAILURE_RET_STATUS(x) {pmStatus dRetStatus = x; if(dRetStatus != pmSuccess) return dRetStatus;}
 
 #define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (memAddr % pageSize))
 
@@ -145,8 +150,6 @@ const unsigned short TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL = 0x0020;
 //#define ENABLE_TASK_PROFILING
 //#define ENABLE_MEM_PROFILING
 //#define ENABLE_ACCUMULATED_TIMINGS
-//#define DUMP_SUBTASK_COLLECTIONS
-//#define DUMP_SUBTASK_SUBSCRIPTION_LENGTH
 //#define DUMP_SHADOW_MEM
 //#define DUMP_NETWORK_STATS
 //#define DUMP_TASK_EXEC_STATS
@@ -174,7 +177,7 @@ const unsigned short TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL = 0x0020;
     #define SERIALIZE_DEFERRED_LOGS
 #endif
 
-#ifdef DEBUG
+#ifdef _DEBUG
     #define DUMP_EXCEPTION_BACKTRACE
 #endif
 

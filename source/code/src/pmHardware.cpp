@@ -28,66 +28,49 @@
 namespace pm
 {
 
-/* class pmHardware */
-pmHardware::pmHardware()
-{
-}
-
-pmHardware::~pmHardware()
-{
-}
-
-
 /* class pmMachine */
 pmMachine::pmMachine(uint pMachineId)
 {
 	mMachineId = pMachineId;
 }
 
-pmMachine::~pmMachine()
-{
-}
-
-pmMachine::operator uint()
+pmMachine::operator uint() const
 {
     return mMachineId;
 }
 
 
 /* class pmProcessingElement */
-pmProcessingElement::pmProcessingElement(pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex)
+pmProcessingElement::pmProcessingElement(const pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex, const communicator::devicePool* pDevicePool)
 	: mMachine(pMachine)
     , mDeviceIndexInMachine(pDeviceIndexInMachine)
 	, mGlobalDeviceIndex(pGlobalDeviceIndex)
 	, mDeviceType(pDeviceType)
 {
+    BuildDeviceInfo(pDevicePool);
 }
 
-pmProcessingElement::~pmProcessingElement()
-{
-}
-
-pmMachine* pmProcessingElement::GetMachine()
+const pmMachine* pmProcessingElement::GetMachine() const
 {
 	return mMachine;
 }
 
-uint pmProcessingElement::GetDeviceIndexInMachine()
+uint pmProcessingElement::GetDeviceIndexInMachine() const
 {
 	return mDeviceIndexInMachine;
 }
 
-uint pmProcessingElement::GetGlobalDeviceIndex()
+uint pmProcessingElement::GetGlobalDeviceIndex() const
 {
 	return mGlobalDeviceIndex;
 }
 
-pmDeviceType pmProcessingElement::GetType()
+pmDeviceType pmProcessingElement::GetType() const
 {
 	return mDeviceType;
 }
 
-pmExecutionStub* pmProcessingElement::GetLocalExecutionStub()
+pmExecutionStub* pmProcessingElement::GetLocalExecutionStub() const
 {
 	if(GetMachine() != PM_LOCAL_MACHINE)
 		PMTHROW(pmFatalErrorException());
@@ -95,54 +78,40 @@ pmExecutionStub* pmProcessingElement::GetLocalExecutionStub()
 	return pmStubManager::GetStubManager()->GetStub(mDeviceIndexInMachine);
 }
 
-pmDeviceInfo& pmProcessingElement::GetDeviceInfo()
+void pmProcessingElement::BuildDeviceInfo(const communicator::devicePool* pDevicePool)
 {
-    if(!mDeviceInfo.get_ptr())
-    {
-        finalize_ptr<pmDeviceInfo> lLocalDeviceInfoAutoPtr(new pmDeviceInfo());
-        pmDeviceInfo* lDeviceInfo = lLocalDeviceInfoAutoPtr.get_ptr();
-        
-        pmDevicePool::pmDeviceData& lDeviceData = pmDevicePool::GetDevicePool()->GetDeviceData(this);
+    const char* lName = pDevicePool->name;
+    const char* lDesc = pDevicePool->description;
 
-        const char* lName = lDeviceData.name.c_str();
-        const char* lDesc = lDeviceData.description.c_str();
-
-        size_t lNameLength = min(strlen(lName), (size_t)(MAX_NAME_STR_LEN-1));
-        size_t lDescLength = min(strlen(lDesc), (size_t)(MAX_DESC_STR_LEN-1));
-        
-        memcpy(lDeviceInfo->name, lName, lNameLength);
-        memcpy(lDeviceInfo->description, lDesc, lDescLength);
-
-        lDeviceInfo->deviceHandle = ((GetMachine() == PM_LOCAL_MACHINE) ? static_cast<void*>(GetLocalExecutionStub()) : this);
-        lDeviceInfo->name[lNameLength] = '\0';
-        lDeviceInfo->description[lDescLength] = '\0';
-
-        lDeviceInfo->deviceType = GetType();
-        lDeviceInfo->host = *(GetMachine());
+    size_t lNameLength = std::min(strlen(lName), (size_t)(MAX_NAME_STR_LEN - 1));
+    size_t lDescLength = std::min(strlen(lDesc), (size_t)(MAX_DESC_STR_LEN - 1));
     
-        lLocalDeviceInfoAutoPtr.release();
-        mDeviceInfo.reset(lDeviceInfo);
-    }
+    memcpy(mDeviceInfo.name, lName, lNameLength);
+    memcpy(mDeviceInfo.description, lDesc, lDescLength);
+
+    mDeviceInfo.deviceHandle = ((GetMachine() == PM_LOCAL_MACHINE) ? static_cast<void*>(GetLocalExecutionStub()) : this);
+    mDeviceInfo.name[lNameLength] = '\0';
+    mDeviceInfo.description[lDescLength] = '\0';
+
+    mDeviceInfo.deviceType = GetType();
+    mDeviceInfo.host = *(GetMachine());
+}
     
-    return *(mDeviceInfo.get_ptr());
+const pmDeviceInfo& pmProcessingElement::GetDeviceInfo() const
+{
+    return mDeviceInfo;
 }
 
-pmStatus pmProcessingElement::GetMachines(std::set<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines)
+void pmProcessingElement::GetMachines(std::set<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines)
 {
-	std::set<pmProcessingElement*>::iterator lIter;
-	for(lIter = pDevices.begin(); lIter != pDevices.end(); ++lIter)
-		pMachines.insert((*lIter)->GetMachine());
-
-	return pmSuccess;
+	for(auto lDevice: pDevices)
+		pMachines.insert(lDevice->GetMachine());
 }
 
-pmStatus pmProcessingElement::GetMachines(std::vector<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines)
+void pmProcessingElement::GetMachines(std::vector<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines)
 {
-	std::vector<pmProcessingElement*>::iterator lIter;
-	for(lIter = pDevices.begin(); lIter != pDevices.end(); ++lIter)
-		pMachines.insert((*lIter)->GetMachine());
-
-	return pmSuccess;
+	for(auto lDevice: pDevices)
+		pMachines.insert(lDevice->GetMachine());
 }
 
 };

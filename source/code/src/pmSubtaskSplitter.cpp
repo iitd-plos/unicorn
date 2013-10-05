@@ -95,10 +95,10 @@ void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
         case CPU:
         {
             size_t lCount = lStubManager->GetProcessingElementsCPU();
-            for(size_t i = 0; i < lCount; ++i)
+            for(uint i = 0; i < lCount; ++i)
             {
                 pmExecutionStub* lStub = lStubManager->GetCpuStub(i);
-                size_t lSplitGroupIndex = (size_t)(i / mSplitFactor);
+                uint lSplitGroupIndex = (uint)(i / mSplitFactor);
                 
                 mSplitGroupVector[lSplitGroupIndex].mConcernedStubs.push_back(lStub);
                 mSplitGroupMap[lStub] = lSplitGroupIndex;
@@ -110,10 +110,10 @@ void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
         case GPU_CUDA:
         {
             size_t lCount = lStubManager->GetProcessingElementsGPU();
-            for(size_t i = 0; i < lCount; ++i)
+            for(uint i = 0; i < lCount; ++i)
             {
                 pmExecutionStub* lStub = lStubManager->GetGpuStub(i);
-                size_t lSplitGroupIndex = (size_t)(i / mSplitFactor);
+                uint lSplitGroupIndex = (uint)(i / mSplitFactor);
                 
                 mSplitGroupVector[lSplitGroupIndex].mConcernedStubs.push_back(lStub);
                 mSplitGroupMap[lStub] = lSplitGroupIndex;
@@ -127,7 +127,7 @@ void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
     }
 }
     
-std::auto_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
+std::unique_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
 {
     return mSplitGroupVector[mSplitGroupMap[pSourceStub]].GetPendingSplit(pSubtaskId, pSourceStub);
 }
@@ -157,7 +157,7 @@ void pmSubtaskSplitter::FreezeDummyEvents()
 
     
 /* class pmSplitGroup */
-std::auto_ptr<pmSplitSubtask> pmSplitGroup::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
+std::unique_ptr<pmSplitSubtask> pmSplitGroup::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
 {
     const splitRecord* lSplitRecord = NULL;
     uint lSplitId = std::numeric_limits<uint>::max();
@@ -179,7 +179,7 @@ std::auto_ptr<pmSplitSubtask> pmSplitGroup::GetPendingSplit(ulong* pSubtaskId, p
         if(!lModifiableSplitRecord)
         {
             if(!pSubtaskId)
-                return std::auto_ptr<pmSplitSubtask>(NULL);
+                return std::unique_ptr<pmSplitSubtask>();
          
             splitRecord lRecord(pSourceStub, *pSubtaskId, mSubtaskSplitter->mSplitFactor);
             mSplitRecordList.push_back(lRecord);
@@ -197,7 +197,7 @@ std::auto_ptr<pmSplitSubtask> pmSplitGroup::GetPendingSplit(ulong* pSubtaskId, p
 
     AddDummyEventToRequiredStubs();
 
-    return std::auto_ptr<pmSplitSubtask>(new pmSplitSubtask(mSubtaskSplitter->mTask, lSplitRecord->sourceStub, lSplitRecord->subtaskId, lSplitId, lSplitRecord->splitCount));
+    return std::unique_ptr<pmSplitSubtask>(new pmSplitSubtask(mSubtaskSplitter->mTask, lSplitRecord->sourceStub, lSplitRecord->subtaskId, lSplitId, lSplitRecord->splitCount));
 }
     
 void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination)
@@ -339,11 +339,7 @@ bool pmSplitGroup::Negotiate(ulong pSubtaskId)
     
     if(lRetVal)
     {
-        pmSubtaskRange lRange;
-        lRange.task = mSubtaskSplitter->mTask;
-        lRange.originalAllottee = NULL;
-        lRange.startSubtask = pSubtaskId;
-        lRange.endSubtask = pSubtaskId;
+        pmSubtaskRange lRange(mSubtaskSplitter->mTask, NULL, pSubtaskId, pSubtaskId);
         
         std::vector<std::pair<pmExecutionStub*, bool> >::iterator lIter = lStubVector.begin(), lEndIter = lStubVector.end();
         for(; lIter != lEndIter; ++lIter)

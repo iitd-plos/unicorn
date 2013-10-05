@@ -23,13 +23,13 @@
 
 #include "pmBase.h"
 #include "pmThread.h"
+#include "pmCommunicator.h"
 
 #include <set>
 
 namespace pm
 {
 
-class pmCommunicatorCommand;
 class pmHardware;
 class pmTask;
 class pmProcessingElement;
@@ -39,15 +39,15 @@ class pmExecutionStub;
 namespace scheduler
 {
 
-typedef enum schedulingModel
+enum schedulingModel
 {
 	PUSH,	/* subtasks are pushed from originating task manager to all schedulers to all stubs */
 	PULL,	/* subtasks are pulled by stubs from their scheduler which pull from originating task manager */
     STATIC_EQUAL,  /* subtasks are equally and statically divided among all stubs */
     STATIC_PROPORTIONAL  /* subtasks are proportionally (as defined in configuration file STATIC_PROP_CONF_FILE) and statically divided among all stubs */
-} schedulingModel;
+};
 
-typedef enum pushStrategy
+enum pushStrategy
 {
 	/** Name derived from TCP slow start. Initially, small number of subtasks are assigned to each processing element. An
 	 *  acknowledgement is sent back upon completion of the allotted subtasks. The second time twice the number of subtasks
@@ -56,17 +56,17 @@ typedef enum pushStrategy
 	 *  subtasks are executed.
 	 */
 	SLOW_START
-} pushStrategy;
+};
 
-typedef enum pullStrategy
+enum pullStrategy
 {
 	/** A random proessing element is selected and subtasks are stolen from it. Firstly, a steal attempt is made locally
 	 *  on the machine. If no processing element on the machine can provide subtasks, then a global steal request is made
 	 */
 	RANDOM_STEALING_LOCAL_FIRST
-} pullStrategy;
+};
 
-typedef enum eventIdentifier
+enum eventIdentifier
 {
 	NEW_SUBMISSION,
 	SUBTASK_EXECUTION,
@@ -89,184 +89,294 @@ typedef enum eventIdentifier
     REDISTRIBUTION_OFFSETS_EVENT,
     RANGE_NEGOTIATION_EVENT,
     RANGE_NEGOTIATION_SUCCESS_EVENT,
-    TERMINATE_TASK
-} eventIdentifier;
+    TERMINATE_TASK,
+    MAX_SCHEDULER_EVENTS
+};
 
-typedef struct taskSubmission
+struct schedulerEvent : public pmBasicThreadEvent
+{
+	eventIdentifier eventId;
+    
+    schedulerEvent(eventIdentifier pEventId = MAX_SCHEDULER_EVENTS)
+    : eventId(pEventId)
+    {}
+};
+
+struct taskSubmissionEvent : public schedulerEvent
 {
 	pmLocalTask* localTask;
-} taskSubmission;
+    
+    taskSubmissionEvent(eventIdentifier pEventId, pmLocalTask* pLocalTask)
+    : schedulerEvent(pEventId)
+    , localTask(pLocalTask)
+    {}
+};
 
-typedef struct subtaskExec
+struct subtaskExecEvent : public schedulerEvent
 {
-	pmProcessingElement* device;
-	pmSubtaskRange range;
-} subtaskExec;
+	const pmProcessingElement* device;
+	const pmSubtaskRange range;
+    
+    subtaskExecEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange)
+    : schedulerEvent(pEventId)
+    , device(pDevice)
+    , range(pRange)
+    {}
+};
 
-typedef struct stealRequest
+struct stealRequestEvent : public schedulerEvent
 {
-	pmProcessingElement* stealingDevice;
+	const pmProcessingElement* stealingDevice;
 	pmTask* task;
 	double stealingDeviceExecutionRate;
-} stealRequest;
+    
+    stealRequestEvent(eventIdentifier pEventId, const pmProcessingElement* pStealingDevice, pmTask* pTask, double pStealingDeviceExecutionRate)
+    : schedulerEvent(pEventId)
+    , stealingDevice(pStealingDevice)
+    , task(pTask)
+    , stealingDeviceExecutionRate(pStealingDeviceExecutionRate)
+    {}
+};
 
-typedef struct stealProcess
+struct stealProcessEvent : public schedulerEvent
 {
-	pmProcessingElement* stealingDevice;
-	pmProcessingElement* targetDevice;
+	const pmProcessingElement* stealingDevice;
+	const pmProcessingElement* targetDevice;
 	pmTask* task;
 	double stealingDeviceExecutionRate;
-} stealProcess;
+    
+    stealProcessEvent(eventIdentifier pEventId, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pStealingDeviceExecutionRate)
+    : schedulerEvent(pEventId)
+    , stealingDevice(pStealingDevice)
+    , targetDevice(pTargetDevice)
+    , task(pTask)
+    , stealingDeviceExecutionRate(pStealingDeviceExecutionRate)
+    {}
+};
 
-typedef struct stealSuccessTarget
+struct stealSuccessTargetEvent : public schedulerEvent
 {
-	pmProcessingElement* stealingDevice;
-	pmProcessingElement* targetDevice;
-	pmSubtaskRange range;
-} stealSuccessTarget;
+	const pmProcessingElement* stealingDevice;
+	const pmProcessingElement* targetDevice;
+	const pmSubtaskRange range;
+    
+    stealSuccessTargetEvent(eventIdentifier pEventId, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange)
+    : schedulerEvent(pEventId)
+    , stealingDevice(pStealingDevice)
+    , targetDevice(pTargetDevice)
+    , range(pRange)
+    {}
+};
 
-typedef struct stealFailTarget
+struct stealFailTargetEvent : public schedulerEvent
 {
-	pmProcessingElement* stealingDevice;
-	pmProcessingElement* targetDevice;
+	const pmProcessingElement* stealingDevice;
+	const pmProcessingElement* targetDevice;
 	pmTask* task;
-} stealFailTarget;
+    
+    stealFailTargetEvent(eventIdentifier pEventId, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask)
+    : schedulerEvent(pEventId)
+    , stealingDevice(pStealingDevice)
+    , targetDevice(pTargetDevice)
+    , task(pTask)
+    {}
+};
 
-typedef struct stealSuccessStealer
+struct stealSuccessStealerEvent : public schedulerEvent
 {
-	pmProcessingElement* stealingDevice;
-	pmProcessingElement* targetDevice;
-	pmSubtaskRange range;
-} stealSuccessStealer;
+	const pmProcessingElement* stealingDevice;
+	const pmProcessingElement* targetDevice;
+	const pmSubtaskRange range;
+    
+    stealSuccessStealerEvent(eventIdentifier pEventId, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange)
+    : schedulerEvent(pEventId)
+    , stealingDevice(pStealingDevice)
+    , targetDevice(pTargetDevice)
+    , range(pRange)
+    {}
+};
 
-typedef struct stealFailStealer
+struct stealFailStealerEvent : public schedulerEvent
 {
-	pmProcessingElement* stealingDevice;
-	pmProcessingElement* targetDevice;
+	const pmProcessingElement* stealingDevice;
+	const pmProcessingElement* targetDevice;
 	pmTask* task;
-} stealFailStealer;
+    
+    stealFailStealerEvent(eventIdentifier pEventId, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask)
+    : schedulerEvent(pEventId)
+    , stealingDevice(pStealingDevice)
+    , targetDevice(pTargetDevice)
+    , task(pTask)
+    {}
+};
 
-typedef struct sendAcknowledgement
+struct sendAcknowledgementEvent : public schedulerEvent
 {
-	pmProcessingElement* device;
-	pmSubtaskRange range;
+	const pmProcessingElement* device;
+	const pmSubtaskRange range;
 	pmStatus execStatus;
-    pmCommunicatorCommand::ownershipDataStruct* ownershipData;    // Alternating offsets and lengths
-    uint dataElements;
-} sendAcknowledgement;
+    std::vector<communicator::ownershipDataStruct> ownershipVector;
+    std::vector<uint> memSectionIndexVector;
+    
+    sendAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipData, std::vector<uint>&& pMemSectionIndexVector)
+    : schedulerEvent(pEventId)
+    , device(pDevice)
+    , range(pRange)
+    , execStatus(pExecStatus)
+    , ownershipVector(pOwnershipData)
+    , memSectionIndexVector(pMemSectionIndexVector)
+    {}
+};
 
-typedef struct receiveAcknowledgement
-{
-	pmProcessingElement* device;
-	pmSubtaskRange range;
-	pmStatus execStatus;
-    pmCommunicatorCommand::ownershipDataStruct* ownershipData;    // Alternating offsets and lengths
-    uint dataElements;
-} receiveAcknowledgement;
+typedef sendAcknowledgementEvent receiveAcknowledgementEvent;
 
-typedef struct taskCancel
-{
-	pmTask* task;
-} taskCancel;
-
-typedef struct taskFinish
+struct taskCancelEvent : public schedulerEvent
 {
 	pmTask* task;
-} taskFinish;
+    
+    taskCancelEvent(eventIdentifier pEventId, pmTask* pTask)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    {}
+};
 
-typedef struct taskComplete
+struct taskFinishEvent : public schedulerEvent
+{
+	pmTask* task;
+    
+    taskFinishEvent(eventIdentifier pEventId, pmTask* pTask)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    {}
+};
+
+struct taskCompleteEvent : public schedulerEvent
 {
 	pmLocalTask* localTask;
-} taskComplete;
+    
+    taskCompleteEvent(eventIdentifier pEventId, pmLocalTask* pLocalTask)
+    : schedulerEvent(pEventId)
+    , localTask(pLocalTask)
+    {}
+};
 
-typedef struct taskTerminate
+struct taskTerminateEvent : public schedulerEvent
 {
 	pmTask* task;
-} taskTerminate;
+    
+    taskTerminateEvent(eventIdentifier pEventId, pmTask* pTask)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    {}
+};
 
-typedef struct subtaskReduce
+struct subtaskReduceEvent : public schedulerEvent
 {
 	pmTask* task;
-	pmMachine* machine;
+	const pmMachine* machine;
     pmExecutionStub* reducingStub;
 	ulong subtaskId;
     pmSplitData splitData;
-} subtaskReduce;
-
-typedef struct commandCompletion
-{
-	pmCommandPtr command;
-} commandCompletion;
     
-typedef struct hostFinalization
+    subtaskReduceEvent(eventIdentifier pEventId, pmTask* pTask, const pmMachine* pMachine, pmExecutionStub* pReducingStub, ulong pSubtaskId, pmSplitData& pSplitData)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    , machine(pMachine)
+    , reducingStub(pReducingStub)
+    , subtaskId(pSubtaskId)
+    , splitData(pSplitData)
+    {}
+};
+
+struct commandCompletionEvent : public schedulerEvent
+{
+	const pmCommandPtr command;
+    
+    commandCompletionEvent(eventIdentifier pEventId, const pmCommandPtr& pCommand)
+    : schedulerEvent(pEventId)
+    , command(pCommand)
+    {}
+};
+    
+struct hostFinalizationEvent : public schedulerEvent
 {
     bool terminate; // true for final termination; false for task submission freeze
-} hostFinalization;
     
-typedef struct subtaskRangeCancel
-{
-	pmProcessingElement* targetDevice;
-    pmSubtaskRange range;
-} subtaskRangeCancel;
+    hostFinalizationEvent(eventIdentifier pEventId, bool pTerminate)
+    : schedulerEvent(pEventId)
+    , terminate(pTerminate)
+    {}
+};
     
-typedef struct redistributionMetaData
+struct subtaskRangeCancelEvent : public schedulerEvent
 {
-    pmTask* task;
-    std::vector<pmCommunicatorCommand::redistributionOrderStruct>* redistributionData;
-    uint count;
-} redistributionMetaData;
+	const pmProcessingElement* targetDevice;
+    const pmSubtaskRange range;
+    
+    subtaskRangeCancelEvent(eventIdentifier pEventId, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange)
+    : schedulerEvent(pEventId)
+    , targetDevice(pTargetDevice)
+    , range(pRange)
+    {}
+};
+    
+struct redistributionMetaDataEvent : public schedulerEvent
+{
+    typedef std::vector<communicator::redistributionOrderStruct> redistributionOrderVectorType;
 
-typedef struct redistributionOffsets
+    pmTask* task;
+    uint memSectionIndex;
+    redistributionOrderVectorType* redistributionData;
+    
+    redistributionMetaDataEvent(eventIdentifier pEventId, pmTask* pTask, uint pMemSectionIndex, redistributionOrderVectorType* pRedistributionData)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    , memSectionIndex(pMemSectionIndex)
+    , redistributionData(pRedistributionData)
+    {}
+};
+
+struct redistributionOffsetsEvent : public schedulerEvent
 {
     pmTask* task;
+    uint memSectionIndex;
     std::vector<ulong>* offsetsData;
-    uint count;
     uint destHostId;
     pmMemSection* redistributedMemSection;
-} redistributionOffsets;
     
-typedef struct rangeNegotiation
+    redistributionOffsetsEvent(eventIdentifier pEventId, pmTask* pTask, uint pMemSectionIndex, std::vector<ulong>* pOffsetsData, uint pDestHostId, pmMemSection* pRedistributedMemSection)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    , memSectionIndex(pMemSectionIndex)
+    , offsetsData(pOffsetsData)
+    , destHostId(pDestHostId)
+    , redistributedMemSection(pRedistributedMemSection)
+    {}
+};
+    
+struct rangeNegotiationEvent : public schedulerEvent
 {
-    pmProcessingElement* requestingDevice;
-    pmSubtaskRange range;
-} rangeNegotiation;
+    const pmProcessingElement* requestingDevice;
+    const pmSubtaskRange range;
+    
+    rangeNegotiationEvent(eventIdentifier pEventId, const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange)
+    : schedulerEvent(pEventId)
+    , requestingDevice(pRequestingDevice)
+    , range(pRange)
+    {}
+};
 
-typedef struct rangeNegotiationSuccess
+struct rangeNegotiationSuccessEvent : public schedulerEvent
 {
-    pmProcessingElement* requestingDevice;
-    pmSubtaskRange negotiatedRange;
-} rangeNegotiationSuccess;
-
-typedef struct schedulerEvent : public pmBasicThreadEvent
-{
-	eventIdentifier eventId;
-	union
-	{
-		taskSubmission submissionDetails;
-		subtaskExec execDetails;
-		stealRequest stealRequestDetails;
-		stealProcess stealProcessDetails;
-		stealSuccessTarget stealSuccessTargetDetails;
-		stealFailTarget stealFailTargetDetails;
-		stealSuccessStealer stealSuccessStealerDetails;
-		stealFailStealer stealFailStealerDetails;
-		sendAcknowledgement ackSendDetails;
-		receiveAcknowledgement ackReceiveDetails;
-		taskCancel taskCancelDetails;
-		taskFinish taskFinishDetails;
-        taskComplete taskCompleteDetails;
-        taskTerminate taskTerminateDetails;
-		subtaskReduce subtaskReduceDetails;
-        hostFinalization hostFinalizationDetails;
-        subtaskRangeCancel subtaskRangeCancelDetails;
-        redistributionMetaData redistributionMetaDataDetails;
-        redistributionOffsets redistributionOffsetsDetails;
-        rangeNegotiation rangeNegotiationDetails;
-        rangeNegotiationSuccess rangeNegotiationSuccessDetails;
-	};
-
-	commandCompletion commandCompletionDetails;	
-} schedulerEvent;
+    const pmProcessingElement* requestingDevice;
+    const pmSubtaskRange negotiatedRange;
+    
+    rangeNegotiationSuccessEvent(eventIdentifier pEventId, const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pNegotiatedRange)
+    : schedulerEvent(pEventId)
+    , requestingDevice(pRequestingDevice)
+    , negotiatedRange(pNegotiatedRange)
+    {}
+};
 
 }
 
@@ -277,133 +387,121 @@ typedef struct schedulerEvent : public pmBasicThreadEvent
 
 class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEvent>
 {
-	friend pmStatus SchedulerCommandCompletionCallback(pmCommandPtr pCommand);
+	friend void SchedulerCommandCompletionCallback(const pmCommandPtr& pCommand);
 
 	public:
-
-		virtual ~pmScheduler();
-
+        virtual ~pmScheduler();
 		static pmScheduler* GetScheduler();
 
-		pmStatus SendAcknowledgement(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap);
-		pmStatus ProcessAcknowledgement(pmLocalTask* pLocalTask, pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements);
+		void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
+		void ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
 
-		virtual pmStatus ThreadSwitchCallback(scheduler::schedulerEvent& pEvent);
+        virtual void ThreadSwitchCallback(std::shared_ptr<scheduler::schedulerEvent>& pEvent);
 
-		pmStatus SendFailedStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask);
-		pmStatus SendStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
+		void SendFailedStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
+		void SendStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 
-		pmStatus SubmitTaskEvent(pmLocalTask* pLocalTask);
-		pmStatus PushEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange);		// subtask range execution event
-		pmStatus StealRequestEvent(pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate);
-		pmStatus StealProcessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate);
-		pmStatus StealSuccessEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
-		pmStatus StealFailedEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask);
-		pmStatus StealSuccessReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
-		pmStatus StealFailedReturnEvent(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask);
-		pmStatus AcknowledgementSendEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap);
-		pmStatus AcknowledgementReceiveEvent(pmProcessingElement* pDevice, pmSubtaskRange& pRange, pmStatus pExecStatus, pmCommunicatorCommand::ownershipDataStruct* pOwnershipData, uint pDataElements);
-		pmStatus TaskCancelEvent(pmTask* pTask);
-        pmStatus TaskFinishEvent(pmTask* pTask);
-        pmStatus TaskCompleteEvent(pmLocalTask* pLocalTask);
-		pmStatus ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
-		pmStatus MemTransferEvent(pmMemSection* pSrcMemSection, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
-		pmStatus CommandCompletionEvent(pmCommandPtr pCommand);
-        pmStatus RangeCancellationEvent(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
-        pmStatus RedistributionMetaDataEvent(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
-        pmStatus RedistributionOffsetsEvent(pmTask* pTask, pmMemSection* pRedistributedMemSection, uint pDestHostId, std::vector<ulong>* pOffsetsData, uint pCount);
-        pmStatus RangeNegotiationEvent(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
-        pmStatus RangeNegotiationSuccessEvent(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pNegotiatedRange);
-        pmStatus TerminateTaskEvent(pmTask* pTask);
-
-        pmStatus SendPostTaskOwnershipTransfer(pmMemSection* pMemSection, pmMachine* pReceiverHost, std::tr1::shared_ptr<std::vector<pmCommunicatorCommand::ownershipChangeStruct> >& pChangeData);
-        pmStatus SendSubtaskRangeCancellationMessage(pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
+		void SubmitTaskEvent(pmLocalTask* pLocalTask);
+		void PushEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange);		// subtask range execution event
+		void StealRequestEvent(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate);
+		void StealProcessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate);
+		void StealSuccessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
+		void StealFailedEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
+		void StealSuccessReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
+		void StealFailedReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
+        void AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
+		void AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
+		void TaskCancelEvent(pmTask* pTask);
+        void TaskFinishEvent(pmTask* pTask);
+        void TaskCompleteEvent(pmLocalTask* pLocalTask);
+		void ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, const pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+		void MemTransferEvent(pmMemSection* pSrcMemSection, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
     
-		pmStatus HandleCommandCompletion(pmCommandPtr pCommand);
+        void CommandCompletionEvent(const pmCommandPtr& pCommand);
+        void RangeCancellationEvent(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
+        void RedistributionMetaDataEvent(pmTask* pTask, uint pMemSectionIndex, std::vector<communicator::redistributionOrderStruct>* pRedistributionData);
+        void RedistributionOffsetsEvent(pmTask* pTask, uint pMemSectionIndex, pmMemSection* pRedistributedMemSection, uint pDestHostId, std::vector<ulong>* pOffsetsData);
+        void RangeNegotiationEvent(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange);
+        void RangeNegotiationSuccessEvent(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pNegotiatedRange);
+        void TerminateTaskEvent(pmTask* pTask);
 
+        void SendPostTaskOwnershipTransfer(pmMemSection* pMemSection, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> >& pChangeData);
+        void SendSubtaskRangeCancellationMessage(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
+
+        void HandleCommandCompletion(const pmCommandPtr& pCommand);
         void FreeTaskResourcesOnLocalStubs(pmTask* pTask);
         void CancelAllSubtasksExecutingOnLocalStubs(pmTask* pTask, bool pTaskListeningOnCancellation);
         void CancelAllSubtaskSplitDummyEventsOnLocalStubs(pmTask* pTask);
         void CommitShadowMemPendingOnAllStubs(pmTask* pTask);
-		pmStatus CancelTask(pmLocalTask* pLocalTask);
+		void CancelTask(pmLocalTask* pLocalTask);
 
-		pmCommandCompletionCallback GetSchedulerCommandCompletionCallback();
+        pmCommandCompletionCallbackType GetSchedulerCommandCompletionCallback();
     
-        pmStatus WaitForAllCommandsToFinish();
+        void WaitForAllCommandsToFinish();
 
-        pmStatus SendFinalizationSignal();
-		pmStatus BroadcastTerminationSignal();
+        void SendFinalizationSignal();
+		void BroadcastTerminationSignal();
     
-        pmStatus NegotiateSubtaskRangeWithOriginalAllottee(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
-        pmStatus SendRangeNegotiationSuccess(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pNegotiatedRange);
-        pmStatus SendRedistributionData(pmTask* pTask, std::vector<pmCommunicatorCommand::redistributionOrderStruct>* pRedistributionData, uint pCount);
-        pmStatus SendRedistributionOffsets(pmTask* pTask, std::vector<ulong>* pOffsetsData, uint pCount, pmMemSection* pRedistributedMemSection, uint pDestHostId);
+        void NegotiateSubtaskRangeWithOriginalAllottee(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange);
+        void SendRangeNegotiationSuccess(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pNegotiatedRange);
+        void SendRedistributionData(pmTask* pTask, uint pMemSectionIndex, std::vector<communicator::redistributionOrderStruct>* pRedistributionData);
+        void SendRedistributionOffsets(pmTask* pTask, uint pMemSectionIndex, std::vector<ulong>* pOffsetsData, pmMemSection* pRedistributedMemSection, uint pDestHostId);
 
-
-        pmStatus SendTaskCompleteToTaskOwner(pmTask* pTask);
+        void SendTaskCompleteToTaskOwner(pmTask* pTask);
 
     private:
 		pmScheduler();
 
-		pmStatus SetupPersistentCommunicationCommands();
-		pmStatus DestroyPersistentCommunicationCommands();
+		void SetupPersistentCommunicationCommands();
+		void DestroyPersistentCommunicationCommands();
 
-		pmStatus SetupNewRemoteSubtaskReception();
-		pmStatus SetupNewTaskEventReception();
-		pmStatus SetupNewStealRequestReception();
-		pmStatus SetupNewStealResponseReception();
-        pmStatus SetupNewMemTransferRequestReception();
-        pmStatus SetupNewHostFinalizationReception();
-        pmStatus SetupNewSubtaskRangeCancelReception();
+		void SetupNewRemoteSubtaskReception();
+		void SetupNewTaskEventReception();
+		void SetupNewStealRequestReception();
+		void SetupNewStealResponseReception();
+        void SetupNewMemTransferRequestReception();
+        void SetupNewHostFinalizationReception();
+        void SetupNewSubtaskRangeCancelReception();
     
-		pmStatus ProcessEvent(scheduler::schedulerEvent& pEvent);
+        void ProcessEvent(scheduler::schedulerEvent& pEvent);
 
-		pmStatus AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<pmMachine*>& pMachines);
+		void AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<const pmMachine*>& pMachines);
 
-		pmStatus AssignSubtasksToDevice(pmProcessingElement* pDevice, pmLocalTask* pLocalTask);
-		pmStatus AssignSubtasksToDevices(pmLocalTask* pLocalTask);
+		void AssignSubtasksToDevice(const pmProcessingElement* pDevice, pmLocalTask* pLocalTask);
+		void AssignSubtasksToDevices(pmLocalTask* pLocalTask);
 
 		pmStatus StartLocalTaskExecution(pmLocalTask* pLocalTask);
 
-		pmStatus PushToStub(pmProcessingElement* pDevice, pmSubtaskRange& pRange);
+		void PushToStub(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange);
 
-		pmProcessingElement* RandomlySelectStealTarget(pmProcessingElement* pStealingDevice, pmTask* pTask);
-		pmStatus StealSubtasks(pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate);
+		const pmProcessingElement* RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask);
+		void StealSubtasks(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate);
 
-		pmStatus ServeStealRequest(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate);
-		pmStatus ReceiveFailedStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmTask* pTask);
-		pmStatus ReceiveStealResponse(pmProcessingElement* pStealingDevice, pmProcessingElement* pTargetDevice, pmSubtaskRange& pRange);
+		void ServeStealRequest(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate);
+		void ReceiveFailedStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
+		void ReceiveStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 
-        pmStatus ClearPendingTaskCommands(pmTask* pTask);
-        pmStatus SendTaskFinishToMachines(pmLocalTask* pLocalTask);
-
-		pmCommunicatorCommandPtr mRemoteTaskCommand;
-		pmCommunicatorCommandPtr mReduceSubtaskCommand;
-
-		pmPersistentCommunicatorCommandPtr mRemoteSubtaskRecvCommand;
-		pmPersistentCommunicatorCommandPtr mTaskEventRecvCommand;
-		pmPersistentCommunicatorCommandPtr mStealRequestRecvCommand;
-		pmPersistentCommunicatorCommandPtr mStealResponseRecvCommand;
-        pmPersistentCommunicatorCommandPtr mMemTransferRequestCommand;
-        pmPersistentCommunicatorCommandPtr mHostFinalizationCommand;
-        pmPersistentCommunicatorCommandPtr mSubtaskRangeCancelCommand;
-
-        pmCommunicatorCommand::remoteSubtaskAssignStruct mSubtaskAssignRecvData;
-        pmCommunicatorCommand::taskEventStruct mTaskEventRecvData;
-        pmCommunicatorCommand::stealRequestStruct mStealRequestRecvData;
-        pmCommunicatorCommand::stealResponseStruct mStealResponseRecvData;
-        pmCommunicatorCommand::memoryTransferRequest mMemTransferRequestData;
-        pmCommunicatorCommand::hostFinalizationStruct mHostFinalizationData;
-        pmCommunicatorCommand::subtaskRangeCancelStruct mSubtaskRangeCancelData;
+        void RegisterPostTaskCompletionOwnershipTransfers(const pmSubtaskRange& pRange, const std::vector<communicator::ownershipDataStruct>& pOwnershipVector, const std::vector<uint>& pMemSectionIndexVector);
     
-#ifdef TRACK_SUBTASK_EXECUTION
+        void ClearPendingTaskCommands(pmTask* pTask);
+        void SendTaskFinishToMachines(pmLocalTask* pLocalTask);
+    
+        pmCommunicatorCommandPtr mRemoteSubtaskRecvCommand;
+		pmCommunicatorCommandPtr mTaskEventRecvCommand;
+		pmCommunicatorCommandPtr mStealRequestRecvCommand;
+		pmCommunicatorCommandPtr mStealResponseRecvCommand;
+        pmCommunicatorCommandPtr mMemTransferRequestCommand;
+        pmCommunicatorCommandPtr mHostFinalizationCommand;
+        pmCommunicatorCommandPtr mSubtaskRangeCancelCommand;
+
+    #ifdef TRACK_SUBTASK_EXECUTION
         ulong mSubtasksAssigned;
         ulong mAcknowledgementsSent;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mTrackLock;
-#endif
+    #endif
 };
 
-bool taskClearMatchFunc(scheduler::schedulerEvent& pEvent, void* pCriterion);
+bool taskClearMatchFunc(const scheduler::schedulerEvent& pEvent, void* pCriterion);
 
 } // end namespace pm
 

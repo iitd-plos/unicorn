@@ -84,7 +84,7 @@ public:
     , mSubtaskSplitter(pSubtaskSplitter)
     {}
     
-    std::auto_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
+    std::unique_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
     void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
 
     bool Negotiate(ulong pSubtaskId);
@@ -121,7 +121,7 @@ public:
     
     bool IsSplitGroupLeader(pmExecutionStub* pStub);
     
-    std::auto_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
+    std::unique_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
     void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
     
     bool Negotiate(pmExecutionStub* pStub, ulong pSubtaskId);

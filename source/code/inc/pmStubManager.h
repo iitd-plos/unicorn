@@ -38,18 +38,16 @@ class pmStubManager : public pmBase
 		size_t GetProcessingElementsCPU();
 		size_t GetProcessingElementsGPU();
 		size_t GetStubCount();
-
-		pmStatus FreeGpuResources();
     
     #ifdef DUMP_EVENT_TIMELINE
         void InitializeEventTimelines();
     #endif
 
-		pmExecutionStub* GetStub(pmProcessingElement* pDevice);
-		pmExecutionStub* GetStub(uint pIndex);
+		pmExecutionStub* GetStub(const pmProcessingElement* pDevice) const;
+		pmExecutionStub* GetStub(uint pIndex) const;
     
-        pmExecutionStub* GetCpuStub(uint pIndex);
-        pmExecutionStub* GetGpuStub(uint pIndex);
+        pmExecutionStub* GetCpuStub(uint pIndex) const;
+        pmExecutionStub* GetGpuStub(uint pIndex) const;
 
         void WaitForAllStubsToFinish();
 
@@ -59,10 +57,14 @@ class pmStubManager : public pmBase
 
         void GetCpuIdInfo(uint pRegA, uint pRegC, uint& pEAX, uint& pEBX, uint& pECX, uint& pEDX);
     
-		pmStatus CreateExecutionStubs();
-		pmStatus DestroyExecutionStubs();
+		void CreateExecutionStubs();
+		void DestroyExecutionStubs();
 
 		pmStatus CountAndProbeProcessingElements();
+
+    #ifdef SUPPORT_CUDA
+		void FreeGpuResources();
+    #endif
 
 		std::vector<pmExecutionStub*> mStubVector;
 		

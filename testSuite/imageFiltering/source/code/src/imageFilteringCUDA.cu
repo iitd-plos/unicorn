@@ -273,7 +273,7 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     char* lFilterPtr = (char*)(pSubtaskInfo.gpuContext.reservedGlobalMem);
     void* lTextureMem  = (void*)(lFilterPtr + (MAX_FILTER_DIM * MAX_FILTER_DIM));
     
-    prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.outputMem, lTaskConf->imageWidth, lOffsetX, lOffsetY, lCols, lRows, getTexturePitch(lSubImageWidth), lTextureMem, lFilterPtr, (cudaStream_t)pCudaStream);
+    prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr, lTaskConf->imageWidth, lOffsetX, lOffsetY, lCols, lRows, getTexturePitch(lSubImageWidth), lTextureMem, lFilterPtr, (cudaStream_t)pCudaStream);
 
     return pmSuccess;
 }

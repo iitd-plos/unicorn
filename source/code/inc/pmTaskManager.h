@@ -23,7 +23,7 @@
 
 #include "pmResourceLock.h"
 #include "pmSignalWait.h"
-#include "pmCommand.h"
+#include "pmCommunicator.h"
 
 #include <set>
 #include <map>
@@ -46,42 +46,42 @@ class pmTaskManager : public pmBase
 {
     typedef std::set<pmLocalTask*> localTasksSetType;
     typedef std::set<pmRemoteTask*> remoteTasksSetType;
-    typedef std::map<std::pair<pmMachine*, ulong>, std::vector<std::pair<pmSubtaskRange, pmProcessingElement*> > > enqueuedRemoteSubtasksMapType;
+    typedef std::map<std::pair<const pmMachine*, ulong>, std::vector<std::pair<pmSubtaskRange, const pmProcessingElement*> > > enqueuedRemoteSubtasksMapType;
 
     public:
 		static pmTaskManager* GetTaskManager();
 
-		pmStatus SubmitTask(pmLocalTask* pLocalTask);
-		pmRemoteTask* CreateRemoteTask(pmCommunicatorCommand::remoteTaskAssignPacked* pRemoteTaskData);
+		void SubmitTask(pmLocalTask* pLocalTask);
+		pmRemoteTask* CreateRemoteTask(communicator::remoteTaskAssignPacked* pRemoteTaskData);
 
-		pmStatus DeleteTask(pmLocalTask* pLocalTask);
-		pmStatus DeleteTask(pmRemoteTask* pRemoteTask);
+		void DeleteTask(pmLocalTask* pLocalTask);
+		void DeleteTask(pmRemoteTask* pRemoteTask);
 
-		pmStatus CancelTask(pmLocalTask* pLocalTask);
+		void CancelTask(pmLocalTask* pLocalTask);
 
 		uint GetLocalTaskCount();
 		uint GetRemoteTaskCount();
     
-        pmStatus WaitForAllTasksToFinish();
+        void WaitForAllTasksToFinish();
 
 		uint FindPendingLocalTaskCount();
 
-        bool GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmProcessingElement* pTargetDevice, pmMachine* pOriginatingHost, ulong pSequenceNumber);
-		pmTask* FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumber);
-        pmTask* FindTaskNoThrow(pmMachine* pOriginatingHost, ulong pSequenceNumber);
+        bool GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, const pmProcessingElement* pTargetDevice, const pmMachine* pOriginatingHost, ulong pSequenceNumber);
+		pmTask* FindTask(const pmMachine* pOriginatingHost, ulong pSequenceNumber);
+        pmTask* FindTaskNoThrow(const pmMachine* pOriginatingHost, ulong pSequenceNumber);
     
         bool DoesTaskHavePendingSubtasks(pmTask* pTask);
-        bool DoesTaskHavePendingSubtasks(pmMachine* pOriginatingHost, ulong pSequenceNumber);
+        bool DoesTaskHavePendingSubtasks(const pmMachine* pOriginatingHost, ulong pSequenceNumber);
     
 	private:
 		pmTaskManager();
 
-        pmStatus ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask* pRemoteTask);
+        void ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask* pRemoteTask);
         
         pmLocalTask* FindLocalTask_Internal(ulong pSequenceNumber);
-        pmRemoteTask* FindRemoteTask_Internal(pmMachine* pOriginatingHost, ulong pSequenceNumber);
+        pmRemoteTask* FindRemoteTask_Internal(const pmMachine* pOriginatingHost, ulong pSequenceNumber);
 		
-        pmStatus SubmitTask(pmRemoteTask* pLocalTask);
+        void SubmitTask(pmRemoteTask* pLocalTask);
 
 		static localTasksSetType& GetLocalTasks();		/* Tasks that originated on this machine */
 		static remoteTasksSetType& GetRemoteTasks();	/* Tasks that originated on remote machines */

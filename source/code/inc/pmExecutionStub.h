@@ -24,6 +24,8 @@
 #include "pmBase.h"
 #include "pmThread.h"
 #include "pmSubtaskSplitter.h"
+#include "pmCommunicator.h"
+#include "pmCache.h"
 
 #ifdef DUMP_EVENT_TIMELINE
     #include "pmEventTimeline.h"
@@ -31,6 +33,7 @@
 
 #ifdef SUPPORT_CUDA
 #include "pmMemChunk.h"
+#include "pmCudaInterface.h"
 #endif
 
 #include <setjmp.h>
@@ -51,7 +54,7 @@ class pmReducer;
 namespace execStub
 {
 
-typedef enum eventIdentifier
+enum eventIdentifier
 {
     THREAD_BIND
     , SUBTASK_EXEC
@@ -69,22 +72,47 @@ typedef enum eventIdentifier
 #ifdef SUPPORT_SPLIT_SUBTASKS
     , SPLIT_SUBTASK_CHECK
 #endif
-} eventIdentifier;
+    , MAX_EXEC_STUB_EVENTS
+};
 
-typedef struct threadBind
+struct stubEvent : public pmBasicBlockableThreadEvent
+{
+    eventIdentifier eventId;
+
+    stubEvent(eventIdentifier pEventId = MAX_EXEC_STUB_EVENTS)
+    :eventId(pEventId)
+    {}
+    
+    virtual bool BlocksSecondaryOperations();
+};
+    
+struct threadBindEvent : public stubEvent
 {
     size_t physicalMemory;
     size_t totalStubCount;
-} threadBind;
+    
+    threadBindEvent(eventIdentifier pEventId, size_t pPhysicalMemory, size_t pTotalStubCount)
+    : stubEvent(pEventId)
+    , physicalMemory(pPhysicalMemory)
+    , totalStubCount(pTotalStubCount)
+    {}
+};
 
-typedef struct subtaskExec
+struct subtaskExecEvent : public stubEvent
 {
     pmSubtaskRange range;
     bool rangeExecutedOnce;
     ulong lastExecutedSubtaskId;
-} subtaskExec;
+    
+    subtaskExecEvent(eventIdentifier pEventId, const pmSubtaskRange& pRange, bool pRangeExecutedOnce, ulong pLastExecutedSubtaskId)
+    : stubEvent(pEventId)
+    , range(pRange)
+    , rangeExecutedOnce(pRangeExecutedOnce)
+    , lastExecutedSubtaskId(pLastExecutedSubtaskId)
+    {}
+};
 
-typedef struct subtaskReduce
+struct subtaskReduceEvent : public stubEvent
 {
     pmTask* task;
     ulong subtaskId1;
@@ -92,78 +120,115 @@ typedef struct subtaskReduce
     ulong subtaskId2;
     pmSplitData splitData1;
     pmSplitData splitData2;
-} subtaskReduce;
+    
+    subtaskReduceEvent(eventIdentifier pEventId, pmTask* pTask, ulong pSubtaskId1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitData& pSplitData1, pmSplitData& pSplitData2)
+    : stubEvent(pEventId)
+    , task(pTask)
+    , subtaskId1(pSubtaskId1)
+    , stub2(pStub2)
+    , subtaskId2(pSubtaskId2)
+    , splitData1(pSplitData1)
+    , splitData2(pSplitData2)
+    {}
+};
 
-typedef struct negotiatedRange
+struct negotiatedRangeEvent : public stubEvent
 {
     pmSubtaskRange range;
-} negotiatedRange;
     
-typedef struct execCompletion
+    negotiatedRangeEvent(eventIdentifier pEventId, const pmSubtaskRange& pRange)
+    : stubEvent(pEventId)
+    , range(pRange)
+    {}
+};
+
+#ifdef SUPPORT_CUDA
+struct freeGpuResourcesEvent : public stubEvent
+{
+    freeGpuResourcesEvent(eventIdentifier pEventId)
+    : stubEvent(pEventId)
+    {}
+};
+#endif
+    
+struct execCompletionEvent : public stubEvent
 {
     pmSubtaskRange range;
     pmStatus execStatus;
-} execCompletion;
     
-typedef struct deferredShadowMemCommits
+    execCompletionEvent(eventIdentifier pEventId, pmSubtaskRange& pRange, pmStatus pExecStatus)
+    : stubEvent(pEventId)
+    , range(pRange)
+    , execStatus(pExecStatus)
+    {}
+};
+    
+struct deferredShadowMemCommitsEvent : public stubEvent
 {
     pmTask* task;
-} deferredShadowMemCommits;
     
-typedef struct reductionFinish
+    deferredShadowMemCommitsEvent(eventIdentifier pEventId, pmTask* pTask)
+    : stubEvent(pEventId)
+    , task(pTask)
+    {}
+};
+    
+struct reductionFinishEvent : public stubEvent
 {
     pmTask* task;
-} reductionFinish;
+
+    reductionFinishEvent(eventIdentifier pEventId, pmTask* pTask)
+    : stubEvent(pEventId)
+    , task(pTask)
+    {}
+};
     
-typedef struct processRedistributionBucket
+struct processRedistributionBucketEvent : public stubEvent
 {
     pmTask* task;
+    uint memSectionIndex;
     size_t bucketIndex;
-} processRedistributionBucket;
     
-typedef struct freeTaskResources
+    processRedistributionBucketEvent(eventIdentifier pEventId, pmTask* pTask, uint pMemSectionIndex, size_t pBucketIndex)
+    : stubEvent(pEventId)
+    , task(pTask)
+    , memSectionIndex(pMemSectionIndex)
+    , bucketIndex(pBucketIndex)
+    {}
+};
+
+struct freeTaskResourcesEvent : public stubEvent
 {
-    pmMachine* taskOriginatingHost;
+    const pmMachine* taskOriginatingHost;
     ulong taskSequenceNumber;
-} freeTaskResources;
+    
+    freeTaskResourcesEvent(eventIdentifier pEventId, const pmMachine* pTaskOriginatingHost, ulong pTaskSequenceNumber)
+    : stubEvent(pEventId)
+    , taskOriginatingHost(pTaskOriginatingHost)
+    , taskSequenceNumber(pTaskSequenceNumber)
+    {}
+};
     
 #ifdef DUMP_EVENT_TIMELINE
-typedef struct initTimeline
+struct initTimelineEvent : public stubEvent
 {
-} initTimeline;
+    initTimelineEvent(eventIdentifier pEventId)
+    : stubEvent(pEventId)
+    {}
+};
 #endif
     
 #ifdef SUPPORT_SPLIT_SUBTASKS
-typedef struct splitSubtaskCheck
+struct splitSubtaskCheckEvent : public stubEvent
 {
     pmTask* task;
-} splitSubtaskCheck;
+    
+    splitSubtaskCheckEvent(eventIdentifier pEventId, pmTask* pTask)
+    : stubEvent(pEventId)
+    , task(pTask)
+    {}
+};
 #endif
-
-typedef struct stubEvent : public pmBasicThreadEvent
-{
-    eventIdentifier eventId;
-    union
-    {
-        threadBind bindDetails;
-        subtaskExec execDetails;
-        subtaskReduce reduceDetails;
-        negotiatedRange negotiatedRangeDetails;
-        execCompletion execCompletionDetails;
-        deferredShadowMemCommits deferredShadowMemCommitsDetails;
-        reductionFinish reductionFinishDetails;
-        processRedistributionBucket processRedistributionBucketDetails;
-        freeTaskResources freeTaskResourcesDetails;
-    #ifdef DUMP_EVENT_TIMELINE
-        initTimeline initTimelineDetails;
-    #endif
-    #ifdef SUPPORT_SPLIT_SUBTASKS
-        splitSubtaskCheck splitSubtaskCheckDetails;
-    #endif
-    };
-
-    virtual bool BlocksSecondaryCommands();
-} stubEvent;
 
 }
 
@@ -177,31 +242,31 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		pmExecutionStub(uint pDeviceIndexOnMachine);
 		virtual ~pmExecutionStub();
 
-		virtual pmStatus BindToProcessingElement() = 0;
+		virtual void BindToProcessingElement() = 0;
 
-		virtual pmStatus Push(pmSubtaskRange& pRange);
+		void Push(const pmSubtaskRange& pRange);
     
-		virtual pmStatus ThreadSwitchCallback(execStub::stubEvent& pEvent);
+		virtual void ThreadSwitchCallback(std::shared_ptr<execStub::stubEvent>& pEvent);
 
 		virtual std::string GetDeviceName() = 0;
 		virtual std::string GetDeviceDescription() = 0;
 
 		virtual pmDeviceType GetType() = 0;
 
-		pmProcessingElement* GetProcessingElement();
+		const pmProcessingElement* GetProcessingElement() const;
 
-        pmStatus ThreadBindEvent(size_t pPhysicalMemory, size_t pTotalStubCount);
+        void ThreadBindEvent(size_t pPhysicalMemory, size_t pTotalStubCount);
     #ifdef DUMP_EVENT_TIMELINE
-        pmStatus InitializeEventTimeline();
+        void InitializeEventTimeline();
     #endif
-		pmStatus ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
-		pmStatus StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate);
-		pmStatus CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation);
-        pmStatus CancelSubtaskRange(pmSubtaskRange& pRange);
-        pmStatus ProcessNegotiatedRange(pmSubtaskRange& pRange);
+		void ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
+		void StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate);
+		void CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation);
+        void CancelSubtaskRange(const pmSubtaskRange& pRange);
+        void ProcessNegotiatedRange(const pmSubtaskRange& pRange);
         void ProcessDeferredShadowMemCommits(pmTask* pTask);
         void ReductionFinishEvent(pmTask* pTask);
-        void ProcessRedistributionBucket(pmTask* pTask, size_t pBucketIndex);
+        void ProcessRedistributionBucket(pmTask* pTask, uint pMemSectionIndex, size_t pBucketIndex);
         void FreeTaskResources(pmTask* pTask);
 
     #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -209,7 +274,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void RemoveSplitSubtaskCheckEvent(pmTask* pTask);
     #endif
 
-        pmStatus NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange);
+        void NegotiateRange(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange);
 
         bool RequiresPrematureExit();
 
@@ -219,20 +284,22 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void SetupJmpBuf(sigjmp_buf* pJmpBuf);
         void UnsetupJmpBuf(bool pHasJumped);
     
-        void WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>& pNetworkCommands);
+        void WaitForNetworkFetch(const std::vector<pmCommunicatorCommandPtr>& pNetworkCommands);
 
         void CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus);
 
 	protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
-		pmStatus CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, bool pPrefetch, pmSplitInfo* pSplitInfo);
+		void CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, bool pPrefetch, pmSplitInfo* pSplitInfo);
 
-		pmStatus FreeGpuResources();
+    #ifdef SUPPORT_CUDA
+		void FreeGpuResources();
+    #endif
 
-		virtual pmStatus DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
+		virtual void DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
 
-        virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, bool pMultiAssign) = 0;
-        virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId) = 0;
+        virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign) = 0;
+        virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
         virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAssign, ulong pStartSubtaskId, ulong pEndSubtaskId, bool pSuccess, pmSplitInfo* pSplitInfo) = 0;
         virtual void TerminateUserModeExecution() = 0;
 
@@ -252,7 +319,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
             bool prematureTermination;
             bool taskListeningOnCancellation;
             sigjmp_buf* jmpBuf;
-            pmAccumulatorCommandPtr* accumulatorCommandPtr;
+            pmCommandPtr* accumulatorCommandPtr;
         #ifdef SUPPORT_SPLIT_SUBTASKS
             pmExecutionStub* splitSubtaskSourceStub;
             pmSplitData splitData;
@@ -276,36 +343,36 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
                 pmExecutionStub* mStub;
         } currentSubtaskRangeTerminus;
     
-		pmStatus ProcessEvent(execStub::stubEvent& pEvent);
-        virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pSplitInfo = NULL) = 0;
+		void ProcessEvent(execStub::stubEvent& pEvent);
+        virtual void Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pSplitInfo = NULL) = 0;
 
     #ifdef DUMP_EVENT_TIMELINE
-        ulong ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execStub::stubEvent& pEvent, bool pIsMultiAssign, pmSubtaskRangeExecutionTimelineAutoPtr& pRangeExecTimelineAutoPtr, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmStatus& pStatus);
+        ulong ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const execStub::subtaskExecEvent& pEvent, bool pIsMultiAssign, pmSubtaskRangeExecutionTimelineAutoPtr& pRangeExecTimelineAutoPtr, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmStatus& pStatus);
     #else
-        ulong ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execStub::stubEvent& pEvent, bool pIsMultiAssign, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmStatus& pStatus);
+        ulong ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const execStub::subtaskExecEvent& pEvent, bool pIsMultiAssign, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmStatus& pStatus);
     #endif
     
     #ifdef SUPPORT_SPLIT_SUBTASKS
-        bool CheckSplittedExecution(execStub::stubEvent& pEvent);
-        void ExecutePendingSplit(std::auto_ptr<pmSplitSubtask> pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked);
-        void ExecuteSplitSubtask(const std::auto_ptr<pmSplitSubtask>& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked, bool pMultiAssign, bool& pPrematureTermination, bool& pReassigned, bool& pForceAckFlag);
+        bool CheckSplittedExecution(execStub::subtaskExecEvent& pEvent);
+        void ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked);
+        void ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked, bool pMultiAssign, bool& pPrematureTermination, bool& pReassigned, bool& pForceAckFlag);
         void HandleSplitSubtaskExecutionCompletion(pmTask* pTask, const splitter::splitRecord& pSplitRecord, pmStatus pExecStatus);
         void CommitSplitSubtask(pmSubtaskRange& pRange, const splitter::splitRecord& pSplitRecord, pmStatus pExecStatus);
-        bool UpdateSecondaryAllotteeMap(std::pair<pmTask*, ulong>& pPair, pmProcessingElement* pRequestingDevice);
-        bool UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulong>& pPair, pmProcessingElement* pRequestingDevice);
+        bool UpdateSecondaryAllotteeMap(std::pair<pmTask*, ulong>& pPair, const pmProcessingElement* pRequestingDevice);
+        bool UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulong>& pPair, const pmProcessingElement* pRequestingDevice);
     #endif
     
-        void ExecuteSubtaskRange(execStub::stubEvent& pEvent);
+        void ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent);
     
         void PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
-        pmStatus CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, pmSplitInfo* pSplitInfo);
-        void CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, pmSplitInfo* pSplitInfo);
+        void CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemSectionIndex);
         void DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
         void CancelCurrentlyExecutingSubtaskRange(bool pTaskListeningOnCancellation);
         void TerminateCurrentSubtaskRange();
         void ClearSecondaryAllotteeMap(pmSubtaskRange& pRange);
-        void SendAcknowledgement(pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap);
+        void SendSplitAcknowledgement(const pmSubtaskRange& pRange, const std::map<ulong, std::vector<pmExecutionStub*> >& pMap, pmStatus pExecStatus);
     
     #ifdef DUMP_EVENT_TIMELINE
         std::string GetEventTimelineName();
@@ -316,18 +383,18 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         volatile sig_atomic_t mExecutingLibraryCode;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCurrentSubtaskRangeLock;
         currentSubtaskRangeStats* mCurrentSubtaskRangeStats;  // Subtasks currently being executed
-        std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> > mSecondaryAllotteeMap;  // PULL model: secondary allottees of a subtask range
+        std::map<std::pair<pmTask*, ulong>, std::vector<const pmProcessingElement*> > mSecondaryAllotteeMap;  // PULL model: secondary allottees of a subtask range
     
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeferredShadowMemCommitsLock;
         std::map<pmTask*, std::vector<std::pair<ulong, pmSplitData> > > mDeferredShadowMemCommits;
 
     #ifdef DUMP_EVENT_TIMELINE
-        std::auto_ptr<pmEventTimeline> mEventTimelineAutoPtr;
+        std::unique_ptr<pmEventTimeline> mEventTimelineAutoPtr;
     #endif
     
     #ifdef SUPPORT_SPLIT_SUBTASKS
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mPushAckLock;
-        std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::pair<ulong, std::map<size_t, size_t> > > > mPushAckHolder;   // Key - Task, Value - Start Subtask, End Subtask, Subtasks ready for acknowledgement, Ownership Map
+        std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::map<ulong, std::vector<pmExecutionStub*>>>> mPushAckHolder;   // Key - Task, Value - Start Subtask, End Subtask, Map of subtask id versus vector of stubs that executed splits
     #endif
 };
 
@@ -337,21 +404,21 @@ class pmStubGPU : public pmExecutionStub
 		pmStubGPU(uint pDeviceIndexOnMachine);
 		virtual ~pmStubGPU();
 
-		virtual pmStatus BindToProcessingElement() = 0;
+		virtual void BindToProcessingElement() = 0;
 
 		virtual std::string GetDeviceName() = 0;
 		virtual std::string GetDeviceDescription() = 0;
 
 		virtual pmDeviceType GetType() = 0;
 
-		virtual pmStatus FreeResources() = 0;
-		virtual pmStatus FreeExecutionResources() = 0;
+		virtual void FreeResources() = 0;
+		virtual void FreeExecutionResources() = 0;
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL) = 0;
+		virtual void Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL) = 0;
 
     protected:
-        virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, bool pMultiAssign) = 0;
-        virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId) = 0;
+        virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign) = 0;
+        virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
         virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAssign, ulong pStartSubtaskId, ulong pEndSubtaskId, bool pSuccess, pmSplitInfo* pSplitInfo) = 0;
         virtual void TerminateUserModeExecution() = 0;
 
@@ -364,7 +431,7 @@ class pmStubCPU : public pmExecutionStub
 		pmStubCPU(size_t pCoreId, uint pDeviceIndexOnMachine);
 		virtual ~pmStubCPU();
 
-		virtual pmStatus BindToProcessingElement();
+		virtual void BindToProcessingElement();
 		virtual size_t GetCoreId();
 
 		virtual std::string GetDeviceName();
@@ -372,11 +439,11 @@ class pmStubCPU : public pmExecutionStub
 
 		virtual pmDeviceType GetType();
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL);
+		virtual void Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL);
 
     protected:
-        virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, bool pMultiAssign);
-        virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId);
+        virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign);
+        virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo);
         virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAssign, ulong pStartSubtaskId, ulong pEndSubtaskId, bool pSuccess, pmSplitInfo* pSplitInfo);
         virtual void TerminateUserModeExecution();
     
@@ -390,70 +457,88 @@ class pmStubCUDA : public pmStubGPU
     friend class pmDispatcherCUDA;
 
     public:
-        pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine);
-		virtual ~pmStubCUDA();
+        typedef pmCache<pmCudaCacheKey, pmCudaCacheValue, pmCudaCacheHasher, pmCudaCacheEvictor> pmCudaCacheType;
 
-		virtual pmStatus BindToProcessingElement();
+        pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine);
+
+		virtual void BindToProcessingElement();
 
 		virtual std::string GetDeviceName();
 		virtual std::string GetDeviceDescription();
 
 		virtual pmDeviceType GetType();
 
-		virtual pmStatus FreeResources();
-		virtual pmStatus FreeExecutionResources();
+		virtual void FreeResources();
+		virtual void FreeExecutionResources();
 
-		virtual pmStatus Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL);
+		virtual void Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL);
     
         void* GetDeviceInfoCudaPtr();
-        pmLastCudaExecutionRecord& GetLastExecutionRecord();
-        void FreeTaskResources(pmMachine* pOriginatingHost, ulong pSequenceNumber);
+        void FreeTaskResources(const pmMachine* pOriginatingHost, ulong pSequenceNumber);
     
-        void StreamFinishCallback();
+        void StreamFinishCallback(void* pCudaStream);
+
+        void ReserveMemory(size_t pPhysicalMemory, size_t pTotalStubCount);
+    
+        pmCudaCacheType& GetCudaCache();
+        pmMemChunk* GetCudaBufferChunk();
+    
+        const std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>>& GetSubtaskPointersMap() const;
+        const std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct>& GetSubtaskSecondaryBuffersMap() const;
 
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        void ReservePinnedMemory(size_t pPhysicalMemory, size_t pTotalStubCount);
         pmMemChunk* GetPinnedBufferChunk();
     #endif
     
         size_t GetDeviceIndex();
 
     protected:
-        virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, bool pMultiAssign);
-        virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId);
+        virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign);
+        virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo);
         virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAssign, ulong pStartSubtaskId, ulong pEndSubtaskId, bool pSuccess, pmSplitInfo* pSplitInfo);
         virtual void TerminateUserModeExecution();
 
-        void PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly);
+        void PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo);
     
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        void CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly);
-        pmStatus CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubtaskInfo& pSubtaskInfo);
+        void CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo);
+        pmStatus CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo);
     #endif
 
 	private:
-		size_t mDeviceIndex;
+        void* CreateTaskConf(const pmTaskInfo& pTaskInfo);
+        void DestroyTaskConf(void* pTaskConfCudaPtr);
+    
+        void* CreateDeviceInfoCudaPtr(const pmDeviceInfo& pDeviceInfo);
+        void DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr);
+    
+        bool CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, std::vector<std::shared_ptr<pmCudaCacheValue>>& pPreventCachePurgeVector, size_t pCudaAlignment);
 
-        std::map<std::pair<pmMachine*, ulong>, pmTaskInfo> mTaskInfoCudaMap; // pair of task originating host and sequence number
-        pmLastCudaExecutionRecord mLastExecutionRecord;
+        void* AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment);
+        bool AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct);
+    
+        size_t mDeviceIndex;
+
+        std::map<std::pair<const pmMachine*, ulong>, pmTaskInfo> mTaskInfoCudaMap; // pair of task originating host and sequence number
         void* mDeviceInfoCudaPtr;
+    
+        std::unique_ptr<pmMemChunk> mCudaBufferChunk;
+        void* mCudaBuffer;
 
-        std::vector<std::vector<std::pair<size_t, size_t> > > mAllocationOffsets;   // pair of offset and size
-        std::map<ulong, std::vector<void*> > mCudaPointersMap;
-        size_t mTotalAllocationSize;
-        void* mCudaAllocation;
-        const size_t mMemElements;    
-        size_t mPendingStreams;
-        std::auto_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> mStreamSignalWait;
+        pmCudaCacheType mCudaCache;
+
+        std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>> mSubtaskPointersMap;  // subtask id versus CUDA and pinned pointers
+        std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct> mSubtaskSecondaryBuffersMap;
+
+        ulong mStartSubtaskId;
+        finalize_ptr<pmCudaStreamAutoPtr, deleteArrayDeallocator<pmCudaStreamAutoPtr>> mCudaStreams;
     
         std::vector<pmCudaMemcpyCommand> mDeviceToHostCommands;
         std::vector<pmCudaMemcpyCommand> mHostToDeviceCommands;
     
      #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        std::auto_ptr<pmMemChunk> mPinnedBufferChunk;
-        std::map<ulong, std::vector<void*> > mPinnedPointersMap;
+        std::unique_ptr<pmMemChunk> mPinnedBufferChunk;
         void* mPinnedBuffer;
-        void* mPinnedAllocation;
     #else
         const pmStatus mStatusCopySrc;
         pmStatus mStatusCopyDest;
@@ -461,8 +546,11 @@ class pmStubCUDA : public pmStubGPU
 };
 #endif
 
-bool execEventMatchFunc(execStub::stubEvent& pEvent, void* pCriterion);
-bool splitSubtaskCheckEventMatchFunc(execStub::stubEvent& pEvent, void* pCriterion);
+bool execEventMatchFunc(const execStub::stubEvent& pEvent, void* pCriterion);
+    
+#ifdef SUPPORT_SPLIT_SUBTASKS
+bool splitSubtaskCheckEventMatchFunc(const execStub::stubEvent& pEvent, void* pCriterion);
+#endif
     
 } // end namespace pm
 

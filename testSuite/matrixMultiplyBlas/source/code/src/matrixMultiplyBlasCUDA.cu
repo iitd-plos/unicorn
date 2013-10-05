@@ -32,9 +32,9 @@ pmStatus matrixMultiply_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevic
     if(!GetSplitData(&lBlockOffset, &lBlockWidth, lTaskConf, pSubtaskInfo.splitInfo))
         return pmSuccess;
 
-    MATRIX_DATA_TYPE* lMatrix1 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem);
-    MATRIX_DATA_TYPE* lMatrix2 = ((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem)) + (lTaskConf->matrixDim * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim + lBlockOffset) - (lBlockRow * lTaskConf->blockDim * lTaskConf->matrixDim);
-    MATRIX_DATA_TYPE* lMatrix3 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.outputMem);
+    MATRIX_DATA_TYPE* lMatrix1 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX1_MEM_INDEX].memHandle);
+    MATRIX_DATA_TYPE* lMatrix2 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX2_MEM_INDEX].memHandle);
+    MATRIX_DATA_TYPE* lMatrix3 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[OUTPUT_MATRIX_MEM_INDEX].memHandle);
 
     CUBLAS_ERROR_CHECK("cublasSetStream", cublasSetStream(lCublasHandle, (cudaStream_t)pCudaStream));
 

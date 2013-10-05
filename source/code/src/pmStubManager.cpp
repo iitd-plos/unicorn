@@ -64,14 +64,14 @@ size_t pmStubManager::GetStubCount()
 	return mStubCount;
 }
 
-pmExecutionStub* pmStubManager::GetStub(pmProcessingElement* pDevice)
+pmExecutionStub* pmStubManager::GetStub(const pmProcessingElement* pDevice) const
 {
 	size_t pIndex = (size_t)(pDevice->GetDeviceIndexInMachine());
 
 	return GetStub((uint)pIndex);
 }
 
-pmExecutionStub* pmStubManager::GetStub(uint pIndex)
+pmExecutionStub* pmStubManager::GetStub(uint pIndex) const
 {
 	if(pIndex >= mStubVector.size())
 		PMTHROW(pmStubException(pmStubException::INVALID_STUB_INDEX));
@@ -79,12 +79,12 @@ pmExecutionStub* pmStubManager::GetStub(uint pIndex)
 	return mStubVector[pIndex];
 }
 
-pmExecutionStub* pmStubManager::GetCpuStub(uint pIndex)
+pmExecutionStub* pmStubManager::GetCpuStub(uint pIndex) const
 {
     return GetStub(pIndex);
 }
 
-pmExecutionStub* pmStubManager::GetGpuStub(uint pIndex)
+pmExecutionStub* pmStubManager::GetGpuStub(uint pIndex) const
 {
     return GetStub((uint)mProcessingElementsCPU + pIndex);
 }
@@ -94,7 +94,7 @@ void pmStubManager::GetCpuIdInfo(uint pRegA, uint pRegC, uint& pEAX, uint& pEBX,
     asm volatile ("cpuid" : "=a" (pEAX), "=b" (pEBX), "=c" (pECX), "=d" (pEDX) : "a" (pRegA), "c" (pRegC));
 }
     
-pmStatus pmStubManager::CreateExecutionStubs()
+void pmStubManager::CreateExecutionStubs()
 {
 #if defined(MACOS)
     size_t lBufferLen = sizeof(mProcessingElementsCPU);
@@ -166,11 +166,10 @@ pmStatus pmStubManager::CreateExecutionStubs()
         (*lIter)->ThreadBindEvent(lPhysicalMemory, mStubCount);
         (*lIter)->WaitForQueuedCommands();
     }
-    
-	return pmSuccess;
 }
 
-pmStatus pmStubManager::FreeGpuResources()
+#ifdef SUPPORT_CUDA
+void pmStubManager::FreeGpuResources()
 {
     for(size_t i=0; i<mStubCount; ++i)
     {
@@ -183,18 +182,17 @@ pmStatus pmStubManager::FreeGpuResources()
         if(dynamic_cast<pmStubGPU*>(mStubVector[i]))
             (static_cast<pmStubGPU*>(mStubVector[i]))->WaitForQueuedCommands();
 	}
-    
-	return pmSuccess;
 }
+#endif
 
-pmStatus pmStubManager::DestroyExecutionStubs()
+void pmStubManager::DestroyExecutionStubs()
 {
+#ifdef SUPPORT_CUDA
 	FreeGpuResources();
+#endif
 
 	for(size_t i = 0; i < mStubCount; ++i)
 		delete mStubVector[i];
-
-	return pmSuccess;
 }
 
 #ifdef DUMP_EVENT_TIMELINE

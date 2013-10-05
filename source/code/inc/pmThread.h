@@ -22,7 +22,6 @@
 #define __PM_THREAD__
 
 #include "pmBase.h"
-#include "pmCommand.h"
 #include "pmSignalWait.h"
 #include "pmSafePriorityQueue.h"
 
@@ -54,62 +53,73 @@ void* ThreadLoop(void* pThreadData);
  * specific. pmThread executes only one command at a time. The subsequent commands wait until
  * the first one returns.
 */
+
+namespace thread
+{
+
+enum internalMessage
+{
+    TERMINATE,
+    DISPATCH_COMMAND,
+    MAX_INTERNAL_COMMANDS
+};
+
+}
+
+typedef struct pmBasicThreadEvent : public pmNonCopyable
+{
+public:
+    template<typename T, typename P>
+    friend class pmPThread;
+
+    bool BlocksSecondaryOperations()
+    {
+        return false;
+    }
+
+private:
+    thread::internalMessage msg;
+} pmBasicThreadEvent;
+
+typedef struct pmBasicBlockableThreadEvent : public pmBasicThreadEvent
+{
+    virtual bool BlocksSecondaryOperations()
+    {
+        return false;
+    }
     
-// T must be default constructible
+    virtual ~pmBasicBlockableThreadEvent() {}
+    
+} pmBasicBlockableThreadEvent;
+
 
 template<typename T, typename P = ushort>
 class pmThread : public pmBase
 {
 	public:
-		typedef bool (*internalMatchFuncPtr)(T& pItem, void* pMatchCriterion);
-
-		typedef struct internalMatchCriterion
-		{
-			internalMatchFuncPtr clientMatchFunc;
-			void* clientMatchCriterion;
-		} internalMatchCriterion;
-
 		virtual ~pmThread() {}
-		virtual pmStatus SwitchThread(T& pCommand, P pPriority) = 0;
+        virtual void SwitchThread(const std::shared_ptr<T>& pCommand, P pPriority) = 0;
 
         virtual void InterruptThread() = 0;
-		virtual pmStatus SetProcessorAffinity(int pProcesorId) = 0;
+		virtual void SetProcessorAffinity(int pProcesorId) = 0;
 		
-        virtual pmStatus WaitForQueuedCommands() = 0;
-        virtual pmStatus WaitIfCurrentCommandMatches(internalMatchFuncPtr pMatchFunc, void* pMatchCriterion) = 0;
+        virtual void WaitForQueuedCommands() = 0;
+        virtual void WaitIfCurrentCommandMatches(typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion) = 0;
 
-        virtual pmStatus UnblockSecondaryCommands();
-		virtual pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem, bool pTemporarilyUnblockSecondaryCommands = false);
-        virtual pmStatus DeleteMatchingCommands(P pPriority, internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
+        virtual void UnblockSecondaryCommands();
+        virtual pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion, std::shared_ptr<T>& pCommand, bool pTemporarilyUnblockSecondaryCommands = false);
+        virtual void DeleteMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion);
     
 		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
+        virtual void ThreadSwitchCallback(std::shared_ptr<T>& pCommand) = 0;
     
-		enum internalMessage
-		{
-			TERMINATE,
-			DISPATCH_COMMAND
-		};
-
-		typedef struct internalType
-		{
-			internalMessage msg;
-			T cmd;
-			typedef pmThread<T, P> outerType;
-        
-            virtual bool BlocksSecondaryOperations()
-            {
-                return cmd.BlocksSecondaryCommands();
-            }
-		} internalType;
-		
-		pmSafePQ<typename pmThread<T, P>::internalType>& GetPriorityQueue() {return this->mSafePQ;}
+		pmSafePQ<T, P>& GetPriorityQueue() {return this->mSafePQ;}
 
 	protected:
-		pmSafePQ<typename pmThread<T, P>::internalType> mSafePQ;
+		pmSafePQ<T, P> mSafePQ;
 
 	private:
-		virtual pmStatus TerminateThread() = 0;
+		virtual void TerminateThread() = 0;
 };
 
 template<typename T, typename P = ushort>
@@ -119,45 +129,32 @@ class pmPThread : public pmThread<T, P>
 		pmPThread();
 		virtual ~pmPThread();
 
-		virtual pmStatus SwitchThread(T& pCommand, P pPriority);
+        virtual void SwitchThread(const std::shared_ptr<T>& pCommand, P pPriority);
 
-		virtual pmStatus SetProcessorAffinity(int pProcesorId);
+		virtual void SetProcessorAffinity(int pProcesorId);
 
 		/* To be implemented by client */
-		virtual pmStatus ThreadSwitchCallback(T& pCommand) = 0;
+        virtual void ThreadSwitchCallback(std::shared_ptr<T>& pCommand) = 0;
 
         virtual void InterruptThread();
-        virtual pmStatus WaitForQueuedCommands();
-        virtual pmStatus WaitIfCurrentCommandMatches(typename pmThread<T, P>::internalMatchFuncPtr pMatchFunc, void* pMatchCriterion);
+        virtual void WaitForQueuedCommands();
+        virtual void WaitIfCurrentCommandMatches(typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion);
     
-        friend void* ThreadLoop <T, P> (void* pThreadData);
+        friend void* ThreadLoop<T, P>(void* pThreadData);
 
 	private:
-		virtual pmStatus SubmitCommand(typename pmThread<T, P>::internalType& pInternalCommand, P pPriority);
-		virtual pmStatus ThreadCommandLoop();
-		virtual pmStatus TerminateThread();
+        virtual void SubmitCommand(const std::shared_ptr<T>& pCommand, P pPriority);
+		virtual void ThreadCommandLoop();
+		virtual void TerminateThread();
 
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mSignalWait;
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mReverseSignalWait;
 
 		pthread_t mThread;
-        typename pmThread<T, P>::internalType mCurrentCommand;
 };
-
-template<typename T> 
-bool internalMatchFunc(T& pInternalCommand, void* pCriterion);
 
 } // end namespace pm
 
-typedef struct pmBasicThreadEvent
-{
-    virtual bool BlocksSecondaryCommands()
-    {
-        return false;
-    }
-} pmBasicThreadEvent;
-
 #include "../src/pmThread.cpp"
-
 
 #endif

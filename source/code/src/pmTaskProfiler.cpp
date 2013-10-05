@@ -38,7 +38,6 @@ static const char* profileName[] =
     (char*)"OUTPUT_MEMORY_TRANSFER",
     (char*)"TOTAL_MEMORY_TRANSFER",
     (char*)"DATA_PARTITIONING",
-    (char*)"PRE_SUBTASK_EXECUTION",
     (char*)"SUBTASK_EXECUTION",
     (char*)"DATA_REDUCTION",
     (char*)"DATA_REDISTRIBUTION",

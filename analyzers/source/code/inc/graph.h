@@ -58,7 +58,7 @@ struct RectGroup
 class Graph
 {
 public:
-    Graph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX, std::auto_ptr<Axis>& pAxisY);
+    Graph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY);
 
     size_t GetWidth() const;
     size_t GetHeight() const;
@@ -73,8 +73,8 @@ protected:
     double mLeftMargin, mRightMargin, mTopMargin, mBottomMargin;
     double mUsableWidth, mUsableHeight;
 
-    std::auto_ptr<Axis> mAxisX;
-    std::auto_ptr<Axis> mAxisY;
+    std::unique_ptr<Axis> mAxisX;
+    std::unique_ptr<Axis> mAxisY;
 
     double mMinX, mMinY, mMaxX, mMaxY;
     double mMinPlottedX, mMinPlottedY;
@@ -87,7 +87,7 @@ protected:
 class LineGraph : public Graph
 {
 public:
-    LineGraph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX, std::auto_ptr<Axis>& pAxisY, size_t pLineCount);
+    LineGraph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY, size_t pLineCount);
     
     void SetLineName(size_t pLineIndex, const std::string& pName);
     void AddLineDataPoint(size_t pLineIndex, const std::pair<double, double>& pDataPoint);
@@ -101,7 +101,7 @@ private:
 class RectGraph : public Graph
 {
 public:
-    RectGraph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX, std::auto_ptr<Axis>& pAxisY, size_t pGroups, size_t pRectsPerGroup, bool pGroupsOnXAxis = true);
+    RectGraph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY, size_t pGroups, size_t pRectsPerGroup, bool pGroupsOnXAxis = true);
 
     void SetGroupName(size_t pGroupIndex, const std::string& pGroupName);
     void SetRectName(size_t pRectIndexInEachGroup, const std::string& pRectName);

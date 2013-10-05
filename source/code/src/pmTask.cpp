@@ -48,9 +48,8 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
 /* class pmTask */
-pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, bool pMultiAssignEnabled, bool pDisjointReadWritesAcrossSubtasks, bool pOverlapComputeCommunication, bool pCanForciblyCancelSubtasks, bool pCanSplitCpuSubtasks, bool pCanSplitGpuSubtasks)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmTaskMemory* pTaskMemPtr, uint pTaskMemCount, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags)
 	: mTaskId(pTaskId)
-	, mMemRO(pMemRO)
 	, mCallbackUnit(pCallbackUnit)
 	, mSubtaskCount(pSubtaskCount)
     , mOriginatingHost(pOriginatingHost)
@@ -61,77 +60,85 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSectio
 	, mSchedulingModel(pSchedulingModel)
     , mSubscriptionManager(this)
     , mSequenceNumber(0)
-    , mMultiAssignEnabled(pMultiAssignEnabled)
-    , mDisjointReadWritesAcrossSubtasks(pDisjointReadWritesAcrossSubtasks)
-    , mOverlapComputeCommunication(pOverlapComputeCommunication)
-    , mReadOnlyMemAddrForSubtasks(NULL)
-    , mCanForciblyCancelSubtasks(pCanForciblyCancelSubtasks)
-    , mCanSplitCpuSubtasks(pCanSplitCpuSubtasks)
-    , mCanSplitGpuSubtasks(pCanSplitGpuSubtasks)
+    , mMultiAssignEnabled(pTaskFlags & TASK_MULTI_ASSIGN_FLAG_VAL)
+    , mDisjointReadWritesAcrossSubtasks(pTaskFlags & TASK_DISJOINT_READ_WRITES_ACROSS_SUBTASKS_FLAG_VAL)
+    , mOverlapComputeCommunication(pTaskFlags & TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL)
+    , mCanForciblyCancelSubtasks(pTaskFlags & TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL)
+    , mCanSplitCpuSubtasks(pTaskFlags & TASK_CAN_SPLIT_CPU_SUBTASKS_FLAG_VAL)
+    , mCanSplitGpuSubtasks(pTaskFlags & TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL)
 #ifdef SUPPORT_SPLIT_SUBTASKS
     , mSubtaskSplitter(this)
 #endif
 	, mSubtasksExecuted(0)
 	, mSubtaskExecutionFinished(false)
     , mExecLock __LOCK_NAME__("pmTask::mExecLock")
-    , mReducerLock __LOCK_NAME__("pmTask::mReducerLock")
-    , mRedistributorLock __LOCK_NAME__("pmTask::mRedistributorLock")
+    , mCompletedRedistributions(0)
+    , mRedistributionLock __LOCK_NAME__("pmTask::mRedistributionLock")
     , mAllStubsScannedForCancellationMessages(false)
     , mAllStubsScannedForShadowMemCommitMessages(false)
     , mOutstandingStubsForCancellationMessages(0)
     , mOutstandingStubsForShadowMemCommitMessages(0)
     , mTaskCompletionLock __LOCK_NAME__("pmTask::mTaskCompletionLock")
     , mStealListLock __LOCK_NAME__("pmTask::mStealListLock")
-    , mCollectiveShadowMem(NULL)
-    , mIndividualShadowMemAllocationLength(0)
-    , mShadowMemCount(0)
-    , mCollectiveShadowMemLock __LOCK_NAME__("pmTask::mCollectiveShadowMemLock")
-	, mMemRW(pMemRW)
+    , mPoolAllocatorMapLock __LOCK_NAME__("pmTask::mPoolAllocatorMapLock")
+    , mTaskHasReadWriteMemSectionWithDisjointSubscriptions(false)
 	, mAssignedDeviceCount(pAssignedDeviceCount)
 {
-	mTaskInfo.taskHandle = NULL;
-    
-    if(pMemRO)
-    {
-        pMemRO->Lock(this, pInputMemInfo);
+    mMemSections.reserve(pTaskMemCount);
 
+    for(size_t i = 0; i < pTaskMemCount; ++i)
+    {
+        const pmTaskMemory& lTaskMem = pTaskMemPtr[i];
+        pmMemSection* lMemSection = lTaskMem.memSection;
+        
+        mMemSections.push_back(lMemSection);
+        
     #ifdef SUPPORT_LAZY_MEMORY
-        if(pMemRO->IsLazy())
-            mReadOnlyMemAddrForSubtasks = mMemRO->GetReadOnlyLazyMemoryMapping();
+        if(lMemSection->IsInput() && lMemSection->IsLazy())
+        {
+            pmMemInfo lMemInfo(lMemSection->GetReadOnlyLazyMemoryMapping(), lMemSection->GetReadOnlyLazyMemoryMapping(), NULL, lMemSection->GetLength());
+            mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo);
+        }
         else
     #endif
-            mReadOnlyMemAddrForSubtasks = mMemRO->GetMem();
+        {
+            pmMemInfo lMemInfo;
+            mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo); // Output mem sections do not have a global lazy protection, rather have at subtask level
+        }
+        
+        lMemSection->Lock(this, lTaskMem.memType);
+        
+        mTaskHasReadWriteMemSectionWithDisjointSubscriptions |= (lMemSection->IsReadWrite() && HasDisjointReadWritesAcrossSubtasks());
     }
-    
-    if(pMemRW)
-        pMemRW->Lock(this, pOutputMemInfo);
-    
+
+    CreateReducerAndRedistributors();
+
     BuildTaskInfo();
+    BuildPreSubscriptionSubtaskInfo();
 }
 
 pmTask::~pmTask()
 {
     mSubscriptionManager.DropAllSubscriptions();
-
-    if(mCollectiveShadowMem)
-        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mCollectiveShadowMem);
 }
 
 pmStatus pmTask::FlushMemoryOwnerships()
 {
-    if(mMemRW && mMemRW->GetMem())
-        mMemRW->FlushOwnerships();
+    std::vector<pmMemSection*>::iterator lIter = mMemSections.begin(), lEndIter = mMemSections.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        if((*lIter)->IsOutput())
+            (*lIter)->FlushOwnerships();
+    }
 
     return pmSuccess;
 }
     
 void pmTask::UnlockMemories()
 {
-    if(mMemRO)
-        mMemRO->Unlock(this);
-    
-    if(mMemRW)
-        mMemRW->Unlock(this);
+    std::vector<pmMemSection*>::iterator lIter = mMemSections.begin(), lEndIter = mMemSections.end();
+    for(; lIter != lEndIter; ++lIter)
+        (*lIter)->Unlock(this);
 }
     
 bool pmTask::IsMultiAssignEnabled()
@@ -147,7 +154,7 @@ bool pmTask::CanForciblyCancelSubtasks()
 bool pmTask::CanSplitCpuSubtasks()
 {
 #ifdef SUPPORT_SPLIT_SUBTASKS
-    return (mCanSplitCpuSubtasks && !GetReducer() && !GetRedistributor() && mCallbackUnit && mCallbackUnit->GetSubtaskCB() && mCallbackUnit->GetSubtaskCB()->HasBothCpuAndGpuCallbacks());
+    return (mCanSplitCpuSubtasks && mCallbackUnit && mCallbackUnit->GetSubtaskCB() && mCallbackUnit->GetSubtaskCB()->HasBothCpuAndGpuCallbacks());
 #else
     return false;
 #endif
@@ -156,68 +163,101 @@ bool pmTask::CanSplitCpuSubtasks()
 bool pmTask::CanSplitGpuSubtasks()
 {
 #ifdef SUPPORT_SPLIT_SUBTASKS
-    return (mCanSplitGpuSubtasks && !mCanSplitCpuSubtasks && !GetReducer() && !GetRedistributor() && mCallbackUnit && mCallbackUnit->GetSubtaskCB() && mCallbackUnit->GetSubtaskCB()->HasBothCpuAndGpuCallbacks());
+    return (mCanSplitGpuSubtasks && !mCanSplitCpuSubtasks && mCallbackUnit && mCallbackUnit->GetSubtaskCB() && mCallbackUnit->GetSubtaskCB()->HasBothCpuAndGpuCallbacks());
 #else
     return false;
 #endif
 }
+    
+bool pmTask::DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions() const
+{
+    return mTaskHasReadWriteMemSectionWithDisjointSubscriptions;
+}
 
-void* pmTask::GetTaskConfiguration()
+void* pmTask::GetTaskConfiguration() const
 {
 	return mTaskConf;
 }
 
-uint pmTask::GetTaskConfigurationLength()
+uint pmTask::GetTaskConfigurationLength() const
 {
 	return mTaskConfLength;
 }
 
-ulong pmTask::GetTaskId()
+ulong pmTask::GetTaskId() const
 {
 	return mTaskId;
 }
 
-pmMemSection* pmTask::GetMemSectionRO()
+pmMemSection* pmTask::GetMemSection(size_t pIndex) const
 {
-	return mMemRO;
+    if(pIndex >= mMemSections.size())
+        PMTHROW(pmFatalErrorException());
+
+	return mMemSections[pIndex];
+}
+    
+size_t pmTask::GetMemSectionCount() const
+{
+    return mMemSections.size();
+}
+    
+std::vector<pmMemSection*>& pmTask::GetMemSections()
+{
+    return mMemSections;
 }
 
-pmMemSection* pmTask::GetMemSectionRW()
+const std::vector<pmMemSection*>& pmTask::GetMemSections() const
 {
-	return mMemRW;
+    return mMemSections;
+}
+    
+uint pmTask::GetMemSectionIndex(const pmMemSection* pMemSection) const
+{
+    const std::vector<pmMemSection*>& lMemSectionVector = GetMemSections();
+
+    std::vector<pmMemSection*>::const_iterator lIter = lMemSectionVector.begin(), lEndIter = lMemSectionVector.end();
+    for(uint i = 0; lIter != lEndIter; ++lIter, ++i)
+    {
+        if(*lIter == pMemSection)
+            return i;
+    }
+    
+    PMTHROW(pmFatalErrorException());
+    return std::numeric_limits<uint>::max();
 }
 
-pmCallbackUnit* pmTask::GetCallbackUnit()
+const pmCallbackUnit* pmTask::GetCallbackUnit() const
 {
 	return mCallbackUnit;
 }
 
-ulong pmTask::GetSubtaskCount()
+ulong pmTask::GetSubtaskCount() const
 {
 	return mSubtaskCount;
 }
 
-pmMachine* pmTask::GetOriginatingHost()
+const pmMachine* pmTask::GetOriginatingHost() const
 {
 	return mOriginatingHost;
 }
 
-pmCluster* pmTask::GetCluster()
+const pmCluster* pmTask::GetCluster() const
 {
 	return mCluster;
 }
 
-ushort pmTask::GetPriority()
+ushort pmTask::GetPriority() const
 {
 	return mPriority;
 }
 
-uint pmTask::GetAssignedDeviceCount()
+uint pmTask::GetAssignedDeviceCount() const
 {
 	return mAssignedDeviceCount;
 }
 
-scheduler::schedulingModel pmTask::GetSchedulingModel()
+scheduler::schedulingModel pmTask::GetSchedulingModel() const
 {
 	return mSchedulingModel;
 }
@@ -227,21 +267,19 @@ pmTaskExecStats& pmTask::GetTaskExecStats()
 	return mTaskExecStats;
 }
 
-pmStatus pmTask::RandomizeDevices(std::vector<pmProcessingElement*>& pDevices)
+void pmTask::RandomizeDevices(std::vector<const pmProcessingElement*>& pDevices)
 {
 	std::random_shuffle(pDevices.begin(), pDevices.end());
-
-	return pmSuccess;
 }
 
-std::vector<pmProcessingElement*>& pmTask::GetStealListForDevice(pmProcessingElement* pDevice)
+std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(const pmProcessingElement* pDevice)
 {
     FINALIZE_RESOURCE_PTR(dStealListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealListLock, Lock(), Unlock());
 
-    std::map<pmProcessingElement*, std::vector<pmProcessingElement*> >::iterator lIter = mStealListForDevice.find(pDevice);
+    std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*> >::iterator lIter = mStealListForDevice.find(pDevice);
     if(lIter == mStealListForDevice.end())
     {
-        std::vector<pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
+        std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
 
         std::srand((uint)reinterpret_cast<size_t>(pDevice));
         lIter = mStealListForDevice.insert(std::make_pair(pDevice, lDevices)).first;
@@ -251,7 +289,7 @@ std::vector<pmProcessingElement*>& pmTask::GetStealListForDevice(pmProcessingEle
     return lIter->second;
 }
 
-pmStatus pmTask::BuildTaskInfo()
+void pmTask::BuildTaskInfo()
 {
 	mTaskInfo.taskHandle = (void*)this;
 	mTaskInfo.taskConf = GetTaskConfiguration();
@@ -260,144 +298,72 @@ pmStatus pmTask::BuildTaskInfo()
 	mTaskInfo.subtaskCount = GetSubtaskCount();
 	mTaskInfo.priority = GetPriority();
 	mTaskInfo.originatingHost = *(GetOriginatingHost());
-
-	return pmSuccess;
 }
 
-pmTaskInfo& pmTask::GetTaskInfo()
+const pmTaskInfo& pmTask::GetTaskInfo() const
 {
 	return mTaskInfo;
 }
 
-pmStatus pmTask::GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, pmSubtaskInfo& pSubtaskInfo, bool& pOutputMemWriteOnly)
+void pmTask::BuildPreSubscriptionSubtaskInfo()
 {
-	pmSubscriptionInfo lInputMemSubscriptionInfo, lOutputMemSubscriptionInfo;
-	void* lOutputMem;
+    for_each_with_index(mPreSubscriptionMemInfoForSubtasks, [&] (const pmMemInfo& pMemInfo, size_t pIndex)
+    {
+        mPreSubscriptionSubtaskInfo.memInfo[pIndex] = pMemInfo;
+    });
 
-	pSubtaskInfo.subtaskId = pSubtaskId;
-	if(mMemRO && mReadOnlyMemAddrForSubtasks && mSubscriptionManager.GetInputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, lInputMemSubscriptionInfo))
-	{
-		pSubtaskInfo.inputMem = (reinterpret_cast<char*>(mReadOnlyMemAddrForSubtasks) + lInputMemSubscriptionInfo.offset);
-		pSubtaskInfo.inputMemLength = lInputMemSubscriptionInfo.length;
-	}
-	else
-	{
-		pSubtaskInfo.inputMem = NULL;
-		pSubtaskInfo.inputMemLength = 0;
-	}
-
-	if(mMemRW && (lOutputMem = mMemRW->GetMem()) && mSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, lOutputMemSubscriptionInfo))
-	{
-		if(DoSubtasksNeedShadowMemory() || pMultiAssign)
-			pSubtaskInfo.outputMem = mSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId, pSplitInfo);
-		else
-			pSubtaskInfo.outputMem = (reinterpret_cast<char*>(lOutputMem) + lOutputMemSubscriptionInfo.offset);
-
-		pSubtaskInfo.outputMemLength = lOutputMemSubscriptionInfo.length;
-        pOutputMemWriteOnly = (mMemRW->GetMemInfo() == OUTPUT_MEM_WRITE_ONLY);
+    mPreSubscriptionSubtaskInfo.memCount = (uint)mPreSubscriptionMemInfoForSubtasks.size();
+}
     
-        if(pOutputMemWriteOnly)
-        {
-            pSubtaskInfo.outputMemRead = NULL;
-            pSubtaskInfo.outputMemReadLength = 0;
-            pSubtaskInfo.outputMemWrite = pSubtaskInfo.outputMem;
-            pSubtaskInfo.outputMemWriteLength = pSubtaskInfo.outputMemLength;
-        }
-        else
-        {
-            pmSubscriptionInfo lReadSubscriptionInfo, lWriteSubscriptionInfo;
-            mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, true, lReadSubscriptionInfo);
-            mSubscriptionManager.GetOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, false, lWriteSubscriptionInfo);
-        
-            pSubtaskInfo.outputMemRead = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + lReadSubscriptionInfo.offset - lOutputMemSubscriptionInfo.offset);
-            pSubtaskInfo.outputMemWrite = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + lWriteSubscriptionInfo.offset - lOutputMemSubscriptionInfo.offset);
-        
-            pSubtaskInfo.outputMemReadLength = lReadSubscriptionInfo.length;
-            pSubtaskInfo.outputMemWriteLength = lWriteSubscriptionInfo.length;
-        }
-	}
-	else
-	{
-		pSubtaskInfo.outputMem = pSubtaskInfo.outputMemRead = pSubtaskInfo.outputMemWrite = NULL;
-		pSubtaskInfo.outputMemLength = pSubtaskInfo.outputMemReadLength = pSubtaskInfo.outputMemWriteLength = 0;
-        pOutputMemWriteOnly = false;
-	}
+pmSubtaskInfo pmTask::GetPreSubscriptionSubtaskInfo(ulong pSubtaskId, pmSplitInfo* pSplitInfo) const
+{
+    pmSubtaskInfo lSubtaskInfo = mPreSubscriptionSubtaskInfo;
+    lSubtaskInfo.subtaskId = pSubtaskId;
     
-    pSubtaskInfo.gpuContext.scratchBuffer = NULL;    
-    pSubtaskInfo.splitInfo = pSplitInfo;
-
-	return pmSuccess;
+    if(pSplitInfo)
+        lSubtaskInfo.splitInfo = *pSplitInfo;
+    
+    return lSubtaskInfo;
 }
 
-void* pmTask::CheckOutSubtaskMemory(size_t pLength, bool pForceNonLazy)
+pmPoolAllocator& pmTask::GetPoolAllocator(uint pMemSectionIndex, size_t pIndividualAllocationSize, size_t pMaxAllocations)
 {
-    if(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks())
+    DEBUG_EXCEPTION_ASSERT(GetMemSection(pMemSectionIndex)->IsOutput() && DoSubtasksNeedShadowMemory(GetMemSection(pMemSectionIndex)));
+    
+    FINALIZE_RESOURCE_PTR(dPoolAllocatorMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mPoolAllocatorMapLock, Lock(), Unlock());
+
+    decltype(mPoolAllocatorMap)::iterator lIter = mPoolAllocatorMap.find(pMemSectionIndex);
+    if(lIter == mPoolAllocatorMap.end())
+        lIter = mPoolAllocatorMap.emplace(std::piecewise_construct, std::forward_as_tuple(pMemSectionIndex), std::forward_as_tuple(pIndividualAllocationSize, pMaxAllocations, true)).first;
+    
+    return lIter->second;
+}
+    
+void* pmTask::CheckOutSubtaskMemory(size_t pLength, uint pMemSectionIndex)
+{
+    pmMemSection* lMemSection = GetMemSection(pMemSectionIndex);
+
+    if(lMemSection->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks())
         return NULL;    // In this case, system might not have enough memory as memory for all individual subtasks need to be held till the end
-    
-    bool lIsLazy = (!pForceNonLazy && GetMemSectionRW()->IsLazy());
 
-    FINALIZE_RESOURCE_PTR(dCollectiveShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCollectiveShadowMemLock, Lock(), Unlock());
+    size_t lMaxAllocations = std::min(pmStubManager::GetStubManager()->GetStubCount(), GetSubtaskCount());
+    pmPoolAllocator& lPoolAllocator = GetPoolAllocator(pMemSectionIndex, pLength, lMaxAllocations);
 
-    if(mCollectiveShadowMem)
-    {
-        if(pLength > mIndividualShadowMemAllocationLength)
-            return NULL;
-    }
-    else
-    {
-        if(!mUnallocatedShadowMemPool.empty())
-            PMTHROW(pmFatalErrorException());
+    void* lMem = lPoolAllocator.Allocate(pLength);
 
-        size_t lPageCount = 0;
-        mIndividualShadowMemAllocationLength = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FindAllocationSize(pLength, lPageCount);
-        
-        mShadowMemCount = std::min(pmStubManager::GetStubManager()->GetStubCount(), GetSubtaskCount());
-        size_t lTotalMemSize = mShadowMemCount * mIndividualShadowMemAllocationLength;
-        
-        mCollectiveShadowMem = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(lTotalMemSize, lIsLazy);
-    
-        void* lAddr = mCollectiveShadowMem;
-        for(size_t i = 0; i < mShadowMemCount; ++i)
-        {
-            mUnallocatedShadowMemPool.push_back(lAddr);
-            lAddr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lAddr) + mIndividualShadowMemAllocationLength);
-        }
-    }
-
-    void* lMem = NULL;
-    if(!mUnallocatedShadowMemPool.empty())
-    {
-        lMem = mUnallocatedShadowMemPool.back();
-        mUnallocatedShadowMemPool.pop_back();
-
-    #ifdef SUPPORT_LAZY_MEMORY
-        if(GetMemSectionRW()->IsLazy())
-            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lMem, mIndividualShadowMemAllocationLength, true, true);
-    #endif
-    }
+#ifdef SUPPORT_LAZY_MEMORY
+    if(lMem && lMemSection->IsLazy())   // Reset protections because previous pooling of same memory might have set permissions otherwise
+        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(lMem, pLength, true, true);
+#endif
     
     return lMem;
 }
     
-void pmTask::RepoolCheckedOutSubtaskMemory(void* pMem)
+void pmTask::RepoolCheckedOutSubtaskMemory(uint pMemSectionIndex, void* pMem)
 {
-    FINALIZE_RESOURCE_PTR(dCollectiveShadowMemLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCollectiveShadowMemLock, Lock(), Unlock());
+    pmPoolAllocator& lPoolAllocator = GetPoolAllocator(pMemSectionIndex, 0, 0);
 
-#ifdef _DEBUG
-    if(std::find(mUnallocatedShadowMemPool.begin(), mUnallocatedShadowMemPool.end(), pMem) != mUnallocatedShadowMemPool.end())
-        PMTHROW(pmFatalErrorException());
-    
-    if(reinterpret_cast<size_t>(pMem) < reinterpret_cast<size_t>(mCollectiveShadowMem))
-        PMTHROW(pmFatalErrorException());
-    
-    if(reinterpret_cast<size_t>(pMem) >= reinterpret_cast<size_t>(mCollectiveShadowMem) + (mShadowMemCount * mIndividualShadowMemAllocationLength))
-        PMTHROW(pmFatalErrorException());
-       
-    if(((reinterpret_cast<size_t>(pMem) - reinterpret_cast<size_t>(mCollectiveShadowMem)) % mIndividualShadowMemAllocationLength) != 0)
-        PMTHROW(pmFatalErrorException());
-#endif
-    
-    mUnallocatedShadowMemPool.push_back(pMem);
+    lPoolAllocator.Deallocate(pMem);
 }
     
 pmSubscriptionManager& pmTask::GetSubscriptionManager()
@@ -412,30 +378,63 @@ pmSubtaskSplitter& pmTask::GetSubtaskSplitter()
 }
 #endif
 
+void pmTask::CreateReducerAndRedistributors()
+{
+    if(mCallbackUnit->GetDataReductionCB())
+        mReducer.reset(new pmReducer(this));
+
+    if(mCallbackUnit->GetDataRedistributionCB())
+    {
+        filtered_for_each_with_index(GetMemSections(), [this] (const pmMemSection* pMemSection)
+        {
+            return pMemSection->IsOutput() && this->IsRedistributable(pMemSection);
+        },
+        [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex, size_t pOutputMemSectionIndex)
+        {
+            mRedistributorsMap.emplace(std::piecewise_construct, std::forward_as_tuple(pMemSection), std::forward_as_tuple(this, GetMemSectionIndex(pMemSection)));
+        });
+    }
+}
+
 pmReducer* pmTask::GetReducer()
 {
-    if(!mCallbackUnit->GetDataReductionCB())
-        return NULL;
-    
-    FINALIZE_RESOURCE_PTR(dReducerLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mReducerLock, Lock(), Unlock());
-
-	if(!mReducer.get_ptr())
-		mReducer.reset(new pmReducer(this));
-
 	return mReducer.get_ptr();
 }
 
-pmRedistributor* pmTask::GetRedistributor()
+pmRedistributor* pmTask::GetRedistributor(const pmMemSection* pMemSection)
 {
+    DEBUG_EXCEPTION_ASSERT(mRedistributorsMap.find(pMemSection) != mRedistributorsMap.end());
+    DEBUG_EXCEPTION_ASSERT(IsRedistributable(pMemSection));
+
     if(!mCallbackUnit->GetDataRedistributionCB())
         return NULL;
 
-    FINALIZE_RESOURCE_PTR(dRedistributorLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mRedistributorLock, Lock(), Unlock());
+    return &mRedistributorsMap.find(pMemSection)->second;
+}
     
-    if(!mRedistributor.get_ptr())
-        mRedistributor.reset(new pmRedistributor(this));
+bool pmTask::RegisterRedistributionCompletion()
+{
+    uint lSize = (uint)mRedistributorsMap.size();
     
-    return mRedistributor.get_ptr();
+    FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mRedistributionLock, Lock(), Unlock());
+    
+    ++mCompletedRedistributions;
+    
+    return (mCompletedRedistributions == lSize);
+}
+    
+bool pmTask::IsReducible(const pmMemSection* pMemSection) const
+{
+    DEBUG_EXCEPTION_ASSERT(mCallbackUnit->GetDataReductionCB());
+    
+    return true;
+}
+
+bool pmTask::IsRedistributable(const pmMemSection* pMemSection) const
+{
+    DEBUG_EXCEPTION_ASSERT(mCallbackUnit->GetDataRedistributionCB());
+    
+    return true;
 }
     
 #ifdef ENABLE_TASK_PROFILING
@@ -445,7 +444,7 @@ pmTaskProfiler* pmTask::GetTaskProfiler()
 }
 #endif
 
-pmStatus pmTask::MarkSubtaskExecutionFinished()
+void pmTask::MarkSubtaskExecutionFinished()
 {
 	// Auto lock/unlock scope
 	{
@@ -458,9 +457,7 @@ pmStatus pmTask::MarkSubtaskExecutionFinished()
         GetReducer()->CheckReductionFinish();
 
     if(mCallbackUnit->GetDataRedistributionCB())
-        GetRedistributor()->SendRedistributionInfo();
-
-	return pmSuccess;
+        for_each(mRedistributorsMap, [] (decltype(mRedistributorsMap)::value_type& pPair) {pPair.second.SendRedistributionInfo();});
 }
 
 bool pmTask::HasSubtaskExecutionFinished()
@@ -486,9 +483,11 @@ ulong pmTask::GetSubtasksExecuted()
 	return mSubtasksExecuted;
 }
 
-bool pmTask::DoSubtasksNeedShadowMemory()
+bool pmTask::DoSubtasksNeedShadowMemory(const pmMemSection* pMemSection) const
 {
-	return (mMemRW && (mMemRW->IsLazy() || (mMemRW->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || (mCallbackUnit->GetDataReductionCB() != NULL)));
+    DEBUG_EXCEPTION_ASSERT(pMemSection->IsOutput());
+    
+	return (pMemSection->IsLazy() || (pMemSection->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || (mCallbackUnit->GetDataReductionCB() != NULL));
 }
     
 void pmTask::TerminateTask()
@@ -516,7 +515,7 @@ void pmTask::MarkAllStubsScannedForCancellationMessages()
     if(mOutstandingStubsForCancellationMessages == 0)
         MarkLocalStubsFreeOfCancellations();
 }
-    
+
 void pmTask::RegisterStubCancellationMessage()
 {
 	FINALIZE_RESOURCE_PTR(dTaskCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskCompletionLock, Lock(), Unlock());
@@ -569,12 +568,12 @@ void pmTask::RegisterStubShadowMemCommitMessage()
         MarkLocalStubsFreeOfShadowMemCommits();
 }
     
-bool pmTask::HasDisjointReadWritesAcrossSubtasks()
+bool pmTask::HasDisjointReadWritesAcrossSubtasks() const
 {
     return mDisjointReadWritesAcrossSubtasks;
 }
 
-bool pmTask::ShouldOverlapComputeCommunication()
+bool pmTask::ShouldOverlapComputeCommunication() const
 {
     return mOverlapComputeCommunication;
 }
@@ -601,8 +600,8 @@ pmStatus pmTask::SetSequenceNumber(ulong pSequenceNumber)
 
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pDisjointReadWritesAcrossSubtasks /* = false */, bool pOverlapComputeCommunication /* = true */, bool pCanForciblyCancelSubtasks /* = true */, bool pCanSplitCpuSubtasks /* = false */, bool pCanSplitGpuSubtasks /* = false */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pDisjointReadWritesAcrossSubtasks, pOverlapComputeCommunication, pCanForciblyCancelSubtasks, pCanSplitCpuSubtasks, pCanSplitGpuSubtasks)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmTaskMemory* pTaskMemPtr, uint pTaskMemCount, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* DEFAULT_TASK_FLAGS_VAL */)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pTaskMemPtr, pTaskMemCount, pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
     , mUserSideTaskCompleted(false)
@@ -615,13 +614,13 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, p
     if(pTaskTimeOutInSecs > 0 && lTaskTimeOutTriggerTime > lCurrentTime && lTaskTimeOutTriggerTime < (ulong)__MAX(int))
         mTaskTimeOutTriggerTime = lTaskTimeOutTriggerTime;
     
-	mTaskCommand = pmTaskCommand::CreateSharedPtr(pPriority, pmTaskCommand::BASIC_TASK);
-    
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE(dSequenceLock, GetSequenceLock().Lock(), GetSequenceLock().Unlock());
         SetSequenceNumber(GetSequenceId()++);
     }
+
+    mTaskCommand = pmCommand::CreateSharedPtr(pPriority, 0, NULL);
 }
 
 pmLocalTask::~pmLocalTask()
@@ -643,15 +642,13 @@ void pmLocalTask::RegisterInternalTaskCompletionMessage()
         DoPostInternalCompletion();
 }
 
-pmStatus pmLocalTask::MarkSubtaskExecutionFinished()
+void pmLocalTask::MarkSubtaskExecutionFinished()
 {
     pmTask::MarkSubtaskExecutionFinished();
    
-    pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
+    const pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
     if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
         MarkUserSideTaskCompletion();
-
-    return pmSuccess;
 }
 
 // This method must be called with mCompletionLock acquired
@@ -663,22 +660,21 @@ void pmLocalTask::DoPostInternalCompletion()
     MarkTaskEnd(mSubtaskManager.get_ptr() ? mSubtaskManager->GetTaskExecutionStatus() : pmNoCompatibleDevice);
 }
     
-void pmLocalTask::TaskRedistributionDone(pmMemSection* pRedistributedMemSection)
+void pmLocalTask::TaskRedistributionDone(uint pOriginalMemSectionIndex, pmMemSection* pRedistributedMemSection)
 {
-    mMemRW = pRedistributedMemSection;
-    MarkUserSideTaskCompletion();
+    mMemSections[pOriginalMemSectionIndex] = pRedistributedMemSection;
+
+    if(RegisterRedistributionCompletion())  // Returns true when all mem sections finish redistributions
+        MarkUserSideTaskCompletion();
 }
 
 void pmLocalTask::MarkLocalStubsFreeOfCancellations()
 {
-#ifdef _DEBUG
-    if(!IsMultiAssignEnabled())
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(IsMultiAssignEnabled());
     
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || mLocalStubsFreeOfShadowMemCommits))
+    if(mUserSideTaskCompleted && (!DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
     
     mLocalStubsFreeOfCancellations = true;
@@ -686,11 +682,8 @@ void pmLocalTask::MarkLocalStubsFreeOfCancellations()
 
 void pmLocalTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
-#ifdef _DEBUG
-    if(!GetMemSectionRW()->IsReadWrite() || HasDisjointReadWritesAcrossSubtasks())
-        PMTHROW(pmFatalErrorException());
-#endif
-    
+    DEBUG_EXCEPTION_ASSERT(DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions());
+
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
     if(mUserSideTaskCompleted && (!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations))
@@ -707,7 +700,7 @@ void pmLocalTask::MarkUserSideTaskCompletion()
     {
         FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || mLocalStubsFreeOfShadowMemCommits))
+        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
             pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
             
         mUserSideTaskCompleted = true;
@@ -724,31 +717,26 @@ void pmLocalTask::UserDeleteTask()
     TerminateTask();
 }
     
-pmStatus pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+void pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, pmMemSection* pMemSection, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
-#ifdef _DEBUG
-    if(!DoSubtasksNeedShadowMemory())
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(DoSubtasksNeedShadowMemory(pMemSection));
+    
+    uint lMemSectionIndex = GetMemSectionIndex(pMemSection);
 
     pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
-    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId, pSplitInfo);
-    pmMemSection* lMemRW = GetMemSectionRW();
+    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId, pSplitInfo, lMemSectionIndex);
     
     subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pStub, pSubtaskId, pSplitInfo, false, lBeginIter, lEndIter))
-    {
-        pmSubscriptionInfo lUnifiedSubscriptionInfo;
-        lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(pStub, pSubtaskId, pSplitInfo, lUnifiedSubscriptionInfo);
+    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, pSubtaskId, pSplitInfo, lMemSectionIndex, lBeginIter, lEndIter);
 
-        subscription::subscriptionRecordType::const_iterator lIter;
-        for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
-            lMemRW->Update(lIter->first, lIter->second.first, reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lIter->first - lUnifiedSubscriptionInfo.offset));
-    }
+    pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub, pSubtaskId, pSplitInfo, lMemSectionIndex);
+
+    std::for_each(lBeginIter, lEndIter, [&] (const subscription::subscriptionRecordType::value_type& pPair)
+    {
+        pMemSection->Update(pPair.first, pPair.second.first, reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + pPair.first - lUnifiedSubscriptionInfo.offset));
+    });
 
     ((pmLocalTask*)this)->MarkUserSideTaskCompletion();
-    
-    return pmSuccess;
 }
 
 pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel)
@@ -780,14 +768,14 @@ ulong pmLocalTask::GetTaskTimeOutTriggerTime()
     return mTaskTimeOutTriggerTime;
 }
 
-std::vector<pmProcessingElement*>& pmLocalTask::GetAssignedDevices()
+std::vector<const pmProcessingElement*>& pmLocalTask::GetAssignedDevices()
 {
 	return mDevices;
 }
 
-pmStatus pmLocalTask::WaitForCompletion()
+void pmLocalTask::WaitForCompletion()
 {
-	return mTaskCommand->WaitForFinish();
+	mTaskCommand->WaitForFinish();
 }
 
 double pmLocalTask::GetExecutionTimeInSecs()
@@ -795,14 +783,14 @@ double pmLocalTask::GetExecutionTimeInSecs()
 	return mTaskCommand->GetExecutionTimeInSecs();
 }
 
-pmStatus pmLocalTask::MarkTaskStart()
+void pmLocalTask::MarkTaskStart()
 {
-	return mTaskCommand->MarkExecutionStart();
+	mTaskCommand->MarkExecutionStart();
 }
 
-pmStatus pmLocalTask::MarkTaskEnd(pmStatus pStatus)
+void pmLocalTask::MarkTaskEnd(pmStatus pStatus)
 {
-	return mTaskCommand->MarkExecutionEnd(pStatus, std::tr1::static_pointer_cast<pmCommand>(mTaskCommand));
+	mTaskCommand->MarkExecutionEnd(pStatus, mTaskCommand);
 }
 
 pmStatus pmLocalTask::GetStatus()
@@ -810,13 +798,13 @@ pmStatus pmLocalTask::GetStatus()
 	return mTaskCommand->GetStatus();
 }
 
-const std::vector<pmProcessingElement*>& pmLocalTask::FindCandidateProcessingElements(std::set<pmMachine*>& pMachines)
+const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcessingElements(std::set<const pmMachine*>& pMachines)
 {
 	pmDevicePool* lDevicePool;
 	SAFE_GET_DEVICE_POOL(lDevicePool);
 
-    std::vector<pmProcessingElement*> lAvailableDevices;
-	pmSubtaskCB* lSubtaskCB = GetCallbackUnit()->GetSubtaskCB();
+    std::vector<const pmProcessingElement*> lAvailableDevices;
+	const pmSubtaskCB* lSubtaskCB = GetCallbackUnit()->GetSubtaskCB();
 	if(lSubtaskCB)
 	{
 		for(uint i = 0; i < MAX_DEVICE_TYPES; ++i)
@@ -827,23 +815,16 @@ const std::vector<pmProcessingElement*>& pmLocalTask::FindCandidateProcessingEle
 		}
 	}
 
-	if(!lAvailableDevices.empty())
-	{
-		pmDeviceSelectionCB* lDeviceSelectionCB = GetCallbackUnit()->GetDeviceSelectionCB();
-		if(lDeviceSelectionCB)
-		{
-			std::vector<pmProcessingElement*>::iterator lIter = lAvailableDevices.begin(), lEndIter = lAvailableDevices.end();
-			for(; lIter != lEndIter; ++lIter)
-			{
-				if(lDeviceSelectionCB->Invoke(this, *lIter))
-					mDevices.push_back(*lIter);
-			}
-		}
-        else
-        {
-            mDevices = lAvailableDevices;
-        }
-	}
+    const pmDeviceSelectionCB* lDeviceSelectionCB = GetCallbackUnit()->GetDeviceSelectionCB();
+    if(lDeviceSelectionCB)
+    {
+        filtered_for_each(lAvailableDevices, [&] (const pmProcessingElement* pDevice) {return lDeviceSelectionCB->Invoke(this, pDevice);},
+                          [&] (const pmProcessingElement* pDevice) {mDevices.push_back(pDevice);});
+    }
+    else
+    {
+        mDevices = lAvailableDevices;
+    }
 
 	mAssignedDeviceCount = (uint)(mDevices.size());
 
@@ -868,8 +849,9 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 
 /* class pmRemoteTask */
-pmRemoteTask::pmRemoteTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmMemSection* pMemRO, pmMemSection* pMemRW, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo, ulong pSubtaskCount, pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, pmMachine* pOriginatingHost, ulong pSequenceNumber, pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, bool pMultiAssignEnabled /* = true */, bool pDisjointReadWritesAcrossSubtasks /* = false */, bool pOverlapComputeCommunication /* = true */, bool pCanForciblyCancelSubtasks /* = true */, bool pCanSplitCpuSubtasks /* = false */, bool pCanSplitGpuSubtasks /* = false */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, pMemRO, pMemRW, pInputMemInfo, pOutputMemInfo, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pMultiAssignEnabled, pDisjointReadWritesAcrossSubtasks, pOverlapComputeCommunication, pCanForciblyCancelSubtasks, pCanSplitCpuSubtasks, pCanSplitGpuSubtasks)
+pmRemoteTask::pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char> >& pTaskConf, uint pTaskConfLength, ulong pTaskId, pmTaskMemory* pTaskMemPtr, uint pTaskMemCount, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, ulong pSequenceNumber, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* = DEFAULT_TASK_FLAGS_VAL */)
+	: pmTask(pTaskConf.get_ptr(), pTaskConfLength, pTaskId, pTaskMemPtr, pTaskMemCount, pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags)
+    , mTaskConfAutoPtr(std::move(pTaskConf))
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)
@@ -888,26 +870,20 @@ void pmRemoteTask::DoPostInternalCompletion()
     UnlockMemories();    
 }
 
-pmStatus pmRemoteTask::AddAssignedDevice(pmProcessingElement* pDevice)
+void pmRemoteTask::AddAssignedDevice(const pmProcessingElement* pDevice)
 {
 	mDevices.push_back(pDevice);
 
-	uint lCount = GetAssignedDeviceCount();
-	uint lSize = (uint)(mDevices.size());
-	if(lSize > lCount)
-		PMTHROW(pmFatalErrorException());
-
-	return pmSuccess;
+    DEBUG_EXCEPTION_ASSERT((uint)(mDevices.size()) <= GetAssignedDeviceCount());
 }
 
-std::vector<pmProcessingElement*>& pmRemoteTask::GetAssignedDevices()
+std::vector<const pmProcessingElement*>& pmRemoteTask::GetAssignedDevices()
 {
 	return mDevices;
 }
     
 void pmRemoteTask::TerminateTask()
 {
-    SAFE_FREE(GetTaskConfiguration());
     pmScheduler::GetScheduler()->TerminateTaskEvent(this);
 }
 
@@ -920,7 +896,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted && (!(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || mLocalStubsFreeOfShadowMemCommits))
+    if(mUserSideTaskCompleted && (!DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
     {
         DoPostInternalCompletion();
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
@@ -934,10 +910,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 
 void pmRemoteTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
-#ifdef _DEBUG
-    if(!GetMemSectionRW()->IsReadWrite() || HasDisjointReadWritesAcrossSubtasks())
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions());
 
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
@@ -957,7 +930,7 @@ void pmRemoteTask::MarkUserSideTaskCompletion()
 {
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if((!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations) && (!(GetMemSectionRW()->IsReadWrite() && !HasDisjointReadWritesAcrossSubtasks()) || mLocalStubsFreeOfShadowMemCommits))
+    if((!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations) && (!DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
     {
         DoPostInternalCompletion();
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
@@ -974,23 +947,22 @@ void pmRemoteTask::MarkReductionFinished()
     MarkUserSideTaskCompletion();
 }
     
-void pmRemoteTask::MarkRedistributionFinished(pmMemSection* pRedistributedMemSection /* = NULL */)
+void pmRemoteTask::MarkRedistributionFinished(uint pOriginalMemSectionIndex, pmMemSection* pRedistributedMemSection /* = NULL */)
 {
     if(pRedistributedMemSection)
-        mMemRW = pRedistributedMemSection;
+        mMemSections[pOriginalMemSectionIndex] = pRedistributedMemSection;
 
-    MarkUserSideTaskCompletion();
+    if(RegisterRedistributionCompletion())
+        MarkUserSideTaskCompletion();
 }
     
-pmStatus pmRemoteTask::MarkSubtaskExecutionFinished()
+void pmRemoteTask::MarkSubtaskExecutionFinished()
 {
     pmTask::MarkSubtaskExecutionFinished();
 
-    pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
+    const pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
     if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
         MarkUserSideTaskCompletion();
-
-    return pmSuccess;
 }   
 
 };

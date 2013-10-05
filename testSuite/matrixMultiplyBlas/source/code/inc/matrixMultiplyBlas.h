@@ -25,14 +25,14 @@ namespace matrixMultiplyBlas
 
 #define BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) (((blockRow) * (matrixDim) + (blockCol)) * (blockDim))
 
-#define SUBSCRIBE_BLOCK(blockRow, blockCol, blockOffset, blockWidth, blockDim, matrixDim, subtaskId, splitInfo, subscriptionType) \
+#define SUBSCRIBE_BLOCK(blockRow, blockCol, blockOffset, blockWidth, blockDim, matrixDim, subtaskId, splitInfo, memIndex, subscriptionType) \
 { \
     size_t dBlockOffset = (BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) + (blockOffset)) * sizeof(MATRIX_DATA_TYPE); \
     for(size_t row = 0; row < (blockDim); ++row) \
     { \
         lSubscriptionInfo.offset = dBlockOffset + row * matrixDim * sizeof(MATRIX_DATA_TYPE); \
         lSubscriptionInfo.length = (blockWidth) * sizeof(MATRIX_DATA_TYPE); \
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, subscriptionType, lSubscriptionInfo); \
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, memIndex, subscriptionType, lSubscriptionInfo); \
     } \
 }
 
@@ -44,12 +44,20 @@ pmStatus matrixMultiply_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevic
 int singleGpuMatrixMultiply(MATRIX_DATA_TYPE* pInputMatrices, MATRIX_DATA_TYPE* pOutputMatrix, int pDim);
 #endif
 
+enum memIndex
+{
+    INPUT_MATRIX1_MEM_INDEX = 0,
+    INPUT_MATRIX2_MEM_INDEX,
+    OUTPUT_MATRIX_MEM_INDEX,
+    MAX_MEM_INDICES
+};
+    
 typedef struct matrixMultiplyTaskConf
 {
 	size_t matrixDim;
     size_t blockDim;
 } matrixMultiplyTaskConf;
 
-bool GetSplitData(size_t* pBlockOffset, size_t* pBlockWidth, matrixMultiplyTaskConf* pTaskConf, pmSplitInfo* pSplitInfo);
+bool GetSplitData(size_t* pBlockOffset, size_t* pBlockWidth, matrixMultiplyTaskConf* pTaskConf, pmSplitInfo& pSplitInfo);
     
 }

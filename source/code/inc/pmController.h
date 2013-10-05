@@ -55,55 +55,54 @@ class pmController : public pmBase
 {
 	public:
 		static pmController* GetController();
-		pmStatus FinalizeController();
+		void FinalizeController();
 	    
-		pmStatus ProcessFinalization();
-		pmStatus ProcessTermination();
+		void ProcessFinalization();
+		void ProcessTermination();
     
-		pmStatus SetLastErrorCode(uint pErrorCode) {mLastErrorCode = pErrorCode; return pmSuccess;}
+		void SetLastErrorCode(uint pErrorCode) {mLastErrorCode = pErrorCode;}
 		uint GetLastErrorCode() {return mLastErrorCode;}
 
 		/* User API Functions */
-		pmStatus RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
-		pmStatus ReleaseCallbacks_Public(pmCallbackHandle pCallbackHandle);
-		pmStatus CreateMemory_Public(size_t pLength, pmMemHandle* pMem);
-        pmStatus ReleaseMemory_Public(pmMemHandle pMem);
-        pmStatus FetchMemory_Public(pmMemHandle pMem);
-        pmStatus FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, size_t pLength);
-        pmStatus GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr);
-		pmStatus SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle);
-		pmStatus ReleaseTask_Public(pmTaskHandle pTaskHandle);
-		pmStatus WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle);
-		pmStatus GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, double* pTime);
-		pmStatus SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo);
-        pmStatus RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, size_t pOffset, size_t pLength, unsigned int pOrder);
-		pmStatus SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf);
-        pmStatus ReserveCudaGlobalMem_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize);
-        void* GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferInfo pScratchBufferInfo, size_t pBufferSize);
+		void RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
+		void ReleaseCallbacks_Public(pmCallbackHandle pCallbackHandle);
+		void CreateMemory_Public(size_t pLength, pmMemHandle* pMem);
+        void ReleaseMemory_Public(pmMemHandle pMem);
+        void FetchMemory_Public(pmMemHandle pMem);
+        void FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, size_t pLength);
+        void GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr);
+		void SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle);
+		void ReleaseTask_Public(pmTaskHandle pTaskHandle);
+		void WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle);
+		void GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, double* pTime);
+		void SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo);
+        void RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, size_t pOffset, size_t pLength, uint pOrder);
+		void SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf);
+        void ReserveCudaGlobalMem_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize);
+        void* GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize);
 
 		uint GetHostId_Public();
 		uint GetHostCount_Public();
     
-        pmStatus pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
-        pmStatus pmReduceUInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
-        pmStatus pmReduceLongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
-        pmStatus pmReduceULongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
-        pmStatus pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        void pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        void pmReduceUInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        void pmReduceLongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        void pmReduceULongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
+        void pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
     
-        pmStatus MapFile_Public(const char* pPath);
+        void MapFile_Public(const char* pPath);
         void* GetMappedFile_Public(const char* pPath);
-        pmStatus UnmapFile_Public(const char* pPath);
+        void UnmapFile_Public(const char* pPath);
 
 	private:
 		pmController();
-		virtual ~pmController();
     
-		pmStatus DestroyController();
+		void DestroyController();
 	
         uint mLastErrorCode;
 		uint mFinalizedHosts;
 	    
-		pmSignalWait* mSignalWait;
+		finalize_ptr<pmSignalWait> mSignalWait;
 
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };

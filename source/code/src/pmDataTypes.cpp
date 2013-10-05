@@ -27,6 +27,11 @@
 #include "pmTaskProfiler.h"
 #include "pmHardware.h"
 
+#ifdef SUPPORT_CUDA
+#include "pmMemChunk.h"
+#include "pmDispatcherGPU.h"
+#endif
+
 #include <iostream>
 #include <iomanip>
 #include <sstream>
@@ -35,6 +40,18 @@
 
 namespace pm
 {
+
+/* Comparison opeartors for pmSubscriptionInfo */
+bool operator==(const pmSubscriptionInfo& pSubscription1, const pmSubscriptionInfo& pSubscription2)
+{
+    return (pSubscription1.offset == pSubscription2.offset && pSubscription1.length == pSubscription2.length);
+}
+    
+bool operator!=(const pmSubscriptionInfo& pSubscription1, const pmSubscriptionInfo& pSubscription2)
+{
+    return !(pSubscription1 == pSubscription2);
+}
+
 
 /* class pmJmpBufAutoPtr */
 pmJmpBufAutoPtr::pmJmpBufAutoPtr()
@@ -409,6 +426,16 @@ void pmAccumulatedTimesSorter::Unlock()
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
 }
 #endif
+
+
+#ifdef SUPPORT_CUDA
+/* class pmCudaCacheEvictor */
+void pmCudaCacheEvictor::operator() (const std::shared_ptr<pmCudaCacheValue>& pValue)
+{
+    mStub->GetCudaBufferChunk()->Deallocate(pValue->cudaPtr);
+}
+#endif
+
     
 /* class pmDestroyOnException */
 pmDestroyOnException::pmDestroyOnException()

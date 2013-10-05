@@ -23,10 +23,11 @@
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
-#include "pmCommand.h"
+#include "pmCommunicator.h"
 
 #include <map>
 #include <vector>
+#include <limits>
 
 namespace pm
 {
@@ -38,11 +39,10 @@ class pmMemSection;
 class pmRedistributor : public pmBase
 {
 	public:
-		pmRedistributor(pmTask* pTask);
-		virtual ~pmRedistributor();
+		pmRedistributor(pmTask* pTask, uint pMemSectionIndex);
 
-        pmStatus RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, ulong pOffset, ulong pLength, uint pOrder);
-        pmStatus PerformRedistribution(pmMachine* pHost, ulong pSubtasksAccounted, const std::vector<pmCommunicatorCommand::redistributionOrderStruct>& pVector);
+        void RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, ulong pOffset, ulong pLength, uint pOrder);
+        void PerformRedistribution(const pmMachine* pHost, ulong pSubtasksAccounted, const std::vector<communicator::redistributionOrderStruct>& pVector);
     
         void SendRedistributionInfo();
     
@@ -51,7 +51,7 @@ class pmRedistributor : public pmBase
 	
 	private:
         typedef std::map<std::pair<uint, uint>, size_t> globalRedistributionMapType;
-        typedef std::map<uint, std::vector<size_t> > localRedistributionMapType;
+        typedef std::map<ulong, std::vector<size_t> > localRedistributionMapType;
 
         typedef struct localRedistributionBucket
         {
@@ -67,7 +67,7 @@ class pmRedistributor : public pmBase
         } globalRedistributionBucket;
     
         void ComputeRedistributionBuckets();
-        void CreateRedistributedMemSection(ulong pGenerationNumber = ((ulong)-1));
+        void CreateRedistributedMemSection(ulong pGenerationNumber = std::numeric_limits<ulong>::max());
 
         void DoParallelRedistribution();
         void DoPostParallelRedistribution();
@@ -76,17 +76,17 @@ class pmRedistributor : public pmBase
         void SendGlobalOffsets();
 
 		pmTask* mTask;
-        ulong mTotalLengthAccounted;
+        uint mMemSectionIndex;
         ulong mSubtasksAccounted;
         pmMemSection* mRedistributedMemSection;
-    
+
         std::vector<localRedistributionBucket> mLocalRedistributionBucketsVector;
     
         globalRedistributionMapType mGlobalRedistributionMap;   // Pair of Order no. and Machine id vs. length
         std::map<uint, std::vector<ulong> > mGlobalOffsetsMap;  // Machine Id vs. vector of offsets for each order in the host's mLocalRedistributionMap
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mGlobalRedistributionLock;
 
-        std::vector<pmCommunicatorCommand::redistributionOrderStruct> mLocalRedistributionVector;
+        std::vector<communicator::redistributionOrderStruct> mLocalRedistributionVector;
         std::vector<size_t> mLocalRedistributionOffsets;
         localRedistributionMapType mLocalRedistributionMap;   // Order vs. vector of mLocalRedistributionVector indices
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mLocalRedistributionLock;

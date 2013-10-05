@@ -44,7 +44,7 @@ pmTaskExecStats::~pmTaskExecStats()
 	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.begin(), lEndIter = mStats.end();
     for(; lIter != lEndIter; ++lIter)
     {
-        pmProcessingElement* lDevice = lIter->first->GetProcessingElement();
+        const pmProcessingElement* lDevice = lIter->first->GetProcessingElement();
         lStream << "Device " << lDevice->GetGlobalDeviceIndex() << " - Subtask execution rate = " << GetStubExecutionRate(lIter->first) << "; Steal attemps = " << GetStealAttempts(lIter->first) << "; Successful steals = " << GetSuccessfulStealAttempts(lIter->first) << "; Failed steals = " << GetFailedStealAttempts(lIter->first) << std::endl;
     }
 

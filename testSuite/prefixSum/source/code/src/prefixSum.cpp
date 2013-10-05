@@ -188,8 +188,8 @@ bool ParallelAddAuxArray(pmMemHandle pSrcMemHandle, pmMemHandle pAuxMemHandle, u
 
 	lTaskDetails.inputMemHandle = pAuxMemHandle;
 	lTaskDetails.outputMemHandle = pSrcMemHandle;
-    lTaskDetails.inputMemInfo = INPUT_MEM_READ_ONLY;
-    lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE;
+    lTaskDetails.inputMemType = INPUT_MEM_READ_ONLY;
+    lTaskDetails.outputMemType = OUTPUT_MEM_READ_WRITE;
     lTaskDetails.disjointReadWritesAcrossSubtasks = true;
 
 	prefixSumTaskConf lTaskConf;

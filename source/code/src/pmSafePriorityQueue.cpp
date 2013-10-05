@@ -24,40 +24,25 @@ namespace pm
 /* class pmSafePQ<T> */
 template<typename T, typename P>
 pmSafePQ<T, P>::pmSafePQ()
-    : mIsProcessing(false)
-    , mSecondaryOperationsBlocked(false)
+    : mSecondaryOperationsBlocked(false)
     , mResourceLock __LOCK_NAME__("pmSafePQ::mResourceLock")
 {
 }
 
 template<typename T, typename P>
-pmSafePQ<T, P>::~pmSafePQ()
-{
-}
-
-template<typename T, typename P>
-pmStatus pmSafePQ<T, P>::InsertItem(T& pItem, P pPriority)
+void pmSafePQ<T, P>::InsertItem(const std::shared_ptr<T>& pItem, P pPriority)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	typename priorityQueueType::iterator lIter = mQueue.find(pPriority);
-	if(lIter != mQueue.end())
-	{
-		typename std::vector<T>& lVector = mQueue[pPriority];
-		lVector.insert(lVector.begin(), pItem);
-	}
-	else
-	{
-		typename std::vector<T> lVector;
-		lVector.push_back(pItem);
-		mQueue[pPriority] = lVector;
-	}
+    if(lIter == mQueue.end())
+        lIter = mQueue.emplace(pPriority, std::list<std::shared_ptr<T>>()).first;
 
-	return pmSuccess;
+    lIter->second.push_front(pItem);
 }
 
 template<typename T, typename P>
-pmStatus pmSafePQ<T, P>::GetTopItem(T& pItem)
+pmStatus pmSafePQ<T, P>::GetTopItem(std::shared_ptr<T>& pItem)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -65,33 +50,30 @@ pmStatus pmSafePQ<T, P>::GetTopItem(T& pItem)
 	if(lIter == mQueue.end())
 		return pmOk;
 
-#ifdef _DEBUG
-    if(mSecondaryOperationsBlocked)
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(!mSecondaryOperationsBlocked);
     
-	typename std::vector<T>& lVector = lIter->second;
-	pItem = lVector.back();
-	lVector.pop_back();
+	typename std::list<std::shared_ptr<T>>& lInternalList = lIter->second;
+	pItem = lInternalList.back();
+	lInternalList.pop_back();
 
-    assert(mIsProcessing == false);
-    mIsProcessing = true;
+    DEBUG_EXCEPTION_ASSERT(!mCurrentItem.get());
+    mCurrentItem = pItem;
     
-    mSecondaryOperationsBlocked = pItem.BlocksSecondaryOperations();
+    mSecondaryOperationsBlocked = pItem->BlocksSecondaryOperations();
     
-	if(lVector.empty())
+	if(lInternalList.empty())
 		mQueue.erase(lIter);
 
 	return pmSuccess;
 }
     
 template<typename T, typename P>
-pmStatus pmSafePQ<T, P>::MarkProcessingFinished()
+void pmSafePQ<T, P>::MarkProcessingFinished()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
     
-    assert(mIsProcessing == true);
-    mIsProcessing = false;
+    DEBUG_EXCEPTION_ASSERT(mCurrentItem.get());
+    mCurrentItem.reset();
     
     if(mSecondaryOperationsBlocked)
     {
@@ -100,12 +82,10 @@ pmStatus pmSafePQ<T, P>::MarkProcessingFinished()
     }
 
     mCommandSignalWait.Signal();
-    
-    return pmSuccess;
 }
 
 template<typename T, typename P>
-pmStatus pmSafePQ<T, P>::UnblockSecondaryOperations()
+void pmSafePQ<T, P>::UnblockSecondaryOperations()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
     
@@ -114,9 +94,7 @@ pmStatus pmSafePQ<T, P>::UnblockSecondaryOperations()
     
     mSecondaryOperationsBlocked = false;
     mSecondaryOperationsWait.Signal();
-    
-    return pmSuccess;
-}    
+}
 
 template<typename T, typename P>
 bool pmSafePQ<T, P>::IsHighPriorityElementPresent(P pPriority)
@@ -148,25 +126,23 @@ uint pmSafePQ<T, P>::GetSize()
 }
 
 template<typename T, typename P>
-pmStatus pmSafePQ<T, P>::WaitIfMatchingItemBeingProcessed(T& pItem, matchFuncPtr pMatchFunc, void* pMatchCriterion)
+void pmSafePQ<T, P>::WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
     while(1)
     {
         // Auto lock/unlock scope
         {
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-            if(!mIsProcessing || !pMatchFunc(pItem, pMatchCriterion))
-                return pmSuccess;
+            if(!mCurrentItem.get() || !pMatchFunc(*mCurrentItem, pMatchCriterion))
+                return;
         }
     
         mCommandSignalWait.Wait();
     }
-    
-    return pmSuccess;
 }
 
 template<typename T, typename P>
-pmStatus pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
+void pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
     while(1)
     {
@@ -178,31 +154,32 @@ pmStatus pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFun
             {
                 typename priorityQueueType::iterator lIter = mQueue.find(pPriority);
                 if(lIter == mQueue.end())
-                    return pmSuccess;
+                    return;
 
-                typename std::vector<T>& lVector = lIter->second;
-                size_t lSize = lVector.size();
-                for(long i=lSize-1; i>=0; --i)
+                typename std::list<std::shared_ptr<T>>& lInternalList = lIter->second;
+
+                typename std::list<std::shared_ptr<T>>::iterator lListIter = lInternalList.begin();
+                while(lListIter != lInternalList.end())
                 {
-                    if(pMatchFunc(lVector[i], pMatchCriterion))
-                        lVector.erase(lVector.begin()+i);
+                    if(pMatchFunc(*lListIter->get(), pMatchCriterion))
+                        lListIter = lInternalList.erase(lListIter);
+                    else
+                        ++lListIter;
                 }
                 
-                if(lVector.empty())
+                if(lInternalList.empty())
                     mQueue.erase(lIter);
 
-                return pmSuccess;
+                return;
             }
         }
 
         mSecondaryOperationsWait.Wait();
     }
-
-	return pmSuccess;
 }
 
 template<typename T, typename P>
-pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem, bool pTemporarilyUnblockSecondaryOperations)
+pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, std::shared_ptr<T>& pItem, bool pTemporarilyUnblockSecondaryOperations)
 {
     while(1)
     {
@@ -219,16 +196,17 @@ pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr
                 if(lIter == mQueue.end())
                     return pmOk;
 
-                typename std::vector<T>& lVector = lIter->second;
-                size_t lSize = lVector.size();
-                for(long i=lSize-1; i>=0; --i)
+                typename std::list<std::shared_ptr<T>>& lInternalList = lIter->second;
+                
+                typename std::list<std::shared_ptr<T>>::iterator lListIter = lInternalList.begin();
+                while(lListIter != lInternalList.end())
                 {
-                    if(pMatchFunc(lVector[i], pMatchCriterion))
+                    if(pMatchFunc(*lListIter->get(), pMatchCriterion))
                     {
-                        pItem = lVector[i];
-                        lVector.erase(lVector.begin()+i);
+                        pItem = *lListIter;
+                        lInternalList.erase(lListIter);
 
-                        if(lVector.empty())
+                        if(lInternalList.empty())
                             mQueue.erase(lIter);
                         
                         return pmSuccess;

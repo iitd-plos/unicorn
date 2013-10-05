@@ -18,45 +18,48 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
-#ifndef __PM_RANGE_ACCESSOR__
-#define __PM_RANGE_ACCESSOR__
+#ifndef __PM_CACHE__
+#define __PM_CACHE__
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
 
-#include <tr1/unordered_map>
+#include <list>
+#include <unordered_map>
 
 namespace pm
 {
 
-struct rangeComparator
+/* An LRU cache will ref counted values */
+template<typename __key, typename __value, typename __hasher, typename __evictor>
+class pmCache : public pmBase, pmNonCopyable
 {
-    bool operator() (std::pair<size_t, size_t>& pRange1, std::pair<size_t, size_t>& pRange2)
-    {
-        return ((pRange1.first <= pRange2.first && pRange1.second >= pRange2.second) || (pRange2.first <= pRange1.first && pRange2.second >= pRange1.second));
-    }
+public:
+    typedef std::pair<const __key, std::shared_ptr<__value>> mappedType;
+
+    pmCache() = default;
+    
+    pmCache(const __evictor& pEvictor)
+    : mEvictor(pEvictor)
+    {}
+
+    void Insert(const __key& pKey, std::shared_ptr<__value>& pValue);
+    std::shared_ptr<__value>& Get(const __key& pKey);
+
+    bool Purge();
+    
+private:
+    std::shared_ptr<__value> mEmptyValue;
+    __evictor mEvictor;
+
+    std::list<mappedType> mCacheList;
+    std::unordered_map<const __key, typename std::list<mappedType>::iterator, __hasher> mCacheHash;
+
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
-    
-template<typename valueType>
-class pmRangeAccessor : public pmBase
-{
-    typedef std::tr1::unordered_map<std::pair<size_t, size_t>, valueType, rangeComparator> hashType;
-    
-    public:
-        pmRangeAccessor();
-        ~pmRangeAccessor();
-    
-        void Insert(size_t pOffset, size_t pLength, const valueType& pValue);
-        bool Find(size_t pOffset, size_t pLength, valueType& pValue);
-        void Erase(size_t pOffset, size_t pLength);
-    
-    private:
-        hashType mHash;
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
-};
-    
+
 } // end namespace pm
 
-#include "../src/pmRangeAccessor.cpp"
+#include "../src/pmCache.cpp"
 
 #endif

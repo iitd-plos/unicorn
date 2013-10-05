@@ -130,7 +130,7 @@ RectGroup::RectGroup()
 
 
 /* class Graph */
-Graph::Graph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX, std::auto_ptr<Axis>& pAxisY)
+Graph::Graph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY)
 : mWidth(pWidth)
 , mHeight(pHeight)
 , mLeftMargin(mWidth * LEFT_MARGIN_PERCENTAGE/100.0)
@@ -139,8 +139,8 @@ Graph::Graph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX, std::au
 , mBottomMargin(mHeight * BOTTOM_MARGIN_PERCENTAGE/100.0)
 , mUsableWidth(mWidth - mLeftMargin - mRightMargin)
 , mUsableHeight(mHeight - mTopMargin - mBottomMargin)
-, mAxisX(pAxisX)
-, mAxisY(pAxisY)
+, mAxisX(std::move(pAxisX))
+, mAxisY(std::move(pAxisY))
 , mMinX(std::numeric_limits<double>::infinity())
 , mMinY(std::numeric_limits<double>::infinity())
 , mMaxX(0.0)
@@ -274,7 +274,7 @@ size_t Graph::GetHeight() const
 
 
 /* class LineGraph */
-LineGraph::LineGraph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX, std::auto_ptr<Axis>& pAxisY, size_t pLineCount)
+LineGraph::LineGraph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY, size_t pLineCount)
 : Graph(pWidth, pHeight, pAxisX, pAxisY)
 {
     mLines.resize(pLineCount);
@@ -359,7 +359,7 @@ const std::string& LineGraph::GetSvg()
 
 
 /* class RectGraph */
-RectGraph::RectGraph(size_t pWidth, size_t pHeight, std::auto_ptr<Axis>& pAxisX, std::auto_ptr<Axis>& pAxisY, size_t pGroups, size_t pRectsPerGroup, bool pGroupsOnXAxis /* = true */)
+RectGraph::RectGraph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY, size_t pGroups, size_t pRectsPerGroup, bool pGroupsOnXAxis /* = true */)
 : Graph(pWidth, pHeight, pAxisX, pAxisY)
 , mRectsPerGroup(pRectsPerGroup)
 , mGroupsOnXAxis(pGroupsOnXAxis)

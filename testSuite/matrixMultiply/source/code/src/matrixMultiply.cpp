@@ -42,22 +42,30 @@ pmCudaLaunchConf GetCudaLaunchConf(int pMatrixDim)
 }
 #endif
 
-pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
+pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
 
-	// Subscribe to entire first and second input matrix (default PMLIB behaviour)
+	// Subscribe to one row of the first input matrix
+    lSubscriptionInfo.offset = pSubtaskInfo.subtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+    lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX1_MEM_INDEX, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+    
+    // Subscribe to entire second input matrix
+    lSubscriptionInfo.offset = 0;
+    lSubscriptionInfo.length = lTaskConf->matrixDim * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX2_MEM_INDEX, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
 
 	// Subscribe to one row of the output matrix
-	lSubscriptionInfo.offset = pSubtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
+	lSubscriptionInfo.offset = pSubtaskInfo.subtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
 	lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+	pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MATRIX_MEM_INDEX, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
 
 #ifdef BUILD_CUDA
 	// Set CUDA Launch Configuration
 	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
-		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, lTaskConf->cudaLaunchConf);
+		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lTaskConf->cudaLaunchConf);
 #endif
 
 	return pmSuccess;
@@ -67,9 +75,9 @@ pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
 {
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
 
-	memset(pSubtaskInfo.outputMem, 0, lTaskConf->matrixDim*sizeof(MATRIX_DATA_TYPE));
+	memset(pSubtaskInfo.memInfo[OUTPUT_MATRIX_MEM_INDEX].ptr, 0, lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE));
 
-	serialMatrixMultiply((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem) + (pSubtaskInfo.subtaskId * lTaskConf->matrixDim), (MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem) + (lTaskConf->matrixDim * lTaskConf->matrixDim), (MATRIX_DATA_TYPE*)(pSubtaskInfo.outputMem), 1, lTaskConf->matrixDim, lTaskConf->matrixDim);
+	serialMatrixMultiply((MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX1_MEM_INDEX].ptr), (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX2_MEM_INDEX].ptr), (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[OUTPUT_MATRIX_MEM_INDEX].ptr), 1, lTaskConf->matrixDim, lTaskConf->matrixDim);
 
 	return pmSuccess;
 }
@@ -77,7 +85,8 @@ pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
 #define READ_NON_COMMON_ARGS \
 	int lMatrixDim = DEFAULT_MATRIX_DIM; \
 	FETCH_INT_ARG(lMatrixDim, pCommonArgs, argc, argv); \
-	size_t lMatrixElems = lMatrixDim * lMatrixDim;
+	size_t lMatrixElems = lMatrixDim * lMatrixDim; \
+    lMatrixElems = lMatrixElems;    // To suppress unused variable warning
 
 // Returns execution time on success; 0 on error
 double DoSerialProcess(int argc, char** argv, int pCommonArgs)
@@ -118,19 +127,32 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	size_t lMatrixSize = lMatrixElems * sizeof(MATRIX_DATA_TYPE);
 
-	// Input Mem contains both input matrices one after the other
+	// Input Mem 1 contains first input matrix
+    // Input Mem 2 contains second input matrix
 	// Output Mem contains the result matrix
 	// Number of subtasks is equal to the number of rows
-	size_t lInputMemSize = 2 * lMatrixSize;
-	size_t lOutputMemSize = lMatrixSize;
-
-	CREATE_TASK(lInputMemSize, lOutputMemSize, lMatrixDim, pCallbackHandle[0], pSchedulingPolicy)
-
-    pmRawMemPtr lRawInputPtr, lRawOutputPtr;
-    pmGetRawMemPtr(lTaskDetails.inputMemHandle, &lRawInputPtr);
+	CREATE_TASK(lMatrixDim, pCallbackHandle[0], pSchedulingPolicy)
     
-	memcpy(lRawInputPtr, gSampleInput, lInputMemSize);
+    pmMemHandle lInputMem1, lInputMem2, lOutputMem;
+    CREATE_MEM(lMatrixSize, lInputMem1)
+    CREATE_MEM(lMatrixSize, lInputMem2)
+    CREATE_MEM(lMatrixSize, lOutputMem)
 
+    pmRawMemPtr lRawInputPtr1, lRawInputPtr2, lRawOutputPtr;
+    pmGetRawMemPtr(lInputMem1, &lRawInputPtr1);
+    pmGetRawMemPtr(lInputMem2, &lRawInputPtr2);
+    
+	memcpy(lRawInputPtr1, gSampleInput, lMatrixSize);
+	memcpy(lRawInputPtr2, gSampleInput + lMatrixElems, lMatrixSize);
+
+    pmTaskMem lTaskMem[MAX_MEM_INDICES];
+    lTaskMem[INPUT_MATRIX1_MEM_INDEX] = {lInputMem1, INPUT_MEM_READ_ONLY};
+    lTaskMem[INPUT_MATRIX2_MEM_INDEX] = {lInputMem2, INPUT_MEM_READ_ONLY};
+    lTaskMem[OUTPUT_MATRIX_MEM_INDEX] = {lOutputMem, OUTPUT_MEM_WRITE_ONLY};
+
+    lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
+    lTaskDetails.taskMemCount = MAX_MEM_INDICES;
+    
 	matrixMultiplyTaskConf lTaskConf;
 	lTaskConf.matrixDim = lMatrixDim;
 	#ifdef BUILD_CUDA
@@ -149,15 +171,15 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         FREE_TASK_AND_RESOURCES
         return (double)-1.0;
     }
-    
+
 	double lEndTime = getCurrentTimeInSecs();
 
     if(pFetchBack)
     {
-        SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
+        SAFE_PM_EXEC( pmFetchMemory(lOutputMem) );
 
-        pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
-        memcpy(gParallelOutput, lRawOutputPtr, lOutputMemSize);
+        pmGetRawMemPtr(lOutputMem, &lRawOutputPtr);
+        memcpy(gParallelOutput, lRawOutputPtr, lMatrixSize);
     }
 
 	FREE_TASK_AND_RESOURCES
@@ -193,7 +215,7 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 	gSerialOutput = new MATRIX_DATA_TYPE[lMatrixElems];
 	gParallelOutput = new MATRIX_DATA_TYPE[lMatrixElems];
 
-	for(size_t i=0; i<lInputSize; ++i)
+	for(size_t i = 0; i < lInputSize; ++i)
 		gSampleInput[i] = (MATRIX_DATA_TYPE)rand(); // i;
 
 	memset(gSerialOutput, 0, lMatrixElems*sizeof(MATRIX_DATA_TYPE));
@@ -216,7 +238,7 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
 
-	for(size_t i=0; i<lMatrixElems; ++i)
+	for(size_t i = 0; i < lMatrixElems; ++i)
 	{
 		if(gSerialOutput[i] != gParallelOutput[i])
 		{

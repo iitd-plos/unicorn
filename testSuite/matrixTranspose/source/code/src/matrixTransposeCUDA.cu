@@ -43,9 +43,11 @@ __global__ void matrixCopy_cuda(matrixTransposeTaskConf pTaskConf, pmSubtaskInfo
     int lInputIndex = lIndexX + (lIndexY * pTaskConf.blockSizeRows);
     int lOutputIndex = lIndexX + (lIndexY * pTaskConf.matrixDimRows);
     
+    unsigned int lOutputMemIndex = (lTaskConf->inplace ? INPLACE_MEM_INDEX : OUTPUT_MEM_INDEX);
+
     int i, lStride = (GPU_TILE_DIM/GPU_ELEMS_PER_THREAD);
     for(i = 0; i < GPU_TILE_DIM; i += lStride)
-        ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemWrite)[lOutputIndex + i * pTaskConf.matrixDimRows] = ((MATRIX_DATA_TYPE*)pOutputBlock)[lInputIndex + i * pTaskConf.blockSizeRows];
+        ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr)[lOutputIndex + i * pTaskConf.matrixDimRows] = ((MATRIX_DATA_TYPE*)pOutputBlock)[lInputIndex + i * pTaskConf.blockSizeRows];
 }
     
 __global__ void matrixTranspose_singleGpu(size_t pInputMemCols, size_t pSubtaskRows, void* pInputMem, void* pOutputBlock, size_t pMaxBlocksX, size_t pMaxBlocksY)
@@ -89,12 +91,12 @@ pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
     {
         void* lBlockCudaPtr = pSubtaskInfo.gpuContext.reservedGlobalMem;
 
-        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, pSubtaskInfo.outputMemRead, lBlockCudaPtr);
+        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].readPtr, lBlockCudaPtr);
         matrixCopy_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);    // because transpose is inplace, this has to be a post step
     }
     else
     {
-        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->matrixDimCols, lTaskConf->matrixDimRows, pSubtaskInfo.inputMem, pSubtaskInfo.outputMemWrite);
+        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->matrixDimCols, lTaskConf->matrixDimRows, pSubtaskInf.memInfo[INPUT_MEM_INDEX].ptr, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
     }
     
     return pmSuccess;

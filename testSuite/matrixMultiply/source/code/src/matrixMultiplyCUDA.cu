@@ -16,21 +16,19 @@ __global__ void matrixMultiply_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceI
 
     matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
     unsigned int lDimension = lTaskConf->matrixDim;
-    unsigned int lMatrixSize = lDimension * lDimension;
 
     MATRIX_DATA_TYPE value = (MATRIX_DATA_TYPE)0;
-    int rowId = pSubtaskInfo.subtaskId;
     int colId = ((blockIdx.x * gridDim.y + blockIdx.y)*(blockDim.x * blockDim.y)) + (threadIdx.x * blockDim.y) + threadIdx.y;
 
     if(colId >= lDimension)
         return;
 
-    MATRIX_DATA_TYPE* inputMem1 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem);
-    MATRIX_DATA_TYPE* inputMem2 = inputMem1 + lMatrixSize;
-    MATRIX_DATA_TYPE* outputMem = (MATRIX_DATA_TYPE*)(pSubtaskInfo.outputMem);
+    MATRIX_DATA_TYPE* inputMem1 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX1_MEM_INDEX].ptr);
+    MATRIX_DATA_TYPE* inputMem2 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX2_MEM_INDEX].ptr);
+    MATRIX_DATA_TYPE* outputMem = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[OUTPUT_MATRIX_MEM_INDEX].ptr);
 
     for(int e = 0; e < lDimension; ++e)
-        value += inputMem1[rowId * lDimension + e] * inputMem2[e * lDimension + colId];
+        value += inputMem1[e] * inputMem2[e * lDimension + colId];
 
     outputMem[colId] = value;
 

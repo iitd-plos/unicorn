@@ -26,21 +26,20 @@ namespace pm
 STATIC_ACCESSOR(pmCallbackUnit::keyMapType, pmCallbackUnit, GetKeyMap)
 STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmCallbackUnit::mResourceLock"), pmCallbackUnit, GetResourceLock)
 
-pmCallbackUnit::pmCallbackUnit(char* pKey, pmDataDistributionCB* pDataDistributionCB, pmSubtaskCB* pSubtaskCB, pmDataReductionCB* pDataReductionCB, pmDeviceSelectionCB* pDeviceSelectionCB,
-	pmDataRedistributionCB* pDataRedistributionCB, pmPreDataTransferCB* pPreDataTransferCB, pmPostDataTransferCB* pPostDataTransferCB)
+pmCallbackUnit::pmCallbackUnit(const char* pKey, finalize_ptr<pmDataDistributionCB>&& pDataDistributionCB, finalize_ptr<pmSubtaskCB>&& pSubtaskCB, finalize_ptr<pmDataReductionCB>&& pDataReductionCB, finalize_ptr<pmDeviceSelectionCB>&& pDeviceSelectionCB, finalize_ptr<pmDataRedistributionCB>&& pDataRedistributionCB, finalize_ptr<pmPreDataTransferCB>&& pPreDataTransferCB, finalize_ptr<pmPostDataTransferCB>&& pPostDataTransferCB)
+    : mDataDistributionCB(std::move(pDataDistributionCB))
+	, mSubtaskCB(std::move(pSubtaskCB))
+	, mDataReductionCB(std::move(pDataReductionCB))
+	, mDataRedistributionCB(std::move(pDataRedistributionCB))
+	, mDeviceSelectionCB(std::move(pDeviceSelectionCB))
+	, mPreDataTransferCB(std::move(pPreDataTransferCB))
+	, mPostDataTransferCB(std::move(pPostDataTransferCB))
+	, mKey(pKey)
 {
-	mDataDistributionCB = pDataDistributionCB;
-	mSubtaskCB = pSubtaskCB;
-	mDataReductionCB = pDataReductionCB;
-	mDataRedistributionCB = pDataRedistributionCB;
-	mDeviceSelectionCB = pDeviceSelectionCB;
-	mPreDataTransferCB = pPreDataTransferCB;
-	mPostDataTransferCB = pPostDataTransferCB;
-
-	mKey = pKey;
-
     keyMapType& lKeyMap = GetKeyMap();
+
 	FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
+    
 	if(lKeyMap.find(mKey) != lKeyMap.end())
 		PMTHROW(pmInvalidKeyException());
 
@@ -51,64 +50,58 @@ pmCallbackUnit::~pmCallbackUnit()
 {
 	FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
 
-    keyMapType& lKeyMap = GetKeyMap();
-	lKeyMap.erase(mKey);
+	GetKeyMap().erase(mKey);
 }
 
-pmDataDistributionCB* pmCallbackUnit::GetDataDistributionCB()
+const pmDataDistributionCB* pmCallbackUnit::GetDataDistributionCB() const
 {
-	return mDataDistributionCB;
+	return mDataDistributionCB.get_ptr();
 }
 
-pmSubtaskCB* pmCallbackUnit::GetSubtaskCB()
+const pmSubtaskCB* pmCallbackUnit::GetSubtaskCB() const
 {
-	return mSubtaskCB;
+	return mSubtaskCB.get_ptr();
 }
 
-pmDataReductionCB* pmCallbackUnit::GetDataReductionCB()
+const pmDataReductionCB* pmCallbackUnit::GetDataReductionCB() const
 {
-	return mDataReductionCB;
+	return mDataReductionCB.get_ptr();
 }
 
-pmDataRedistributionCB* pmCallbackUnit::GetDataRedistributionCB()
+const pmDataRedistributionCB* pmCallbackUnit::GetDataRedistributionCB() const
 {
-	return mDataRedistributionCB;
+	return mDataRedistributionCB.get_ptr();
 }
 
-pmDeviceSelectionCB* pmCallbackUnit::GetDeviceSelectionCB()
+const pmDeviceSelectionCB* pmCallbackUnit::GetDeviceSelectionCB() const
 {
-	return mDeviceSelectionCB;
+	return mDeviceSelectionCB.get_ptr();
 }
 
-pmPreDataTransferCB* pmCallbackUnit::GetPreDataTransferCB()
+const pmPreDataTransferCB* pmCallbackUnit::GetPreDataTransferCB() const
 {
-	return mPreDataTransferCB;
+	return mPreDataTransferCB.get_ptr();
 }
 
-pmPostDataTransferCB* pmCallbackUnit::GetPostDataTransferCB()
+const pmPostDataTransferCB* pmCallbackUnit::GetPostDataTransferCB() const
 {
-	return mPostDataTransferCB;
+	return mPostDataTransferCB.get_ptr();
 }
 
-const char* pmCallbackUnit::GetKey()
+const char* pmCallbackUnit::GetKey() const
 {
 	return mKey.c_str();
 }
 
-pmCallbackUnit* pmCallbackUnit::FindCallbackUnit(char* pKey)
+const pmCallbackUnit* pmCallbackUnit::FindCallbackUnit(char* pKey)
 {
 	std::string lStr(pKey);
 
 	FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
 
-    keyMapType& lKeyMap = GetKeyMap();
-	std::map<std::string, pmCallbackUnit*>::iterator lIter = lKeyMap.find(lStr);
-	if(lIter == lKeyMap.end())
-		PMTHROW(pmInvalidKeyException());
+	DEBUG_EXCEPTION_ASSERT(GetKeyMap().find(lStr) != GetKeyMap().end());
 
-	pmCallbackUnit* lCallbackUnit = lKeyMap[lStr];
-
-	return lCallbackUnit;
+	return GetKeyMap().find(lStr)->second;
 }
 
 };

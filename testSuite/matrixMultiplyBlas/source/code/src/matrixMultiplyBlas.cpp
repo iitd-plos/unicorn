@@ -32,22 +32,22 @@ void serialMatrixMultiply(MATRIX_DATA_TYPE* pMatrixA, MATRIX_DATA_TYPE* pMatrixB
     CBLAS_GEMM(CblasRowMajor, CblasNoTrans, CblasNoTrans, (int)pDim1, (int)pDim3, (int)pDim2, 1.0f, pMatrixA, (int)pRowStepElems, pMatrixB, (int)pRowStepElems, 0.0f, pMatrixC, (int)pRowStepElems);
 }
 
-bool GetSplitData(size_t* pBlockOffset, size_t* pBlockWidth, matrixMultiplyTaskConf* pTaskConf, pmSplitInfo* pSplitInfo)
+bool GetSplitData(size_t* pBlockOffset, size_t* pBlockWidth, matrixMultiplyTaskConf* pTaskConf, pmSplitInfo& pSplitInfo)
 {
     *pBlockOffset = 0;
     *pBlockWidth = pTaskConf->blockDim;
-    if(pSplitInfo)
+    if(pSplitInfo.splitCount)
     {
-        size_t lSplitCount = ((pTaskConf->blockDim < pSplitInfo->splitCount) ? pTaskConf->blockDim : pSplitInfo->splitCount);
+        size_t lSplitCount = ((pTaskConf->blockDim < pSplitInfo.splitCount) ? pTaskConf->blockDim : pSplitInfo.splitCount);
         
-        if(pSplitInfo->splitId > lSplitCount - 1)
+        if(pSplitInfo.splitId > lSplitCount - 1)
             return false;
         
         size_t lSplittedBlockSize = (pTaskConf->blockDim / lSplitCount);
-        *pBlockOffset = pSplitInfo->splitId * lSplittedBlockSize;
+        *pBlockOffset = pSplitInfo.splitId * lSplittedBlockSize;
 
-        if(pSplitInfo->splitId == lSplitCount - 1)
-            *pBlockWidth = (pTaskConf->blockDim - (pSplitInfo->splitId * lSplittedBlockSize));
+        if(pSplitInfo.splitId == lSplitCount - 1)
+            *pBlockWidth = (pTaskConf->blockDim - (pSplitInfo.splitId * lSplittedBlockSize));
         else
             *pBlockWidth = lSplittedBlockSize;
     }
@@ -55,22 +55,22 @@ bool GetSplitData(size_t* pBlockOffset, size_t* pBlockWidth, matrixMultiplyTaskC
     return true;
 }
     
-pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLazyMemInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo)
+pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
     
     size_t lBlocksPerDim = (lTaskConf->matrixDim / lTaskConf->blockDim);
-    size_t lBlockRow = (pSubtaskId / lBlocksPerDim);
-    size_t lBlockCol = (pSubtaskId % lBlocksPerDim);
+    size_t lBlockRow = (pSubtaskInfo.subtaskId / lBlocksPerDim);
+    size_t lBlockCol = (pSubtaskInfo.subtaskId % lBlocksPerDim);
     
     size_t lBlockOffset, lBlockWidth;
-    if(!GetSplitData(&lBlockOffset, &lBlockWidth, lTaskConf, pSplitInfo))
+    if(!GetSplitData(&lBlockOffset, &lBlockWidth, lTaskConf, pSubtaskInfo.splitInfo))
     {
         lSubscriptionInfo.offset = lSubscriptionInfo.length = 0;
 
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 1, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
         
         return pmSuccess;
     }
@@ -80,19 +80,19 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLaz
     {
         lSubscriptionInfo.offset = ((lBlockRow * lTaskConf->blockDim) + i) * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
         lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX1_MEM_INDEX, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
     }
 
 	// Subscribe to entire lBlockCol of the second matrix (appropriately equal split)
     for(size_t i = 0; i < lTaskConf->matrixDim; ++i)
     {
-        lSubscriptionInfo.offset = (lTaskConf->matrixDim * lTaskConf->matrixDim + i * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim + lBlockOffset) * sizeof(MATRIX_DATA_TYPE);
+        lSubscriptionInfo.offset = (i * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim + lBlockOffset) * sizeof(MATRIX_DATA_TYPE);
         lSubscriptionInfo.length = lBlockWidth * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX2_MEM_INDEX, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
     }
 
 	// Subscribe to one block of the output matrix (with equal split)
-    SUBSCRIBE_BLOCK(lBlockRow, lBlockCol, lBlockOffset, lBlockWidth, lTaskConf->blockDim, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_WRITE_SUBSCRIPTION)
+    SUBSCRIBE_BLOCK(lBlockRow, lBlockCol, lBlockOffset, lBlockWidth, lTaskConf->blockDim, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MATRIX_MEM_INDEX,OUTPUT_MEM_WRITE_SUBSCRIPTION)
 
 	return pmSuccess;
 }
@@ -101,17 +101,13 @@ pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
 {
 	matrixMultiplyTaskConf* lTaskConf = (matrixMultiplyTaskConf*)(pTaskInfo.taskConf);
     
-    size_t lBlocksPerDim = (lTaskConf->matrixDim / lTaskConf->blockDim);
-    size_t lBlockRow = (pSubtaskInfo.subtaskId / lBlocksPerDim);
-    size_t lBlockCol = (pSubtaskInfo.subtaskId % lBlocksPerDim);
-
     size_t lBlockOffset, lBlockWidth;
     if(!GetSplitData(&lBlockOffset, &lBlockWidth, lTaskConf, pSubtaskInfo.splitInfo))
         return pmSuccess;
         
-    MATRIX_DATA_TYPE* lMatrix1 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem);
-    MATRIX_DATA_TYPE* lMatrix2 = ((MATRIX_DATA_TYPE*)(pSubtaskInfo.inputMem)) + (lTaskConf->matrixDim * lTaskConf->matrixDim + lBlockCol * lTaskConf->blockDim + lBlockOffset) - (lBlockRow * lTaskConf->blockDim * lTaskConf->matrixDim);
-    MATRIX_DATA_TYPE* lMatrix3 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.outputMem);
+    MATRIX_DATA_TYPE* lMatrix1 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX1_MEM_INDEX].ptr);
+    MATRIX_DATA_TYPE* lMatrix2 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX2_MEM_INDEX].ptr);
+    MATRIX_DATA_TYPE* lMatrix3 = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[OUTPUT_MATRIX_MEM_INDEX].ptr);
     
 	serialMatrixMultiply(lMatrix1, lMatrix2, lMatrix3, lTaskConf->blockDim, lTaskConf->matrixDim, lBlockWidth, lTaskConf->matrixDim);
 
@@ -162,23 +158,36 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	READ_NON_COMMON_ARGS
 
 	size_t lMatrixSize = lMatrixElems * sizeof(MATRIX_DATA_TYPE);
+    size_t lBlockSize = getBlockSize(lMatrixDim);
 
-	// Input Mem contains both input matrices one after the other
+	// Input Mem 1 contains first input matrix
+    // Input Mem 2 contains second input matrix
 	// Output Mem contains the result matrix
 	// The number of subtasks is equal to the number of blocks in the output matrix
-	size_t lInputMemSize = 2 * lMatrixSize;
-	size_t lOutputMemSize = lMatrixSize;
-    
-    size_t lBlockSize = getBlockSize(lMatrixDim);
     unsigned long lSubtaskCount = (lMatrixDim / lBlockSize) * (lMatrixDim / lBlockSize);
 
-	CREATE_TASK(lInputMemSize, lOutputMemSize, lSubtaskCount, pCallbackHandle[0], pSchedulingPolicy)
+	CREATE_TASK(lSubtaskCount, pCallbackHandle[0], pSchedulingPolicy)
 
-    pmRawMemPtr lRawInputPtr, lRawOutputPtr;
-    pmGetRawMemPtr(lTaskDetails.inputMemHandle, &lRawInputPtr);
+    pmMemHandle lInputMem1, lInputMem2, lOutputMem;
+    CREATE_MEM(lMatrixSize, lInputMem1)
+    CREATE_MEM(lMatrixSize, lInputMem2)
+    CREATE_MEM(lMatrixSize, lOutputMem)
+
+    pmRawMemPtr lRawInputPtr1, lRawInputPtr2, lRawOutputPtr;
+    pmGetRawMemPtr(lInputMem1, &lRawInputPtr1);
+    pmGetRawMemPtr(lInputMem2, &lRawInputPtr2);
     
-	memcpy(lRawInputPtr, gSampleInput, lInputMemSize);
+	memcpy(lRawInputPtr1, gSampleInput, lMatrixSize);
+	memcpy(lRawInputPtr2, gSampleInput + lMatrixElems, lMatrixSize);
 
+    pmTaskMem lTaskMem[MAX_MEM_INDICES];
+    lTaskMem[INPUT_MATRIX1_MEM_INDEX] = {lInputMem1, INPUT_MEM_READ_ONLY};
+    lTaskMem[INPUT_MATRIX2_MEM_INDEX] = {lInputMem2, INPUT_MEM_READ_ONLY};
+    lTaskMem[OUTPUT_MATRIX_MEM_INDEX] = {lOutputMem, OUTPUT_MEM_WRITE_ONLY};
+
+    lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
+    lTaskDetails.taskMemCount = MAX_MEM_INDICES;
+    
 	matrixMultiplyTaskConf lTaskConf;
 	lTaskConf.matrixDim = lMatrixDim;
     lTaskConf.blockDim = lBlockSize;
@@ -202,10 +211,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     if(pFetchBack)
     {
-        SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
+        SAFE_PM_EXEC( pmFetchMemory(lOutputMem) );
 
-        pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
-        memcpy(gParallelOutput, lRawOutputPtr, lOutputMemSize);
+        pmGetRawMemPtr(lOutputMem, &lRawOutputPtr);
+        memcpy(gParallelOutput, lRawOutputPtr, lMatrixSize);
     }
 
 	FREE_TASK_AND_RESOURCES

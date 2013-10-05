@@ -41,15 +41,15 @@ struct StandardCurve
 
 struct StandardChart
 {
-    std::auto_ptr<Axis> xAxis;
-    std::auto_ptr<Axis> yAxis;
+    std::unique_ptr<Axis> xAxis;
+    std::unique_ptr<Axis> yAxis;
     
     std::vector<std::string> groups;    // Only used for rect graphs
     std::vector<StandardCurve> curves;
     
-    StandardChart(std::auto_ptr<Axis> pXAxis, std::auto_ptr<Axis> pYAxis)
-    : xAxis(pXAxis)
-    , yAxis(pYAxis)
+    StandardChart(std::unique_ptr<Axis> pXAxis, std::unique_ptr<Axis> pYAxis)
+    : xAxis(std::move(pXAxis))
+    , yAxis(std::move(pYAxis))
     {}
     
     void SetCurves(size_t pCurveCount, const char** pCurveNames)
@@ -60,7 +60,7 @@ struct StandardChart
             curves.push_back(StandardCurve(pCurveNames[i]));
     }
     
-    std::auto_ptr<Graph> graph;
+    std::unique_ptr<Graph> graph;
 };
 
 struct DeviceStats

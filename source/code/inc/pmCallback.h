@@ -39,8 +39,6 @@ class pmCallback : public pmBase
 	public:
 
 	protected:
-		pmCallback();
-		virtual ~pmCallback();
 
 	private:
 };
@@ -49,9 +47,8 @@ class pmDataDistributionCB : public pmCallback
 {
 	public:
 		pmDataDistributionCB(pmDataDistributionCallback pCallback);
-		virtual ~pmDataDistributionCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) const;
 
 	private:
 		pmDataDistributionCallback mCallback;
@@ -61,13 +58,12 @@ class pmSubtaskCB : public pmCallback
 {
 	public:
 		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom);
-		virtual ~pmSubtaskCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly);
+		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, void* pStreamPtr = NULL) const;
 
-		virtual bool IsCallbackDefinedForDevice(pmDeviceType pDeviceType);
-        virtual bool HasCustomGpuCallback();
-        virtual bool HasBothCpuAndGpuCallbacks();
+		bool IsCallbackDefinedForDevice(pmDeviceType pDeviceType) const;
+        bool HasCustomGpuCallback() const;
+        bool HasBothCpuAndGpuCallbacks() const;
 
 	private:
 		pmSubtaskCallback_CPU mCallback_CPU;
@@ -79,9 +75,8 @@ class pmDataReductionCB : public pmCallback
 {
 	public:
 		pmDataReductionCB(pmDataReductionCallback pCallback);
-		virtual ~pmDataReductionCB();
 
-		virtual pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2);
+		pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2) const;
 
 	private:
 		pmDataReductionCallback mCallback;
@@ -91,9 +86,8 @@ class pmDataRedistributionCB : public pmCallback
 {
 	public:
 		pmDataRedistributionCB(pmDataRedistributionCallback pCallback);
-		virtual ~pmDataRedistributionCB();
 
-		virtual pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign);
+		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign) const;
 
 	private:
 		pmDataRedistributionCallback mCallback;
@@ -103,9 +97,8 @@ class pmDeviceSelectionCB : public pmCallback
 {
 	public:
 		pmDeviceSelectionCB(pmDeviceSelectionCallback pCallback);
-		virtual ~pmDeviceSelectionCB();
 
-		virtual bool Invoke(pmTask* pTask, pmProcessingElement* pProcessingElement);
+		bool Invoke(pmTask* pTask, const pmProcessingElement* pProcessingElement) const;
 
 	private:
 		pmDeviceSelectionCallback mCallback;
@@ -115,9 +108,8 @@ class pmPreDataTransferCB : public pmCallback
 {
 	public:
 		pmPreDataTransferCB(pmPreDataTransferCallback pCallback);
-		virtual ~pmPreDataTransferCB();
 
-		virtual pmStatus Invoke();
+		pmStatus Invoke() const;
 
 	private:
 		pmPreDataTransferCallback mCallback;
@@ -127,9 +119,8 @@ class pmPostDataTransferCB : public pmCallback
 {
 	public:
 		pmPostDataTransferCB(pmPostDataTransferCallback pCallback);
-		virtual ~pmPostDataTransferCB();
 
-		virtual pmStatus Invoke();
+		pmStatus Invoke() const;
 
 	private:
 		pmPostDataTransferCallback mCallback;

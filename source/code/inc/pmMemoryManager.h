@@ -65,10 +65,10 @@ class pmMemoryManager : public pmBase
         virtual void FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector) = 0;
         virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask) = 0;
     
-        virtual size_t GetVirtualMemoryPageSize() = 0;
+        virtual size_t GetVirtualMemoryPageSize() const = 0;
         virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount) = 0;
 
-        virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy) = 0;
+        virtual void* CreateCheckOutMemory(size_t pLength) = 0;
     
 #ifdef SUPPORT_LAZY_MEMORY
         virtual void* CreateReadOnlyMemoryMapping(pmMemSection* pMemSection) = 0;
@@ -130,9 +130,9 @@ class pmLinuxMemoryManager : public pmMemoryManager
         virtual void FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
         virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask);
 
-        virtual size_t GetVirtualMemoryPageSize();
+        virtual size_t GetVirtualMemoryPageSize() const;
 
-        size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
+        virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
     
         pmStatus InstallSegFaultHandler();
 		pmStatus UninstallSegFaultHandler();
@@ -150,7 +150,7 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
         void FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
 
-        virtual void* CreateCheckOutMemory(size_t pLength, bool pIsLazy);
+        virtual void* CreateCheckOutMemory(size_t pLength);
 
 #ifdef SUPPORT_LAZY_MEMORY
     public:

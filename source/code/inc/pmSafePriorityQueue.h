@@ -25,7 +25,7 @@
 #include "pmResourceLock.h"
 #include "pmSignalWait.h"
 
-#include <vector>
+#include <list>
 #include <map>
 
 namespace pm
@@ -39,26 +39,23 @@ namespace pm
  * not provide iterators and deletion/inspection of random elements.
  */
 
-using namespace std;
-
 template<typename T, typename P = ushort>
 class pmSafePQ : public pmBase
 {
 	public:
-		typedef bool (*matchFuncPtr)(T& pItem, void* pMatchCriterion);
+		typedef bool (*matchFuncPtr)(const T& pItem, void* pMatchCriterion);
 
 		pmSafePQ();
-		virtual ~pmSafePQ();
 
-		pmStatus InsertItem(T& pItem, P pPriority);
-		pmStatus GetTopItem(T& pItem);
-    
-        pmStatus MarkProcessingFinished();
-        pmStatus UnblockSecondaryOperations();
+        void InsertItem(const std::shared_ptr<T>& pItem, P pPriority);
+        pmStatus GetTopItem(std::shared_ptr<T>& pItem);
 
-        pmStatus WaitIfMatchingItemBeingProcessed(T& pItem, matchFuncPtr pMatchFunc, void* pMatchCriterion);
-		pmStatus DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, T& pItem, bool pTemporarilyUnblockSecondaryOperations);
-		pmStatus DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
+        void MarkProcessingFinished();
+        void UnblockSecondaryOperations();
+
+        void WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, void* pMatchCriterion);
+        pmStatus DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, std::shared_ptr<T>& pItem, bool pTemporarilyUnblockSecondaryOperations);
+		void DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
 
 		bool IsHighPriorityElementPresent(P pPriority);
 
@@ -66,9 +63,10 @@ class pmSafePQ : public pmBase
 		uint GetSize();
 
 	private:
-		typedef map<P, typename std::vector<T> > priorityQueueType;
-		priorityQueueType mQueue;
-        bool mIsProcessing;
+        typedef std::map<P, typename std::list<std::shared_ptr<T>>> priorityQueueType;
+
+        priorityQueueType mQueue;
+        std::shared_ptr<T> mCurrentItem;
         bool mSecondaryOperationsBlocked;
     
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;

@@ -23,7 +23,6 @@
 #include "pmScheduler.h"
 #include "pmNetwork.h"
 #include "pmHardware.h"
-#include "pmCommand.h"
 #include "pmCallbackUnit.h"
 #include "pmDevicePool.h"
 #include "pmMemSection.h"
@@ -49,7 +48,7 @@ pmTaskManager* pmTaskManager::GetTaskManager()
     return &lTaskManager;
 }
 
-pmStatus pmTaskManager::SubmitTask(pmLocalTask* pLocalTask)
+void pmTaskManager::SubmitTask(pmLocalTask* pLocalTask)
 {
     // Auto lock/unlock scope
     {
@@ -59,45 +58,30 @@ pmStatus pmTaskManager::SubmitTask(pmLocalTask* pLocalTask)
 
 	pLocalTask->MarkTaskStart();
 	pmScheduler::GetScheduler()->SubmitTaskEvent(pLocalTask);
-
-	return pmSuccess;
 }
 
-pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskAssignPacked* pRemoteTaskData)
+pmRemoteTask* pmTaskManager::CreateRemoteTask(communicator::remoteTaskAssignPacked* pRemoteTaskData)
 {
-	pmCallbackUnit* lCallbackUnit = pmCallbackUnit::FindCallbackUnit(pRemoteTaskData->taskStruct.callbackKey);	// throws exception if key unregistered
+	const pmCallbackUnit* lCallbackUnit = pmCallbackUnit::FindCallbackUnit(pRemoteTaskData->taskStruct.callbackKey);	// throws exception if key unregistered
 
-	void* lTaskConf;
-	if(pRemoteTaskData->taskStruct.taskConfLength == 0)
-	{
-		lTaskConf = NULL;
-	}
-	else
-	{
-		lTaskConf = malloc(pRemoteTaskData->taskStruct.taskConfLength);
-		if(!lTaskConf)
-			PMTHROW(pmOutOfMemoryException());
+    std::vector<pmTaskMemory> lTaskMemVector;
+    lTaskMemVector.reserve(pRemoteTaskData->taskStruct.taskMemCount);
 
-		memcpy(lTaskConf, pRemoteTaskData->taskConf.ptr, pRemoteTaskData->taskConf.length);
-	}
+    for(size_t memIndex = 0; memIndex < pRemoteTaskData->taskStruct.taskMemCount; ++memIndex)
+    {
+        communicator::taskMemoryStruct& lTaskMemStruct = pRemoteTaskData->taskMem[memIndex];
+        const pmMachine* lOwnerHost = pmMachinePool::GetMachinePool()->GetMachine(lTaskMemStruct.memIdentifier.memOwnerHost);
 
-	pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost);
+        lTaskMemVector[memIndex].memSection = pmMemSection::CheckAndCreateMemSection(lTaskMemStruct.memLength, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
+        lTaskMemVector[memIndex].memType = (pmMemType)(lTaskMemStruct.memType);
+    }
 
-	pmRemoteTask* lRemoteTask;
-	pmMemSection* lInputMem = NULL;
-	pmMemSection* lOutputMem = NULL;
-	
-	START_DESTROY_ON_EXCEPTION(lDestructionBlock)
-		FREE_PTR_ON_EXCEPTION(lDestructionBlock, lTaskConf, lTaskConf);
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lInputMem, pmMemSection, (pRemoteTaskData->taskStruct.inputMemLength == 0) ? NULL : (pmMemSection::CheckAndCreateMemSection(pRemoteTaskData->taskStruct.inputMemLength, lOriginatingHost, pRemoteTaskData->taskStruct.inputMemGenerationNumber)));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lOutputMem, pmMemSection, (pRemoteTaskData->taskStruct.outputMemLength == 0) ? NULL : (pmMemSection::CheckAndCreateMemSection(pRemoteTaskData->taskStruct.outputMemLength, lOriginatingHost, pRemoteTaskData->taskStruct.outputMemGenerationNumber)));
-		DESTROY_PTR_ON_EXCEPTION(lDestructionBlock, lRemoteTask, pmRemoteTask, new pmRemoteTask(lTaskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, lInputMem, lOutputMem, (pmMemInfo)(pRemoteTaskData->taskStruct.inputMemInfo), (pmMemInfo)(pRemoteTaskData->taskStruct.outputMemInfo), pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), (pRemoteTaskData->taskStruct.flags & TASK_MULTI_ASSIGN_FLAG_VAL), (pRemoteTaskData->taskStruct.flags & TASK_DISJOINT_READ_WRITES_ACROSS_SUBTASKS_FLAG_VAL), (pRemoteTaskData->taskStruct.flags & TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL), (pRemoteTaskData->taskStruct.flags & TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL), (pRemoteTaskData->taskStruct.flags & TASK_CAN_SPLIT_CPU_SUBTASKS_FLAG_VAL), (pRemoteTaskData->taskStruct.flags & TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL)));
-	END_DESTROY_ON_EXCEPTION(lDestructionBlock)
+	pmRemoteTask* lRemoteTask = new pmRemoteTask(pRemoteTaskData->taskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, &lTaskMemVector[0], pRemoteTaskData->taskStruct.taskMemCount, pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), pRemoteTaskData->taskStruct.flags);
 
 	if(pRemoteTaskData->taskStruct.schedModel == scheduler::PULL || lRemoteTask->GetCallbackUnit()->GetDataReductionCB())
 	{
 		for(uint i = 0; i < pRemoteTaskData->taskStruct.assignedDeviceCount; ++i)
-			lRemoteTask->AddAssignedDevice(pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(((uint*)pRemoteTaskData->devices.ptr)[i]));
+			lRemoteTask->AddAssignedDevice(pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(((uint*)pRemoteTaskData->devices.get_ptr())[i]));
 	}
 
 	SubmitTask(lRemoteTask);
@@ -105,46 +89,40 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(pmCommunicatorCommand::remoteTaskA
 	return lRemoteTask;
 }
 
-pmStatus pmTaskManager::SubmitTask(pmRemoteTask* pRemoteTask)
+void pmTaskManager::SubmitTask(pmRemoteTask* pRemoteTask)
 {
 	FINALIZE_RESOURCE(dResourceLock, GetRemoteTaskResourceLock().Lock(), GetRemoteTaskResourceLock().Unlock());
 
 	GetRemoteTasks().insert(pRemoteTask);
     ScheduleEnqueuedRemoteSubtasksForExecution(pRemoteTask);
-
-	return pmSuccess;
 }
 
 // Do not derefernce pLocalTask in this method. It is already deleted from memory.
-pmStatus pmTaskManager::DeleteTask(pmLocalTask* pLocalTask)
+void pmTaskManager::DeleteTask(pmLocalTask* pLocalTask)
 {
     FINALIZE_RESOURCE(dResourceLock, GetLocalTaskResourceLock().Lock(), GetLocalTaskResourceLock().Unlock());
     localTasksSetType& lLocalTasks = GetLocalTasks();
     if(lLocalTasks.find(pLocalTask) == lLocalTasks.end())
-        return pmSuccess;
+        return;
     
     lLocalTasks.erase(pLocalTask);
 
     mTaskFinishSignalWait.Signal();
-
-    return pmSuccess;
 }
 
 // Do not derefernce pRemoteTask in this method. It is already deleted from memory.
-pmStatus pmTaskManager::DeleteTask(pmRemoteTask* pRemoteTask)
+void pmTaskManager::DeleteTask(pmRemoteTask* pRemoteTask)
 {
     FINALIZE_RESOURCE(dResourceLock, GetRemoteTaskResourceLock().Lock(), GetRemoteTaskResourceLock().Unlock());
     remoteTasksSetType& lRemoteTasks = GetRemoteTasks();
     lRemoteTasks.erase(pRemoteTask);
     
     mTaskFinishSignalWait.Signal();
-    
-    return pmSuccess;
 }
 
-pmStatus pmTaskManager::CancelTask(pmLocalTask* pLocalTask)
+void pmTaskManager::CancelTask(pmLocalTask* pLocalTask)
 {
-	return pmScheduler::GetScheduler()->CancelTask(pLocalTask);
+	pmScheduler::GetScheduler()->CancelTask(pLocalTask);
 }
 
 uint pmTaskManager::GetLocalTaskCount()
@@ -176,18 +154,16 @@ uint pmTaskManager::FindPendingLocalTaskCount()
 	return lPendingCount;
 }
     
-pmStatus pmTaskManager::WaitForAllTasksToFinish()
+void pmTaskManager::WaitForAllTasksToFinish()
 {
     while(GetLocalTaskCount() || GetRemoteTaskCount())
         mTaskFinishSignalWait.Wait();
-    
-    return pmSuccess;
 }
 
 /** If remote task already exists returns true; otherwise if remote task does not exist (due to out of order message receives),
  *  enqueues remote subtask range for later execution 
  */
-bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmProcessingElement* pTargetDevice, pmMachine* pOriginatingHost, ulong pSequenceNumber)
+bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, const pmProcessingElement* pTargetDevice, const pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
 	FINALIZE_RESOURCE(dResourceLock, GetRemoteTaskResourceLock().Lock(), GetRemoteTaskResourceLock().Unlock());
 
@@ -199,15 +175,15 @@ bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmPro
         return true;
     }
     
-    std::pair<pmMachine*, ulong> lPair(pOriginatingHost, pSequenceNumber);
+    std::pair<const pmMachine*, ulong> lPair(pOriginatingHost, pSequenceNumber);
     
     enqueuedRemoteSubtasksMapType& lEnqueuedRemoteSubtasksMap = GetEnqueuedRemoteSubtasksMap();
     
 #ifdef _DEBUG
     if(lEnqueuedRemoteSubtasksMap.find(lPair) != lEnqueuedRemoteSubtasksMap.end())
     {
-        std::vector<std::pair<pmSubtaskRange, pmProcessingElement*> >::iterator lBegin = lEnqueuedRemoteSubtasksMap[lPair].begin();
-        std::vector<std::pair<pmSubtaskRange, pmProcessingElement*> >::iterator lEnd = lEnqueuedRemoteSubtasksMap[lPair].end();
+        std::vector<std::pair<pmSubtaskRange, const pmProcessingElement*> >::iterator lBegin = lEnqueuedRemoteSubtasksMap[lPair].begin();
+        std::vector<std::pair<pmSubtaskRange, const pmProcessingElement*> >::iterator lEnd = lEnqueuedRemoteSubtasksMap[lPair].end();
         
         for(; lBegin != lEnd; ++lBegin)
         {
@@ -223,30 +199,28 @@ bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, pmPro
 }
 
 // Must be called with mRemoteTaskResourceLock acquired
-pmStatus pmTaskManager::ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask* pRemoteTask)
+void pmTaskManager::ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask* pRemoteTask)
 {
     enqueuedRemoteSubtasksMapType& lEnqueuedRemoteSubtasksMap = GetEnqueuedRemoteSubtasksMap();
-    std::pair<pmMachine*, ulong> lPair(pRemoteTask->GetOriginatingHost(), pRemoteTask->GetSequenceNumber());
+    std::pair<const pmMachine*, ulong> lPair(pRemoteTask->GetOriginatingHost(), pRemoteTask->GetSequenceNumber());
     
     if(lEnqueuedRemoteSubtasksMap.find(lPair) != lEnqueuedRemoteSubtasksMap.end())
     {
-        std::vector<std::pair<pmSubtaskRange, pmProcessingElement*> >::iterator lBegin = lEnqueuedRemoteSubtasksMap[lPair].begin();
-        std::vector<std::pair<pmSubtaskRange, pmProcessingElement*> >::iterator lEnd = lEnqueuedRemoteSubtasksMap[lPair].end();
+        std::vector<std::pair<pmSubtaskRange, const pmProcessingElement*> >::iterator lBegin = lEnqueuedRemoteSubtasksMap[lPair].begin();
+        std::vector<std::pair<pmSubtaskRange, const pmProcessingElement*> >::iterator lEnd = lEnqueuedRemoteSubtasksMap[lPair].end();
         
         for(; lBegin != lEnd; ++lBegin)
         {
-            std::pair<pmSubtaskRange, pmProcessingElement*>& lValuePair = *lBegin;
+            std::pair<pmSubtaskRange, const pmProcessingElement*>& lValuePair = *lBegin;
             lValuePair.first.task = pRemoteTask;
             pmScheduler::GetScheduler()->PushEvent(lValuePair.second, lValuePair.first);
         }
         
         lEnqueuedRemoteSubtasksMap.erase(lPair);
     }
-    
-    return pmSuccess;
 }
 
-pmTask* pmTaskManager::FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumber)
+pmTask* pmTaskManager::FindTask(const pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
     pmTask* lTask = FindTaskNoThrow(pOriginatingHost, pSequenceNumber);
 
@@ -256,7 +230,7 @@ pmTask* pmTaskManager::FindTask(pmMachine* pOriginatingHost, ulong pSequenceNumb
     return lTask;
 }
 
-pmTask* pmTaskManager::FindTaskNoThrow(pmMachine* pOriginatingHost, ulong pSequenceNumber)
+pmTask* pmTaskManager::FindTaskNoThrow(const pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
     pmTask* lTask = NULL;
     
@@ -277,7 +251,7 @@ pmTask* pmTaskManager::FindTaskNoThrow(pmMachine* pOriginatingHost, ulong pSeque
 /** There could be unnecessary processing requests in flight when a task finishes. So it is required to atomically check
  *  the existence of task and it's subtask completion while processing commands in the scheduler thread.
 */
-bool pmTaskManager::DoesTaskHavePendingSubtasks(pmMachine* pOriginatingHost, ulong pSequenceNumber)
+bool pmTaskManager::DoesTaskHavePendingSubtasks(const pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
     bool lState = false;
     
@@ -343,7 +317,7 @@ pmLocalTask* pmTaskManager::FindLocalTask_Internal(ulong pSequenceNumber)
 }
     
 // Must be called with mRemoteTaskResourceLock acquired
-pmRemoteTask* pmTaskManager::FindRemoteTask_Internal(pmMachine* pOriginatingHost, ulong pSequenceNumber)
+pmRemoteTask* pmTaskManager::FindRemoteTask_Internal(const pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
     remoteTasksSetType& lRemoteTasks = GetRemoteTasks();
     remoteTasksSetType::iterator lIter = lRemoteTasks.begin(), lEndIter = lRemoteTasks.end();

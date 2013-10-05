@@ -25,18 +25,10 @@
 #include "pmHardware.h"
 #include "pmMemSection.h"
 #include "pmExecutionStub.h"
+#include "pmCudaInterface.h"
 
 namespace pm
 {
-
-/* class pmCallback */
-pmCallback::pmCallback()
-{
-}
-
-pmCallback::~pmCallback()
-{
-}
 
 /* class pmDataDistributionCB */
 pmDataDistributionCB::pmDataDistributionCB(pmDataDistributionCallback pCallback)
@@ -44,11 +36,7 @@ pmDataDistributionCB::pmDataDistributionCB(pmDataDistributionCallback pCallback)
 	mCallback = pCallback;
 }
 
-pmDataDistributionCB::~pmDataDistributionCB()
-{
-}
-
-pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) const
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_PARTITIONING);
@@ -57,16 +45,7 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
 	if(!mCallback)
 		return pmSuccess;
 
-    pmMemSection* lInputMemSection = pTask->GetMemSectionRO();
-    pmMemSection* lOutputMemSection = pTask->GetMemSectionRW();
-    
-    void* lInputMem = (lInputMemSection && lInputMemSection->IsLazy()) ? (lInputMemSection->GetMem()) : NULL;
-    void* lOutputMem = (lOutputMemSection && lOutputMemSection->IsLazy()) ? (lOutputMemSection->GetMem()) : NULL;
-    
-    size_t lInputMemSize = ((lInputMem && lInputMemSection) ? lInputMemSection->GetLength() : 0);
-    size_t lOutputMemSize = ((lOutputMem && lOutputMemSection) ? lOutputMemSection->GetLength() : 0);
-    
-    pmLazyMemInfo lLazyMemInfo(lInputMem, lOutputMem, lInputMemSize, lOutputMemSize);
+    pmSubtaskInfo lSubtaskInfo = pTask->GetPreSubscriptionSubtaskInfo(pSubtaskId, pSplitInfo);
     
     pmStatus lStatus = pmStatusUnavailable;
     pmJmpBufAutoPtr lJmpBufAutoPtr;
@@ -77,7 +56,7 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
     if(!lJmpVal)
     {
         lJmpBufAutoPtr.Reset(&lJmpBuf, pStub);
-        lStatus = mCallback(pTask->GetTaskInfo(), lLazyMemInfo, pStub->GetProcessingElement()->GetDeviceInfo(), pSubtaskId, pSplitInfo);
+        lStatus = mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
     }
     else
     {
@@ -97,11 +76,7 @@ pmSubtaskCB::pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_
 {
 }
 
-pmSubtaskCB::~pmSubtaskCB()
-{
-}
-
-bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
+bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType) const
 {
 	switch(pDeviceType)
 	{
@@ -130,7 +105,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType)
 	return false;
 }
     
-bool pmSubtaskCB::HasCustomGpuCallback()
+bool pmSubtaskCB::HasCustomGpuCallback() const
 {
 #ifdef SUPPORT_CUDA
     return (mCallback_GPU_Custom != NULL);
@@ -139,7 +114,7 @@ bool pmSubtaskCB::HasCustomGpuCallback()
 #endif
 }
     
-bool pmSubtaskCB::HasBothCpuAndGpuCallbacks()
+bool pmSubtaskCB::HasBothCpuAndGpuCallbacks() const
 {
 #ifdef SUPPORT_CUDA
     if(IsCallbackDefinedForDevice(CPU) && IsCallbackDefinedForDevice(GPU_CUDA))
@@ -149,7 +124,7 @@ bool pmSubtaskCB::HasBothCpuAndGpuCallbacks()
     return false;
 }
 
-pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, pmTaskInfo& pTaskInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly)
+pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, void* pStreamPtr /* = NULL */) const
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
@@ -164,7 +139,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			if(!mCallback_CPU)
 				return pmSuccess;
 
-            pmDeviceInfo& lDeviceInfo = pStub->GetProcessingElement()->GetDeviceInfo();
+            const pmDeviceInfo& lDeviceInfo = pStub->GetProcessingElement()->GetDeviceInfo();
 
             pmJmpBufAutoPtr lJmpBufAutoPtr;
             
@@ -194,7 +169,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskId, pSplitInfo);
 
             // pTaskInfo is task info with CUDA pointers; pTask->GetTaskInfo() is with CPU pointers
-            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pStub, pTask->GetTaskInfo(), pTaskInfo, pSubtaskInfo, lCudaLaunchConf, pOutputMemWriteOnly, mCallback_GPU_CUDA, mCallback_GPU_Custom);
+            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask, (pmStubCUDA*)pStub, pTask->GetTaskInfo(), pTaskInfo, pSubtaskInfo, lCudaLaunchConf, mCallback_GPU_CUDA, mCallback_GPU_Custom, *((pmCudaStreamAutoPtr*)pStreamPtr));
             
 			break;
 		}
@@ -206,7 +181,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
     
     pTask->GetSubscriptionManager().DropScratchBufferIfNotRequiredPostSubtaskExec(pStub, pSubtaskId, pSplitInfo);
 
-	return pmSuccess;
+	return lStatus;
 }
 
 
@@ -216,11 +191,7 @@ pmDataReductionCB::pmDataReductionCB(pmDataReductionCallback pCallback)
 	mCallback = pCallback;
 }
 
-pmDataReductionCB::~pmDataReductionCB()
-{
-}
-
-pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2)
+pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2) const
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
@@ -229,11 +200,9 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong
 	if(!mCallback)
 		return pmSuccess;
     
-    bool lOutputMemWriteOnly = false;
-
-	pmSubtaskInfo lSubtaskInfo1, lSubtaskInfo2;
-	pTask->GetSubtaskInfo(pStub1, pSubtaskId1, pSplitInfo1, pMultiAssign1, lSubtaskInfo1, lOutputMemWriteOnly);
-	pTask->GetSubtaskInfo(pStub2, pSubtaskId2, pSplitInfo2, pMultiAssign2, lSubtaskInfo2, lOutputMemWriteOnly);
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+    const pmSubtaskInfo& lSubtaskInfo1 = lSubscriptionManager.GetSubtaskInfo(pStub1, pSubtaskId1, pSplitInfo1);
+    const pmSubtaskInfo& lSubtaskInfo2 = lSubscriptionManager.GetSubtaskInfo(pStub2, pSubtaskId2, pSplitInfo2);
     
 	return mCallback(pTask->GetTaskInfo(), pStub1->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo1, pStub2->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo2);
 }
@@ -245,23 +214,13 @@ pmDataRedistributionCB::pmDataRedistributionCB(pmDataRedistributionCallback pCal
 	mCallback = pCallback;
 }
 
-pmDataRedistributionCB::~pmDataRedistributionCB()
-{
-}
-
-pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign)
+pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign) const
 {
 	if(!mCallback)
 		return pmSuccess;
 
-    bool lOutputMemWriteOnly = false;
-
-	pmSubtaskInfo lSubtaskInfo;
-	pTask->GetSubtaskInfo(pStub, pSubtaskId, pSplitInfo, pMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
-
-	pmStatus lStatus = mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
-    
-    return lStatus;
+    const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(pStub, pSubtaskId, pSplitInfo);
+	return mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
 }
 
 
@@ -271,11 +230,7 @@ pmDeviceSelectionCB::pmDeviceSelectionCB(pmDeviceSelectionCallback pCallback)
 	mCallback = pCallback;
 }
 
-pmDeviceSelectionCB::~pmDeviceSelectionCB()
-{
-}
-
-bool pmDeviceSelectionCB::Invoke(pmTask* pTask, pmProcessingElement* pProcessingElement)
+bool pmDeviceSelectionCB::Invoke(pmTask* pTask, const pmProcessingElement* pProcessingElement) const
 {
 	if(!mCallback)
 		return pmSuccess;
@@ -290,11 +245,7 @@ pmPreDataTransferCB::pmPreDataTransferCB(pmPreDataTransferCallback pCallback)
 	mCallback = pCallback;
 }
 
-pmPreDataTransferCB::~pmPreDataTransferCB()
-{
-}
-
-pmStatus pmPreDataTransferCB::Invoke()
+pmStatus pmPreDataTransferCB::Invoke() const
 {
 	if(!mCallback)
 		return pmSuccess;
@@ -310,11 +261,7 @@ pmPostDataTransferCB::pmPostDataTransferCB(pmPostDataTransferCallback pCallback)
 	mCallback = pCallback;
 }
 
-pmPostDataTransferCB::~pmPostDataTransferCB()
-{
-}
-
-pmStatus pmPostDataTransferCB::Invoke()
+pmStatus pmPostDataTransferCB::Invoke() const
 {
 	if(!mCallback)
 		return pmSuccess;

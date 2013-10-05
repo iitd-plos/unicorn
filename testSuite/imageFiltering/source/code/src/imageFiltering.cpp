@@ -133,7 +133,7 @@ void serialImageFilter(void* pImageData, int pFilterRadius)
     }
 }
     
-bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, int* pStartCol, int* pEndCol, int* pStartRow, int* pEndRow)
+bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, int* pStartCol, int* pEndCol, int* pStartRow, int* pEndRow)
 {
     unsigned int lTilesPerRow = (pTaskConf->imageWidth/TILE_DIM + (pTaskConf->imageWidth%TILE_DIM ? 1 : 0));
 
@@ -150,38 +150,38 @@ bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubta
         *pEndRow = pTaskConf->imageHeight;
 
     // If it is a split subtask, then subscribe to a smaller number of rows within the tile
-    if(pSplitInfo)
+    if(pSplitInfo.splitCount)
     {
-        int lSplitCount = pSplitInfo->splitCount;
+        int lSplitCount = pSplitInfo.splitCount;
         int lRows = (*pEndRow - *pStartRow);
 
         if(lSplitCount > lRows)
             lSplitCount = lRows;
         
         // No subscription required
-        if((int)pSplitInfo->splitId >= lSplitCount)
+        if((int)pSplitInfo.splitId >= lSplitCount)
             return false;
         
         int lRowFactor = lRows / lSplitCount;
 
-        *pStartRow += pSplitInfo->splitId * lRowFactor;
-        if((int)pSplitInfo->splitId != lSplitCount - 1)
+        *pStartRow += pSplitInfo.splitId * lRowFactor;
+        if((int)pSplitInfo.splitId != lSplitCount - 1)
             *pEndRow = (*pStartRow + lRowFactor);
     }
     
     return true;
 }
 
-pmStatus imageFilterDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLazyMemInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo)
+pmStatus imageFilterDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	imageFilterTaskConf* lTaskConf = (imageFilterTaskConf*)(pTaskInfo.taskConf);
 
     int lSubscriptionStartCol, lSubscriptionEndCol, lSubscriptionStartRow, lSubscriptionEndRow;
-    if(!GetSubtaskSubscription(lTaskConf, pSubtaskId, pSplitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
+    if(!GetSubtaskSubscription(lTaskConf, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
     {
         lSubscriptionInfo.offset = lSubscriptionInfo.length = 0;
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
     }
     else
     {
@@ -190,15 +190,15 @@ pmStatus imageFilterDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLazyMe
         for(int i = lSubscriptionStartRow; i < lSubscriptionEndRow; ++i)
         {
             lSubscriptionInfo.offset = (i * lRowSize) + (lSubscriptionStartCol * PIXEL_COUNT);
-            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
         }
 
     #ifdef BUILD_CUDA
         // Reserve CUDA Global Mem
         if(pDeviceInfo.deviceType == pm::GPU_CUDA)
         {
-            size_t lReservedMem = computeSubtaskReservedMemRequirement(pTaskInfo, pDeviceInfo, pSubtaskId, lSubscriptionStartCol, lSubscriptionEndCol, lSubscriptionStartRow, lSubscriptionEndRow);
-            pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, lReservedMem);
+            size_t lReservedMem = computeSubtaskReservedMemRequirement(pTaskInfo, pDeviceInfo, pSubtaskInfo.subtaskId, lSubscriptionStartCol, lSubscriptionEndCol, lSubscriptionStartRow, lSubscriptionEndRow);
+            pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lReservedMem);
         }
     #endif
     }
@@ -211,8 +211,8 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
 	imageFilterTaskConf* lTaskConf = (imageFilterTaskConf*)(pTaskInfo.taskConf);
 
     char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset;
-    char* lOutput = (char*)(pSubtaskInfo.outputMem);
-    
+    char* lOutput = (char*)(pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
+
     int lSubscriptionStartCol, lSubscriptionEndCol, lSubscriptionStartRow, lSubscriptionEndRow;
     if(!GetSubtaskSubscription(lTaskConf, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
         return pmSuccess;
@@ -315,7 +315,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	// Output Mem contains the result image
 	// Number of subtasks is equal to the number of tiles in the image
     unsigned int lSubtasks = (gImageWidth/TILE_DIM + (gImageWidth%TILE_DIM ? 1 : 0)) * (gImageHeight/TILE_DIM + (gImageHeight%TILE_DIM ? 1 : 0));
-	CREATE_TASK(0, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
+	CREATE_SIMPLE_TASK(0, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
 
 	imageFilterTaskConf lTaskConf;
     strcpy(lTaskConf.imagePath, lImagePath);
@@ -349,10 +349,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     if(pFetchBack)
     {
-        SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.outputMemHandle) );
+        SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.taskMem[OUTPUT_MEM_INDEX].memHandle) );
 
         pmRawMemPtr lRawOutputPtr;
-        pmGetRawMemPtr(lTaskDetails.outputMemHandle, &lRawOutputPtr);
+        pmGetRawMemPtr(lTaskDetails.taskMem[OUTPUT_MEM_INDEX].memHandle, &lRawOutputPtr);
         memcpy(gParallelOutput, lRawOutputPtr, IMAGE_SIZE);
     }
 

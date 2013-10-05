@@ -43,15 +43,16 @@ namespace pm
 class pmCluster : public pmHardware
 {
 	public:
-		bool ContainsMachine(pmMachine* pMachine);
+		bool ContainsMachine(const pmMachine* pMachine) const;
 
 	protected:
-		pmCluster();	/* Only used for creating Global Cluster; Machine list is not stored for this cluster */
-		pmCluster(std::set<pmMachine*>& pMachines);
-		virtual ~pmCluster();
+		pmCluster()	/* Only used for creating Global Cluster; Machine list is not stored for this cluster */
+        {}
+    
+		pmCluster(std::set<const pmMachine*>& pMachines);
 
 	private:
-		std::set<pmMachine*> mMachines;
+		std::set<const pmMachine*> mMachines;
 };
 
 extern pmCluster* PM_GLOBAL_CLUSTER;	/* The cluster of all machines */
@@ -64,13 +65,12 @@ class pmClusterMPI : public pmCluster
 		pmClusterMPI();	/* Creates Global Cluster; Access it using PM_GLOBAL_CLUSTER */
 
 	public:		
-		pmClusterMPI(std::set<pmMachine*>& pMachines);
-		virtual ~pmClusterMPI();
+		pmClusterMPI(std::set<const pmMachine*>& pMachines);
 
-		virtual MPI_Comm GetCommunicator();
-		virtual uint GetRankInCommunicator(pmMachine* pMachine);
+		MPI_Comm GetCommunicator() const;
+		uint GetRankInCommunicator(const pmMachine* pMachine) const;
 
-		virtual bool operator==(pmClusterMPI& pClusterMPI);
+		bool operator==(const pmClusterMPI& pClusterMPI) const;
 
 	private:
 		MPI_Comm mCommunicator;

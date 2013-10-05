@@ -367,7 +367,7 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
 	CREATE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)
     
     lTaskDetails.inputMemHandle = pInputMemHandle;
-    lTaskDetails.outputMemInfo = OUTPUT_MEM_WRITE_ONLY;
+    lTaskDetails.outputMemType = OUTPUT_MEM_WRITE_ONLY;
 
 	lTaskDetails.taskConf = (void*)(pTaskConf);
 	lTaskDetails.taskConfLength = sizeof(pageRankTaskConf);

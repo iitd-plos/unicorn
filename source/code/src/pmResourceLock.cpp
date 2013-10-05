@@ -74,12 +74,14 @@ pmPThreadResourceLock::pmPThreadResourceLock(
 pmPThreadResourceLock::~pmPThreadResourceLock()
 {
 	DUMP_MUTEX(&mMutex, "Destroying");
+
 	Lock();
 	Unlock();
-	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_destroy(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_DESTROY_FAILURE );
+	
+    THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_destroy(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_DESTROY_FAILURE );
 }
 
-pmStatus pmPThreadResourceLock::Lock()
+void pmPThreadResourceLock::Lock()
 {
 #ifdef TRACK_MUTEX_TIMINGS
     pmAccumulationTimerHelper lHelperTimer(&mLockTimer);
@@ -87,11 +89,9 @@ pmStatus pmPThreadResourceLock::Lock()
 
 	DUMP_MUTEX(&mMutex, "Locking");
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_lock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_LOCK_FAILURE );
-
-	return pmSuccess;
 }
 
-pmStatus pmPThreadResourceLock::Unlock()
+void pmPThreadResourceLock::Unlock()
 {
 #ifdef TRACK_MUTEX_TIMINGS
     pmAccumulationTimerHelper lHelperTimer(&mUnlockTimer);
@@ -99,8 +99,6 @@ pmStatus pmPThreadResourceLock::Unlock()
 
 	DUMP_MUTEX(&mMutex, "Unlocking");
 	THROW_ON_NON_ZERO_RET_VAL( pthread_mutex_unlock(&mMutex), pmThreadFailureException, pmThreadFailureException::MUTEX_UNLOCK_FAILURE );
-
-	return pmSuccess;
 }
 
 #ifdef RECORD_LOCK_ACQUISITIONS

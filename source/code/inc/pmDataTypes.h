@@ -27,19 +27,128 @@
 #include <stdlib.h>
 #include <setjmp.h>
 
+#include <algorithm>
 #include <memory>
 #include <vector>
 #include <map>
 
 namespace pm
 {
-	typedef unsigned short int ushort;
-	typedef unsigned int uint;
-	typedef unsigned long ulong;
+    #define EXCEPTION_ASSERT(x) \
+    if(!(x)) \
+        PMTHROW(pmFatalErrorException());
+    
+#ifdef _DEBUG
+    #define DEBUG_EXCEPTION_ASSERT(x) EXCEPTION_ASSERT(x)
+#else
+    #define DEBUG_EXCEPTION_ASSERT(x)
+#endif
 
 	class pmTask;
     class pmProcessingElement;
     class pmExecutionStub;
+    class pmMemSection;
+
+    namespace communicator
+    {
+        enum communicatorCommandTypes
+        {
+            SEND,
+            RECEIVE,
+            BROADCAST,
+            ALL2ALL,
+            MAX_COMMUNICATOR_COMMAND_TYPES
+        };
+
+        enum communicatorCommandTags
+        {
+            MACHINE_POOL_TRANSFER_TAG,
+            DEVICE_POOL_TRANSFER_TAG,
+            REMOTE_TASK_ASSIGNMENT_TAG,
+            REMOTE_SUBTASK_ASSIGNMENT_TAG,
+            SEND_ACKNOWLEDGEMENT_TAG,
+            TASK_EVENT_TAG,
+            STEAL_REQUEST_TAG,
+            STEAL_RESPONSE_TAG,
+            OWNERSHIP_TRANSFER_TAG,
+            MEMORY_TRANSFER_REQUEST_TAG,
+            MEMORY_RECEIVE_TAG,
+            SUBTASK_REDUCE_TAG,
+            UNKNOWN_LENGTH_TAG,
+            HOST_FINALIZATION_TAG,
+            DATA_REDISTRIBUTION_TAG,
+            REDISTRIBUTION_OFFSETS_TAG,
+            SUBTASK_RANGE_CANCEL_TAG,
+            FILE_OPERATIONS_TAG,
+        #ifdef SERIALIZE_DEFERRED_LOGS
+            DEFERRED_LOG_LENGTH_TAG,
+            DEFERRED_LOG_TAG,
+        #endif
+            MAX_COMMUNICATOR_COMMAND_TAGS
+        };
+
+        enum communicatorDataTypes
+        {
+            BYTE,
+            INT,
+            UINT,
+            MACHINE_POOL_STRUCT,
+            DEVICE_POOL_STRUCT,
+            MEMORY_IDENTIFIER_STRUCT,
+            TASK_MEMORY_STRUCT,
+            REMOTE_TASK_ASSIGN_STRUCT,
+            REMOTE_TASK_ASSIGN_PACKED,
+            REMOTE_SUBTASK_ASSIGN_STRUCT,
+            OWNERSHIP_DATA_STRUCT,
+            SEND_ACKNOWLEDGEMENT_STRUCT,
+            SEND_ACKNOWLEDGEMENT_PACKED,
+            TASK_EVENT_STRUCT,
+            STEAL_REQUEST_STRUCT,
+            STEAL_RESPONSE_STRUCT,
+            OWNERSHIP_CHANGE_STRUCT,
+            OWNERSHIP_TRANSFER_PACKED,
+            MEMORY_TRANSFER_REQUEST_STRUCT,
+            SHADOW_MEM_TRANSFER_STRUCT,
+            SUBTASK_REDUCE_STRUCT,
+            SUBTASK_REDUCE_PACKED,
+            MEMORY_RECEIVE_STRUCT,
+            MEMORY_RECEIVE_PACKED,
+            HOST_FINALIZATION_STRUCT,
+            REDISTRIBUTION_ORDER_STRUCT,
+            DATA_REDISTRIBUTION_STRUCT,
+            DATA_REDISTRIBUTION_PACKED,
+            REDISTRIBUTION_OFFSETS_STRUCT,
+            REDISTRIBUTION_OFFSETS_PACKED,
+            SUBTASK_RANGE_CANCEL_STRUCT,
+            FILE_OPERATIONS_STRUCT,
+            MAX_COMMUNICATOR_DATA_TYPES
+        };
+    }
+
+    struct pmTaskMemory
+    {
+        pmMemSection* memSection;
+        pmMemType memType;
+        
+        pmTaskMemory(pmMemSection* pMemSection, pmMemType pMemType)
+        : memSection(pMemSection)
+        , memType(pMemType)
+        {}
+    };
+
+    class pmNonCopyable
+    {
+        public:
+            pmNonCopyable() = default;
+        
+        private:
+            pmNonCopyable(const pmNonCopyable&) = delete;
+            pmNonCopyable& operator=(const pmNonCopyable&) = delete;
+    };
+
+    /* Comparison operators for pmSubscriptionInfo */
+    bool operator==(const pmSubscriptionInfo& pSubscription1, const pmSubscriptionInfo& pSubscription2);
+    bool operator!=(const pmSubscriptionInfo& pSubscription1, const pmSubscriptionInfo& pSubscription2);
 
     class pmSubtaskTerminationCheckPointAutoPtr
     {
@@ -71,9 +180,21 @@ namespace pm
         uint splitId;
         uint splitCount;
         
-        operator std::auto_ptr<pmSplitInfo>()
+        pmSplitData(bool pValid, uint pSplitId, uint pSplitCount)
+        : valid(pValid)
+        , splitId(pSplitId)
+        , splitCount(pSplitCount)
+        {}
+        
+        pmSplitData(pmSplitInfo* pSplitInfo)
+        : valid(pSplitInfo != NULL)
+        , splitId(pSplitInfo ? pSplitInfo->splitId : 0)
+        , splitCount(pSplitInfo ? pSplitInfo->splitCount : 0)
+        {}
+        
+        operator std::unique_ptr<pmSplitInfo>()
         {
-            return std::auto_ptr<pmSplitInfo>(valid ? new pmSplitInfo(splitId, splitCount) : NULL);
+            return std::unique_ptr<pmSplitInfo>(valid ? new pmSplitInfo(splitId, splitCount) : NULL);
         }
         
         /* Can't make a constructor because this class is added to unions and needs to be default constructible */
@@ -94,50 +215,54 @@ namespace pm
 #endif
 
 #ifdef SUPPORT_CUDA
-    typedef struct pmLastCudaExecutionRecord
-    {
-        uint taskOriginatingMachineIndex;
-        ulong taskSequenceNumber;
-        ulong lastSubtaskId;
-        void* inputMemCudaPtr;
-        bool valid;
-        
-        pmLastCudaExecutionRecord()
-        : taskOriginatingMachineIndex(0)
-        , taskSequenceNumber(0)
-        , lastSubtaskId(0)
-        , inputMemCudaPtr(NULL)
-        , valid(false)
-        {}
-    } pmLastCudaExecutionRecord;
+    class pmStubCUDA;
 
-    class pmCudaAutoPtr
+    struct pmCudaCacheKey
     {
-    public:
-        pmCudaAutoPtr(void* pRuntimeHandle, size_t pAllocationSize = 0);
-        ~pmCudaAutoPtr();
+        const pmMemSection* memSection;
+        ulong offset;
+        ulong length;
         
-        void reset(size_t pAllocationSize);
-        void release();
-        void* getPtr();
-        
-    private:
-        void* mRuntimeHandle;
-        void* mCudaPtr;
+        pmCudaCacheKey(const pmMemSection* pMemSection, ulong pOffset, ulong pLength)
+        : memSection(pMemSection)
+        , offset(pOffset)
+        , length(pLength)
+        {}
+
+        bool operator== (const pmCudaCacheKey& pKey) const
+        {
+            return (memSection == pKey.memSection && offset == pKey.offset && length == pKey.length);
+        }
     };
     
-    typedef struct pmCudaMemcpyCommand
+    struct pmCudaCacheHasher
     {
-        void* srcPtr;
-        void* destPtr;
-        size_t size;
+        std::size_t operator() (const pmCudaCacheKey& pKey) const
+        {
+            return (std::hash<size_t>()(((reinterpret_cast<size_t>(pKey.memSection)) ^ (std::hash<ulong>()(pKey.offset) << 1)) >> 1) ^ (std::hash<ulong>()(pKey.length) << 1));
+        }
+    };
+    
+    struct pmCudaCacheValue
+    {
+        void* cudaPtr;
         
-        pmCudaMemcpyCommand(void* pSrcPtr, void* pDestPtr, size_t pSize)
-        : srcPtr(pSrcPtr)
-        , destPtr(pDestPtr)
-        , size(pSize)
+        pmCudaCacheValue(void* pCudaPtr)
+        : cudaPtr(pCudaPtr)
         {}
-    } pmCudaMemcpyCommand;
+    };
+    
+    struct pmCudaCacheEvictor
+    {
+        pmCudaCacheEvictor(pmStubCUDA* pStub)
+        : mStub(pStub)
+        {}
+
+        void operator() (const std::shared_ptr<pmCudaCacheValue>& pValue);
+        
+    private:
+        pmStubCUDA* mStub;
+    };
 #endif
     
 #ifdef ENABLE_TASK_PROFILING
@@ -151,7 +276,6 @@ namespace pm
             OUTPUT_MEMORY_TRANSFER,
             TOTAL_MEMORY_TRANSFER,    /* For internal use only */
             DATA_PARTITIONING,
-            PRE_SUBTASK_EXECUTION,
             SUBTASK_EXECUTION,
             DATA_REDUCTION,
             DATA_REDISTRIBUTION,
@@ -228,12 +352,11 @@ namespace pm
     typedef struct pmSubtaskRange
     {
         pmTask* task;
-        pmProcessingElement* originalAllottee;
+        const pmProcessingElement* originalAllottee;
         ulong startSubtask;
         ulong endSubtask;
 
-        /*
-        pmSubtaskRange(pmTask* pTask, pmProcessingElement* pOriginalAllottee, ulong pStartSubtask, ulong pEndSubtask)
+        pmSubtaskRange(pmTask* pTask, const pmProcessingElement* pOriginalAllottee, ulong pStartSubtask, ulong pEndSubtask)
         : task(pTask)
         , originalAllottee(pOriginalAllottee)
         , startSubtask(pStartSubtask)
@@ -246,7 +369,6 @@ namespace pm
         , startSubtask(pRange.startSubtask)
         , endSubtask(pRange.endSubtask)
         {}
-        */
     } pmSubtaskRange;
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -290,36 +412,39 @@ namespace pm
     }
     
     template<typename T>
-    class deleteDeallocator
+    struct deleteDeallocator
     {
-        public:
-            void operator()(T* pMem)
-            {
-                delete pMem;
-            }
+        void operator()(T* pMem)
+        {
+            delete pMem;
+        }
     };
     
     template<typename T>
-    class deleteArrayDeallocator
+    struct deleteArrayDeallocator
     {
-        public:
-            void operator()(T* pMem)
-            {
-                delete[] pMem;
-            }
+        void operator()(T* pMem)
+        {
+            delete[] pMem;
+        }
     };
     
 	template<typename T, typename D = deleteDeallocator<T> >
 	class finalize_ptr
 	{
 		public:
-			finalize_ptr(T* pMem = NULL) : mMem(pMem)
+            typedef T ptrType;
+        
+			finalize_ptr(T* pMem = NULL, bool pHasOwnership = true)
+            : mMem(pMem)
+            , mHasOwnership(pHasOwnership)
 			{
 			}
 
 			~finalize_ptr()
 			{
-				mDeallocator.operator()(mMem);
+                if(mMem && mHasOwnership)
+                    mDeallocator.operator()(mMem);
 			}
 
 			T* get_ptr() const
@@ -327,33 +452,45 @@ namespace pm
 				return mMem;
 			}
 
-            void release()
+            T* release()
             {
+                T* lMem = mMem;
+
                 mMem = NULL;
+                mHasOwnership = false;
+                
+                return lMem;
             }
 
-            void reset(T* pMem)
+            void reset(T* pMem, bool pHasOwnership = true)
             {
-                mDeallocator.operator()(mMem);
+                if(mMem && mHasOwnership)
+                    mDeallocator.operator()(mMem);
+                
+                mHasOwnership = pHasOwnership;
                 mMem = pMem;
-            }        
+            }
+        
+            finalize_ptr(const finalize_ptr& pPtr) = delete;
+            finalize_ptr& operator=(finalize_ptr& pPtr) = delete;
 
-            finalize_ptr(const finalize_ptr& pPtr)
+            finalize_ptr(finalize_ptr&& pPtr)
             : mMem(NULL)
+            , mHasOwnership(false)
             {
-                reset(pPtr.get_ptr());
-                (const_cast<finalize_ptr&>(pPtr)).release();
+                reset(pPtr.get_ptr(), pPtr.mHasOwnership);
+                pPtr.release();
             }
             
-            const finalize_ptr& operator=(const finalize_ptr& pPtr)
+            finalize_ptr& operator=(finalize_ptr&& pPtr)
             {
-                reset(pPtr.get_ptr());
-                (const_cast<finalize_ptr&>(pPtr)).release();
+                reset(pPtr.get_ptr(), pPtr.mHasOwnership);
+                pPtr.release();
             
                 return *this;
             }
     
-            T* operator->()
+            T* operator->() const
             {
                 return mMem;
             }
@@ -362,10 +499,11 @@ namespace pm
             {
                 return mDeallocator;
             }
-    
+        
         private:
 			T* mMem;
             D mDeallocator;
+            bool mHasOwnership;
 	};
 
 	template<typename T>
@@ -543,7 +681,7 @@ namespace pm
             std::string mStr;
             double mMinTime, mMaxTime, mAccumulatedTime, mActualTime;
             uint mExecCount, mThreadCount;
-            TIMER_IMPLEMENTATION_CLASS* mTimer;
+            finalize_ptr<TIMER_IMPLEMENTATION_CLASS> mTimer;
             pthread_mutex_t mMutex;
     };
 
@@ -634,7 +772,9 @@ namespace pm
     class guarded_ptr
     {
         public:
-            guarded_ptr(G* pGuard, T** pPtr, T* pMem = NULL) : mGuard(pGuard), mPtr(pPtr)
+            guarded_ptr(G* pGuard, T** pPtr, T* pMem = NULL)
+            : mGuard(pGuard)
+            , mPtr(pPtr)
             {
                 if((*mPtr) != pMem)
                 {
@@ -665,6 +805,7 @@ namespace pm
 	{
 		public:
 			virtual void SetDelete(bool pDelete) = 0;
+            virtual ~selective_finalize_base() {}
 	};
 
     template<typename T>
@@ -759,6 +900,75 @@ namespace pm
 	#define END_DESTROY_ON_EXCEPTION(blockName) //blockName.SetDestroy(false); } catch(...) {throw;}
 
 	#define SAFE_FREE(ptr) if(ptr) free(ptr);
+
+
+    template<typename _InputIterator, typename _Filter_Function, typename _Command_Function>
+    _Command_Function filtered_for_each(_InputIterator __first, _InputIterator __last, _Filter_Function __f1, _Command_Function __f2)
+    {
+        for (; __first != __last; ++__first)
+        {
+            if(__f1(*__first))
+                __f2(*__first);
+        }
+
+        return std::move(__f2);
+    }
+
+    template<typename _InputIterator, typename _Filter_Function, typename _Command_Function>
+    _Command_Function filtered_for_each_with_index(_InputIterator __first, _InputIterator __last, _Filter_Function __f1, _Command_Function __f2)
+    {
+        for (size_t index = 0, filteredIndex = 0; __first != __last; ++__first, ++index)
+        {
+            if(__f1(*__first))
+            {
+                __f2(*__first, index, filteredIndex);
+                ++filteredIndex;
+            }
+        }
+        
+        return std::move(__f2);
+    }
+
+    template<typename _InputIterator, typename _Command_Function>
+    _Command_Function for_each_with_index(_InputIterator __first, _InputIterator __last, _Command_Function __f)
+    {
+        for (size_t index = 0; __first != __last; ++__first, ++index)
+            __f(*__first, index);
+        
+        return std::move(__f);
+    }
+    
+    template<typename _Container, typename _Filter_Function, typename _Command_Function>
+    _Command_Function filtered_for_each(_Container __container, _Filter_Function __f1, _Command_Function __f2)
+    {
+        return filtered_for_each(__container.begin(), __container.end(), __f1, __f2);
+    }
+    
+    template<typename _Container, typename _Filter_Function, typename _Command_Function>
+    _Command_Function filtered_for_each_with_index(_Container __container, _Filter_Function __f1, _Command_Function __f2)
+    {
+        return filtered_for_each_with_index(__container.begin(), __container.end(), __f1, __f2);
+    }
+
+    template<typename _Container, typename _Command_Function>
+    _Command_Function for_each_with_index(_Container __container, _Command_Function __f)
+    {
+        return for_each_with_index(__container.begin(), __container.end(), __f);
+    }
+
+    template<typename _Container, typename _Command_Function>
+    _Command_Function for_each(_Container __container, _Command_Function __f)
+    {
+        return std::for_each(__container.begin(), __container.end(), __f);
+    }
+
+    template<typename _LockType, typename _Container, typename _Command_Function>
+    _Command_Function for_each_while_locked(_LockType __l, _Container __container, _Command_Function __f)
+    {
+        FINALIZE_RESOURCE_PTR(dLock, _LockType, &__l, Lock(), Unlock());
+
+        return std::for_each(__container.begin(), __container.end(), __f);
+    }
 
 } // end namespace pm
 

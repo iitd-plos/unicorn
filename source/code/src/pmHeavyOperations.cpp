@@ -32,16 +32,19 @@
 #include "pmTask.h"
 #include "pmTaskManager.h"
 
+#include <memory>
+
 namespace pm
 {
     
 using namespace heavyOperations;
+using namespace communicator;
 
 #ifdef TRACK_MEMORY_REQUESTS
-void __dump_mem_forward(const pmMemSection* memSection, pmCommunicatorCommand::memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, pmCommunicatorCommand::memoryIdentifierStruct& newIdentifier, ulong newOffset);
-void __dump_mem_transfer(const pmMemSection* memSection, pmCommunicatorCommand::memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host);
+void __dump_mem_forward(const pmMemSection* memSection, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, memoryIdentifierStruct& newIdentifier, ulong newOffset);
+void __dump_mem_transfer(const pmMemSection* memSection, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host);
     
-void __dump_mem_forward(const pmMemSection* memSection, pmCommunicatorCommand::memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, pmCommunicatorCommand::memoryIdentifierStruct&  newIdentifier, ulong newOffset)
+void __dump_mem_forward(const pmMemSection* memSection, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, memoryIdentifierStruct&  newIdentifier, ulong newOffset)
 {
     char lStr[512];
     
@@ -53,7 +56,7 @@ void __dump_mem_forward(const pmMemSection* memSection, pmCommunicatorCommand::m
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-void __dump_mem_transfer(const pmMemSection* memSection, pmCommunicatorCommand::memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host)
+void __dump_mem_transfer(const pmMemSection* memSection, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host)
 {
     char lStr[512];
     
@@ -72,12 +75,10 @@ void __dump_mem_transfer(const pmMemSection* memSection, pmCommunicatorCommand::
 #define MEM_FORWARD_DUMP(memSection, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset)
 #endif
 
-pmStatus HeavyOperationsCommandCompletionCallback(pmCommandPtr pCommand)
+void HeavyOperationsCommandCompletionCallback(const pmCommandPtr& pCommand)
 {
 	pmHeavyOperationsThreadPool* lHeavyOperationsThreadPool = pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
 	lHeavyOperationsThreadPool->CommandCompletionEvent(pCommand);
-    
-    return pmSuccess;
 }
 
 pmHeavyOperationsThreadPool* pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()
@@ -96,7 +97,7 @@ pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
     for(size_t i = 0; i < pThreadCount; ++i)
         mThreadVector.push_back(new pmHeavyOperationsThread(i));
     
-    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::FILE_OPERATIONS_STRUCT);
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(FILE_OPERATIONS_STRUCT);
 	SetupPersistentCommunicationCommands();
 }
 
@@ -108,27 +109,29 @@ pmHeavyOperationsThreadPool::~pmHeavyOperationsThreadPool()
 
     mThreadVector.clear();
     
-    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::FILE_OPERATIONS_STRUCT);
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(FILE_OPERATIONS_STRUCT);
 	DestroyPersistentCommunicationCommands();
 }
 
 void pmHeavyOperationsThreadPool::SetupPersistentCommunicationCommands()
 {
-#define PERSISTENT_RECV_COMMAND(tag, structType, recvDataPtr) pmPersistentCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::RECEIVE, \
-	pmCommunicatorCommand::tag, NULL, pmCommunicatorCommand::structType, recvDataPtr, 1, NULL, 0, HeavyOperationsCommandCompletionCallback)
+    finalize_ptr<communicator::fileOperationsStruct> lFileOperationsRecvData(new fileOperationsStruct());
 
-	mFileOperationsRecvCommand = PERSISTENT_RECV_COMMAND(FILE_OPERATIONS_TAG, FILE_OPERATIONS_STRUCT, &mFileOperationsRecvData);
+#define PERSISTENT_RECV_COMMAND(tag, structType, structEnumType, recvDataPtr) pmCommunicatorCommand<structEnumType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structType, recvDataPtr, 1, HeavyOperationsCommandCompletionCallback)
+
+	mFileOperationsRecvCommand = PERSISTENT_RECV_COMMAND(FILE_OPERATIONS_TAG, FILE_OPERATIONS_STRUCT, fileOperationsStruct, lFileOperationsRecvData);
+    
+    mFileOperationsRecvCommand->SetPersistent();
     
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
-    lNetwork->InitializePersistentCommand(mFileOperationsRecvCommand.get());
+    lNetwork->InitializePersistentCommand(mFileOperationsRecvCommand);
 
 	SetupNewFileOperationsReception();
 }
     
 void pmHeavyOperationsThreadPool::DestroyPersistentCommunicationCommands()
 {
-    pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
-    lNetwork->TerminatePersistentCommand(mFileOperationsRecvCommand.get());
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->TerminatePersistentCommand(mFileOperationsRecvCommand);
 }
 
 void pmHeavyOperationsThreadPool::SetupNewFileOperationsReception()
@@ -136,58 +139,24 @@ void pmHeavyOperationsThreadPool::SetupNewFileOperationsReception()
 	pmCommunicator::GetCommunicator()->Receive(mFileOperationsRecvCommand, false);
 }
 
-void pmHeavyOperationsThreadPool::PackAndSendData(pmCommunicatorCommand::communicatorCommandTags pCommandTag, pmCommunicatorCommand::communicatorDataTypes pDataType, pmHardware* pDestination, void* pData, ushort pPriority)
+void pmHeavyOperationsThreadPool::PackAndSendData(const pmCommunicatorCommandPtr& pCommand)
 {
-    heavyOperationsEvent lEvent;
-	lEvent.eventId = PACK_DATA;
-
-    lEvent.packDetails.commandTag = pCommandTag;
-    lEvent.packDetails.dataType = pDataType;
-    lEvent.packDetails.destination = pDestination;
-    lEvent.packDetails.data = pData;
-    lEvent.packDetails.priority = pPriority;
-    
-    SubmitToThreadPool(lEvent, pPriority);
+    SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new packEvent(PACK_DATA, pCommand)), pCommand->GetPriority());
 }
     
 void pmHeavyOperationsThreadPool::UnpackDataEvent(char* pPackedData, int pPackedLength, ushort pPriority)
 {
-    heavyOperationsEvent lEvent;
-	lEvent.eventId = UNPACK_DATA;
-
-    lEvent.unpackDetails.packedData = pPackedData;
-    lEvent.unpackDetails.packedLength = pPackedLength;
-    
-    SubmitToThreadPool(lEvent, pPriority);
+    SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new unpackEvent(UNPACK_DATA, pPackedData, pPackedLength)), pPriority);
 }
     
-void pmHeavyOperationsThreadPool::MemTransferEvent(pmCommunicatorCommand::memoryIdentifierStruct& pSrcMemIdentifier, pmCommunicatorCommand::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
+void pmHeavyOperationsThreadPool::MemTransferEvent(memoryIdentifierStruct& pSrcMemIdentifier, memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
 {
-    heavyOperationsEvent lEvent;
-	lEvent.eventId = MEM_TRANSFER;
-
-	lEvent.memTransferDetails.srcMemIdentifier = pSrcMemIdentifier;
-    lEvent.memTransferDetails.destMemIdentifier = pDestMemIdentifier;
-	lEvent.memTransferDetails.offset = pOffset;
-	lEvent.memTransferDetails.length = pLength;
-	lEvent.memTransferDetails.machine = pDestMachine;
-	lEvent.memTransferDetails.receiverOffset = pReceiverOffset;
-	lEvent.memTransferDetails.priority = pPriority;
-    lEvent.memTransferDetails.isForwarded = pIsForwarded;
-    lEvent.memTransferDetails.isTaskOriginated = pIsTaskOriginated;
-    lEvent.memTransferDetails.taskOriginatingHost = pTaskOriginatingHost;
-    lEvent.memTransferDetails.taskSequenceNumber = pTaskSequenceNumber;
-    
-    SubmitToThreadPool(lEvent, pPriority);
+    SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new memTransferEvent(MEM_TRANSFER, pSrcMemIdentifier, pDestMemIdentifier, pOffset, pLength, pDestMachine, pReceiverOffset, pPriority, pIsForwarded, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber)), pPriority);
 }
 
 void pmHeavyOperationsThreadPool::CommandCompletionEvent(pmCommandPtr pCommand)
 {
-	heavyOperationsEvent lEvent;
-	lEvent.eventId = COMMAND_COMPLETION;
-	lEvent.commandCompletionDetails.command = pCommand;
-
-	SubmitToThreadPool(lEvent, pCommand->GetPriority());
+	SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new commandCompletionEvent(COMMAND_COMPLETION, pCommand)), pCommand->GetPriority());
 }
     
 void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmMemSection* pMemSection)
@@ -195,13 +164,8 @@ void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmMemSection* pMemS
     size_t lPoolSize = mThreadVector.size();
 
 	FINALIZE_PTR_ARRAY(dSignalWaitArray, SIGNAL_WAIT_IMPLEMENTATION_CLASS, new SIGNAL_WAIT_IMPLEMENTATION_CLASS[lPoolSize]);
-
-	heavyOperationsEvent lEvent;
-	lEvent.eventId = MEM_TRANSFER_CANCEL;
-	lEvent.memTransferCancelDetails.memSection = pMemSection;
-    lEvent.memTransferCancelDetails.signalWaitArray = dSignalWaitArray;
     
-	SubmitToAllThreadsInPool(lEvent, MAX_CONTROL_PRIORITY);
+	SubmitToAllThreadsInPool(std::shared_ptr<heavyOperationsEvent>(new memTransferCancelEvent(MEM_TRANSFER_CANCEL, pMemSection, dSignalWaitArray)), MAX_CONTROL_PRIORITY);
     
     for(size_t i = 0; i < lPoolSize; ++i)
         dSignalWaitArray[i].Wait();
@@ -209,14 +173,10 @@ void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmMemSection* pMemS
     
 void pmHeavyOperationsThreadPool::CancelTaskSpecificMemoryTransferEvents(pmTask* pTask)
 {
-	heavyOperationsEvent lEvent;
-	lEvent.eventId = TASK_MEM_TRANSFER_CANCEL;
-	lEvent.taskMemTransferCancelDetails.task = pTask;
-    
-	SubmitToAllThreadsInPool(lEvent, MAX_CONTROL_PRIORITY);
+	SubmitToAllThreadsInPool(std::shared_ptr<heavyOperationsEvent>(new taskMemTransferCancelEvent(TASK_MEM_TRANSFER_CANCEL, pTask)), MAX_CONTROL_PRIORITY);
 }
 
-void pmHeavyOperationsThreadPool::SubmitToThreadPool(heavyOperationsEvent& pEvent, ushort pPriority)
+void pmHeavyOperationsThreadPool::SubmitToThreadPool(const std::shared_ptr<heavyOperationsEvent>& pEvent, ushort pPriority)
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -227,9 +187,9 @@ void pmHeavyOperationsThreadPool::SubmitToThreadPool(heavyOperationsEvent& pEven
         mCurrentThread = 0;
 }
 
-void pmHeavyOperationsThreadPool::SubmitToAllThreadsInPool(heavyOperationsEvent& pEvent, ushort pPriority)
+void pmHeavyOperationsThreadPool::SubmitToAllThreadsInPool(const std::shared_ptr<heavyOperationsEvent>& pEvent, ushort pPriority) const
 {
-    std::vector<pmHeavyOperationsThread*>::iterator lIter = mThreadVector.begin(), lEndIter = mThreadVector.end();
+    std::vector<pmHeavyOperationsThread*>::const_iterator lIter = mThreadVector.begin(), lEndIter = mThreadVector.end();
 
     for(; lIter != lEndIter; ++lIter)
         (*lIter)->SwitchThread(pEvent, pPriority);
@@ -246,40 +206,37 @@ pmHeavyOperationsThread::~pmHeavyOperationsThread()
 {
 }
 
-pmStatus pmHeavyOperationsThread::ThreadSwitchCallback(heavyOperationsEvent& pEvent)
+void pmHeavyOperationsThread::ThreadSwitchCallback(std::shared_ptr<heavyOperationsEvent>& pEvent)
 {
     try
 	{
-		return ProcessEvent(pEvent);
+		ProcessEvent(*pEvent);
 	}
 	catch(pmException& e)
 	{
 		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from heavy operations thread");
 	}
-    
-    return pmSuccess;
 }
 
-pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
+void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
 {
     switch(pEvent.eventId)
     {
         case PACK_DATA:
         {
-            packEvent& lEventDetails = pEvent.packDetails;
+            packEvent& lEventDetails = static_cast<packEvent&>(pEvent);
 
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, lEventDetails.commandTag, lEventDetails.destination, lEventDetails.dataType, lEventDetails.data, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
-
-			pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+			pmCommunicator::GetCommunicator()->SendPacked(lEventDetails.command, false);
 
             break;
         }
         
         case UNPACK_DATA:
         {
-            unpackEvent& lEventDetails = pEvent.unpackDetails;
+            unpackEvent& lEventDetails = static_cast<unpackEvent&>(pEvent);
         
             pmCommunicatorCommandPtr lCommand = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnpackData(lEventDetails.packedData, lEventDetails.packedLength);
+
             lCommand->MarkExecutionStart();
             NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->ReceiveComplete(lCommand, pmSuccess);
 
@@ -290,21 +247,19 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         
         case MEM_TRANSFER:
         {
-            memTransferEvent& lEventDetails = pEvent.memTransferDetails;
+            memTransferEvent& lEventDetails = static_cast<memTransferEvent&>(pEvent);
 
             if(lEventDetails.machine == PM_LOCAL_MACHINE && !lEventDetails.isForwarded)
                 PMTHROW(pmFatalErrorException());   // Cyclic reference
-            
-            pmCommunicatorCommand::memoryReceivePacked* lPackedData = NULL;
-            
+
             pmMemSection* lSrcMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.srcMemIdentifier.memOwnerHost), lEventDetails.srcMemIdentifier.generationNumber);
             if(!lSrcMemSection)
-                return pmSuccess;
+                return;
             
             pmTask* lRequestingTask = NULL;
             if(lEventDetails.isTaskOriginated)
             {
-                pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.taskOriginatingHost);
+                const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.taskOriginatingHost);
                 lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lEventDetails.taskSequenceNumber);
                 
 //                if(lOriginatingHost == PM_LOCAL_MACHINE && !lRequestingTask)
@@ -347,11 +302,11 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                     }
                     else
                     {
-                        lPackedData = new pmCommunicatorCommand::memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset), lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber);
+                        finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset), lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber));
                     
                         MEM_TRANSFER_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
 
-                        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(lEventDetails.priority, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_RECEIVE_TAG, lEventDetails.machine, pmCommunicatorCommand::MEMORY_RECEIVE_PACKED, lPackedData, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+                        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(lEventDetails.priority, SEND, MEMORY_RECEIVE_TAG, lEventDetails.machine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 
                         pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
                     }
@@ -361,24 +316,11 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                     if(lEventDetails.isForwarded)
                         PMTHROW(pmFatalErrorException());
                     
-                    pmCommunicatorCommand::memoryTransferRequest* lData = new pmCommunicatorCommand::memoryTransferRequest();
-                    lData->sourceMemIdentifier.memOwnerHost = lRangeOwner.memIdentifier.memOwnerHost;
-                    lData->sourceMemIdentifier.generationNumber = lRangeOwner.memIdentifier.generationNumber;
-                    lData->destMemIdentifier.memOwnerHost = lEventDetails.destMemIdentifier.memOwnerHost;
-                    lData->destMemIdentifier.generationNumber = lEventDetails.destMemIdentifier.generationNumber;
-                    lData->receiverOffset = lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset;
-                    lData->offset = lRangeOwner.hostOffset;
-                    lData->length = lInternalLength;
-                    lData->destHost = *(lEventDetails.machine);
-                    lData->isForwarded = 1;
-                    lData->isTaskOriginated = lEventDetails.isTaskOriginated;
-                    lData->originatingHost = lEventDetails.taskOriginatingHost;
-                    lData->sequenceNumber = lEventDetails.taskSequenceNumber;
-                    lData->priority = lEventDetails.priority;
+                    finalize_ptr<memoryTransferRequest> lData(new memoryTransferRequest(memoryIdentifierStruct(lRangeOwner.memIdentifier.memOwnerHost, lRangeOwner.memIdentifier.generationNumber), memoryIdentifierStruct(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber), lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lRangeOwner.hostOffset, lInternalLength, *lEventDetails.machine, 1, lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber, lEventDetails.priority));
                     
                     MEM_FORWARD_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.memIdentifier, lRangeOwner.hostOffset)
 
-                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_TAG, lRangeOwner.host, pmCommunicatorCommand::MEMORY_TRANSFER_REQUEST_STRUCT, (void*)lData, 1, NULL, 0, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryTransferRequest>::CreateSharedPtr(MAX_CONTROL_PRIORITY, SEND, MEMORY_TRANSFER_REQUEST_TAG, lRangeOwner.host, MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
                     
                     pmCommunicator::GetCommunicator()->Send(lCommand);
                 }
@@ -389,7 +331,7 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         
         case COMMAND_COMPLETION:
         {
-            commandCompletion& lEventDetails = pEvent.commandCompletionDetails;
+            commandCompletionEvent& lEventDetails = static_cast<commandCompletionEvent&>(pEvent);
 
             HandleCommandCompletion(lEventDetails.command);
 
@@ -398,7 +340,7 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
             
         case MEM_TRANSFER_CANCEL:
         {
-            memTransferCancelEvent& lEventDetails = pEvent.memTransferCancelDetails;
+            memTransferCancelEvent& lEventDetails = static_cast<memTransferCancelEvent&>(pEvent);
             
             /* There is no need to actually cancel any mem transfer event becuase even after cancelling the ones in queue,
              another may still come (because of MA). These need to be handled separately anyway. This handling is done in
@@ -413,32 +355,33 @@ pmStatus pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
             
         case TASK_MEM_TRANSFER_CANCEL:
         {
-            taskMemTransferCancelEvent& lEventDetails = pEvent.taskMemTransferCancelDetails;
+            taskMemTransferCancelEvent& lEventDetails = static_cast<taskMemTransferCancelEvent&>(pEvent);
             DeleteMatchingCommands(lEventDetails.task->GetPriority(), taskMemTransferEventsMatchFunc, lEventDetails.task);
 
             break;
         }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
     }
-    
-    return pmSuccess;
 }
     
-void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr pCommand)
+void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
 {
-	pmCommunicatorCommandPtr lCommunicatorCommand = std::tr1::dynamic_pointer_cast<pmCommunicatorCommand>(pCommand);
+	pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
 
 	switch(lCommunicatorCommand->GetType())
 	{
-        case pmCommunicatorCommand::RECEIVE:
+        case RECEIVE:
         {
             switch(lCommunicatorCommand->GetTag())
 			{
-                case pmCommunicatorCommand::FILE_OPERATIONS_TAG:
+                case FILE_OPERATIONS_TAG:
                 {
-                    pmCommunicatorCommand::fileOperationsStruct* lData = (pmCommunicatorCommand::fileOperationsStruct*)(lCommunicatorCommand->GetData());
-                    switch((pmCommunicatorCommand::fileOperations)(lData->fileOp))
+                    fileOperationsStruct* lData = (fileOperationsStruct*)(lCommunicatorCommand->GetData());
+                    switch((fileOperations)(lData->fileOp))
                     {
-                        case pmCommunicatorCommand::MMAP_FILE:
+                        case MMAP_FILE:
                         {
                             pmUtility::MapFile((char*)(lData->fileName));
                             pmUtility::SendFileMappingAcknowledgement((char*)(lData->fileName), pmMachinePool::GetMachinePool()->GetMachine(lData->sourceHost));
@@ -446,7 +389,7 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr pCommand)
                             break;
                         }
 
-                        case pmCommunicatorCommand::MUNMAP_FILE:
+                        case MUNMAP_FILE:
                         {
                             pmUtility::UnmapFile((char*)(lData->fileName));
                             pmUtility::SendFileUnmappingAcknowledgement((char*)(lData->fileName), pmMachinePool::GetMachinePool()->GetMachine(lData->sourceHost));
@@ -454,13 +397,13 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr pCommand)
                             break;
                         }
                             
-                        case pmCommunicatorCommand::MMAP_ACK:
+                        case MMAP_ACK:
                         {
                             pmUtility::RegisterFileMappingResponse((char*)(lData->fileName));
                             break;
                         }
 
-                        case pmCommunicatorCommand::MUNMAP_ACK:
+                        case MUNMAP_ACK:
                         {
                             pmUtility::RegisterFileUnmappingResponse((char*)(lData->fileName));
                             break;
@@ -487,13 +430,15 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr pCommand)
     }
 }
     
-bool taskMemTransferEventsMatchFunc(heavyOperationsEvent& pEvent, void* pCriterion)
+bool taskMemTransferEventsMatchFunc(const heavyOperationsEvent& pEvent, void* pCriterion)
 {
     switch(pEvent.eventId)
     {
         case MEM_TRANSFER:
         {
-            if(pEvent.memTransferDetails.isTaskOriginated && pEvent.memTransferDetails.taskOriginatingHost == (uint)(*((pmTask*)pCriterion)->GetOriginatingHost()) && pEvent.memTransferDetails.taskSequenceNumber == ((pmTask*)pCriterion)->GetSequenceNumber())
+            const memTransferEvent& lEventDetails = static_cast<const memTransferEvent&>(pEvent);
+
+            if(lEventDetails.isTaskOriginated && lEventDetails.taskOriginatingHost == (uint)(*((pmTask*)pCriterion)->GetOriginatingHost()) && lEventDetails.taskSequenceNumber == ((pmTask*)pCriterion)->GetSequenceNumber())
                 return true;
         
             break;

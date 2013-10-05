@@ -42,8 +42,8 @@ namespace pm
 class pmResourceLock : public pmBase
 {
 	public:
-        virtual pmStatus Lock() = 0;
-		virtual pmStatus Unlock() = 0;
+        virtual void Lock() = 0;
+		virtual void Unlock() = 0;
 
     #ifdef RECORD_LOCK_ACQUISITIONS
         virtual void RecordAcquisition(const char* pFile, int pLine) = 0;
@@ -65,8 +65,8 @@ class pmPThreadResourceLock : public pmResourceLock
     
 		virtual ~pmPThreadResourceLock();
     
-		virtual pmStatus Lock();
-		virtual pmStatus Unlock();
+		virtual void Lock();
+		virtual void Unlock();
     
     #ifdef RECORD_LOCK_ACQUISITIONS
         virtual void RecordAcquisition(const char* pFile, int pLine);
@@ -74,7 +74,7 @@ class pmPThreadResourceLock : public pmResourceLock
         virtual bool IsLockSelfAcquired();
     #endif
     
-		virtual pthread_mutex_t* GetMutex() {return &mMutex;}
+		pthread_mutex_t* GetMutex() {return &mMutex;}
 
 	private:
 		pthread_mutex_t mMutex;

@@ -33,12 +33,12 @@ namespace luDecomposition
 MATRIX_DATA_TYPE* gSerialOutput;
 MATRIX_DATA_TYPE* gParallelOutput;
 
-std::auto_ptr<MATRIX_DATA_TYPE> reproduceNonDecomposedMatrix(MATRIX_DATA_TYPE* pMatrix, size_t pDim)
+std::unique_ptr<MATRIX_DATA_TYPE> reproduceNonDecomposedMatrix(MATRIX_DATA_TYPE* pMatrix, size_t pDim)
 {
     size_t lElems = pDim * pDim;
 
-    std::auto_ptr<MATRIX_DATA_TYPE> lLower(new MATRIX_DATA_TYPE[lElems]);
-    std::auto_ptr<MATRIX_DATA_TYPE> lUpper(new MATRIX_DATA_TYPE[lElems]);
+    std::unique_ptr<MATRIX_DATA_TYPE> lLower(new MATRIX_DATA_TYPE[lElems]);
+    std::unique_ptr<MATRIX_DATA_TYPE> lUpper(new MATRIX_DATA_TYPE[lElems]);
     
 	memset(lLower.get(), 0, lElems * sizeof(MATRIX_DATA_TYPE));
 	memset(lUpper.get(), 0, lElems * sizeof(MATRIX_DATA_TYPE));
@@ -93,13 +93,13 @@ void serialLUDecomposition(MATRIX_DATA_TYPE* pMatrix, size_t pDim, size_t pColSt
     }
 }
 
-pmStatus luDecompositionDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLazyMemInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo)
+pmStatus luDecompositionDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	luTaskConf* lTaskConf = (luTaskConf*)(pTaskInfo.taskConf);
     
     // Subscribe to one block of matrix
-    SUBSCRIBE_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION);
+    SUBSCRIBE_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION);
 
 #ifdef BUILD_CUDA
 	// Reserve CUDA Global Mem
@@ -116,73 +116,73 @@ pmStatus luDecompositionDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLa
 pmStatus luDecomposition_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	luTaskConf* lTaskConf = (luTaskConf*)(pTaskInfo.taskConf);
-    MATRIX_DATA_TYPE* lOutputMem = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMem);
+    MATRIX_DATA_TYPE* lOutputMem = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
 
     serialLUDecomposition(lOutputMem, BLOCK_DIM, lTaskConf->matrixDim);
 
 	return pmSuccess;
 }
     
-bool GetSubtaskSplit(size_t* pStartDim, size_t* pEndDim, pmSplitInfo* pSplitInfo)
+bool GetSubtaskSplit(size_t* pStartDim, size_t* pEndDim, pmSplitInfo pSplitInfo)
 {
     *pStartDim = 0;
     *pEndDim = BLOCK_DIM;
     
     // If it is a split subtask, then subscribe to a smaller number of cols within the col major block
-    if(pSplitInfo)
+    if(pSplitInfo.splitCount)
     {
-        size_t lSplitCount = pSplitInfo->splitCount;
+        size_t lSplitCount = pSplitInfo.splitCount;
         size_t lDims = (*pEndDim - *pStartDim);
 
         if(lSplitCount > lDims)
             lSplitCount = lDims;
         
         // No subscription required
-        if((size_t)pSplitInfo->splitId >= lSplitCount)
+        if((size_t)pSplitInfo.splitId >= lSplitCount)
             return false;
         
         size_t lDimFactor = lDims / lSplitCount;
 
-        *pStartDim = pSplitInfo->splitId * lDimFactor;
-        if((size_t)pSplitInfo->splitId != lSplitCount - 1)
+        *pStartDim = pSplitInfo.splitId * lDimFactor;
+        if((size_t)pSplitInfo.splitId != lSplitCount - 1)
             *pEndDim = (*pStartDim + lDimFactor);
     }
     
     return true;
 }
-    
-pmStatus horizVertCompDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLazyMemInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo)
+
+pmStatus horizVertCompDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	luTaskConf* lTaskConf = (luTaskConf*)(pTaskInfo.taskConf);
     
     size_t lStartDim, lEndDim;
-    if(!GetSubtaskSplit(&lStartDim, &lEndDim, pSplitInfo))
+    if(!GetSubtaskSplit(&lStartDim, &lEndDim, pSubtaskInfo.splitInfo))
     {
         lSubscriptionInfo.offset = lSubscriptionInfo.length = 0;
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
         
         return pmSuccess;
     }
 
-    bool lUpperTriangularComputation = (pSubtaskId < (pTaskInfo.subtaskCount/2));
+    bool lUpperTriangularComputation = (pSubtaskInfo.subtaskId < (pTaskInfo.subtaskCount/2));
     if(lUpperTriangularComputation)   // Upper Triangular Matrix
     {
         // Subscribe to block L00
-        SUBSCRIBE_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_SUBSCRIPTION);
+        SUBSCRIBE_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_READ_SUBSCRIPTION);
 
         // Subscribe to one horizontal block of matrix (with split)
-        SUBSCRIBE_SPLIT_COL_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId + 1 + pSubtaskId, lStartDim, lEndDim, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION);
+        SUBSCRIBE_SPLIT_COL_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId, lStartDim, lEndDim, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION);
     }
     else    // Lower Triangular Matrix
     {
         size_t lStartingSubtask = (pTaskInfo.subtaskCount/2);
 
         // Subscribe to block U00
-        SUBSCRIBE_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_SUBSCRIPTION);
+        SUBSCRIBE_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_READ_SUBSCRIPTION);
         
         // Subscribe to one vertical block of matrix (with split)
-        SUBSCRIBE_SPLIT_ROW_BLOCK(pTaskInfo.taskId + 1 + pSubtaskId - lStartingSubtask, pTaskInfo.taskId, lStartDim, lEndDim, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION);
+        SUBSCRIBE_SPLIT_ROW_BLOCK(pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId - lStartingSubtask, pTaskInfo.taskId, lStartDim, lEndDim, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION);
     }
 
 	return pmSuccess;
@@ -201,7 +201,7 @@ pmStatus horizVertComp_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSub
     {
         size_t lOffsetElems = lStartDim * lTaskConf->matrixDim + BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim);
 
-        MATRIX_DATA_TYPE* lL00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMem);
+        MATRIX_DATA_TYPE* lL00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
         MATRIX_DATA_TYPE* lU01 = lL00 + lOffsetElems;
         
         CBLAS_TRSM(CblasColMajor, CblasLeft, CblasLower, CblasNoTrans, CblasNonUnit, BLOCK_DIM, (int)(lEndDim - lStartDim), 1.0f, lL00, (int)lTaskConf->matrixDim, lU01, (int)lTaskConf->matrixDim);
@@ -212,7 +212,7 @@ pmStatus horizVertComp_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSub
 
         size_t lOffsetElems = lStartDim + BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId - lStartingSubtask, pTaskInfo.taskId, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim);
 
-        MATRIX_DATA_TYPE* lU00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMem);
+        MATRIX_DATA_TYPE* lU00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
         MATRIX_DATA_TYPE* lL10 = lU00 + lOffsetElems;
 
         CBLAS_TRSM(CblasColMajor, CblasRight, CblasUpper, CblasNoTrans, CblasUnit, (int)(lEndDim - lStartDim), BLOCK_DIM, 1.0f, lU00, (int)lTaskConf->matrixDim, lL10, (int)lTaskConf->matrixDim);
@@ -221,32 +221,32 @@ pmStatus horizVertComp_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSub
 	return pmSuccess;
 }
     
-pmStatus diagCompDataDistribution(pmTaskInfo pTaskInfo, pmLazyMemInfo pLazyMemInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo)
+pmStatus diagCompDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	luTaskConf* lTaskConf = (luTaskConf*)(pTaskInfo.taskConf);
     
     size_t lDim = sqrtl(pTaskInfo.subtaskCount);
-    size_t lRow = (pSubtaskId / lDim);
-    size_t lCol = (pSubtaskId % lDim);
+    size_t lRow = (pSubtaskInfo.subtaskId / lDim);
+    size_t lCol = (pSubtaskInfo.subtaskId % lDim);
 
     size_t lStartDim, lEndDim;
-    if(!GetSubtaskSplit(&lStartDim, &lEndDim, pSplitInfo))
+    if(!GetSubtaskSplit(&lStartDim, &lEndDim, pSubtaskInfo.splitInfo))
     {
         lSubscriptionInfo.offset = lSubscriptionInfo.length = 0;
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
         
         return pmSuccess;
     }
 
     // Subscribe to one block from L10
-    SUBSCRIBE_BLOCK(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_SUBSCRIPTION);
+    SUBSCRIBE_BLOCK(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_READ_SUBSCRIPTION);
     
     // Subscribe to one block from U01 (with split)
-    SUBSCRIBE_SPLIT_COL_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId + 1 + lCol, lStartDim, lEndDim, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_SUBSCRIPTION);
+    SUBSCRIBE_SPLIT_COL_BLOCK(pTaskInfo.taskId, pTaskInfo.taskId + 1 + lCol, lStartDim, lEndDim, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_READ_SUBSCRIPTION);
     
     // Subscribe to one block of the matrix (with split)
-    SUBSCRIBE_SPLIT_COL_BLOCK(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId + 1 + lCol, lStartDim, lEndDim, lTaskConf->matrixDim, pSubtaskId, pSplitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION);
+    SUBSCRIBE_SPLIT_COL_BLOCK(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId + 1 + lCol, lStartDim, lEndDim, lTaskConf->matrixDim, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION);
     
 	return pmSuccess;
 }
@@ -267,7 +267,7 @@ pmStatus diagComp_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskI
     
     size_t lOffsetElems2 = lStartDim * lTaskConf->matrixDim + BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId + 1 + lCol, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId, lTaskConf->matrixDim);
 
-    MATRIX_DATA_TYPE* lL10 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMem);
+    MATRIX_DATA_TYPE* lL10 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
     MATRIX_DATA_TYPE* lU01 = lL10 + lOffsetElems1;
     MATRIX_DATA_TYPE* lA11 = lL10 + lOffsetElems2;
 
@@ -341,17 +341,20 @@ bool StageParallelTask(enum taskStage pStage, pmMemHandle pMemHandle, size_t pTa
         }
     }
     
-    CREATE_TASK(0, 0, lSubtasks, pCallbackHandle, pSchedulingPolicy)
+    CREATE_TASK(lSubtasks, pCallbackHandle, pSchedulingPolicy)
 
     luTaskConf lTaskConf;
     lTaskConf.matrixDim = pMatrixDim;
-
-    lTaskDetails.taskId = pTaskId;
-    lTaskDetails.outputMemHandle = pMemHandle;
-    lTaskDetails.outputMemInfo = OUTPUT_MEM_READ_WRITE;
-    lTaskDetails.disjointReadWritesAcrossSubtasks = true;
+    
+    pmTaskMem lTaskMem[MAX_MEM_INDICES];
+    lTaskMem[OUTPUT_MEM_INDEX] = {pMemHandle, OUTPUT_MEM_READ_WRITE};
+    
     lTaskDetails.taskConf = &lTaskConf;
     lTaskDetails.taskConfLength = sizeof(luTaskConf);
+    lTaskDetails.taskMem = lTaskMem;
+    lTaskDetails.taskMemCount = 1;
+    lTaskDetails.disjointReadWritesAcrossSubtasks = true;
+    lTaskDetails.taskId = pTaskId;
     
     if(pStage == HORZ_VERT_COMP || pStage == DIAGONAL_COMP)
         lTaskDetails.canSplitCpuSubtasks = true;
@@ -505,8 +508,8 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 //    for(size_t i = 0; i < (lMatrixDim * lMatrixDim); ++i)
 //        std::cout << gSerialOutput[i] << " " << gParallelOutput[i] << std::endl;
 
-    std::auto_ptr<MATRIX_DATA_TYPE> lSerial = reproduceNonDecomposedMatrix(gSerialOutput, lMatrixDim);
-    std::auto_ptr<MATRIX_DATA_TYPE> lParallel = reproduceNonDecomposedMatrix(gParallelOutput, lMatrixDim);
+    std::unique_ptr<MATRIX_DATA_TYPE> lSerial = reproduceNonDecomposedMatrix(gSerialOutput, lMatrixDim);
+    std::unique_ptr<MATRIX_DATA_TYPE> lParallel = reproduceNonDecomposedMatrix(gParallelOutput, lMatrixDim);
     
     MATRIX_DATA_TYPE lSerialNormal = findFrobeniusNormal(lSerial.get(), lMatrixDim);
     MATRIX_DATA_TYPE lParallelNormal = findFrobeniusNormal(lParallel.get(), lMatrixDim);

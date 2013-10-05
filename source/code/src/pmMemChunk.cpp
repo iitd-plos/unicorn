@@ -28,15 +28,11 @@ pmMemChunk::pmMemChunk(void* pChunk, size_t pSize)
     , mSize(pSize)
     , mResourceLock __LOCK_NAME__("pmMemChunk::mResourceLock")
 {
-    mFree.insert(std::make_pair(mSize, 0));
-    mFreeBlocks[mChunk] = mSize;
+    mFree.insert(std::make_pair(pSize, 0));
+    mFreeBlocks[pChunk] = pSize;
 }
     
-pmMemChunk::~pmMemChunk()
-{
-}
-    
-void* pmMemChunk::GetChunk()
+const void* pmMemChunk::GetChunk() const
 {
     return mChunk;
 }
@@ -81,7 +77,7 @@ void* pmMemChunk::Allocate(size_t pSize, size_t pAlignment)
             
             void* lAllocation = reinterpret_cast<void*>(lPossibleAllocation);
             mAllocations[lAllocation] = pSize;
-            
+
             return lAllocation;
         }
     }
@@ -174,6 +170,11 @@ size_t pmMemChunk::GetBiggestAvaialbleContiguousAllocation()
         return 0;
     
     return mFree.rbegin()->first;
+}
+    
+size_t pmMemChunk::GetSize() const
+{
+    return mSize;
 }
 
 };

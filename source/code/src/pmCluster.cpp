@@ -25,25 +25,14 @@ namespace pm
 {
 
 /* class pmCluster */
-pmCluster::pmCluster(std::set<pmMachine*>& pMachines)
+pmCluster::pmCluster(std::set<const pmMachine*>& pMachines)
 {
 	mMachines = pMachines;
 }
 
-pmCluster::pmCluster()
+bool pmCluster::ContainsMachine(const pmMachine* pMachine) const
 {
-}
-
-pmCluster::~pmCluster()
-{
-}
-
-bool pmCluster::ContainsMachine(pmMachine* pMachine)
-{
-	if(this == PM_GLOBAL_CLUSTER)
-		return true;
-
-	if(mMachines.find(pMachine) != mMachines.end())
+	if(this == PM_GLOBAL_CLUSTER || mMachines.find(pMachine) != mMachines.end())
 		return true;
 
 	return false;
@@ -51,33 +40,31 @@ bool pmCluster::ContainsMachine(pmMachine* pMachine)
 
 
 /* class pmClusterMPI */
-pmClusterMPI::pmClusterMPI() : pmCluster()
+pmClusterMPI::pmClusterMPI()
+    : pmCluster()
 {
 	mCommunicator = MPI_COMM_WORLD;
 }
 
-pmClusterMPI::pmClusterMPI(std::set<pmMachine*>& pMachines) : pmCluster(pMachines)
+pmClusterMPI::pmClusterMPI(std::set<const pmMachine*>& pMachines)
+    : pmCluster(pMachines)
 {
 }
 
-pmClusterMPI::~pmClusterMPI()
-{
-}
-
-MPI_Comm pmClusterMPI::GetCommunicator()
+MPI_Comm pmClusterMPI::GetCommunicator() const
 {
 	return mCommunicator;
 }
 
-uint pmClusterMPI::GetRankInCommunicator(pmMachine* pMachine)
+uint pmClusterMPI::GetRankInCommunicator(const pmMachine* pMachine) const
 {
 	if(mCommunicator == MPI_COMM_WORLD)
 		return *pMachine;
 
-	return 0;
+	PMTHROW(pmFatalErrorException());   // Unimplemented !!!
 }
 
-bool pmClusterMPI::operator==(pmClusterMPI& pClusterMPI)
+bool pmClusterMPI::operator==(const pmClusterMPI& pClusterMPI) const
 {
 	return false;
 }

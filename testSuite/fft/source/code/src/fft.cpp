@@ -100,22 +100,22 @@ void fftSerial(complex* input, complex* output, size_t powx, size_t nx, size_t p
 #endif
 }
 
-pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
+pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	pmSubscriptionInfo lSubscriptionInfo;
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
-    lSubscriptionInfo.offset = ROWS_PER_FFT_SUBTASK * pSubtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+    lSubscriptionInfo.offset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
     lSubscriptionInfo.length = ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
 
     if(lTaskConf->inplace)
     {
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPLACE_MEM_INDEX, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
     }
     else
     {
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
     }
 
 	return pmSuccess;
@@ -129,7 +129,7 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
     {
         for(unsigned int i = 0; i < ROWS_PER_FFT_SUBTASK; ++i)
         {
-            FFT_DATA_TYPE* lOutputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.outputMem + (i * lTaskConf->elemsY);
+            FFT_DATA_TYPE* lOutputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].ptr + (i * lTaskConf->elemsY);
             fftSerial1D(FORWARD_TRANSFORM_DIRECTION, lTaskConf->powY, lTaskConf->elemsY, lOutputLoc, lOutputLoc, lTaskConf->rowPlanner);
         }
     }
@@ -137,8 +137,8 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
     {
         for(unsigned int i = 0; i < ROWS_PER_FFT_SUBTASK; ++i)
         {
-            FFT_DATA_TYPE* lInputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.inputMem + (i * lTaskConf->elemsY);
-            FFT_DATA_TYPE* lOutputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.outputMem + (i * lTaskConf->elemsY);
+            FFT_DATA_TYPE* lInputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr + (i * lTaskConf->elemsY);
+            FFT_DATA_TYPE* lOutputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr + (i * lTaskConf->elemsY);
             fftSerial1D(FORWARD_TRANSFORM_DIRECTION, lTaskConf->powY, lTaskConf->elemsY, lInputLoc, lOutputLoc, lTaskConf->rowPlanner);
         }
     }
@@ -223,25 +223,31 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 #endif
 }
 
-bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemInfo pInputMemInfo, pmMemHandle pOutputMemHandle, pmMemInfo pOutputMemInfo, fftTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemType pInputMemType, pmMemHandle pOutputMemHandle, pmMemType pOutputMemType, fftTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
     bool lInplace = (pInputMemHandle == pOutputMemHandle);
 
     unsigned long lSubtaskCount = pTaskConf->elemsX / ROWS_PER_FFT_SUBTASK;
-	CREATE_TASK(0, 0, lSubtaskCount, pCallbackHandle, pSchedulingPolicy)
+	CREATE_TASK(lSubtaskCount, pCallbackHandle, pSchedulingPolicy)
 
+    pmTaskMem lTaskMem[MAX_MEM_INDICES];
+    
     if(lInplace)
     {
+        lTaskMem[INPLACE_MEM_INDEX] = {pOutputMemHandle, pOutputMemType};
+
         lTaskDetails.disjointReadWritesAcrossSubtasks = true;
+        lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
+        lTaskDetails.taskMemCount = INPLACE_MAX_MEM_INDICES;
     }
     else
     {
-        lTaskDetails.inputMemHandle = pInputMemHandle;
-        lTaskDetails.inputMemInfo = pInputMemInfo;
-    }
+        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType};
+        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType};
 
-    lTaskDetails.outputMemInfo = pOutputMemInfo;
-	lTaskDetails.outputMemHandle = pOutputMemHandle;
+        lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
+        lTaskDetails.taskMemCount = MAX_MEM_INDICES;
+    }
 
 	lTaskDetails.taskConf = (void*)(pTaskConf);
 	lTaskDetails.taskConfLength = sizeof(fftTaskConf);
@@ -259,9 +265,9 @@ bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemInfo pInputMemInfo, pmMem
 }
 
 #ifdef FFT_2D
-bool Parallel_Transpose(void* pInputMemHandle, pmMemInfo pInputMemInfo, void* pOutputMemHandle, pmMemInfo pOutputMemInfo, fftTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+bool Parallel_Transpose(void* pInputMemHandle, pmMemType pInputMemType, void* pOutputMemHandle, pmMemType pOutputMemType, fftTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
-    if(matrixTranspose::parallelMatrixTranspose(pTaskConf->powX, pTaskConf->powY, pTaskConf->elemsX, pTaskConf->elemsY, pInputMemHandle, pOutputMemHandle, pCallbackHandle, pSchedulingPolicy, pInputMemInfo, pOutputMemInfo) == -1.0)
+    if(matrixTranspose::parallelMatrixTranspose(pTaskConf->powX, pTaskConf->powY, pTaskConf->elemsX, pTaskConf->elemsY, pInputMemHandle, pOutputMemHandle, pCallbackHandle, pSchedulingPolicy, pInputMemType, pOutputMemType) == -1.0)
         return false;
 
 	return true;
@@ -299,16 +305,16 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.rowPlanner = true;
     lTaskConf.inplace = lInplace;
 
-    pmMemInfo lOutputMemInfo = (lInplace ? OUTPUT_MEM_READ_WRITE : OUTPUT_MEM_WRITE_ONLY);
-    pmMemInfo lInputMemInfo = INPUT_MEM_READ_ONLY;
+    pmMemType lOutputMemType = (lInplace ? OUTPUT_MEM_READ_WRITE : OUTPUT_MEM_WRITE_ONLY);
+    pmMemType lInputMemType = INPUT_MEM_READ_ONLY;
     
 	double lStartTime = getCurrentTimeInSecs();
 
-    if(!Parallel_FFT_1D(lInputMemHandle, lInputMemInfo, lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
+    if(!Parallel_FFT_1D(lInputMemHandle, lInputMemType, lOutputMemHandle, lOutputMemType, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
         return (double)-1.0;
 
 #ifdef FFT_2D
-    if(!Parallel_Transpose(lOutputMemHandle, lInputMemInfo, lInputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle[1], pSchedulingPolicy))
+    if(!Parallel_Transpose(lOutputMemHandle, lInputMemType, lInputMemHandle, lOutputMemType, &lTaskConf, pCallbackHandle[1], pSchedulingPolicy))
         return (double)-1.0;
     
     lTaskConf.elemsX = lElemsY;
@@ -317,10 +323,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.powY = lPowX;
     lTaskConf.rowPlanner = false;
     
-    if(!Parallel_FFT_1D(lInputMemHandle, lInputMemInfo, lOutputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
+    if(!Parallel_FFT_1D(lInputMemHandle, lInputMemType, lOutputMemHandle, lOutputMemType, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
         return (double)-1.0;
 
-    if(!Parallel_Transpose(lOutputMemHandle, lInputMemInfo, lInputMemHandle, lOutputMemInfo, &lTaskConf, pCallbackHandle[1], pSchedulingPolicy))
+    if(!Parallel_Transpose(lOutputMemHandle, lInputMemType, lInputMemHandle, lOutputMemType, &lTaskConf, pCallbackHandle[1], pSchedulingPolicy))
         return (double)-1.0;
     
     if(!lInplace)

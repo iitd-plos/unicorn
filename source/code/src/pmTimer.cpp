@@ -43,7 +43,7 @@ pmStatus pmTimer::SetState(pmTimer::timerState pState)
 	return pmSuccess;
 }
 
-pmTimer::timerState pmTimer::GetState()
+pmTimer::timerState pmTimer::GetState() const
 {
 	return mState;
 }
@@ -150,7 +150,7 @@ pmStatus pmLinuxTimer::Resume()
 	return pmSuccess;
 }
 
-double pmLinuxTimer::GetElapsedTimeInSecs()
+double pmLinuxTimer::GetElapsedTimeInSecs() const
 {
 	pmTimer::timerState lState = GetState();
 

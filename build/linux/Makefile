@@ -17,13 +17,13 @@ PTHREAD_LIBS= -lpthread
 
 COMPILER=g++
 NVCC_COMPILER=nvcc
-FLAGS=-Wall -fPIC -DUNIX -D$(PLATFORM)
+FLAGS=-Wall -std=c++11 -fPIC -DUNIX -D$(PLATFORM)
 CUDAFLAGS= -DUNIX --compiler-options -fPIC --machine 64
 
 ifeq ($(PLATFORM), LINUX)
 STRIP=strip -s
 else
-STRIP=strip -x
+#STRIP=strip -x
 endif
 
 ifeq ($(DEBUG), 1)
@@ -32,7 +32,7 @@ MPI_LIBS= -L$(MPI_DEBUG_INSTALL_PATH)/lib -lmpi -lmpi_cxx
 ifeq ($(PLATFORM), LINUX)
 SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared -Wl,-soname,libpmlib_g.so
 else
-SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared 
+SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared
 endif
 else
 MPI_INCLUDE= -I$(MPI_RELEASE_INSTALL_PATH)/include
@@ -44,7 +44,9 @@ SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared
 endif
 endif
 
-LIBRARIES= $(PTHREAD_LIBS) $(MPI_LIBS) -lstdc++ -lm
+SO_FLAGS += -std=c++11
+
+LIBRARIES= $(PTHREAD_LIBS) $(MPI_LIBS) -L$(STD_LIB_PATH) -lstdc++ -lm
 ifeq ($(PLATFORM), LINUX)
 LIBRARIES += -lrt
 endif
@@ -54,7 +56,7 @@ ifeq ($(DEBUG), 1)
 	CUDAFLAGS += -DDEBUG -D_DEBUG -G -g
 	BUILD=debug
 else
-	FLAGS += -O3 -DNDEBUG
+	FLAGS += -O3 -DNDEBUG -g
 	BUILD=release
 endif
 
@@ -87,6 +89,7 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmNetwork.o \
 	$(OUTDIR)/pmReducer.o \
 	$(OUTDIR)/pmRedistributor.o \
+	$(OUTDIR)/pmPoolAllocator.o \
 	$(OUTDIR)/pmPublicDefinitions.o \
 	$(OUTDIR)/pmResourceLock.o \
 	$(OUTDIR)/pmScheduler.o \
@@ -104,14 +107,14 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmTls.o \
 	$(OUTDIR)/pmUtility.o 
 
-CUDA_OBJECTS = $(OUTDIR)/pmDispatcherCUDA.o
+CUDA_OBJECTS = $(OUTDIR)/pmCudaInterface.o
 
 ifeq ($(SUPPORT_CUDA), 1)
 FLAGS += -DSUPPORT_CUDA
 CUDAFLAGS += -DSUPPORT_CUDA
 INCLUDES += -I$(CUDA_INCLUDE_PATH)
 OBJECTS += $(CUDA_OBJECTS)
-LIBRARIES += -L$(CUDA_LIB_PATH) -lcudart
+LIBRARIES += -L$(CUDA_LIB_PATH) -L$(CUDA_DRIVER_LIB_PATH) -lcuda -lcudart
 endif
 
 INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(STD_TR1_INCLUDE)

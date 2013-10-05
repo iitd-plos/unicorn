@@ -18,42 +18,37 @@
  * Tarun Beri - http://www.cse.iitd.ernet.in/~tarun
  */
 
-#ifndef __PM_MEM_CHUNK__
-#define __PM_MEM_CHUNK__
+#ifndef __PM_POOL_ALLOCATOR__
+#define __PM_POOL_ALLOCATOR__
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
 
-#include <map>
+#include <vector>
 
 namespace pm
 {
-
-class pmMemChunk : public pmBase
+    
+class pmPoolAllocator : public pmBase
 {
 public:
-    pmMemChunk(void* pChunk, size_t pSize);
-
-    const void* GetChunk() const;
+    pmPoolAllocator(size_t pIndividualAllocationSize, size_t pMaxAllocations, bool pPageAlignedAllocations);
+    ~pmPoolAllocator();
     
-    void* Allocate(size_t pSize, size_t pAlignment);
-    void Deallocate(void* pPtr);
-    
-    size_t GetBiggestAvaialbleContiguousAllocation();
-
-    size_t GetSize() const;
+    void* Allocate(size_t pSize);
+    void Deallocate(void* pMem);
     
 private:
-    const void* mChunk;
-    const size_t mSize;
+    size_t mIndividualAllocationSize;
+    size_t mMaxAllocations;
+    bool mPageAlignedAllocations;
     
-    std::map<void*, size_t> mAllocations;
-    std::map<void*, size_t> mFreeBlocks;
-    std::multimap<size_t, size_t> mFree; // free size versus offset
-    
+    void* mMasterAllocation;
+    std::vector<void*> mUnallocatedPool;
+
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
-
+    
 } // end namespace pm
 
 #endif

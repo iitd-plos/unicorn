@@ -22,6 +22,7 @@
 #define __PM_HARDWARE__
 
 #include "pmBase.h"
+#include "pmCommunicator.h"
 
 #include <set>
 #include <vector>
@@ -38,13 +39,6 @@ class pmDevicePool;
 
 class pmHardware : public pmBase
 {
-	public:
-
-	protected:
-		pmHardware();
-		virtual ~pmHardware();
-
-	private:
 };
 
 class pmMachine : public pmHardware
@@ -52,9 +46,7 @@ class pmMachine : public pmHardware
 	friend class pmMachinePool;
 
 	public:
-		virtual ~pmMachine();
-
-		virtual operator uint();
+		operator uint() const;
 
 	private:
 		pmMachine(uint pMachineId);
@@ -69,24 +61,24 @@ class pmProcessingElement : public pmHardware
 	friend class pmDevicePool;
 
 	public:
-		virtual ~pmProcessingElement();
+		const pmMachine* GetMachine() const;
+		uint GetDeviceIndexInMachine() const;
+		uint GetGlobalDeviceIndex() const;
+		pmDeviceType GetType() const;
 
-		virtual pmMachine* GetMachine();
-		virtual uint GetDeviceIndexInMachine();
-		virtual uint GetGlobalDeviceIndex();
-		virtual pmDeviceType GetType();
+		pmExecutionStub* GetLocalExecutionStub() const;
+		const pmDeviceInfo& GetDeviceInfo() const;
 
-		virtual pmExecutionStub* GetLocalExecutionStub();
-		pmDeviceInfo& GetDeviceInfo();
-
-		static pmStatus GetMachines(std::set<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines);
-		static pmStatus GetMachines(std::vector<pmProcessingElement*>& pDevices, std::set<pmMachine*>& pMachines);
+		static void GetMachines(std::set<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines);
+		static void GetMachines(std::vector<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines);
 
 	private:
-		pmProcessingElement(pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex);
+		pmProcessingElement(const pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex, const communicator::devicePool* pDevicePool);
+    
+        void BuildDeviceInfo(const communicator::devicePool* pDevicePool);
 
-        finalize_ptr<pmDeviceInfo> mDeviceInfo;
-		pmMachine* mMachine;
+        pmDeviceInfo mDeviceInfo;
+		const pmMachine* mMachine;
 		uint mDeviceIndexInMachine;
 		uint mGlobalDeviceIndex;
 		pmDeviceType mDeviceType;

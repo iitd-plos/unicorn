@@ -21,6 +21,8 @@ OBJECTS= $(SAMPLE_NAME).o
 
 CUDA_OBJECTS = $(SAMPLE_NAME)CUDA.o
 
+#CUDAFLAGS += -gencode arch=compute_30,code=sm_30
+
 include ../../../common/build/linux/Makefile.common
 
 

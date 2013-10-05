@@ -12,7 +12,6 @@
 		0E20293F162DF290006DC536 /* pmTls.h in Headers */ = {isa = PBXBuildFile; fileRef = 0E20293E162DF290006DC536 /* pmTls.h */; };
 		0E202941162DF35B006DC536 /* pmTls.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E202940162DF35B006DC536 /* pmTls.cpp */; };
 		0E29502015CAFE3A00F31801 /* pmTimedEventManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */; };
-		0E7327BF16F7A409006FE28F /* pmRangeAccessor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E7327BD16F7A409006FE28F /* pmRangeAccessor.cpp */; };
 		0E78AD0416A9B11800EF45BF /* libmpi_cxx.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E78AD0216A9B11800EF45BF /* libmpi_cxx.0.dylib */; };
 		0E78AD0516A9B11800EF45BF /* libmpi.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E78AD0316A9B11800EF45BF /* libmpi.0.dylib */; };
 		0EB3339F16F28D120078AC9C /* pmDataTypes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */; };
@@ -21,7 +20,9 @@
 		0EFF67BA1545CF7800ED4E8F /* pmRedistributor.h in Headers */ = {isa = PBXBuildFile; fileRef = 0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */; };
 		0EFF67BD1545CF9A00ED4E8F /* pmRedistributor.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */; };
 		2B12642217DDF6AA00D34C09 /* pmSubtaskSplitter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B12642017DDF6AA00D34C09 /* pmSubtaskSplitter.cpp */; };
+		2B23A24117F61C600019FCD3 /* pmPoolAllocator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B23A23F17F61C600019FCD3 /* pmPoolAllocator.cpp */; };
 		2B2E44041795C8B900309100 /* pmMemChunk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B2E44021795C8B900309100 /* pmMemChunk.cpp */; };
+		2BC0D9D217F9F0DC001CAE05 /* pmCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */; };
 		2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED2F151C7B07006AA45D /* pmBase.h */; };
 		2BCCED6F151C7B07006AA45D /* pmCallback.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED30151C7B07006AA45D /* pmCallback.h */; };
 		2BCCED70151C7B07006AA45D /* pmCallbackUnit.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED31151C7B07006AA45D /* pmCallbackUnit.h */; };
@@ -95,8 +96,6 @@
 		0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTimedEventManager.cpp; sourceTree = "<group>"; };
 		0E29502115CAFE7300F31801 /* pmTimedEventManager.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmTimedEventManager.h; sourceTree = "<group>"; };
 		0E64400316F1080600D4D8E6 /* pmPublicUtilities.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmPublicUtilities.h; sourceTree = "<group>"; };
-		0E7327BC16F7A3F3006FE28F /* pmRangeAccessor.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmRangeAccessor.h; sourceTree = "<group>"; };
-		0E7327BD16F7A409006FE28F /* pmRangeAccessor.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmRangeAccessor.cpp; sourceTree = "<group>"; };
 		0E78AD0216A9B11800EF45BF /* libmpi_cxx.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi_cxx.0.dylib; path = "../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib/libmpi_cxx.0.dylib"; sourceTree = "<group>"; };
 		0E78AD0316A9B11800EF45BF /* libmpi.0.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi.0.dylib; path = "../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib/libmpi.0.dylib"; sourceTree = "<group>"; };
 		0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmDataTypes.cpp; sourceTree = "<group>"; };
@@ -108,8 +107,12 @@
 		0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmRedistributor.cpp; sourceTree = "<group>"; };
 		2B12642017DDF6AA00D34C09 /* pmSubtaskSplitter.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmSubtaskSplitter.cpp; sourceTree = "<group>"; };
 		2B12642417DDF6DB00D34C09 /* pmSubtaskSplitter.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmSubtaskSplitter.h; sourceTree = "<group>"; };
+		2B23A23E17F61C300019FCD3 /* pmPoolAllocator.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmPoolAllocator.h; sourceTree = "<group>"; };
+		2B23A23F17F61C600019FCD3 /* pmPoolAllocator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmPoolAllocator.cpp; sourceTree = "<group>"; };
 		2B2E44011795C6E800309100 /* pmMemChunk.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmMemChunk.h; sourceTree = "<group>"; };
 		2B2E44021795C8B900309100 /* pmMemChunk.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemChunk.cpp; sourceTree = "<group>"; };
+		2BC0D9CF17F9F0C3001CAE05 /* pmCache.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmCache.h; sourceTree = "<group>"; };
+		2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmCache.cpp; sourceTree = "<group>"; };
 		2BCCED1D151C7AA1006AA45D /* pmlib.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		2BCCED21151C7AA1006AA45D /* pmlib-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "pmlib-Prefix.pch"; sourceTree = "<group>"; };
 		2BCCED22151C7AA1006AA45D /* pmlibProj.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = pmlibProj.xcconfig; sourceTree = "<group>"; };
@@ -154,7 +157,7 @@
 		2BCCED55151C7B07006AA45D /* pmCommunicator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmCommunicator.cpp; sourceTree = "<group>"; };
 		2BCCED56151C7B07006AA45D /* pmController.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = pmController.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED57151C7B07006AA45D /* pmDevicePool.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmDevicePool.cpp; sourceTree = "<group>"; };
-		2BCCED58151C7B07006AA45D /* pmDispatcherCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = pmDispatcherCUDA.cu; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
+		2BCCED58151C7B07006AA45D /* pmCudaInterface.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = pmCudaInterface.cu; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED59151C7B07006AA45D /* pmDispatcherGPU.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmDispatcherGPU.cpp; sourceTree = "<group>"; };
 		2BCCED5A151C7B07006AA45D /* pmExecutionStub.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmExecutionStub.cpp; sourceTree = "<group>"; };
 		2BCCED5B151C7B07006AA45D /* pmHardware.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmHardware.cpp; sourceTree = "<group>"; };
@@ -176,6 +179,7 @@
 		2BCCED6B151C7B07006AA45D /* pmTaskManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTaskManager.cpp; sourceTree = "<group>"; };
 		2BCCED6C151C7B07006AA45D /* pmThread.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmThread.cpp; sourceTree = "<group>"; };
 		2BCCED6D151C7B07006AA45D /* pmTimer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTimer.cpp; sourceTree = "<group>"; };
+		2BD5487017FC328B00A95158 /* pmCudaInterface.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmCudaInterface.h; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -233,18 +237,20 @@
 			isa = PBXGroup;
 			children = (
 				2BCCED2F151C7B07006AA45D /* pmBase.h */,
+				2BC0D9CF17F9F0C3001CAE05 /* pmCache.h */,
 				2BCCED30151C7B07006AA45D /* pmCallback.h */,
 				2BCCED31151C7B07006AA45D /* pmCallbackUnit.h */,
 				2BCCED32151C7B07006AA45D /* pmCluster.h */,
 				2BCCED33151C7B07006AA45D /* pmCommand.h */,
 				2BCCED34151C7B07006AA45D /* pmCommunicator.h */,
 				2BCCED35151C7B07006AA45D /* pmController.h */,
+				2BD5487017FC328B00A95158 /* pmCudaInterface.h */,
 				2BCCED36151C7B07006AA45D /* pmDataTypes.h */,
 				2BCCED37151C7B07006AA45D /* pmDevicePool.h */,
 				2BCCED38151C7B07006AA45D /* pmDispatcherGPU.h */,
 				2BCCED39151C7B07006AA45D /* pmErrorDefinitions.h */,
-				2BCCED3A151C7B07006AA45D /* pmExecutionStub.h */,
 				0E05C91F1686227E0044891C /* pmEventTimeline.h */,
+				2BCCED3A151C7B07006AA45D /* pmExecutionStub.h */,
 				2BCCED3B151C7B07006AA45D /* pmHardware.h */,
 				0E0668D616BEB8B3001D0B8F /* pmHeavyOperations.h */,
 				2BCCED3C151C7B07006AA45D /* pmInternalDefinitions.h */,
@@ -253,13 +259,14 @@
 				2BCCED3E151C7B07006AA45D /* pmMemoryManager.h */,
 				2BCCED3F151C7B07006AA45D /* pmMemSection.h */,
 				2BCCED40151C7B07006AA45D /* pmNetwork.h */,
+				2B23A23E17F61C300019FCD3 /* pmPoolAllocator.h */,
 				2BCCED41151C7B07006AA45D /* pmPublicDefinitions.h */,
-				2BCCED42151C7B07006AA45D /* pmReducer.h */,
+				0E64400316F1080600D4D8E6 /* pmPublicUtilities.h */,
 				0EFF67B91545CF7800ED4E8F /* pmRedistributor.h */,
+				2BCCED42151C7B07006AA45D /* pmReducer.h */,
 				2BCCED43151C7B07006AA45D /* pmResourceLock.h */,
 				2BCCED44151C7B07006AA45D /* pmSafePriorityQueue.h */,
 				2BCCED45151C7B07006AA45D /* pmScheduler.h */,
-				0E20293E162DF290006DC536 /* pmTls.h */,
 				2BCCED46151C7B07006AA45D /* pmSignalWait.h */,
 				2BCCED47151C7B07006AA45D /* pmStubManager.h */,
 				2BCCED48151C7B07006AA45D /* pmSubscriptionManager.h */,
@@ -270,11 +277,10 @@
 				2BCCED4C151C7B07006AA45D /* pmTaskManager.h */,
 				0EDC2E6A15B30FB900937B7E /* pmTaskProfiler.h */,
 				2BCCED4D151C7B07006AA45D /* pmThread.h */,
-				2BCCED4E151C7B07006AA45D /* pmTimer.h */,
 				0E29502115CAFE7300F31801 /* pmTimedEventManager.h */,
+				2BCCED4E151C7B07006AA45D /* pmTimer.h */,
+				0E20293E162DF290006DC536 /* pmTls.h */,
 				0EFEA56F16EF13FD00DDB741 /* pmUtility.h */,
-				0E64400316F1080600D4D8E6 /* pmPublicUtilities.h */,
-				0E7327BC16F7A3F3006FE28F /* pmRangeAccessor.h */,
 			);
 			name = inc;
 			path = ../../../code/inc;
@@ -284,6 +290,7 @@
 			isa = PBXGroup;
 			children = (
 				2BCCED50151C7B07006AA45D /* pmBase.cpp */,
+				2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */,
 				2BCCED51151C7B07006AA45D /* pmCallback.cpp */,
 				2BCCED52151C7B07006AA45D /* pmCallbackUnit.cpp */,
 				2BCCED53151C7B07006AA45D /* pmCluster.cpp */,
@@ -292,10 +299,10 @@
 				2BCCED56151C7B07006AA45D /* pmController.cpp */,
 				0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */,
 				2BCCED57151C7B07006AA45D /* pmDevicePool.cpp */,
-				2BCCED58151C7B07006AA45D /* pmDispatcherCUDA.cu */,
+				2BCCED58151C7B07006AA45D /* pmCudaInterface.cu */,
 				2BCCED59151C7B07006AA45D /* pmDispatcherGPU.cpp */,
-				2BCCED5A151C7B07006AA45D /* pmExecutionStub.cpp */,
 				0E05C9201686229D0044891C /* pmEventTimeline.cpp */,
+				2BCCED5A151C7B07006AA45D /* pmExecutionStub.cpp */,
 				2BCCED5B151C7B07006AA45D /* pmHardware.cpp */,
 				0E0668D816BEB8C6001D0B8F /* pmHeavyOperations.cpp */,
 				2BCCED5C151C7B07006AA45D /* pmLogger.cpp */,
@@ -303,10 +310,10 @@
 				2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */,
 				2BCCED5E151C7B07006AA45D /* pmMemSection.cpp */,
 				2BCCED5F151C7B07006AA45D /* pmNetwork.cpp */,
-				0E202940162DF35B006DC536 /* pmTls.cpp */,
+				2B23A23F17F61C600019FCD3 /* pmPoolAllocator.cpp */,
 				2BCCED60151C7B07006AA45D /* pmPublicDefinitions.cpp */,
-				2BCCED61151C7B07006AA45D /* pmReducer.cpp */,
 				0EFF67BC1545CF9A00ED4E8F /* pmRedistributor.cpp */,
+				2BCCED61151C7B07006AA45D /* pmReducer.cpp */,
 				2BCCED62151C7B07006AA45D /* pmResourceLock.cpp */,
 				2BCCED63151C7B07006AA45D /* pmSafePriorityQueue.cpp */,
 				2BCCED64151C7B07006AA45D /* pmScheduler.cpp */,
@@ -320,10 +327,10 @@
 				2BCCED6B151C7B07006AA45D /* pmTaskManager.cpp */,
 				0EDC2EA915B313C700937B7E /* pmTaskProfiler.cpp */,
 				2BCCED6C151C7B07006AA45D /* pmThread.cpp */,
-				2BCCED6D151C7B07006AA45D /* pmTimer.cpp */,
 				0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */,
+				2BCCED6D151C7B07006AA45D /* pmTimer.cpp */,
+				0E202940162DF35B006DC536 /* pmTls.cpp */,
 				0EFEA57016EF141000DDB741 /* pmUtility.cpp */,
-				0E7327BD16F7A409006FE28F /* pmRangeAccessor.cpp */,
 			);
 			name = src;
 			path = ../../../code/src;
@@ -399,7 +406,7 @@
 		2BCCED14151C7AA1006AA45D /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0460;
+				LastUpgradeCheck = 0500;
 			};
 			buildConfigurationList = 2BCCED17151C7AA1006AA45D /* Build configuration list for PBXProject "pmlib" */;
 			compatibilityVersion = "Xcode 3.2";
@@ -435,8 +442,10 @@
 				2BCCED97151C7B07006AA45D /* pmExecutionStub.cpp in Sources */,
 				2BCCED98151C7B07006AA45D /* pmHardware.cpp in Sources */,
 				2BCCED99151C7B07006AA45D /* pmLogger.cpp in Sources */,
+				2B23A24117F61C600019FCD3 /* pmPoolAllocator.cpp in Sources */,
 				2BCCED9A151C7B07006AA45D /* pmMemoryManager.cpp in Sources */,
 				2BCCED9B151C7B07006AA45D /* pmMemSection.cpp in Sources */,
+				2BC0D9D217F9F0DC001CAE05 /* pmCache.cpp in Sources */,
 				2BCCED9C151C7B07006AA45D /* pmNetwork.cpp in Sources */,
 				2BCCED9D151C7B07006AA45D /* pmPublicDefinitions.cpp in Sources */,
 				2BCCED9E151C7B07006AA45D /* pmReducer.cpp in Sources */,
@@ -460,7 +469,6 @@
 				0E0668DA16BEB8C6001D0B8F /* pmHeavyOperations.cpp in Sources */,
 				0EFEA57216EF141000DDB741 /* pmUtility.cpp in Sources */,
 				0EB3339F16F28D120078AC9C /* pmDataTypes.cpp in Sources */,
-				0E7327BF16F7A409006FE28F /* pmRangeAccessor.cpp in Sources */,
 				2B2E44041795C8B900309100 /* pmMemChunk.cpp in Sources */,
 				2B12642217DDF6AA00D34C09 /* pmSubtaskSplitter.cpp in Sources */,
 			);
@@ -473,8 +481,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = YES;
-				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -492,7 +501,9 @@
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.6;
@@ -506,8 +517,9 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = YES;
-				ARCHS = "$(ARCHS_STANDARD_64_BIT)";
+				CLANG_WARN_BOOL_CONVERSION = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -519,7 +531,9 @@
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;
 				GCC_WARN_ABOUT_RETURN_TYPE = YES;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
 				GCC_WARN_UNINITIALIZED_AUTOS = YES;
+				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
 				HEADER_SEARCH_PATHS = "";
 				MACOSX_DEPLOYMENT_TARGET = 10.6;
@@ -531,23 +545,30 @@
 		2BCCED2C151C7AA1006AA45D /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN__EXIT_TIME_DESTRUCTORS = NO;
 				EXCLUDED_SOURCE_FILE_NAMES = (
 					pmSafePriorityQueue.cpp,
 					pmThread.cpp,
-					pmRangeAccessor.cpp,
+					pmCache.cpp,
 				);
+				GCC_C_LANGUAGE_STANDARD = c11;
 				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
 					UNIX,
 					MACOS,
 					"DEBUG=1",
 					"$(inherited)",
 				);
-				GCC_VERSION = com.apple.compilers.llvmgcc42;
+				GCC_VERSION = "";
+				GCC_WARN_HIDDEN_VIRTUAL_FUNCTIONS = YES;
+				GCC_WARN_NON_VIRTUAL_DESTRUCTOR = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/include/";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib\"",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				USER_HEADER_SEARCH_PATHS = "";
 			};
@@ -556,22 +577,29 @@
 		2BCCED2D151C7AA1006AA45D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++0x";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_WARN__EXIT_TIME_DESTRUCTORS = NO;
 				EXCLUDED_SOURCE_FILE_NAMES = (
 					pmSafePriorityQueue.cpp,
 					pmThread.cpp,
-					pmRangeAccessor.cpp,
+					pmCache.cpp,
 				);
+				GCC_C_LANGUAGE_STANDARD = c11;
 				GCC_OPTIMIZATION_LEVEL = 3;
 				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
 					MACOS,
 					UNIX,
 				);
-				GCC_VERSION = com.apple.compilers.llvmgcc42;
+				GCC_VERSION = "";
+				GCC_WARN_HIDDEN_VIRTUAL_FUNCTIONS = YES;
+				GCC_WARN_NON_VIRTUAL_DESTRUCTOR = YES;
 				HEADER_SEARCH_PATHS = "$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/include/";
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib\"",
 				);
+				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Release;

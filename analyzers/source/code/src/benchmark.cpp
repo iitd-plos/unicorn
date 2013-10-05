@@ -1451,20 +1451,20 @@ void Benchmark::GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlo
     const std::string& lGraphDisplayName = lGraphDisplayNameStream.str();
 
     const char* lOneHostSvpCurveNames[] = {"Sequential", "CPUs", "GPUs", "CPUs+GPUs"}; // Svp means Sequential versus Parallel
-    StandardChart lOneHostSvpGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+    StandardChart lOneHostSvpGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayName)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
     lOneHostSvpGraph.SetCurves(4, lOneHostSvpCurveNames);
     
     const char* lOneHostSgvpCurveNames[] = {"Single GPU", "CPUs", "GPUs", "CPUs+GPUs"}; // Sgvp means Single GPU versus Parallel
-    StandardChart lOneHostSgvpGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+    StandardChart lOneHostSgvpGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayName)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
     lOneHostSgvpGraph.SetCurves(4, lOneHostSgvpCurveNames);
 
     const char* lOneHostParallelCurveNames[] = {"CPUs", "GPUs", "CPUs+GPUs"};
-    StandardChart lOneHostParallelGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+    StandardChart lOneHostParallelGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayName)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
     lOneHostParallelGraph.SetCurves(3, lOneHostParallelCurveNames);
 
-    StandardChart lCpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-    StandardChart lGpusAllHostsGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-    StandardChart lCpgAllHostsGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayName)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));   // Cpg means CPUs+GPUs
+    StandardChart lCpusAllHostsGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayName)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+    StandardChart lGpusAllHostsGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayName)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+    StandardChart lCpgAllHostsGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayName)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));   // Cpg means CPUs+GPUs
 
     std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
     for(size_t lHostIndex = 0; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
@@ -1589,9 +1589,9 @@ void Benchmark::GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t
         else
             pHtmlStream << "<br>" << std::endl;
 
-        StandardChart lCpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-        StandardChart lGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-        StandardChart lCpusPlusGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lGpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusPlusGpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
 
         const char* lCurveNames[] = {"Push", "Pull", "Static Equal", "Static Best"};
         const char* lCurveNamesMA[] = {"Push_MA", "Pull_MA", "Static Equal", "Static Best"};
@@ -1707,7 +1707,7 @@ void Benchmark::GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pP
                 pHtmlStream << "<tr class=horizSpacing>" << std::endl;
             }
             
-            StandardChart lGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Finishing Time (in s) --->")));
+            StandardChart lGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Finishing Time (in s) --->")));
 
             const std::map<Level2InnerTaskKey, Level2InnerTaskValue>& lInnerTaskMap = lInnerIter->second.innerTaskMap;
             if(lInnerTaskMap.find(pInnerTask) != lInnerTaskMap.end())
@@ -1758,9 +1758,9 @@ void Benchmark::GenerateMultiAssignComparisonGraphsInternal(size_t pPlotWidth, s
         else
             pHtmlStream << "<br>" << std::endl;
         
-        StandardChart lCpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-        StandardChart lGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-        StandardChart lCpusPlusGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lGpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusPlusGpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
 
         const char* lCurveNames[] = {"Push", "Push_MA", "Pull", "Pull_MA"};
         lCpusGraph.SetCurves(4, lCurveNames);
@@ -1856,9 +1856,9 @@ void Benchmark::GenerateOverlapComparisonGraphsInternal(size_t pPlotWidth, size_
         else
             pHtmlStream << "<br>" << std::endl;
         
-        StandardChart lCpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-        StandardChart lGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
-        StandardChart lCpusPlusGpusGraph(std::auto_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::auto_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lGpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
+        StandardChart lCpusPlusGpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
 
         const char* lCurveNames[] = {"Push", "Push_Overlap", "Pull", "Pull_Overlap"};
         lCpusGraph.SetCurves(4, lCurveNames);

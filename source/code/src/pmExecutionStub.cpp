@@ -39,17 +39,18 @@
 #include <sstream>
 #include <algorithm>
 #include <limits>
+#include <functional>
 
 #include SYSTEM_CONFIGURATION_HEADER // for sched_setaffinity
 
-#define INVOKE_SAFE_PROPAGATE_ON_FAILURE(objectType, object, function, ...) \
+#define INVOKE_SAFE_THROW_ON_FAILURE(objectType, object, function, ...) \
 { \
 	pmStatus dStatus = pmSuccess; \
-	objectType* dObject = object; \
+	const objectType* dObject = object; \
 	if(dObject) \
 		dStatus = dObject->function(__VA_ARGS__); \
 	if(dStatus != pmSuccess) \
-		return dStatus; \
+		PMTHROW(pmUserErrorException()); \
 }
 
 #define THROW_IF_PARTIAL_RANGE_OVERLAP(start1, end1, start2, end2) \
@@ -83,42 +84,26 @@ pmExecutionStub::~pmExecutionStub()
 	#endif
 }
 
-pmProcessingElement* pmExecutionStub::GetProcessingElement()
+const pmProcessingElement* pmExecutionStub::GetProcessingElement() const
 {
 	return pmDevicePool::GetDevicePool()->GetDeviceAtMachineIndex(PM_LOCAL_MACHINE, mDeviceIndexOnMachine);
 }
     
-pmStatus pmExecutionStub::ThreadBindEvent(size_t pPhysicalMemory, size_t pTotalStubCount)
+void pmExecutionStub::ThreadBindEvent(size_t pPhysicalMemory, size_t pTotalStubCount)
 {
-	stubEvent lEvent;
-	lEvent.eventId = THREAD_BIND;
-    lEvent.bindDetails.physicalMemory = pPhysicalMemory;
-    lEvent.bindDetails.totalStubCount = pTotalStubCount;
-	SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
-
-    return pmSuccess;
+	SwitchThread(std::shared_ptr<stubEvent>(new threadBindEvent(THREAD_BIND, pPhysicalMemory, pTotalStubCount)), MAX_CONTROL_PRIORITY);
 }
 
 #ifdef DUMP_EVENT_TIMELINE
-pmStatus pmExecutionStub::InitializeEventTimeline()
+void pmExecutionStub::InitializeEventTimeline()
 {
-	stubEvent lEvent;
-	lEvent.eventId = INIT_EVENT_TIMELINE;
-
-	return SwitchThread(lEvent, MAX_CONTROL_PRIORITY);
+	SwitchThread(std::shared_ptr<stubEvent>(new initTimelineEvent(INIT_EVENT_TIMELINE)), MAX_CONTROL_PRIORITY);
 }
 #endif
 
-pmStatus pmExecutionStub::Push(pmSubtaskRange& pRange)
+void pmExecutionStub::Push(const pmSubtaskRange& pRange)
 {
-	if(pRange.endSubtask < pRange.startSubtask)
-		PMTHROW(pmFatalErrorException());
-
-	stubEvent lEvent;
-	lEvent.execDetails.range = pRange;
-	lEvent.execDetails.rangeExecutedOnce = false;
-	lEvent.execDetails.lastExecutedSubtaskId = 0;
-	lEvent.eventId = SUBTASK_EXEC;
+	DEBUG_EXCEPTION_ASSERT(pRange.endSubtask >= pRange.startSubtask);
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(pRange.task->GetSubtaskSplitter().IsSplitting(GetType()))
@@ -126,11 +111,11 @@ pmStatus pmExecutionStub::Push(pmSubtaskRange& pRange)
         bool lIsMultiAssignRange = (pRange.task->IsMultiAssignEnabled() && pRange.originalAllottee != NULL);
         if(lIsMultiAssignRange)
         {
-        #ifdef DEBUG
+        #ifdef _DEBUG
             std::cout << "WARNING << Multi-Assign range with stub executing split subtasks. Ignoring !!!" << std::endl;
         #endif
 
-            return pmSuccess;    // Range is dropped by not executing and not adding to the event queue
+            return;    // Range is dropped by not executing and not adding to the event queue
         }
 
         // PUSH expects one consolidated acknowledgement for the entire assigned range
@@ -141,47 +126,35 @@ pmStatus pmExecutionStub::Push(pmSubtaskRange& pRange)
             if(mPushAckHolder.find(pRange.task) != mPushAckHolder.end())
                 PMTHROW(pmFatalErrorException());   // Only one range of a task allowed at a time
             
-            std::map<size_t, size_t> lOwnershipMap;
-            mPushAckHolder.insert(std::make_pair(pRange.task, std::make_pair(std::make_pair(pRange.startSubtask, pRange.endSubtask), std::make_pair(0, lOwnershipMap))));
+            std::map<ulong, std::vector<pmExecutionStub*> > lMap;
+            mPushAckHolder.insert(std::make_pair(pRange.task, std::make_pair(std::make_pair(pRange.startSubtask, pRange.endSubtask), lMap)));
         }
     }
 #endif
     
-	return SwitchThread(lEvent, pRange.task->GetPriority());
+	SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pRange, false, 0)), pRange.task->GetPriority());
 }
 
-pmStatus pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2)
+void pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2)
 {
-	stubEvent lEvent;
-	lEvent.reduceDetails.task = pTask;
-	lEvent.reduceDetails.subtaskId1 = pSubtaskId1;
-    lEvent.reduceDetails.stub2 = pStub2;
-	lEvent.reduceDetails.subtaskId2 = pSubtaskId2;
-    
-    pmSplitData::ConvertSplitInfoToSplitData(lEvent.reduceDetails.splitData1, pSplitInfo1);
-    pmSplitData::ConvertSplitInfoToSplitData(lEvent.reduceDetails.splitData2, pSplitInfo2);
+    pmSplitData lSplitData1(pSplitInfo1);
+    pmSplitData lSplitData2(pSplitInfo2);
 
-	lEvent.eventId = SUBTASK_REDUCE;
-
-	return SwitchThread(lEvent, pTask->GetPriority());
+	SwitchThread(std::shared_ptr<stubEvent>(new subtaskReduceEvent(SUBTASK_REDUCE, pTask, pSubtaskId1, pStub2, pSubtaskId2, lSplitData1, lSplitData2)), pTask->GetPriority());
 }
 
-pmStatus pmExecutionStub::ProcessNegotiatedRange(pmSubtaskRange& pRange)
+void pmExecutionStub::ProcessNegotiatedRange(const pmSubtaskRange& pRange)
 {
-    stubEvent lEvent;
-    lEvent.negotiatedRangeDetails.range = pRange;
-    lEvent.eventId = NEGOTIATED_RANGE;
-    
-	return SwitchThread(lEvent, pRange.task->GetPriority());
+	SwitchThread(std::shared_ptr<stubEvent>(new negotiatedRangeEvent(NEGOTIATED_RANGE, pRange)), pRange.task->GetPriority());
 }
 
 /* This is an asynchronous call. Current subtask is not cancelled immediately. */
-pmStatus pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation)
+void pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation)
 {
     ushort lPriority = pTask->GetPriority();
 
     // There is atmost one range per task at a time
-    stubEvent lTaskEvent;
+    std::shared_ptr<stubEvent> lTaskEvent;
     DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pTask, lTaskEvent);
 
     FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
@@ -192,7 +165,7 @@ pmStatus pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOn
 #ifdef _DEBUG
     if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
     {
-        std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.begin(), lEndIter = mSecondaryAllotteeMap.end();
+        std::map<std::pair<pmTask*, ulong>, std::vector<const pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.begin(), lEndIter = mSecondaryAllotteeMap.end();
     
         for(; lIter != lEndIter; ++lIter)
         {
@@ -201,16 +174,14 @@ pmStatus pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOn
         }
     }
 #endif
-
-    return pmSuccess;
 }
     
 /* This is an asynchronous call. Current subtask is not cancelled immediately. */
-pmStatus pmExecutionStub::CancelSubtaskRange(pmSubtaskRange& pRange)
+void pmExecutionStub::CancelSubtaskRange(const pmSubtaskRange& pRange)
 {
     ushort lPriority = pRange.task->GetPriority();
     
-    stubEvent lTaskEvent;
+    std::shared_ptr<stubEvent> lTaskEvent;
     bool lFound = (DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pRange.task, lTaskEvent) == pmSuccess);
 
     // Auto lock/unlock scope
@@ -224,23 +195,20 @@ pmStatus pmExecutionStub::CancelSubtaskRange(pmSubtaskRange& pRange)
         }
     }
     
-    if(lFound && (pRange.endSubtask < lTaskEvent.execDetails.range.startSubtask || pRange.startSubtask > lTaskEvent.execDetails.range.endSubtask))
-        SwitchThread(lTaskEvent, lPriority);
-
-    return pmSuccess;
+    if(lFound)
+    {
+        subtaskExecEvent& lExecEvent = static_cast<subtaskExecEvent&>(*lTaskEvent.get());
+        if(pRange.endSubtask < lExecEvent.range.startSubtask || pRange.startSubtask > lExecEvent.range.endSubtask)
+            SwitchThread(lTaskEvent, lPriority);
+    }
 }
 
-pmStatus pmExecutionStub::FreeGpuResources()
-{
 #ifdef SUPPORT_CUDA
-    stubEvent lEvent;
-    lEvent.eventId = FREE_GPU_RESOURCES;
-
-    SwitchThread(lEvent, RESERVED_PRIORITY);
-#endif
-
-	return pmSuccess;
+void pmExecutionStub::FreeGpuResources()
+{
+    SwitchThread(std::shared_ptr<stubEvent>(new freeGpuResourcesEvent(FREE_GPU_RESOURCES)), RESERVED_PRIORITY);
 }
+#endif
     
 void pmExecutionStub::FreeTaskResources(pmTask* pTask)
 {
@@ -255,25 +223,14 @@ void pmExecutionStub::FreeTaskResources(pmTask* pTask)
 
 #ifdef SUPPORT_CUDA
     if(dynamic_cast<pmStubCUDA*>(this))
-    {
-        stubEvent lEvent;
-        lEvent.eventId = FREE_TASK_RESOURCES;
-        lEvent.freeTaskResourcesDetails.taskOriginatingHost = pTask->GetOriginatingHost();
-        lEvent.freeTaskResourcesDetails.taskSequenceNumber = pTask->GetSequenceNumber();
-
-        SwitchThread(lEvent, RESERVED_PRIORITY);
-    }
+        SwitchThread(std::shared_ptr<stubEvent>(new freeTaskResourcesEvent(FREE_TASK_RESOURCES, pTask->GetOriginatingHost(), pTask->GetSequenceNumber())), RESERVED_PRIORITY);
 #endif
 }
     
 #ifdef SUPPORT_SPLIT_SUBTASKS
 void pmExecutionStub::SplitSubtaskCheckEvent(pmTask* pTask)
 {
-    stubEvent lEvent;
-    lEvent.eventId = SPLIT_SUBTASK_CHECK;
-    lEvent.splitSubtaskCheckDetails.task = pTask;
-    
-    SwitchThread(lEvent, pTask->GetPriority());
+    SwitchThread(std::shared_ptr<stubEvent>(new splitSubtaskCheckEvent(SPLIT_SUBTASK_CHECK, pTask)), pTask->GetPriority());
 }
     
 void pmExecutionStub::RemoveSplitSubtaskCheckEvent(pmTask* pTask)
@@ -285,12 +242,7 @@ void pmExecutionStub::RemoveSplitSubtaskCheckEvent(pmTask* pTask)
     
 void pmExecutionStub::PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus)
 {
-    stubEvent lEvent;
-    lEvent.execCompletionDetails.range = pRange;
-    lEvent.execCompletionDetails.execStatus = pExecStatus;
-    lEvent.eventId = POST_HANDLE_EXEC_COMPLETION;
-    
-    SwitchThread(lEvent, pRange.task->GetPriority() - 1);
+    SwitchThread(std::shared_ptr<stubEvent>(new execCompletionEvent(POST_HANDLE_EXEC_COMPLETION, pRange, pExecStatus)), pRange.task->GetPriority() - 1);
 }
     
 void pmExecutionStub::ProcessDeferredShadowMemCommits(pmTask* pTask)
@@ -306,43 +258,27 @@ void pmExecutionStub::ProcessDeferredShadowMemCommits(pmTask* pTask)
     if(lPendingCommits)
     {
         pTask->RecordStubWillSendShadowMemCommitMessage();
-    
-        stubEvent lEvent;
-        lEvent.deferredShadowMemCommitsDetails.task = pTask;
-        lEvent.eventId = DEFERRED_SHADOW_MEM_COMMITS;
-        
-        SwitchThread(lEvent, pTask->GetPriority() - 1);
+        SwitchThread(std::shared_ptr<stubEvent>(new deferredShadowMemCommitsEvent(DEFERRED_SHADOW_MEM_COMMITS, pTask)), pTask->GetPriority() - 1);
     }
 }
     
 void pmExecutionStub::ReductionFinishEvent(pmTask* pTask)
 {
-    stubEvent lEvent;
-    lEvent.reductionFinishDetails.task = pTask;
-    lEvent.eventId = REDUCTION_FINISH;
-    
-    SwitchThread(lEvent, pTask->GetPriority());
+    SwitchThread(std::shared_ptr<stubEvent>(new reductionFinishEvent(REDUCTION_FINISH, pTask)), pTask->GetPriority());
 }
     
-void pmExecutionStub::ProcessRedistributionBucket(pmTask* pTask, size_t pBucketIndex)
+void pmExecutionStub::ProcessRedistributionBucket(pmTask* pTask, uint pMemSectionIndex, size_t pBucketIndex)
 {
-    stubEvent lEvent;
-    lEvent.processRedistributionBucketDetails.task = pTask;
-    lEvent.processRedistributionBucketDetails.bucketIndex = pBucketIndex;
-    lEvent.eventId = PROCESS_REDISTRIBUTION_BUCKET;
-    
-    SwitchThread(lEvent, pTask->GetPriority());
+    SwitchThread(std::shared_ptr<stubEvent>(new processRedistributionBucketEvent(PROCESS_REDISTRIBUTION_BUCKET, pTask, pMemSectionIndex, pBucketIndex)), pTask->GetPriority());
 }
 
-pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice, pmSubtaskRange& pRange)
+void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange)
 {
-    pmProcessingElement* lLocalDevice = GetProcessingElement();
-    if(pRange.originalAllottee != lLocalDevice)
-        PMTHROW(pmFatalErrorException());
+    DEBUG_EXCEPTION_ASSERT(GetProcessingElement() == pRange.originalAllottee);
 
     ushort lPriority = pRange.task->GetPriority();
     
-    stubEvent lTaskEvent;
+    std::shared_ptr<stubEvent> lTaskEvent;
     if(pRange.task->IsMultiAssignEnabled())
     {
     #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -353,8 +289,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
             // splitted subtasks. For PUSH model, the entire subtask range is multi-assigned by the controlling host.
             if(pRange.task->GetSchedulingModel() == scheduler::PULL)
             {
-                if(pRange.startSubtask != pRange.endSubtask)
-                    PMTHROW(pmFatalErrorException());
+                DEBUG_EXCEPTION_ASSERT(pRange.startSubtask == pRange.endSubtask);
                 
                 if(pRange.task->GetSubtaskSplitter().Negotiate(this, pRange.startSubtask))
                 {
@@ -362,14 +297,14 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                     std::cout << "[Host " << pmGetHostId() << "]: Split subtask negotiation success from device " << GetProcessingElement()->GetGlobalDeviceIndex() << " to device " << pRequestingDevice->GetGlobalDeviceIndex() << "; Negotiated range [" << pRange.startSubtask << ", " << pRange.endSubtask << "]" << std::endl;
                 #endif
 
-                    return pmScheduler::GetScheduler()->SendRangeNegotiationSuccess(pRequestingDevice, pRange);
+                    pmScheduler::GetScheduler()->SendRangeNegotiationSuccess(pRequestingDevice, pRange);
                 }
             }
             else
             {
                 FINALIZE_RESOURCE_PTR(dPushAckLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mPushAckLock, Lock(), Unlock());
 
-                std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::pair<ulong, std::map<size_t, size_t> > > >::iterator lIter = mPushAckHolder.find(pRange.task);
+                std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::map<ulong, std::vector<pmExecutionStub*> > > >::iterator lIter = mPushAckHolder.find(pRange.task);
                 if(lIter != mPushAckHolder.end())
                 {
                     if(lIter->second.first.first == pRange.startSubtask && lIter->second.first.second == pRange.endSubtask)
@@ -378,15 +313,16 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                         bool lFound = (DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pRange.task, lTaskEvent) == pmSuccess);
                         if(lFound)
                         {
-                            if(pRange.endSubtask < lTaskEvent.execDetails.range.startSubtask || pRange.startSubtask > lTaskEvent.execDetails.range.endSubtask)
+                            subtaskExecEvent& lExecEvent = static_cast<subtaskExecEvent&>(*lTaskEvent.get());
+                            if(pRange.endSubtask < lExecEvent.range.startSubtask || pRange.startSubtask > lExecEvent.range.endSubtask)
                             {
-                                SwitchThread(lTaskEvent, lPriority);
+                                SwitchThread(std::move(lTaskEvent), lPriority);
                             }
                             else
                             {
                                 lNegotiationStatus = true;
 
-                                for(ulong i = pRange.startSubtask; i < lTaskEvent.execDetails.range.startSubtask; ++i)
+                                for(ulong i = pRange.startSubtask; i < lExecEvent.range.startSubtask; ++i)
                                     pRange.task->GetSubtaskSplitter().Negotiate(this, i);
                             }
                         }
@@ -409,8 +345,8 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                     }
                 }
             }
-                
-            return pmSuccess;
+
+            return;
         }
     #endif
         
@@ -437,7 +373,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                     std::pair<pmTask*, ulong> lPair(pRange.task, pRange.endSubtask);
                     if(mSecondaryAllotteeMap.find(lPair) != mSecondaryAllotteeMap.end())
                     {
-                        std::vector<pmProcessingElement*>& lSecondaryAllottees = mSecondaryAllotteeMap[lPair];
+                        std::vector<const pmProcessingElement*>& lSecondaryAllottees = mSecondaryAllotteeMap[lPair];
 
                     #ifdef _DEBUG
                         if(std::find(lSecondaryAllottees.begin(), lSecondaryAllottees.end(), pRequestingDevice) == lSecondaryAllottees.end())
@@ -454,18 +390,14 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                                 
                         if(mCurrentSubtaskRangeStats->parentRangeStartSubtask != mCurrentSubtaskRangeStats->startSubtaskId)
                         {
-                            pmSubtaskRange lCompletedRange;
-                            lCompletedRange.task = pRange.task;
-                            lCompletedRange.startSubtask = mCurrentSubtaskRangeStats->parentRangeStartSubtask;
-                            lCompletedRange.endSubtask = mCurrentSubtaskRangeStats->startSubtaskId - 1;
-                            lCompletedRange.originalAllottee = NULL;
+                            pmSubtaskRange lCompletedRange(pRange.task, NULL, mCurrentSubtaskRangeStats->parentRangeStartSubtask, mCurrentSubtaskRangeStats->startSubtaskId - 1);
 
                             PostHandleRangeExecutionCompletion(lCompletedRange, pmSuccess);
                         }
                     
                         pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(pRange.originalAllottee, pRange);
-                        std::vector<pmProcessingElement*>::iterator lBegin = lSecondaryAllottees.begin();
-                        std::vector<pmProcessingElement*>::iterator lEnd = lSecondaryAllottees.end();
+                        std::vector<const pmProcessingElement*>::iterator lBegin = lSecondaryAllottees.begin();
+                        std::vector<const pmProcessingElement*>::iterator lEnd = lSecondaryAllottees.end();
                     
                         for(; lBegin < lEnd; ++lBegin)
                         {
@@ -480,7 +412,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
         }
         else
         {
-            pmSubtaskRange lNegotiatedRange;
+            pmSubtaskRange lNegotiatedRange(pRange);
             bool lSuccessfulNegotiation = false;
             bool lCurrentTransferred = false;
         
@@ -492,16 +424,17 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                 
             if(lFound)
             {
-                if(lTaskEvent.execDetails.range.originalAllottee == NULL)
+                subtaskExecEvent& lExecEvent = static_cast<subtaskExecEvent&>(*lTaskEvent.get());
+                if(lExecEvent.range.originalAllottee == NULL)
                 {       
-                    if(pRange.endSubtask < lTaskEvent.execDetails.range.startSubtask || pRange.startSubtask > lTaskEvent.execDetails.range.endSubtask)
+                    if(pRange.endSubtask < lExecEvent.range.startSubtask || pRange.startSubtask > lExecEvent.range.endSubtask)
                     {
-                        SwitchThread(lTaskEvent, lPriority);
+                        SwitchThread(std::move(lTaskEvent), lPriority);
                     }
                     else
                     {
-                        ulong lFirstPendingSubtask = (lTaskEvent.execDetails.rangeExecutedOnce ? (lTaskEvent.execDetails.lastExecutedSubtaskId + 1) : lTaskEvent.execDetails.range.startSubtask);
-                        ulong lLastPendingSubtask = lTaskEvent.execDetails.range.endSubtask;
+                        ulong lFirstPendingSubtask = (lExecEvent.rangeExecutedOnce ? (lExecEvent.lastExecutedSubtaskId + 1) : lExecEvent.range.startSubtask);
+                        ulong lLastPendingSubtask = lExecEvent.range.endSubtask;
                     
                         if(lConsiderCurrent)
                         {
@@ -509,7 +442,7 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                             if(!mCurrentSubtaskRangeStats->originalAllottee)
                                 PMTHROW(pmFatalErrorException());
 
-                            if(lTaskEvent.execDetails.lastExecutedSubtaskId != mCurrentSubtaskRangeStats->endSubtaskId)
+                            if(lExecEvent.lastExecutedSubtaskId != mCurrentSubtaskRangeStats->endSubtaskId)
                                 PMTHROW(pmFatalErrorException());
                         #endif
                         
@@ -517,10 +450,8 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                             lCurrentTransferred = true;
                         }
                     
-                        lNegotiatedRange.task = pRange.task;
                         lNegotiatedRange.startSubtask = std::max(pRange.startSubtask, lFirstPendingSubtask);
                         lNegotiatedRange.endSubtask = std::min(pRange.endSubtask, lLastPendingSubtask);
-                        lNegotiatedRange.originalAllottee = pRange.originalAllottee;
                     
                         lSuccessfulNegotiation = true;
                     
@@ -529,24 +460,24 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                             PMTHROW(pmFatalErrorException());
                     #endif
                     
-                        if(lNegotiatedRange.startSubtask != lTaskEvent.execDetails.range.startSubtask)  // Entire range not negotiated
+                        if(lNegotiatedRange.startSubtask != lExecEvent.range.startSubtask)  // Entire range not negotiated
                         {
                             // Find range left with original allottee
-                            lTaskEvent.execDetails.range.endSubtask = lNegotiatedRange.startSubtask - 1;
-                            if(lConsiderCurrent && lTaskEvent.execDetails.range.endSubtask >= mCurrentSubtaskRangeStats->endSubtaskId)
+                            lExecEvent.range.endSubtask = lNegotiatedRange.startSubtask - 1;
+                            if(lConsiderCurrent && lExecEvent.range.endSubtask >= mCurrentSubtaskRangeStats->endSubtaskId)
                                 lCurrentTransferred = false;   // current subtask still with original allottee
                         
                             bool lCurrentSubtaskInRemainingRange = (lConsiderCurrent && !lCurrentTransferred);
 
-                            if(!lCurrentSubtaskInRemainingRange && lTaskEvent.execDetails.range.endSubtask == (lTaskEvent.execDetails.lastExecutedSubtaskId - (lCurrentTransferred ? (mCurrentSubtaskRangeStats->endSubtaskId - mCurrentSubtaskRangeStats->startSubtaskId + 1) : 0)))  // no pending subtask
+                            if(!lCurrentSubtaskInRemainingRange && lExecEvent.range.endSubtask == (lExecEvent.lastExecutedSubtaskId - (lCurrentTransferred ? (mCurrentSubtaskRangeStats->endSubtaskId - mCurrentSubtaskRangeStats->startSubtaskId + 1) : 0)))  // no pending subtask
                             {
-                                if(lTaskEvent.execDetails.rangeExecutedOnce)
-                                    PostHandleRangeExecutionCompletion(lTaskEvent.execDetails.range, pmSuccess);
+                                if(lExecEvent.rangeExecutedOnce)
+                                    PostHandleRangeExecutionCompletion(lExecEvent.range, pmSuccess);
                             }
-                            else if(lCurrentSubtaskInRemainingRange && lTaskEvent.execDetails.lastExecutedSubtaskId == lTaskEvent.execDetails.range.endSubtask) // only current subtask range pending
+                            else if(lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // only current subtask range pending
                             {
                             #ifdef _DEBUG
-                                if(lTaskEvent.execDetails.lastExecutedSubtaskId != mCurrentSubtaskRangeStats->endSubtaskId)
+                                if(lExecEvent.lastExecutedSubtaskId != mCurrentSubtaskRangeStats->endSubtaskId)
                                     PMTHROW(pmFatalErrorException());
                             #endif
                             
@@ -554,14 +485,14 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                             }
                             else
                             {   // pending range does not have current subtask or has more subtasks after the current one
-                                SwitchThread(lTaskEvent, lPriority);
+                                SwitchThread(std::move(lTaskEvent), lPriority);
                             }
                         }
                     }
                 }
                 else
                 {
-                    SwitchThread(lTaskEvent, lPriority);
+                    SwitchThread(std::move(lTaskEvent), lPriority);
                 }
             }
             else if(lConsiderCurrent)
@@ -574,19 +505,12 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
                 lSuccessfulNegotiation = true;
                 lCurrentTransferred = true;
             
-                lNegotiatedRange.task = pRange.task;
                 lNegotiatedRange.startSubtask = mCurrentSubtaskRangeStats->startSubtaskId;
                 lNegotiatedRange.endSubtask = mCurrentSubtaskRangeStats->endSubtaskId;
-                lNegotiatedRange.originalAllottee = pRange.originalAllottee;
             
                 if(mCurrentSubtaskRangeStats->parentRangeStartSubtask != mCurrentSubtaskRangeStats->startSubtaskId)
                 {
-                    pmSubtaskRange lCompletedRange;
-                    lCompletedRange.task = pRange.task;
-                    lCompletedRange.startSubtask = mCurrentSubtaskRangeStats->parentRangeStartSubtask;
-                    lCompletedRange.endSubtask = mCurrentSubtaskRangeStats->startSubtaskId - 1;
-                    lCompletedRange.originalAllottee = NULL;
-
+                    pmSubtaskRange lCompletedRange(pRange.task, NULL, mCurrentSubtaskRangeStats->parentRangeStartSubtask, mCurrentSubtaskRangeStats->startSubtaskId - 1);
                     PostHandleRangeExecutionCompletion(lCompletedRange, pmSuccess);
                 }
             }
@@ -613,28 +537,27 @@ pmStatus pmExecutionStub::NegotiateRange(pmProcessingElement* pRequestingDevice,
         PMTHROW(pmFatalErrorException());
     }
 #endif
-    
-    return pmSuccess;
 }
     
-pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate)
+void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate)
 {
     bool lStealSuccess = false;
     ushort lPriority = pTask->GetPriority();
-    pmProcessingElement* lLocalDevice = GetProcessingElement();
+    const pmProcessingElement* lLocalDevice = GetProcessingElement();
     double lLocalRate = pTask->GetTaskExecStats().GetStubExecutionRate(this);
     
-    stubEvent lTaskEvent;
+    std::shared_ptr<stubEvent> lTaskEvent;
     bool lFound = (DeleteAndGetFirstMatchingCommand(lPriority, execEventMatchFunc, pTask, lTaskEvent) == pmSuccess);
     
     FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
     
     if(lFound)
     {
-        if(!pTask->IsMultiAssignEnabled() || lTaskEvent.execDetails.range.originalAllottee == NULL)
+        subtaskExecEvent& lExecEvent = static_cast<subtaskExecEvent&>(*lTaskEvent.get());
+        if(!pTask->IsMultiAssignEnabled() || lExecEvent.range.originalAllottee == NULL)
         {
             ulong lStealCount = 0;
-            ulong lAvailableSubtasks = ((lTaskEvent.execDetails.rangeExecutedOnce) ? (lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.lastExecutedSubtaskId) : (lTaskEvent.execDetails.range.endSubtask - lTaskEvent.execDetails.range.startSubtask + 1));
+            ulong lAvailableSubtasks = ((lExecEvent.rangeExecutedOnce) ? (lExecEvent.range.endSubtask - lExecEvent.lastExecutedSubtaskId) : (lExecEvent.range.endSubtask - lExecEvent.range.startSubtask + 1));
 
             if(lAvailableSubtasks)
             {
@@ -661,16 +584,12 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
             
             if(lStealCount)
             {                        
-                pmSubtaskRange lStolenRange;
-                lStolenRange.task = pTask;
-                lStolenRange.startSubtask = (lTaskEvent.execDetails.range.endSubtask - lStealCount) + 1;
-                lStolenRange.endSubtask = lTaskEvent.execDetails.range.endSubtask;
-                lStolenRange.originalAllottee = NULL;
+                pmSubtaskRange lStolenRange(pTask, NULL, (lExecEvent.range.endSubtask - lStealCount) + 1, lExecEvent.range.endSubtask);
                 
-                lTaskEvent.execDetails.range.endSubtask -= lStealCount;
+                lExecEvent.range.endSubtask -= lStealCount;
                 
                 bool lCurrentSubtaskInRemainingRange = false;
-                if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && lTaskEvent.execDetails.range.startSubtask <= mCurrentSubtaskRangeStats->startSubtaskId && mCurrentSubtaskRangeStats->endSubtaskId <= lTaskEvent.execDetails.range.endSubtask)
+                if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && lExecEvent.range.startSubtask <= mCurrentSubtaskRangeStats->startSubtaskId && mCurrentSubtaskRangeStats->endSubtaskId <= lExecEvent.range.endSubtask)
                 {
                 #ifdef _DEBUG
                     if(!mCurrentSubtaskRangeStats->originalAllottee || mCurrentSubtaskRangeStats->reassigned)
@@ -680,15 +599,15 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
                     lCurrentSubtaskInRemainingRange = true;
                 }
                 
-                if(!lCurrentSubtaskInRemainingRange && lTaskEvent.execDetails.lastExecutedSubtaskId == lTaskEvent.execDetails.range.endSubtask) // no pending subtask
+                if(!lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // no pending subtask
                 {
-                    if(lTaskEvent.execDetails.rangeExecutedOnce)
-                        PostHandleRangeExecutionCompletion(lTaskEvent.execDetails.range, pmSuccess);
+                    if(lExecEvent.rangeExecutedOnce)
+                        PostHandleRangeExecutionCompletion(lExecEvent.range, pmSuccess);
                 }
-                else if(lCurrentSubtaskInRemainingRange && lTaskEvent.execDetails.lastExecutedSubtaskId == lTaskEvent.execDetails.range.endSubtask) // only current subtask range pending
+                else if(lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // only current subtask range pending
                 {
                 #ifdef _DEBUG
-                    if(lTaskEvent.execDetails.lastExecutedSubtaskId != mCurrentSubtaskRangeStats->endSubtaskId)
+                    if(lExecEvent.lastExecutedSubtaskId != mCurrentSubtaskRangeStats->endSubtaskId)
                         PMTHROW(pmFatalErrorException());
                 #endif
 
@@ -696,8 +615,8 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
                 }
                 else // pending range does not have current subtask or has more subtasks after the current one
                 {
-                    if(lTaskEvent.execDetails.rangeExecutedOnce || !(lStolenRange.startSubtask == lTaskEvent.execDetails.range.startSubtask && lStolenRange.endSubtask == lTaskEvent.execDetails.range.endSubtask + lStealCount))
-                        SwitchThread(lTaskEvent, lPriority);
+                    if(lExecEvent.rangeExecutedOnce || !(lStolenRange.startSubtask == lExecEvent.range.startSubtask && lStolenRange.endSubtask == lExecEvent.range.endSubtask + lStealCount))
+                        SwitchThread(std::move(lTaskEvent), lPriority);
                 }
                 
                 lStealSuccess = true;
@@ -705,18 +624,16 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
             }
             else
             {
-                SwitchThread(lTaskEvent, lPriority);
+                SwitchThread(std::move(lTaskEvent), lPriority);
             }
         }
         else
         {
-            SwitchThread(lTaskEvent, lPriority);
+            SwitchThread(std::move(lTaskEvent), lPriority);
         }
     }
     else if(pTask->IsMultiAssignEnabled())
     {
-        pmSubtaskRange lStolenRange;
-
         if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned)
         {
             if(!(pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() == GetType()))
@@ -734,10 +651,6 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
                 
                     if(lLocalRateZero || (lExpectedRemoteTimeToExecute + lTransferOverheadTime < lExpectedLocalTimeToFinish))
                     {
-                        lStolenRange.task = pTask;
-                        lStolenRange.startSubtask = mCurrentSubtaskRangeStats->startSubtaskId;
-                        lStolenRange.endSubtask = mCurrentSubtaskRangeStats->endSubtaskId;
-
                     #ifdef SUPPORT_SPLIT_SUBTASKS
                         if(mCurrentSubtaskRangeStats->splitData.valid)
                         {
@@ -750,21 +663,21 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
                             if(mCurrentSubtaskRangeStats->splitSubtaskSourceStub == this)
                             {
                                 if(!UpdateSecondaryAllotteeMapInternal(lPair, pRequestingDevice))
-                                    return pmSuccess;
+                                    return;
                             }
                             else
                             {
                                 lLocalDevice = mCurrentSubtaskRangeStats->splitSubtaskSourceStub->GetProcessingElement();
                                 if(!mCurrentSubtaskRangeStats->splitSubtaskSourceStub->UpdateSecondaryAllotteeMap(lPair, pRequestingDevice))
-                                    return pmSuccess;
+                                    return;
                             }
                         }
                         else
                     #endif
                             mSecondaryAllotteeMap[lPair].push_back(pRequestingDevice);
 
-                        lStolenRange.originalAllottee = lLocalDevice;
-                        
+                        pmSubtaskRange lStolenRange(pTask, lLocalDevice, mCurrentSubtaskRangeStats->startSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId);
+
                     #ifdef TRACK_MULTI_ASSIGN
                         std::cout << "Multiassign of subtask range [" << mCurrentSubtaskRangeStats->startSubtaskId << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "] from range [" << mCurrentSubtaskRangeStats->parentRangeStartSubtask << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "+] - Device " << pRequestingDevice->GetGlobalDeviceIndex() << ", Original Allottee - Device " << lLocalDevice->GetGlobalDeviceIndex() << ", Secondary allottment count - " << mSecondaryAllotteeMap[lPair].size() << std::endl;
                     #endif
@@ -779,25 +692,21 @@ pmStatus pmExecutionStub::StealSubtasks(pmTask* pTask, pmProcessingElement* pReq
 
     if(!lStealSuccess)
         pmScheduler::GetScheduler()->StealFailedEvent(pRequestingDevice, lLocalDevice, pTask);
-    
-    return pmSuccess;
 }
-    
-pmStatus pmExecutionStub::ThreadSwitchCallback(stubEvent& pEvent)
+
+void pmExecutionStub::ThreadSwitchCallback(std::shared_ptr<stubEvent>& pEvent)
 {
 	try
 	{
-		return ProcessEvent(pEvent);
+		ProcessEvent(*pEvent);
 	}
     catch(pmException& e)
     {
-            pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from stub thread");
+        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::WARNING, "Exception generated from stub thread");
     }
-
-	return pmSuccess;
 }
 
-pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
+void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 {
 	switch(pEvent.eventId)
 	{
@@ -807,11 +716,12 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_EXEC_STUB, this);
 
         #ifdef SUPPORT_CUDA
-            #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
                 pmStubCUDA* lStub = dynamic_cast<pmStubCUDA*>(this);
                 if(lStub)
-                    lStub->ReservePinnedMemory(pEvent.bindDetails.physicalMemory, pEvent.bindDetails.totalStubCount);
-            #endif
+                {
+                    threadBindEvent& lEvent = static_cast<threadBindEvent&>(pEvent);
+                    lStub->ReserveMemory(lEvent.physicalMemory, lEvent.totalStubCount);
+                }
         #endif
 
 			break;
@@ -828,34 +738,40 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         
 		case SUBTASK_EXEC:	/* Comes from scheduler thread */
 		{
-        #ifdef SUPPORT_CUDA
-            if(CheckSplittedExecution(pEvent))
+            subtaskExecEvent& lEvent = static_cast<subtaskExecEvent&>(pEvent);
+
+        #ifdef SUPPORT_SPLIT_SUBTASKS
+            if(CheckSplittedExecution(lEvent))
                 break;
         #endif
             
-            ExecuteSubtaskRange(pEvent);
+            ExecuteSubtaskRange(lEvent);
 
 			break;
 		}
 
 		case SUBTASK_REDUCE:
 		{
-            std::auto_ptr<pmSplitInfo> lSplitInfoAutoPtr1(pEvent.reduceDetails.splitData1.operator std::auto_ptr<pmSplitInfo>());
-            std::auto_ptr<pmSplitInfo> lSplitInfoAutoPtr2(pEvent.reduceDetails.splitData2.operator std::auto_ptr<pmSplitInfo>());
+            subtaskReduceEvent& lEvent = static_cast<subtaskReduceEvent&>(pEvent);
 
-			DoSubtaskReduction(pEvent.reduceDetails.task, pEvent.reduceDetails.subtaskId1, lSplitInfoAutoPtr1.get(), pEvent.reduceDetails.stub2, pEvent.reduceDetails.subtaskId2, lSplitInfoAutoPtr2.get());
+            std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr1(lEvent.splitData1.operator std::unique_ptr<pmSplitInfo>());
+            std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr2(lEvent.splitData2.operator std::unique_ptr<pmSplitInfo>());
+
+			DoSubtaskReduction(lEvent.task, lEvent.subtaskId1, lSplitInfoAutoPtr1.get(), lEvent.stub2, lEvent.subtaskId2, lSplitInfoAutoPtr2.get());
 
 			break;
 		}
 
         case NEGOTIATED_RANGE:
         {
+            negotiatedRangeEvent& lEvent = static_cast<negotiatedRangeEvent&>(pEvent);
+
         #ifdef _DEBUG
-            if(pEvent.negotiatedRangeDetails.range.originalAllottee == NULL || pEvent.negotiatedRangeDetails.range.originalAllottee == GetProcessingElement())
+            if(lEvent.range.originalAllottee == NULL || lEvent.range.originalAllottee == GetProcessingElement())
                 PMTHROW(pmFatalErrorException());
         #endif
         
-            pmSubtaskRange& lRange = pEvent.negotiatedRangeDetails.range;
+            pmSubtaskRange& lRange = lEvent.range;
             for(ulong subtaskId = lRange.startSubtask; subtaskId <= lRange.endSubtask; ++subtaskId)
             {
             #ifdef DUMP_EVENT_TIMELINE
@@ -873,7 +789,7 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             #endif
             
             #ifdef TRACK_MULTI_ASSIGN
-                std::cout << "Multi assign partition [" << lRange.startSubtask << " - " << lRange.endSubtask << "] completed by secondary allottee - Device " << GetProcessingElement()->GetGlobalDeviceIndex() << ", Original Allottee: Device " << pEvent.negotiatedRangeDetails.range.originalAllottee->GetGlobalDeviceIndex() << std::endl;
+                std::cout << "Multi assign partition [" << lRange.startSubtask << " - " << lRange.endSubtask << "] completed by secondary allottee - Device " << GetProcessingElement()->GetGlobalDeviceIndex() << ", Original Allottee: Device " << lEvent.range.originalAllottee->GetGlobalDeviceIndex() << std::endl;
             #endif
             }
 
@@ -892,22 +808,34 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         
         case POST_HANDLE_EXEC_COMPLETION:
         {
-            HandleRangeExecutionCompletion(pEvent.execCompletionDetails.range, pEvent.execCompletionDetails.execStatus);
+            execCompletionEvent& lEvent = static_cast<execCompletionEvent&>(pEvent);
+            HandleRangeExecutionCompletion(lEvent.range, lEvent.execStatus);
         
             break;
         }
         
         case DEFERRED_SHADOW_MEM_COMMITS:
         {
-            pmTask* lTask = pEvent.deferredShadowMemCommitsDetails.task;
+            deferredShadowMemCommitsEvent& lEvent = static_cast<deferredShadowMemCommitsEvent&>(pEvent);
+            pmTask* lTask = lEvent.task;
 
             std::vector<std::pair<ulong, pmSplitData> >::iterator lIter = mDeferredShadowMemCommits[lTask].begin();
             std::vector<std::pair<ulong, pmSplitData> >::iterator lEndIter = mDeferredShadowMemCommits[lTask].end();
 
             for(; lIter != lEndIter; ++lIter)
             {
-                std::auto_ptr<pmSplitInfo> lAutoPtr((*lIter).second.operator std::auto_ptr<pmSplitInfo>());
-                CommitSubtaskShadowMem(lTask, (*lIter).first, lAutoPtr.get());
+                std::unique_ptr<pmSplitInfo> lAutoPtr((*lIter).second.operator std::unique_ptr<pmSplitInfo>());
+                
+                const std::vector<pmMemSection*>& lMemSectionVector = lTask->GetMemSections();
+                
+                std::vector<pmMemSection*>::const_iterator lMemIter = lMemSectionVector.begin(), lMemEndIter = lMemSectionVector.end();
+                for(uint lMemSectionIndex = 0; lMemIter != lMemEndIter; ++lMemIter, ++lMemSectionIndex)
+                {
+                    const pmMemSection* lMemSection = (*lMemIter);
+                    
+                    if(lMemSection->IsOutput() && lMemSection->IsReadWrite() && !lTask->HasDisjointReadWritesAcrossSubtasks())
+                        CommitSubtaskShadowMem(lTask, (*lIter).first, lAutoPtr.get(), lMemSectionIndex);
+                }
             }
         
             mDeferredShadowMemCommits.erase(lTask);
@@ -919,7 +847,8 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         
         case REDUCTION_FINISH:
         {
-            pmTask* lTask = pEvent.reductionFinishDetails.task;
+            reductionFinishEvent& lEvent = static_cast<reductionFinishEvent&>(pEvent);
+            pmTask* lTask = lEvent.task;
 
             lTask->GetReducer()->HandleReductionFinish();
             
@@ -928,18 +857,20 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             
         case PROCESS_REDISTRIBUTION_BUCKET:
         {
-            pmTask* lTask = pEvent.processRedistributionBucketDetails.task;
+            processRedistributionBucketEvent& lEvent = static_cast<processRedistributionBucketEvent&>(pEvent);
+            pmTask* lTask = lEvent.task;
             
-            lTask->GetRedistributor()->ProcessRedistributionBucket(pEvent.processRedistributionBucketDetails.bucketIndex);
+            lTask->GetRedistributor(lTask->GetMemSection(lEvent.memSectionIndex))->ProcessRedistributionBucket(lEvent.bucketIndex);
             
             break;
         }
             
         case FREE_TASK_RESOURCES:
         {
-    #ifdef SUPPORT_CUDA
-            ((pmStubCUDA*)this)->FreeTaskResources(pEvent.freeTaskResourcesDetails.taskOriginatingHost, pEvent.freeTaskResourcesDetails.taskSequenceNumber);
-    #endif
+        #ifdef SUPPORT_CUDA
+            freeTaskResourcesEvent& lEvent = static_cast<freeTaskResourcesEvent&>(pEvent);
+            ((pmStubCUDA*)this)->FreeTaskResources(lEvent.taskOriginatingHost, lEvent.taskSequenceNumber);
+        #endif
             
             break;
         }
@@ -947,7 +878,8 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
     #ifdef SUPPORT_SPLIT_SUBTASKS
         case SPLIT_SUBTASK_CHECK:
         {
-            pmTask* lTask = pEvent.splitSubtaskCheckDetails.task;
+            splitSubtaskCheckEvent& lEvent = static_cast<splitSubtaskCheckEvent&>(pEvent);
+            pmTask* lTask = lEvent.task;
 
             ExecutePendingSplit(lTask->GetSubtaskSplitter().GetPendingSplit(NULL, this), false);
             
@@ -956,17 +888,18 @@ pmStatus pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             break;
         }
     #endif
+            
+        default:
+            PMTHROW(pmFatalErrorException());
 	}
-
-	return pmSuccess;
 }
     
-void pmExecutionStub::ExecuteSubtaskRange(execStub::stubEvent &pEvent)
+void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
 {
-    pmSubtaskRange& lRange = pEvent.execDetails.range;
+    pmSubtaskRange& lRange = pEvent.range;
     pmSubtaskRange lCurrentRange(lRange);
-    if(pEvent.execDetails.rangeExecutedOnce)
-        lCurrentRange.startSubtask = pEvent.execDetails.lastExecutedSubtaskId + 1;
+    if(pEvent.rangeExecutedOnce)
+        lCurrentRange.startSubtask = pEvent.lastExecutedSubtaskId + 1;
 
 #ifdef _DEBUG
     if(lCurrentRange.startSubtask > lCurrentRange.endSubtask)
@@ -976,9 +909,9 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::stubEvent &pEvent)
     bool lPrematureTermination = false, lReassigned = false, lForceAckFlag = false;
     bool lIsMultiAssignRange = (lCurrentRange.task->IsMultiAssignEnabled() && lCurrentRange.originalAllottee != NULL);
     pmStatus lExecStatus = pmStatusUnavailable;
-    
-    pmSubtaskRangeCommandPtr lCommand = pmSubtaskRangeCommand::CreateSharedPtr(lRange.task->GetPriority(), pmSubtaskRangeCommand::BASIC_SUBTASK_RANGE);
-    lCommand->MarkExecutionStart();
+
+    TIMER_IMPLEMENTATION_CLASS lTimer;
+    lTimer.Start();
 
 #ifdef DUMP_EVENT_TIMELINE
     // Timeline Scope
@@ -993,7 +926,7 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::stubEvent &pEvent)
     lCurrentRange.endSubtask = pmExecutionStub::ExecuteWrapper(lCurrentRange, pEvent, lIsMultiAssignRange, lReassigned, lForceAckFlag, lPrematureTermination, lExecStatus);
 #endif
 
-    lCommand->MarkExecutionEnd(lExecStatus, std::tr1::static_pointer_cast<pmCommand>(lCommand));
+    lTimer.Stop();
 
     if(lPrematureTermination)
     {
@@ -1019,7 +952,7 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::stubEvent &pEvent)
     #endif
 
         ulong lCompletedCount = lCurrentRange.endSubtask - lCurrentRange.startSubtask + 1;
-        lRange.task->GetTaskExecStats().RecordStubExecutionStats(this, lCompletedCount, lCommand->GetExecutionTimeInSecs());
+        lRange.task->GetTaskExecStats().RecordStubExecutionStats(this, lCompletedCount, lTimer.GetElapsedTimeInSecs());
     
         if(lRange.originalAllottee == NULL)
             CommonPostNegotiationOnCPU(lRange.task, lCurrentRange.endSubtask, false, NULL);
@@ -1028,7 +961,7 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::stubEvent &pEvent)
             lRange.endSubtask = lCurrentRange.endSubtask;
     
         if(lCurrentRange.endSubtask == lRange.endSubtask)
-            HandleRangeExecutionCompletion(lRange, lCommand->GetStatus());
+            HandleRangeExecutionCompletion(lRange, lExecStatus);
     }
 }
 
@@ -1042,9 +975,9 @@ void pmExecutionStub::ClearSecondaryAllotteeMap(pmSubtaskRange& pRange)
     std::pair<pmTask*, ulong> lPair(pRange.task, pRange.endSubtask);
     if(mSecondaryAllotteeMap.find(lPair) != mSecondaryAllotteeMap.end())
     {
-        std::vector<pmProcessingElement*>& lSecondaryAllottees = mSecondaryAllotteeMap[lPair];
+        std::vector<const pmProcessingElement*>& lSecondaryAllottees = mSecondaryAllotteeMap[lPair];
 
-        std::vector<pmProcessingElement*>::iterator lIter = lSecondaryAllottees.begin(), lEnd = lSecondaryAllottees.end();
+        std::vector<const pmProcessingElement*>::iterator lIter = lSecondaryAllottees.begin(), lEnd = lSecondaryAllottees.end();
         for(; lIter != lEnd; ++lIter)
             pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(*lIter, pRange);
 
@@ -1054,46 +987,6 @@ void pmExecutionStub::ClearSecondaryAllotteeMap(pmSubtaskRange& pRange)
 
         mSecondaryAllotteeMap.erase(lPair);
     }
-}
-    
-void pmExecutionStub::SendAcknowledgement(pmSubtaskRange& pRange, pmStatus pExecStatus, std::map<size_t, size_t>& pOwnershipMap)
-{
-#ifdef SUPPORT_SPLIT_SUBTASKS
-    // PUSH expects one consolidated acknowledgement for the entire assigned range
-    if(pRange.task->GetSchedulingModel() == scheduler::PUSH && !pRange.originalAllottee && pRange.task->GetSubtaskSplitter().IsSplitting(GetType()))
-    {
-        FINALIZE_RESOURCE_PTR(dPushAckLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mPushAckLock, Lock(), Unlock());
-
-        std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::pair<ulong, std::map<size_t, size_t> > > >::iterator lIter = mPushAckHolder.find(pRange.task);
-
-        if(lIter == mPushAckHolder.end())
-            return; // Probably negotiated
-
-        ulong lSubtasks = lIter->second.first.second - lIter->second.first.first + 1;
-        lIter->second.second.first += (pRange.endSubtask - pRange.startSubtask + 1);
-        
-        if(lIter->second.second.first > lSubtasks)
-            PMTHROW(pmFatalErrorException());
-
-        lIter->second.second.second.insert(pOwnershipMap.begin(), pOwnershipMap.end());
-        
-        if(lIter->second.second.first != lSubtasks)
-            return;
-
-        pmSubtaskRange lRange;
-        lRange.task = pRange.task;
-        lRange.originalAllottee = pRange.originalAllottee;
-        lRange.startSubtask = lIter->second.first.first;
-        lRange.endSubtask = lIter->second.first.second;
-
-        pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), lRange, pExecStatus, lIter->second.second.second);
-
-        mPushAckHolder.erase(lIter);
-    }
-    else
-#endif
-        
-    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, pOwnershipMap);
 }
 
 void pmExecutionStub::HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus)
@@ -1115,29 +1008,37 @@ void pmExecutionStub::HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmS
 
 void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
 {
-    std::map<size_t, size_t> lOwnershipMap;
-    pmMemSection* lMemSection = pRange.task->GetMemSectionRW();    
+    std::vector<communicator::ownershipDataStruct> lOwnershipVector;
+    std::vector<uint> lMemSectionIndexVector;
 
-	if(lMemSection && !(pRange.task->GetCallbackUnit()->GetDataReductionCB() || pRange.task->GetCallbackUnit()->GetDataRedistributionCB()))
+    if(!pRange.task->GetCallbackUnit()->GetDataReductionCB() && !pRange.task->GetCallbackUnit()->GetDataRedistributionCB())
     {
-        subscription::subscriptionRecordType::const_iterator lIter, lBeginIter, lEndIter;
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
-    
-        for(ulong subtaskId = pRange.startSubtask; subtaskId <= pRange.endSubtask; ++subtaskId)
-        {
-            if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, subtaskId, NULL, false, lBeginIter, lEndIter))
+        const std::vector<pmMemSection*>& lMemSectionVector = pRange.task->GetMemSections();
+        
+        filtered_for_each_with_index(lMemSectionVector.begin(), lMemSectionVector.end(), [] (const pmMemSection* pMemSection) {return pMemSection->IsOutput();},
+            [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex, size_t pOutputMemSectionIndex)
             {
-                for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
-                    lOwnershipMap[lIter->first] = lIter->second.first;
-            }
-        }
+                subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+                lMemSectionIndexVector.push_back((uint)lOwnershipVector.size());
+
+                for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
+                {
+                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, lSubtaskId, NULL, (uint)pMemSectionIndex, lBeginIter, lEndIter);
+                    
+                    std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
+                    {
+                        lOwnershipVector.push_back(communicator::ownershipDataStruct(pPair.first, pPair.second.first));
+                    });
+                }
+            });
     }
 
-    SendAcknowledgement(pRange, pExecStatus, lOwnershipMap);
+    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lMemSectionIndexVector));
 }
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
-bool pmExecutionStub::UpdateSecondaryAllotteeMap(std::pair<pmTask*, ulong>& pPair, pmProcessingElement* pRequestingDevice)
+bool pmExecutionStub::UpdateSecondaryAllotteeMap(std::pair<pmTask*, ulong>& pPair, const pmProcessingElement* pRequestingDevice)
 {
     FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
 
@@ -1145,17 +1046,17 @@ bool pmExecutionStub::UpdateSecondaryAllotteeMap(std::pair<pmTask*, ulong>& pPai
 }
 
 /* This method must be called with mCurrentSubtaskRangeLock acquired */
-bool pmExecutionStub::UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulong>& pPair, pmProcessingElement* pRequestingDevice)
+bool pmExecutionStub::UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulong>& pPair, const pmProcessingElement* pRequestingDevice)
 {
-#ifdef DEBUG
+#ifdef _DEBUG
     if(pPair.first->GetSchedulingModel() != scheduler::PULL)
         PMTHROW(pmFatalErrorException());
 #endif
     
-    std::map<std::pair<pmTask*, ulong>, std::vector<pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.find(pPair);
+    std::map<std::pair<pmTask*, ulong>, std::vector<const pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.find(pPair);
     if(lIter != mSecondaryAllotteeMap.end())
     {
-        std::vector<pmProcessingElement*>::iterator lInnerIter = lIter->second.begin(), lInnerEndIter = lIter->second.end();
+        std::vector<const pmProcessingElement*>::iterator lInnerIter = lIter->second.begin(), lInnerEndIter = lIter->second.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
         {
             if((*lInnerIter) == pRequestingDevice)
@@ -1172,11 +1073,7 @@ bool pmExecutionStub::UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulon
  It may be different from the stub to which the original unsplitted subtask was assigned. */
 void pmExecutionStub::HandleSplitSubtaskExecutionCompletion(pmTask* pTask, const splitter::splitRecord& pSplitRecord, pmStatus pExecStatus)
 {
-    pmSubtaskRange lRange;
-    lRange.task = pTask;
-    lRange.originalAllottee = NULL;
-    lRange.startSubtask = pSplitRecord.subtaskId;
-    lRange.endSubtask = pSplitRecord.subtaskId;
+    pmSubtaskRange lRange(pTask, NULL, pSplitRecord.subtaskId, pSplitRecord.subtaskId);
     
     if(pTask->IsMultiAssignEnabled())
         pSplitRecord.sourceStub->ClearSecondaryAllotteeMap(lRange);
@@ -1186,31 +1083,89 @@ void pmExecutionStub::HandleSplitSubtaskExecutionCompletion(pmTask* pTask, const
     
 void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter::splitRecord& pSplitRecord, pmStatus pExecStatus)
 {
-    std::map<size_t, size_t> lOwnershipMap;
-    pmMemSection* lMemSection = pRange.task->GetMemSectionRW();    
-
-	if(lMemSection && !(pRange.task->GetCallbackUnit()->GetDataReductionCB() || pRange.task->GetCallbackUnit()->GetDataRedistributionCB()))
+    // PUSH expects one consolidated acknowledgement for the entire assigned range
+    if(pRange.task->GetSchedulingModel() == scheduler::PUSH && !pRange.originalAllottee && pRange.task->GetSubtaskSplitter().IsSplitting(GetType()))
     {
+        FINALIZE_RESOURCE_PTR(dPushAckLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mPushAckLock, Lock(), Unlock());
+
+        std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::map<ulong, std::vector<pmExecutionStub*> > > >::iterator lIter = mPushAckHolder.find(pRange.task);
+
+        if(lIter == mPushAckHolder.end())
+            return; // Probably negotiated
+
+        DEBUG_EXCEPTION_ASSERT(lIter->second.second.find(pSplitRecord.subtaskId) == lIter->second.second.end());
+        
+        lIter->second.second[pSplitRecord.subtaskId].reserve(pSplitRecord.splitCount);
         for(uint i = 0; i < pSplitRecord.splitCount; ++i)
-        {
-            subscription::subscriptionRecordType::const_iterator lIter, lBeginIter, lEndIter;
-            pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
-            
-            pmSplitInfo lSplitInfo(i, pSplitRecord.splitCount);
-            if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(pSplitRecord.assignedStubs[i].first, pRange.startSubtask, &lSplitInfo, false, lBeginIter, lEndIter))
+            lIter->second.second[pSplitRecord.subtaskId][i] = pSplitRecord.assignedStubs[i].first;
+
+        ulong lSubtasks = lIter->second.first.second - lIter->second.first.first + 1;
+        
+        DEBUG_EXCEPTION_ASSERT(lIter->second.second.size() <= lSubtasks);
+
+        if(lIter->second.second.size() != lSubtasks)
+            return;
+    
+        pmSubtaskRange lRange(pRange.task, NULL, lIter->second.first.first, lIter->second.first.second);
+        pSplitRecord.sourceStub->SendSplitAcknowledgement(lRange, lIter->second.second, pExecStatus);
+
+        mPushAckHolder.erase(lIter);
+    }
+    else
+    {
+        std::map<ulong, std::vector<pmExecutionStub*> > lMap;
+
+        std::map<ulong, std::vector<pmExecutionStub*> >::iterator lMapIter = lMap.insert(std::make_pair(pRange.startSubtask, std::vector<pmExecutionStub*>())).first;
+        lMapIter->second.reserve(pSplitRecord.splitCount);
+    
+        for(uint i = 0; i < pSplitRecord.splitCount; ++i)
+            lMapIter->second.push_back(pSplitRecord.assignedStubs[i].first);
+
+        pSplitRecord.sourceStub->SendSplitAcknowledgement(pRange, lMap, pExecStatus);
+    }
+}
+    
+void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, const std::map<ulong, std::vector<pmExecutionStub*> >& pMap, pmStatus pExecStatus)
+{
+    std::vector<communicator::ownershipDataStruct> lOwnershipVector;
+    std::vector<uint> lMemSectionIndexVector;
+
+    if(!pRange.task->GetCallbackUnit()->GetDataReductionCB() && !pRange.task->GetCallbackUnit()->GetDataRedistributionCB())
+    {
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
+        std::vector<pmMemSection*>& lMemSectionVector = pRange.task->GetMemSections();
+
+        filtered_for_each_with_index(lMemSectionVector.begin(), lMemSectionVector.end(), [] (const pmMemSection* pMemSection) {return pMemSection->IsOutput();},
+            [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex, size_t pOutputMemSectionIndex)
             {
-                for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
-                    lOwnershipMap[lIter->first] = lIter->second.first;
-            }
-        }
+                lMemSectionIndexVector.push_back((uint)lOwnershipVector.size());
+
+                for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId < pRange.endSubtask; ++lSubtaskId)
+                {
+                    const std::vector<pmExecutionStub*>& lVector = pMap.find(lSubtaskId)->second;
+                    uint lSplitCount = (uint)lVector.size();
+
+                    for_each_with_index(lVector.begin(), lVector.end(), [&] (const pmExecutionStub* pStub, size_t pSplitIndex)
+                    {
+                        pmSplitInfo lSplitInfo((uint)pSplitIndex, lSplitCount);
+                        lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, lSubtaskId, &lSplitInfo, (uint)pMemSectionIndex, lBeginIter, lEndIter);
+
+                        std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
+                        {
+                            lOwnershipVector.push_back(communicator::ownershipDataStruct(pPair.first, pPair.second.first));
+                        });
+                    });
+                }
+            });
     }
 
-    pSplitRecord.sourceStub->SendAcknowledgement(pRange, pExecStatus, lOwnershipMap);
+    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lMemSectionIndexVector));
 }
 
-bool pmExecutionStub::CheckSplittedExecution(stubEvent& pEvent)
+bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)
 {
-    pmSubtaskRange& lRange = pEvent.execDetails.range;
+    pmSubtaskRange& lRange = pEvent.range;
 
     pmSubtaskSplitter& lSubtaskSplitter = lRange.task->GetSubtaskSplitter();
     if(!lSubtaskSplitter.IsSplitting(GetType()))
@@ -1220,9 +1175,9 @@ bool pmExecutionStub::CheckSplittedExecution(stubEvent& pEvent)
     if(lIsMultiAssignRange)
         PMTHROW(pmFatalErrorException());
 
-    ulong lSubtaskId = ((pEvent.execDetails.rangeExecutedOnce) ? (pEvent.execDetails.lastExecutedSubtaskId + 1) : lRange.startSubtask);
+    ulong lSubtaskId = ((pEvent.rangeExecutedOnce) ? (pEvent.lastExecutedSubtaskId + 1) : lRange.startSubtask);
 
-    std::auto_ptr<pmSplitSubtask> lSplitSubtaskAutoPtr = lSubtaskSplitter.GetPendingSplit(&lSubtaskId, this);
+    std::unique_ptr<pmSplitSubtask> lSplitSubtaskAutoPtr = lSubtaskSplitter.GetPendingSplit(&lSubtaskId, this);
     if(!lSplitSubtaskAutoPtr.get())
         return false;
 
@@ -1231,35 +1186,26 @@ bool pmExecutionStub::CheckSplittedExecution(stubEvent& pEvent)
         // Remove the split subtask from the range in the current event, so that it does not send it's acknowledgement later
         if(lSubtaskId != lRange.startSubtask)
         {
-            pmSubtaskRange lFinishedRange;
-            lFinishedRange.task = lRange.task;
-            lFinishedRange.originalAllottee = lRange.originalAllottee;
-            lFinishedRange.startSubtask = lRange.startSubtask;
-            lFinishedRange.endSubtask = lSubtaskId - 1;
-
+            pmSubtaskRange lFinishedRange(lRange.task, lRange.originalAllottee, lRange.startSubtask, lSubtaskId - 1);
             HandleRangeExecutionCompletion(lFinishedRange, pmSuccess);
         }
         
         if(lSubtaskId < lRange.endSubtask)
         {
-            pEvent.execDetails.rangeExecutedOnce = false;
-            pEvent.execDetails.lastExecutedSubtaskId = 0;
-            pEvent.execDetails.range.startSubtask = lSubtaskId + 1;
-
-            SwitchThread(pEvent, lRange.task->GetPriority());
+            SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pmSubtaskRange(pEvent.range.task, pEvent.range.originalAllottee, lSubtaskId + 1, pEvent.range.endSubtask), false, 0)), lRange.task->GetPriority());
         }
     }
     else    // Push back current event in the queue as some other split subtask has been assigned
     {
-        SwitchThread(pEvent, lRange.task->GetPriority());
+        SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pEvent.range, pEvent.rangeExecutedOnce, pEvent.lastExecutedSubtaskId)), lRange.task->GetPriority());
     }
     
-    ExecutePendingSplit(lSplitSubtaskAutoPtr, true);
+    ExecutePendingSplit(std::move(lSplitSubtaskAutoPtr), true);
     
     return true;
 }
     
-void pmExecutionStub::ExecutePendingSplit(std::auto_ptr<pmSplitSubtask> pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked)
+void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked)
 {
     if(!pSplitSubtaskAutoPtr.get())
         return;
@@ -1268,13 +1214,13 @@ void pmExecutionStub::ExecutePendingSplit(std::auto_ptr<pmSplitSubtask> pSplitSu
     pmSplitSubtaskExecutionTimelineAutoPtr lExecTimelineAutoPtr(pSplitSubtaskAutoPtr->task, mEventTimelineAutoPtr.get(), pSplitSubtaskAutoPtr->subtaskId, pSplitSubtaskAutoPtr->splitId, pSplitSubtaskAutoPtr->splitCount);
 #endif
 
-    pmSubtaskRangeCommandPtr lCommand = pmSubtaskRangeCommand::CreateSharedPtr(pSplitSubtaskAutoPtr->task->GetPriority(), pmSubtaskRangeCommand::BASIC_SUBTASK_RANGE);
-    lCommand->MarkExecutionStart();
+    TIMER_IMPLEMENTATION_CLASS lTimer;
+    lTimer.Start();
 
     bool lMultiAssign = false, lPrematureTermination = false, lReassigned = false, lForceAckFlag = false;
     ExecuteSplitSubtask(pSplitSubtaskAutoPtr, pSecondaryOperationsBlocked, lMultiAssign, lPrematureTermination, lReassigned, lForceAckFlag);
 
-    lCommand->MarkExecutionEnd(pmSuccess, std::tr1::static_pointer_cast<pmCommand>(lCommand));
+    lTimer.Stop();
 
     if(lReassigned)
         return;
@@ -1291,13 +1237,13 @@ void pmExecutionStub::ExecutePendingSplit(std::auto_ptr<pmSplitSubtask> pSplitSu
         lExecTimelineAutoPtr.SetGracefulCompletion();
     #endif
 
-        pSplitSubtaskAutoPtr->task->GetTaskExecStats().RecordStubExecutionStats(this, 1, lCommand->GetExecutionTimeInSecs());   // Exec time of the split group
+        pSplitSubtaskAutoPtr->task->GetTaskExecStats().RecordStubExecutionStats(this, 1, lTimer.GetElapsedTimeInSecs());   // Exec time of the split group
     }
 
     pSplitSubtaskAutoPtr->task->GetSubtaskSplitter().FinishedSplitExecution(pSplitSubtaskAutoPtr->subtaskId, pSplitSubtaskAutoPtr->splitId, this, lPrematureTermination);
 }
     
-void pmExecutionStub::ExecuteSplitSubtask(const std::auto_ptr<pmSplitSubtask>& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked, bool pMultiAssign, bool& pPrematureTermination, bool& pReassigned, bool& pForceAckFlag)
+void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked, bool pMultiAssign, bool& pPrematureTermination, bool& pReassigned, bool& pForceAckFlag)
 {
     currentSubtaskRangeTerminus lTerminus(pReassigned, pForceAckFlag, pPrematureTermination, this);
 
@@ -1313,8 +1259,13 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::auto_ptr<pmSplitSubtask>& p
     {
         if(pSecondaryOperationsBlocked)
             UnblockSecondaryCommands(); // Allow external operations (steal & range negotiation) on priority queue
+        
+        pmSubtaskRange lCurrentRange(pSplitSubtaskAutoPtr->task, NULL, lSubtaskId, lSubtaskId);
+        ulong lEndSubtask = FindCollectivelyExecutableSubtaskRangeEnd(lCurrentRange, &lSplitInfo, pMultiAssign);
 
-        PrepareForSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId);
+        EXCEPTION_ASSERT(lEndSubtask == lCurrentRange.startSubtask && lEndSubtask == lCurrentRange.endSubtask);
+
+        PrepareForSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, &lSplitInfo);
 
         TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &lSubtaskId);
 
@@ -1358,29 +1309,23 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::auto_ptr<pmSplitSubtask>& p
 }
 #endif
     
-void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemSectionIndex)
 {
-#ifdef ENABLE_TASK_PROFILING
-    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SHADOW_MEM_COMMIT);
-#endif
-
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
-
-    pmSubscriptionInfo lUnifiedSubscriptionInfo;
-    if(!lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(this, pSubtaskId, pSplitInfo, lUnifiedSubscriptionInfo))
-        PMTHROW(pmFatalErrorException());
     
-    subscription::subscriptionRecordType::const_iterator lIter, lBeginIter, lEndIter;
+    const pmSubscriptionInfo& lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+    
+    subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBeginIter, lEndIter);
 
-    if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, pSplitInfo, false, lBeginIter, lEndIter))
-        lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, pSplitInfo, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
+    lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
 }
 
 void pmExecutionStub::DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
-    pmSplitData lSplitData = {false, 0, 0};
+    pmSplitData lSplitData(false, 0, 0);
     pmSplitData::ConvertSplitInfoToSplitData(lSplitData, pSplitInfo);
-    
+
     mDeferredShadowMemCommits[pTask].push_back(std::make_pair(pSubtaskId, lSplitData));
 }
 
@@ -1409,7 +1354,7 @@ void pmExecutionStub::CancelCurrentlyExecutingSubtaskRange(bool pTaskListeningOn
         else
         {
             if(mCurrentSubtaskRangeStats->accumulatorCommandPtr)
-               (*mCurrentSubtaskRangeStats->accumulatorCommandPtr)->ForceComplete(*mCurrentSubtaskRangeStats->accumulatorCommandPtr);
+                (static_cast<pmAccumulatorCommand*>((*mCurrentSubtaskRangeStats->accumulatorCommandPtr).get()))->ForceComplete(*mCurrentSubtaskRangeStats->accumulatorCommandPtr);
         }
     }
 }
@@ -1514,15 +1459,15 @@ bool pmExecutionStub::IsHighPriorityEventWaiting(ushort pPriority)
 }
 
 #ifdef DUMP_EVENT_TIMELINE
-ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execStub::stubEvent& pEvent, bool pIsMultiAssign, pmSubtaskRangeExecutionTimelineAutoPtr& pRangeExecTimelineAutoPtr, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmStatus& pStatus)
+ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const subtaskExecEvent& pEvent, bool pIsMultiAssign, pmSubtaskRangeExecutionTimelineAutoPtr& pRangeExecTimelineAutoPtr, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmStatus& pStatus)
 #else
-ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execStub::stubEvent& pEvent, bool pIsMultiAssign, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmStatus& pStatus)
+ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const subtaskExecEvent& pEvent, bool pIsMultiAssign, bool& pReassigned, bool& pForceAckFlag, bool& pPrematureTermination, pmStatus& pStatus)
 #endif
 {
     ulong lStartSubtask = pCurrentRange.startSubtask;
     ulong lEndSubtask = std::numeric_limits<ulong>::infinity();
 
-    pmSubtaskRange& lParentRange = pEvent.execDetails.range;
+    const pmSubtaskRange& lParentRange = pEvent.range;
 
     currentSubtaskRangeTerminus lTerminus(pReassigned, pForceAckFlag, pPrematureTermination, this);
 
@@ -1532,10 +1477,9 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execS
     
     try
     {
-        lEndSubtask = FindCollectivelyExecutableSubtaskRangeEnd(pCurrentRange, pIsMultiAssign);
+        lEndSubtask = FindCollectivelyExecutableSubtaskRangeEnd(pCurrentRange, NULL, pIsMultiAssign);
 
-        if(lEndSubtask < pCurrentRange.startSubtask || lEndSubtask > pCurrentRange.endSubtask)
-            PMTHROW(pmFatalErrorException());
+        EXCEPTION_ASSERT(lEndSubtask >= pCurrentRange.startSubtask && lEndSubtask <= pCurrentRange.endSubtask);
         
         if(lEndSubtask != pCurrentRange.endSubtask)
         {
@@ -1547,10 +1491,8 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execS
             mCurrentSubtaskRangeStats->ResetEndSubtaskId(lEndSubtask);
         }
 
-        pEvent.execDetails.rangeExecutedOnce = true;
-        pEvent.execDetails.lastExecutedSubtaskId = lEndSubtask;
         if(lEndSubtask != lParentRange.endSubtask)
-            SwitchThread(pEvent, lParentRange.task->GetPriority());
+            SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pEvent.range, true, lEndSubtask)), lParentRange.task->GetPriority());
 
         ulong* lPrefetchSubtaskIdPtr = NULL;
 
@@ -1565,7 +1507,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execS
 
         UnblockSecondaryCommands(); // Allow external operations (steal & range negotiation) on priority queue
 
-        PrepareForSubtaskRangeExecution(pCurrentRange.task, lStartSubtask, lEndSubtask);
+        PrepareForSubtaskRangeExecution(pCurrentRange.task, lStartSubtask, lEndSubtask, NULL);
 
         for(ulong lSubtaskId = lStartSubtask; lSubtaskId <= lEndSubtask; ++lSubtaskId)
         {
@@ -1580,9 +1522,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execS
             pRangeExecTimelineAutoPtr.InitializeNextSubtask();
         #endif
             
-            pStatus = Execute(pCurrentRange.task, lSubtaskId, pIsMultiAssign, lPrefetchSubtaskIdPtr, NULL);
-            if(pStatus != pmSuccess)
-                break;
+            Execute(pCurrentRange.task, lSubtaskId, pIsMultiAssign, lPrefetchSubtaskIdPtr, NULL);
             
             TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
         }
@@ -1614,7 +1554,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, execS
     return lEndSubtask;
 }
     
-pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, bool pPrefetch, pmSplitInfo* pSplitInfo)
+void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, bool pPrefetch, pmSplitInfo* pSplitInfo)
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
@@ -1634,91 +1574,116 @@ pmStatus pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId,
     
     if(!pPrefetch)
     {
-        if(pTask->DoSubtasksNeedShadowMemory() || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
-            lSubscriptionManager.CreateSubtaskShadowMem(this, pSubtaskId, pSplitInfo);
-    }
+        const std::vector<pmMemSection*>& lMemSectionVector = pTask->GetMemSections();
 
-	return pmSuccess;
+        std::vector<pmMemSection*>::const_iterator lIter = lMemSectionVector.begin(), lEndIter = lMemSectionVector.end();
+        for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
+        {
+            const pmMemSection* lMemSection = (*lIter);
+            
+            if(lMemSection->IsOutput())
+            {
+                if(pTask->DoSubtasksNeedShadowMemory(lMemSection) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
+                    lSubscriptionManager.CreateSubtaskShadowMem(this, pSubtaskId, pSplitInfo, lMemIndex);
+            }
+        }
+    }
 }
 
-pmStatus pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, pmSplitInfo* pSplitInfo)
+void pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, pmSplitInfo* pSplitInfo)
 {
-	pmCallbackUnit* lCallbackUnit = pTask->GetCallbackUnit();
-	pmDataReductionCB* lReduceCallback = lCallbackUnit->GetDataReductionCB();
+	const pmCallbackUnit* lCallbackUnit = pTask->GetCallbackUnit();
+	const pmDataReductionCB* lReduceCallback = lCallbackUnit->GetDataReductionCB();
     
 	if(lReduceCallback)
 		pTask->GetReducer()->AddSubtask(this, pSubtaskId, pSplitInfo);
 	else
-		INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmDataRedistributionCB, pTask->GetCallbackUnit()->GetDataRedistributionCB(), Invoke, this, pTask, pSubtaskId, pSplitInfo, pIsMultiAssign);
+		INVOKE_SAFE_THROW_ON_FAILURE(pmDataRedistributionCB, pTask->GetCallbackUnit()->GetDataRedistributionCB(), Invoke, this, pTask, pSubtaskId, pSplitInfo, pIsMultiAssign);
 
-    if(!lReduceCallback && (pTask->DoSubtasksNeedShadowMemory() || (pTask->IsMultiAssignEnabled() && pIsMultiAssign)))
+    bool lDeferCommit = false;
+
+    if(!lReduceCallback)
     {
-        if(pTask->GetMemSectionRW()->IsReadWrite() && !pTask->HasDisjointReadWritesAcrossSubtasks())
-            DeferShadowMemCommit(pTask, pSubtaskId, pSplitInfo);
-        else
-            CommitSubtaskShadowMem(pTask, pSubtaskId, pSplitInfo);
+        const std::vector<pmMemSection*>& lMemSectionVector = pTask->GetMemSections();
+
+        std::vector<pmMemSection*>::const_iterator lIter = lMemSectionVector.begin(), lEndIter = lMemSectionVector.end();
+        for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
+        {
+            const pmMemSection* lMemSection = (*lIter);
+            
+            if(lMemSection->IsOutput())
+            {
+                if(pTask->DoSubtasksNeedShadowMemory(lMemSection) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
+                {
+                    if(lMemSection->IsReadWrite() && !pTask->HasDisjointReadWritesAcrossSubtasks())
+                        lDeferCommit = true;
+                    else
+                        CommitSubtaskShadowMem(pTask, pSubtaskId, pSplitInfo, lMemIndex);
+                }
+            }
+        }
     }
-    
-    return pmSuccess;
+
+    if(lDeferCommit)
+        DeferShadowMemCommit(pTask, pSubtaskId, pSplitInfo);
 }
 
-pmStatus pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2)
+void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2)
 {
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &pSubtaskId1);
 	pmStatus lStatus = pTask->GetCallbackUnit()->GetDataReductionCB()->Invoke(pTask, this, pSubtaskId1, pSplitInfo1, true, pStub2, pSubtaskId2, pSplitInfo2, true);
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
 
-	/* Handle Transactions */
-	switch(lStatus)
-	{
-		case pmSuccess:
-		{
-			pTask->GetSubscriptionManager().DestroySubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2);
-			pTask->GetReducer()->AddSubtask(this, pSubtaskId1, pSplitInfo1);
+    const std::vector<pmMemSection*>& lMemSectionVector = pTask->GetMemSections();
 
-			break;
-		}
-
-		default:
-		{
-			pTask->GetSubscriptionManager().DestroySubtaskShadowMem(this, pSubtaskId1, pSplitInfo1);
-			pTask->GetSubscriptionManager().DestroySubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2);
-		}
+    std::vector<pmMemSection*>::const_iterator lIter = lMemSectionVector.begin(), lEndIter = lMemSectionVector.end();
+    for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
+    {
+        const pmMemSection* lMemSection = (*lIter);
+        
+        if(lMemSection->IsOutput())
+        {
+            pTask->GetSubscriptionManager().DestroySubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2, lMemIndex);
+            
+            if(lStatus != pmSuccess)
+                pTask->GetSubscriptionManager().DestroySubtaskShadowMem(this, pSubtaskId1, pSplitInfo1, lMemIndex);
+        }
 	}
-
-	return lStatus;
+    
+    if(lStatus == pmSuccess)
+        pTask->GetReducer()->AddSubtask(this, pSubtaskId1, pSplitInfo1);
 }
 
-void pmExecutionStub::WaitForNetworkFetch(std::vector<pmCommunicatorCommandPtr>& pNetworkCommands)
+void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommunicatorCommandPtr>& pNetworkCommands)
 {
     if(pNetworkCommands.empty())
         return;
     
+    pmCommandPtr lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
+
+#ifdef _DEBUG
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
+        
+        DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->accumulatorCommandPtr);
+    }
+#endif
+    
 #ifdef ENABLE_TASK_PROFILING
     pmTask* lTask = NULL;
-#endif
-
-    pmAccumulatorCommandPtr lAccumulatorCommand;
 
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
-        if(!mCurrentSubtaskRangeStats || mCurrentSubtaskRangeStats->accumulatorCommandPtr != NULL)
-            PMTHROW(pmFatalErrorException());
 
-    #ifdef ENABLE_TASK_PROFILING
         lTask = mCurrentSubtaskRangeStats->task;
-    #endif
-
-        lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
-        mCurrentSubtaskRangeStats->accumulatorCommandPtr = &lAccumulatorCommand;
     }
-    
-#ifdef ENABLE_TASK_PROFILING
+
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::STUB_WAIT_ON_NETWORK);
 #endif
 
-    guarded_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, pmAccumulatorCommandPtr> lGuardedPtr(&mCurrentSubtaskRangeLock, &(mCurrentSubtaskRangeStats->accumulatorCommandPtr), &lAccumulatorCommand);
+    guarded_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, pmCommandPtr> lGuardedPtr(&mCurrentSubtaskRangeLock, &(mCurrentSubtaskRangeStats->accumulatorCommandPtr), &lAccumulatorCommand);
 
     pmStatus lStatus = lAccumulatorCommand->WaitForFinish();
     
@@ -1746,6 +1711,7 @@ pmExecutionStub::currentSubtaskRangeStats::currentSubtaskRangeStats(pmTask* pTas
     , accumulatorCommandPtr(NULL)
 #ifdef SUPPORT_SPLIT_SUBTASKS
     , splitSubtaskSourceStub(pSplitSubtaskSourceStub)
+    , splitData(false, 0, 0)
 #endif
 {
 #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -1769,9 +1735,9 @@ pmStubCPU::~pmStubCPU()
 {
 }
 
-pmStatus pmStubCPU::BindToProcessingElement()
+void pmStubCPU::BindToProcessingElement()
 {
-	 return SetProcessorAffinity((int)mCoreId);
+	 SetProcessorAffinity((int)mCoreId);
 }
 
 size_t pmStubCPU::GetCoreId()
@@ -1796,31 +1762,26 @@ pmDeviceType pmStubCPU::GetType()
 	return CPU;
 }
     
-ulong pmStubCPU::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, bool pMultiAssign)
+ulong pmStubCPU::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign)
 {
     return pSubtaskRange.startSubtask;
 }
 
-pmStatus pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pSplitInfo /* = NULL */)
+void pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pSplitInfo /* = NULL */)
 {
-	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign, false, pSplitInfo));
+	CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign, false, pSplitInfo);
 
     if(pPreftechSubtaskIdPtr)
-        PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true, NULL));
+        CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true, NULL);
     
-    pmSubtaskInfo lSubtaskInfo;
-    bool lOutputMemWriteOnly = false;
-    pTask->GetSubtaskInfo(this, pSubtaskId, pSplitInfo, pIsMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
+    const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo);
     
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pSplitInfo, pIsMultiAssign, pTask->GetTaskInfo(), lSubtaskInfo, lOutputMemWriteOnly);
-	
-	return pmSuccess;
+	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pSplitInfo, pIsMultiAssign, pTask->GetTaskInfo(), lSubtaskInfo);
 }
 
-void pmStubCPU::PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId)
+void pmStubCPU::PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo)
 {
-    if(pStartSubtaskId != pEndSubtaskId)
-        PMTHROW(pmFatalErrorException());
+    DEBUG_EXCEPTION_ASSERT(pStartSubtaskId == pEndSubtaskId);
 }
     
 void pmStubCPU::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAssign, ulong pStartSubtaskId, ulong pEndSubtaskId, bool pSuccess, pmSplitInfo* pSplitInfo)
@@ -1850,13 +1811,11 @@ pmStubCUDA::pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine)
 	: pmStubGPU(pDeviceIndexOnMachine)
     , mDeviceIndex(pDeviceIndex)
     , mDeviceInfoCudaPtr(NULL)
-    , mTotalAllocationSize(0)
-    , mCudaAllocation(NULL)
-    , mMemElements(5)    // Input Mem, Output Mem, Scratch Mem, Status
-    , mPendingStreams(0)
+    , mCudaBuffer(NULL)
+    , mCudaCache(pmCudaCacheEvictor(this))
+    , mStartSubtaskId(std::numeric_limits<ulong>::max())
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     , mPinnedBuffer(NULL)
-    , mPinnedAllocation(NULL)
 #else
     , mStatusCopySrc(pmStatusUnavailable)
     , mStatusCopyDest(pmStatusUnavailable)
@@ -1864,43 +1823,37 @@ pmStubCUDA::pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine)
 {
 }
 
-pmStubCUDA::~pmStubCUDA()
-{
-}
-
-pmStatus pmStubCUDA::FreeResources()
+void pmStubCUDA::FreeResources()
 {
     FreeGpuResources();
-    return pmSuccess;
 }
 
-pmStatus pmStubCUDA::FreeExecutionResources()
+void pmStubCUDA::FreeExecutionResources()
 {
-    if(mCudaAllocation)
-        PMTHROW(pmFatalErrorException());
-        
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    if(mPinnedAllocation)
-        PMTHROW(pmFatalErrorException());
-        
     if(mPinnedBuffer)
-        pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->DeallocatePinnedBuffer(mPinnedBuffer);
+        pmCudaInterface::DeallocatePinnedBuffer(mPinnedBuffer);
 #endif
 
     if(mDeviceInfoCudaPtr)
-        pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->DestroyDeviceInfoCudaPtr(mDeviceInfoCudaPtr);
-
-    pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FreeLastExecutionResources(mLastExecutionRecord);
-
-    if(!mTaskInfoCudaMap.empty())
-        PMTHROW(pmFatalErrorException());
+        DestroyDeviceInfoCudaPtr(mDeviceInfoCudaPtr);
     
-    return pmSuccess;
+    if(mCudaBuffer)
+        pmCudaInterface::DeallocateCudaMem(mCudaBuffer);
+
+    EXCEPTION_ASSERT(mTaskInfoCudaMap.empty());
+    
+    pmCudaInterface::UnbindFromDevice(mDeviceIndex);
 }
     
 size_t pmStubCUDA::GetDeviceIndex()
 {
     return mDeviceIndex;
+}
+
+pmMemChunk* pmStubCUDA::GetCudaBufferChunk()
+{
+    return mCudaBufferChunk.get();
 }
 
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
@@ -1910,33 +1863,33 @@ pmMemChunk* pmStubCUDA::GetPinnedBufferChunk()
 }
 #endif
     
-void pmStubCUDA::FreeTaskResources(pmMachine* pOriginatingHost, ulong pSequenceNumber)
+void pmStubCUDA::FreeTaskResources(const pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
-    std::pair<pmMachine*, ulong> lPair(pOriginatingHost, pSequenceNumber);
+    std::pair<const pmMachine*, ulong> lPair(pOriginatingHost, pSequenceNumber);
 
-    std::map<std::pair<pmMachine*, ulong>, pmTaskInfo>::iterator lIter = mTaskInfoCudaMap.find(lPair);
+    std::map<std::pair<const pmMachine*, ulong>, pmTaskInfo>::iterator lIter = mTaskInfoCudaMap.find(lPair);
     if(lIter != mTaskInfoCudaMap.end())
     {
         if(lIter->second.taskConfLength)
-            pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->DestroyTaskConf(lIter->second.taskConf);
+            DestroyTaskConf(lIter->second.taskConf);
     
         mTaskInfoCudaMap.erase(lPair);
     }
 }
 
-pmStatus pmStubCUDA::BindToProcessingElement()
+void pmStubCUDA::BindToProcessingElement()
 {
-	return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->BindToDevice(mDeviceIndex);
+	pmCudaInterface::BindToDevice(mDeviceIndex);
 }
 
 std::string pmStubCUDA::GetDeviceName()
 {
-	return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetDeviceName(mDeviceIndex);
+	return pmCudaInterface::GetDeviceName(mDeviceIndex);
 }
 
 std::string pmStubCUDA::GetDeviceDescription()
 {
-	return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetDeviceDescription(mDeviceIndex);
+	return pmCudaInterface::GetDeviceDescription(mDeviceIndex);
 }
 
 pmDeviceType pmStubCUDA::GetType()
@@ -1944,10 +1897,194 @@ pmDeviceType pmStubCUDA::GetType()
 	return GPU_CUDA;
 }
     
-ulong pmStubCUDA::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, bool pMultiAssign)
+pmStubCUDA::pmCudaCacheType& pmStubCUDA::GetCudaCache()
 {
-    mAllocationOffsets.clear();
+    return mCudaCache;
+}
 
+void* pmStubCUDA::AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment)
+{
+    void* lPtr = mCudaBufferChunk->Allocate(pLength, pCudaAlignment);
+
+    while(!lPtr && mCudaCache.Purge())
+        lPtr = mCudaBufferChunk->Allocate(pLength, pCudaAlignment);
+    
+    return lPtr;
+}
+
+bool pmStubCUDA::AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct)
+{
+    pMemoryStruct.cudaPtr = AllocateMemoryOnDevice(pLength, pCudaAlignment);
+    
+#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+    if(pMemoryStruct.cudaPtr)
+    {
+        pMemoryStruct.pinnedPtr = mPinnedBufferChunk->Allocate(pLength, pCudaAlignment);
+        
+        if(!pMemoryStruct.pinnedPtr)
+        {
+            mCudaBufferChunk->Deallocate(pMemoryStruct.cudaPtr);
+            pMemoryStruct.cudaPtr = NULL;
+        }
+    }
+#endif
+    
+    return (pMemoryStruct.cudaPtr != NULL);
+}
+    
+bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, std::vector<std::shared_ptr<pmCudaCacheValue>>& pPreventCachePurgeVector, size_t pCudaAlignment)
+{
+    bool lLoadStatus = true;    // Can this subtask's memory requirements be loaded (or are already loaded) on the device?
+
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+    lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, pSplitInfo);
+    
+    std::vector<pmCudaSubtaskMemoryStruct> lSubtaskMemoryVector(pTask->GetMemSectionCount());
+    std::vector<std::pair<pmCudaCacheKey, std::shared_ptr<pmCudaCacheValue>>> lPendingCacheInsertions;
+
+    // Data is not fetched till this stage and shadow mem is also not created; so not using GetSubtaskInfo call here
+    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
+    {
+        bool lNeedsAllocation = false;
+        pmSubscriptionInfo lSubscriptionInfo;
+
+        if(pMemSection->IsInput())
+        {
+            lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+
+            if(lSubscriptionInfo.length)
+            {
+                std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(pmCudaCacheKey(pMemSection, lSubscriptionInfo.offset, lSubscriptionInfo.length));
+
+                if(lDeviceMemoryPtr.get())
+                {
+                    lSubtaskMemoryVector[pMemSectionIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
+                    pPreventCachePurgeVector.push_back(lDeviceMemoryPtr);   // increase ref count of cache value
+                }
+                else
+                {
+                    lNeedsAllocation = true;
+                }
+            }
+        }
+        else
+        {
+            lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            if(lSubscriptionInfo.length)
+                lNeedsAllocation = true;
+        }
+
+        if(lNeedsAllocation)
+        {
+            if(!AllocateMemoryOnDevice(lSubscriptionInfo.length, pCudaAlignment, lSubtaskMemoryVector[pMemSectionIndex]))
+            {
+                lLoadStatus = false;
+                return;     // Return from lambda expression
+            }
+
+            lSubtaskMemoryVector[pMemSectionIndex].requiresLoad = true;
+            lPendingCacheInsertions.emplace_back(std::make_pair(pmCudaCacheKey(pMemSection, lSubscriptionInfo.offset, lSubscriptionInfo.length), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pMemSectionIndex].cudaPtr))));
+        }
+    });
+
+    if(lLoadStatus)
+    {
+        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
+        size_t lScratchBufferSize = 0;
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
+
+        if(lCpuScratchBuffer && lScratchBufferSize)
+        {
+            pmCudaSubtaskMemoryStruct lStruct;
+            lLoadStatus = false;
+
+            if(AllocateMemoryOnDevice(lScratchBufferSize, pCudaAlignment, lStruct))
+            {
+                lStruct.requiresLoad = true;
+                lLoadStatus = true;
+
+                lSubtaskMemoryVector.push_back(lStruct);
+            }
+        }
+    }
+
+    if(lLoadStatus)
+    {
+        pmCudaSubtaskSecondaryBuffersStruct& lStruct = mSubtaskSecondaryBuffersMap.emplace(std::make_pair(pSubtaskId, pmCudaSubtaskSecondaryBuffersStruct())).first->second;
+
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+        lStruct.statusPinnedPtr = mPinnedBufferChunk->Allocate(sizeof(pmStatus), pCudaAlignment);
+        
+        if(!lStruct.statusPinnedPtr)
+        {
+            lLoadStatus = false;
+        }
+        else
+    #endif
+        {
+            size_t lReservedMem = lSubscriptionManager.GetReservedCudaGlobalMemSize(this, pSubtaskId, pSplitInfo);
+            size_t lTotalMem = lReservedMem + sizeof(pmStatus);
+
+            if(lTotalMem)
+            {
+                void* lPtr = NULL;
+                lLoadStatus = false;
+
+                if((lPtr = AllocateMemoryOnDevice(lTotalMem, pCudaAlignment)) != NULL)
+                {
+                    lLoadStatus = true;
+
+                    if(lReservedMem)
+                    {
+                        lStruct.reservedMemCudaPtr = lPtr;
+                        lStruct.statusCudaPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lStruct.reservedMemCudaPtr) + lReservedMem);
+                    }
+                    else
+                    {
+                        lStruct.statusCudaPtr = lPtr;
+                    }
+                }
+            #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                else
+                {
+                    mPinnedBufferChunk->Deallocate(lStruct.statusPinnedPtr);
+                }
+            #endif
+            }
+        }
+    }
+
+    if(lLoadStatus)
+    {
+        std::move(lSubtaskMemoryVector.begin(), lSubtaskMemoryVector.end(), std::back_inserter(mSubtaskPointersMap[pSubtaskId]));
+        
+        for_each(lPendingCacheInsertions, [&] (decltype(lPendingCacheInsertions)::value_type& pPair)
+        {
+            mCudaCache.Insert(pPair.first, pPair.second);
+            pPreventCachePurgeVector.push_back(pPair.second);   // increase ref count to prevent purging
+        });
+    }
+    else
+    {
+        for_each(lSubtaskMemoryVector, [&] (const pmCudaSubtaskMemoryStruct& pStruct)
+        {
+            if(pStruct.requiresLoad)
+            {
+                mCudaBufferChunk->Deallocate(pStruct.cudaPtr);
+            #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                mPinnedBufferChunk->Deallocate(pStruct.pinnedPtr);
+            #endif
+            }
+        });
+    }
+
+    return lLoadStatus;
+}
+    
+ulong pmStubCUDA::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign)
+{
+    DEBUG_EXCEPTION_ASSERT(!pSplitInfo || (pSubtaskRange.startSubtask == pSubtaskRange.endSubtask && !pMultiAssign));
+    
     pmSubtaskRange lSubtaskRange(pSubtaskRange);
 
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
@@ -1958,466 +2095,455 @@ ulong pmStubCUDA::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange
     
 #endif
 
-    return pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->FindCollectivelyExecutableSubtaskRangeEnd(this, lSubtaskRange, pMultiAssign, mAllocationOffsets, mTotalAllocationSize);
+    ulong lSubtaskCount = 0;
+    pmTask* lTask = lSubtaskRange.task;
+
+    std::vector<std::shared_ptr<pmCudaCacheValue>> lPreventCachePurgeVector;
+    size_t lCudaAlignment = pmCudaInterface::GetCudaAlignment(mDeviceIndex);
+
+    for(ulong lSubtaskId = lSubtaskRange.startSubtask; lSubtaskId <= lSubtaskRange.endSubtask; ++lSubtaskId, ++lSubtaskCount)
+    {
+        if(!CheckSubtaskMemoryRequirements(lTask, lSubtaskId, pSplitInfo, lPreventCachePurgeVector, lCudaAlignment))
+            break;
+    }
+    
+    EXCEPTION_ASSERT(lSubtaskCount);    // not enough CUDA memory to run even one subtask
+
+    return (lSubtaskRange.startSubtask + lSubtaskCount - 1);
 }
 
-pmStatus pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pSplitInfo /* = NULL */)
+void pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pSplitInfo /* = NULL */)
 {
-	PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign, false, pSplitInfo));
+	CommonPreExecuteOnCPU(pTask, pSubtaskId, pIsMultiAssign, false, pSplitInfo);
 
     if(pPreftechSubtaskIdPtr)
-        PROPAGATE_FAILURE_RET_STATUS(CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true, NULL));
+        CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true, NULL);
 
-    pmSubtaskInfo lSubtaskInfo;
-    bool lOutputMemWriteOnly = false;
-    pTask->GetSubtaskInfo(this, pSubtaskId, pSplitInfo, pIsMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
-    
+    const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo);
+
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    CopyDataToPinnedBuffers(pTask, pSubtaskId, pSplitInfo, lSubtaskInfo, lOutputMemWriteOnly);
+    CopyDataToPinnedBuffers(pTask, pSubtaskId, pSplitInfo, lSubtaskInfo);
 #endif
-    
-    PopulateMemcpyCommands(pTask, pSubtaskId, pSplitInfo, lSubtaskInfo, lOutputMemWriteOnly);
 
-    std::pair<pmMachine*, ulong> lPair(pTask->GetOriginatingHost(), pTask->GetSequenceNumber());
+    PopulateMemcpyCommands(pTask, pSubtaskId, pSplitInfo, lSubtaskInfo);
 
-    std::map<std::pair<pmMachine*, ulong>, pmTaskInfo>::iterator lIter = mTaskInfoCudaMap.find(lPair);
+    std::pair<const pmMachine*, ulong> lPair(pTask->GetOriginatingHost(), pTask->GetSequenceNumber());
+
+    std::map<std::pair<const pmMachine*, ulong>, pmTaskInfo>::iterator lIter = mTaskInfoCudaMap.find(lPair);
     if(lIter == mTaskInfoCudaMap.end())
     {
-        pmTaskInfo& lTaskInfo = pTask->GetTaskInfo();
-        void* lTaskConfCudaPtr = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->CreateTaskConf(lTaskInfo);
-
-        mTaskInfoCudaMap[lPair] = lTaskInfo;
-        lIter = mTaskInfoCudaMap.find(lPair);
-        
-        lIter->second.taskConf = lTaskConfCudaPtr;
+        lIter = mTaskInfoCudaMap.insert(std::make_pair(lPair, pTask->GetTaskInfo())).first;
+        lIter->second.taskConf = CreateTaskConf(pTask->GetTaskInfo());
     }
 
-	INVOKE_SAFE_PROPAGATE_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, lOutputMemWriteOnly);
+    pmCudaStreamAutoPtr& lStreamPtr = ((pmCudaStreamAutoPtr*)mCudaStreams.get_ptr())[pSubtaskId - mStartSubtaskId];
+    lStreamPtr.Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
 
-	return pmSuccess;
+	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, &lStreamPtr);
 }
 
+void* pmStubCUDA::CreateTaskConf(const pmTaskInfo& pTaskInfo)
+{
+    void* lTaskConfCudaPtr = NULL;
+
+    if(pTaskInfo.taskConfLength)
+    {
+        size_t lCudaAlignment = pmCudaInterface::GetCudaAlignment(mDeviceIndex);
+
+        lTaskConfCudaPtr = mCudaBufferChunk->Allocate((size_t)pTaskInfo.taskConfLength, lCudaAlignment);
+        if(!lTaskConfCudaPtr)
+            PMTHROW(pmOutOfMemoryException());
+
+        pmCudaInterface::CopyDataToCudaDevice(lTaskConfCudaPtr, pTaskInfo.taskConf, pTaskInfo.taskConfLength);
+    }
+    
+    return lTaskConfCudaPtr;
+}
+
+void pmStubCUDA::DestroyTaskConf(void* pTaskConfCudaPtr)
+{
+    mCudaBufferChunk->Deallocate(pTaskConfCudaPtr);
+}
+
+void* pmStubCUDA::CreateDeviceInfoCudaPtr(const pmDeviceInfo& pDeviceInfo)
+{
+    size_t lCudaAlignment = pmCudaInterface::GetCudaAlignment(mDeviceIndex);
+
+    void* lDeviceInfoCudaPtr = mCudaBufferChunk->Allocate(sizeof(pmDeviceInfo), lCudaAlignment);
+    if(!lDeviceInfoCudaPtr)
+        PMTHROW(pmOutOfMemoryException());
+
+    pmCudaInterface::CopyDataToCudaDevice(lDeviceInfoCudaPtr, &pDeviceInfo, sizeof(pmDeviceInfo));
+    
+    return lDeviceInfoCudaPtr;
+}
+
+void pmStubCUDA::DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr)
+{
+    mCudaBufferChunk->Deallocate(pDeviceInfoCudaPtr);
+}
+    
 void* pmStubCUDA::GetDeviceInfoCudaPtr()
 {
     if(!mDeviceInfoCudaPtr)
-        mDeviceInfoCudaPtr = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->CreateDeviceInfoCudaPtr(GetProcessingElement()->GetDeviceInfo());
+        mDeviceInfoCudaPtr = CreateDeviceInfoCudaPtr(GetProcessingElement()->GetDeviceInfo());
         
     return mDeviceInfoCudaPtr;
 }
 
-pmLastCudaExecutionRecord& pmStubCUDA::GetLastExecutionRecord()
+void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo)
 {
-    return mLastExecutionRecord;
-}
-    
-void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly)
-{
-    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
-    
     mDeviceToHostCommands.clear();
     mHostToDeviceCommands.clear();
-    
-#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    std::vector<void*>& lPinnedVector = mPinnedPointersMap[pSubtaskId];
 
-    void* lInputPinnedMem = lPinnedVector[0];
-    void* lOutputPinnedMem = lPinnedVector[1];
-    void* lScratchPinnedMem = lPinnedVector[2];
-    void* lStatusPinnedMem = lPinnedVector[4];
-#endif
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+
+    std::vector<pmCudaSubtaskMemoryStruct>& lVector = mSubtaskPointersMap[pSubtaskId];
+
+    uint lMemSectionCount = pTask->GetMemSectionCount();
+
+    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lMemSectionCount + 1);
     
-    std::vector<void*>& lVector = mCudaPointersMap[pSubtaskId];
-    
-    void* lInputMem = lVector[0];
-    void* lOutputMem = lVector[1];
-    void* lScratchMem = lVector[2];
-    void* lStatusMem = lVector[4];
-    
-    if(lInputMem)
+    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
     {
-        pmSubscriptionInfo lInputMemSubscriptionInfo;
-        if(lSubscriptionManager.GetInputMemSubscriptionForSubtask(this, pSubtaskId, pSplitInfo, lInputMemSubscriptionInfo))
+        if(lVector[pMemSectionIndex].requiresLoad)
         {
-            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-            if(lSubscriptionManager.GetNonConsolidatedInputMemSubscriptionsForSubtask(this, pSubtaskId, pSplitInfo, lBegin, lEnd))
+            pmSubscriptionInfo lSubscriptionInfo;
+
+            if(pMemSection->IsInput())
+                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            else
+                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+
+            if(lSubscriptionInfo.length)
             {
+                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+                lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBegin, lEnd);
+
                 for(lIter = lBegin; lIter != lEnd; ++lIter)
                 {
                 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lInputPinnedMem) + lIter->first - lInputMemSubscriptionInfo.offset);
+                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
                 #else
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.inputMem) + lIter->first - lInputMemSubscriptionInfo.offset);
+                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pMemSectionIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
                 #endif
                     
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lInputMem) + lIter->first - lInputMemSubscriptionInfo.offset);
+                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
 
                     mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
                 }
             }
         }
-    }
+    });
     
-    if(lOutputMem && !pOutputMemWriteOnly)
+    if(lVector.size() > lMemSectionCount)
     {
-        pmSubscriptionInfo lUnifiedSubscriptionInfo;
-        if(lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(this, pSubtaskId, pSplitInfo, lUnifiedSubscriptionInfo))
-        {
-        #ifndef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-            void* lMem = pTask->GetMemSectionRW()->GetMem();
-        #endif
-
-            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-            if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, pSplitInfo, true, lBegin, lEnd))
-            {
-                for(lIter = lBegin; lIter != lEnd; ++lIter)
-                {
-                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputPinnedMem) + lIter->first - lUnifiedSubscriptionInfo.offset);
-                #else
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lMem) + lIter->first);
-                #endif
-                    
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMem) + lIter->first - lUnifiedSubscriptionInfo.offset);
-
-                    mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
-                }
-            }
-        }
-    }
-
-    if(lScratchMem)
-    {
-        pmScratchBufferInfo lScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
+        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferInfo);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
         if(lCpuScratchBuffer && lScratchBufferSize)
         {
-            if(lScratchBufferInfo == PRE_SUBTASK_TO_SUBTASK || lScratchBufferInfo == PRE_SUBTASK_TO_POST_SUBTASK)
+            if(lScratchBufferType == PRE_SUBTASK_TO_SUBTASK || lScratchBufferType == PRE_SUBTASK_TO_POST_SUBTASK)
             {
+                pmCudaSubtaskMemoryStruct& lStruct = lVector.back();
+                
             #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lScratchPinnedMem, lScratchMem, lScratchBufferSize));
+                mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lStruct.pinnedPtr, lStruct.cudaPtr, lScratchBufferSize));
             #else
-                mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lCpuScratchBuffer, lScratchMem, lScratchBufferSize));
+                mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lCpuScratchBuffer, lStruct.cudaPtr, lScratchBufferSize));
             #endif
             }
         }
     }
-    
-    if(lStatusMem)
+
+#if 0   // Not copying in status
+    pmCudaSubtaskSecondaryBuffersStruct& lSecondaryStruct = mSubtaskSecondaryBuffersMap[pSubtaskId];
+    if(lSecondaryStruct.statusCudaPtr)
     {
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lStatusPinnedMem, lStatusMem, sizeof(pmStatus)));
+        mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSecondaryStruct.statusPinnedPtr, lSecondaryStruct.statusCudaPtr, sizeof(pmStatus)));
     #else
-        mHostToDeviceCommands.push_back(pmCudaMemcpyCommand((void*)(&mStatusCopySrc), lStatusMem, sizeof(pmStatus)));
+        mHostToDeviceCommands.push_back(pmCudaMemcpyCommand((void*)(&mStatusCopySrc), lSecondaryStruct.statusCudaPtr, sizeof(pmStatus)));
     #endif
     }
+#endif
     
-    if(lOutputMem)
+    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
     {
-        pmSubscriptionInfo lUnifiedSubscriptionInfo;
-        if(lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(this, pSubtaskId, pSplitInfo, lUnifiedSubscriptionInfo))
+        if(!pMemSection->IsInput())
         {
-        #ifndef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-            void* lMem = pTask->GetMemSectionRW()->GetMem();
-        #endif
+            pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
 
-            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-            if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, pSplitInfo, false, lBegin, lEnd))
+            if(lSubscriptionInfo.length)
             {
+                DEBUG_EXCEPTION_ASSERT(lVector[pMemSectionIndex].requiresLoad);
+                
+                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBegin, lEnd);
+                
                 for(lIter = lBegin; lIter != lEnd; ++lIter)
                 {
                 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputPinnedMem) + lIter->first - lUnifiedSubscriptionInfo.offset);
+                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
                 #else
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lMem) + lIter->first);
+                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pMemSectionIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
                 #endif
                     
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMem) + lIter->first - lUnifiedSubscriptionInfo.offset);
+                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
 
                     mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
                 }
             }
         }
-    }
+    });
 
-    if(lScratchMem)
+    if(lVector.size() > lMemSectionCount)
     {
-        pmScratchBufferInfo lScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
+        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferInfo);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
         if(lCpuScratchBuffer && lScratchBufferSize)
         {
-            if(lScratchBufferInfo == SUBTASK_TO_POST_SUBTASK || lScratchBufferInfo == PRE_SUBTASK_TO_POST_SUBTASK)
+            if(lScratchBufferType == SUBTASK_TO_POST_SUBTASK || lScratchBufferType == PRE_SUBTASK_TO_POST_SUBTASK)
             {
+                pmCudaSubtaskMemoryStruct& lStruct = lVector.back();
+
             #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lScratchMem, lScratchPinnedMem, lScratchBufferSize));
+                mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lStruct.cudaPtr, lStruct.pinnedPtr, lScratchBufferSize));
             #else
-                mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lScratchMem, lCpuScratchBuffer, lScratchBufferSize));
+                mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lStruct.cudaPtr, lCpuScratchBuffer, lScratchBufferSize));
             #endif
             }
         }
     }
-    
-    if(lStatusMem)
+
+#if 0   // Not reading out status
+    if(lSecondaryStruct.statusCudaPtr)
     {
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lStatusMem, lStatusPinnedMem, sizeof(pmStatus)));
+        mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSecondaryStruct.statusCudaPtr, lSecondaryStruct.statusPinnedPtr, sizeof(pmStatus)));
     #else
-        mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lStatusMem, (void*)(&mStatusCopyDest), sizeof(pmStatus)));
+        mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSecondaryStruct.statusCudaPtr, (void*)(&mStatusCopyDest), sizeof(pmStatus)));
     #endif
     }
+#endif
 }
-    
-#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-void pmStubCUDA::ReservePinnedMemory(size_t pPhysicalMemory, size_t pTotalStubCount)
+
+void pmStubCUDA::ReserveMemory(size_t pPhysicalMemory, size_t pTotalStubCount)
 {
-    if(mPinnedBuffer)
-        PMTHROW(pmFatalErrorException());
+    DEBUG_EXCEPTION_ASSERT(!mCudaBuffer);
+
+    size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+    
+    // Allocate cuda/pinned buffer of size equal to stub's main mem share or available cuda mem (whichever is less), subject to a maximum of 4 GB
+    size_t lCudaMem = pmCudaInterface::GetAvailableCudaMem();
+    size_t lAllocationSize = std::min((size_t)4 * 1024 * 1024 * 1024, lCudaMem);
+
+    if(pPhysicalMemory && pTotalStubCount)
+        lAllocationSize = std::min(lAllocationSize, pPhysicalMemory / pTotalStubCount);
+
+    if(lAllocationSize == lCudaMem) // Do not allocate entire CUDA memory
+        lAllocationSize = ((lCudaMem / lPageSize) - UNALLOCATED_CUDA_MEM_PAGES) * lPageSize;
+
+    EXCEPTION_ASSERT(lAllocationSize);
+
+#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+    DEBUG_EXCEPTION_ASSERT(!mPinnedBuffer);
 
     if(pPhysicalMemory && pTotalStubCount)
     {
-        // Allocate a pinned buffer of size equal to stub's main mem share or available cuda mem (whichever is less), subject to a maximum of 4 GB
-        size_t lCudaMem = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetAvailableCudaMem();
-        size_t lBufferSize = std::min((size_t)4 * 1024 * 1024 * 1024, std::min(lCudaMem, pPhysicalMemory / pTotalStubCount));
-        mPinnedBuffer = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->AllocatePinnedBuffer(lBufferSize);
-
-        if(!mPinnedBuffer)
-            PMTHROW(pmFatalErrorException());
-        
-        mPinnedBufferChunk.reset(new pmMemChunk(mPinnedBuffer, lBufferSize));
+        mPinnedBuffer = pmCudaInterface::AllocatePinnedBuffer(lAllocationSize);
+        mPinnedBufferChunk.reset(new pmMemChunk(mPinnedBuffer, lAllocationSize));
     }
+#endif
+
+    mCudaBuffer = pmCudaInterface::AllocateCudaMem(lAllocationSize);
+    mCudaBufferChunk.reset(new pmMemChunk(mCudaBuffer, lAllocationSize));
+}
+    
+const std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>>& pmStubCUDA::GetSubtaskPointersMap() const
+{
+    return mSubtaskPointersMap;
+}
+    
+const std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct>& pmStubCUDA::GetSubtaskSecondaryBuffersMap() const
+{
+    return mSubtaskSecondaryBuffersMap;
 }
 
-void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubtaskInfo& pSubtaskInfo, bool pOutputMemWriteOnly)
+#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo)
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
-    
-    std::vector<void*>& lVector = mPinnedPointersMap[pSubtaskId];
-    
-    void* lInputMem = lVector[0];
-    void* lOutputMem = lVector[1];
-    void* lScratchMem = lVector[2];
-    void* lStatusMem = lVector[4];
 
-    if(lInputMem)
+    uint lMemSectionCount = pTask->GetMemSectionCount();
+    std::vector<pmCudaSubtaskMemoryStruct>& lVector = mSubtaskPointersMap[pSubtaskId];
+    
+    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lMemSectionCount + 1);
+
+    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
     {
-        pmSubscriptionInfo lInputMemSubscriptionInfo;
-        if(lSubscriptionManager.GetInputMemSubscriptionForSubtask(this, pSubtaskId, pSplitInfo, lInputMemSubscriptionInfo))
+        if(lVector[pMemSectionIndex].requiresLoad)
         {
-            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-            if(lSubscriptionManager.GetNonConsolidatedInputMemSubscriptionsForSubtask(this, pSubtaskId, pSplitInfo, lBegin, lEnd))
+            pmSubscriptionInfo lSubscriptionInfo;
+
+            if(pMemSection->IsInput())
+                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            else
+                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+
+            if(lSubscriptionInfo.length)
             {
+                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+                lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBegin, lEnd);
+
                 for(lIter = lBegin; lIter != lEnd; ++lIter)
                 {
-                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lInputMem) + lIter->first - lInputMemSubscriptionInfo.offset);
-                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.inputMem) + lIter->first - lInputMemSubscriptionInfo.offset);
+                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pMemSectionIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
 
                     memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
                 }
             }
         }
-    }
-    
-    if(lOutputMem && !pOutputMemWriteOnly)
+    });
+
+    if(lVector.size() > lMemSectionCount)
     {
-        pmSubscriptionInfo lUnifiedSubscriptionInfo;
-        if(lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(this, pSubtaskId, pSplitInfo, lUnifiedSubscriptionInfo))
-        {
-            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-            if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, pSplitInfo, true, lBegin, lEnd))
-            {
-                void* lMem = pTask->GetMemSectionRW()->GetMem();
-
-                for(lIter = lBegin; lIter != lEnd; ++lIter)
-                {
-                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMem) + lIter->first - lUnifiedSubscriptionInfo.offset);
-                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lMem) + lIter->first);
-
-                    memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
-                }
-            }
-        }
-    }
-
-    if(lScratchMem)
-    {
-        pmScratchBufferInfo lScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
+        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferInfo);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
         if(lCpuScratchBuffer && lScratchBufferSize)
         {
-            if(lScratchBufferInfo == PRE_SUBTASK_TO_SUBTASK || lScratchBufferInfo == PRE_SUBTASK_TO_POST_SUBTASK)
-                memcpy(lScratchMem, lCpuScratchBuffer, lScratchBufferSize);
+            if(lScratchBufferType == PRE_SUBTASK_TO_SUBTASK || lScratchBufferType == PRE_SUBTASK_TO_POST_SUBTASK)
+                memcpy(lVector.back().pinnedPtr, lCpuScratchBuffer, lScratchBufferSize);
         }
     }
     
-    if(lStatusMem)
-        *((pmStatus*)lStatusMem) = pmStatusUnavailable;
+    pmCudaSubtaskSecondaryBuffersStruct& lStruct = mSubtaskSecondaryBuffersMap[pSubtaskId];
+
+    if(lStruct.statusPinnedPtr)
+        *((pmStatus*)lStruct.statusPinnedPtr) = pmStatusUnavailable;
 }
     
-pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmSubtaskInfo& pSubtaskInfo)
+pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo)
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     
-    std::vector<void*>& lVector = mPinnedPointersMap[pSubtaskId];
+    uint lMemSectionCount = pTask->GetMemSectionCount();
+    std::vector<pmCudaSubtaskMemoryStruct>& lVector = mSubtaskPointersMap[pSubtaskId];
     
-    void* lOutputMem = lVector[1];
-    void* lScratchMem = lVector[2];
-    void* lStatusMem = lVector[4];
-    
-    if(lOutputMem)
+    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lMemSectionCount + 1);
+
+    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
     {
-        pmSubscriptionInfo lUnifiedSubscriptionInfo;
-        if(lSubscriptionManager.GetUnifiedOutputMemSubscriptionForSubtask(this, pSubtaskId, pSplitInfo, lUnifiedSubscriptionInfo))
+        if(!pMemSection->IsInput())
         {
-            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-            if(lSubscriptionManager.GetNonConsolidatedOutputMemSubscriptionsForSubtask(this, pSubtaskId, pSplitInfo, false, lBegin, lEnd))
+            pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            
+            if(lSubscriptionInfo.length)
             {
+                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBegin, lEnd);
+
                 for(lIter = lBegin; lIter != lEnd; ++lIter)
                 {
-                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lOutputMem) + lIter->first - lUnifiedSubscriptionInfo.offset);
-                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.outputMem) + lIter->first - lUnifiedSubscriptionInfo.offset);
+                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pMemSectionIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
 
                     memcpy(lDataPtr, lPinnedPtr, lIter->second.first);
                 }
             }
         }
-    }
-
-    if(lScratchMem)
+    });
+    
+    if(lVector.size() > lMemSectionCount)
     {
-        pmScratchBufferInfo lScratchBufferInfo = SUBTASK_TO_POST_SUBTASK;
+        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferInfo);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
         if(lCpuScratchBuffer && lScratchBufferSize)
         {
-            if(lScratchBufferInfo == SUBTASK_TO_POST_SUBTASK || lScratchBufferInfo == PRE_SUBTASK_TO_POST_SUBTASK)
-                memcpy(lCpuScratchBuffer, lScratchMem, lScratchBufferSize);
+            if(lScratchBufferType == SUBTASK_TO_POST_SUBTASK || lScratchBufferType == PRE_SUBTASK_TO_POST_SUBTASK)
+                memcpy(lCpuScratchBuffer, lVector.back().pinnedPtr, lScratchBufferSize);
         }
     }
-    
-    if(lStatusMem)
-        return *((pmStatus*)lStatusMem);
+
+    pmCudaSubtaskSecondaryBuffersStruct& lStruct = mSubtaskSecondaryBuffersMap[pSubtaskId];
+
+    if(lStruct.statusPinnedPtr)
+        return *((pmStatus*)lStruct.statusPinnedPtr);
     
     return pmStatusUnavailable;
 }
-    
-#endif
+#endif  // SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
 
-void pmStubCUDA::PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId)
+void pmStubCUDA::PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo)
 {
-#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    if(pEndSubtaskId - pStartSubtaskId + 1 != mAllocationOffsets.size())
-        PMTHROW(pmFatalErrorException());
+    DEBUG_EXCEPTION_ASSERT(!pSplitInfo || pStartSubtaskId == pEndSubtaskId);
 
-    if(mPinnedAllocation)
-        PMTHROW(pmFatalErrorException());
-    
-    mPinnedAllocation = mPinnedBufferChunk->Allocate(mTotalAllocationSize, pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetCudaAlignment(mDeviceIndex));
-    
-    if(!mPinnedAllocation)
-        PMTHROW(pmFatalErrorException());
-    
-    size_t lPinnedBaseAddr = reinterpret_cast<size_t>(mPinnedAllocation);
-    mPinnedPointersMap.clear();
+#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+    EXCEPTION_ASSERT(pEndSubtaskId - pStartSubtaskId + 1 == mSubtaskPointersMap.size());
 #else
-    if(pStartSubtaskId != pEndSubtaskId || mAllocationOffsets.size() != 1)
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(pStartSubtaskId == pEndSubtaskId && mSubtaskPointersMap.size() == 1);
 #endif
     
-    if(mCudaAllocation)
-        PMTHROW(pmFatalErrorException());
-
-    mCudaAllocation = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->AllocateCudaMem(mTotalAllocationSize);
-
-    if(!mCudaAllocation)
-        PMTHROW(pmFatalErrorException());
-    
-    size_t lCudaBaseAddr = reinterpret_cast<size_t>(mCudaAllocation);
-    mCudaPointersMap.clear();
-    
-    std::vector<std::vector<std::pair<size_t, size_t> > >::iterator lIter = mAllocationOffsets.begin(), lEndIter = mAllocationOffsets.end();
-    for(size_t subtaskId = pStartSubtaskId; lIter != lEndIter; ++lIter, ++subtaskId)
-    {
-        std::vector<std::pair<size_t, size_t> >& lVector = *lIter;
-        
-        if(lVector.size() != mMemElements)
-            PMTHROW(pmFatalErrorException());
-        
-        std::vector<std::pair<size_t, size_t> >::iterator lInnerIter = lVector.begin(), lInnerEndIter = lVector.end();
-        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
-        {
-            std::pair<size_t, size_t>& lPair = *lInnerIter;
-            
-            mCudaPointersMap[subtaskId].push_back(lPair.second ? reinterpret_cast<void*>(lCudaBaseAddr + lPair.first) : NULL);
-
-        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-            mPinnedPointersMap[subtaskId].push_back(lPair.second ? reinterpret_cast<void*>(lPinnedBaseAddr + lPair.first) : NULL);
-        #endif
-        }
-    }
-    
-    mPendingStreams = pEndSubtaskId - pStartSubtaskId + 1;
-    
-    if(mStreamSignalWait.get())
-        PMTHROW(pmFatalErrorException());
-    
-    mStreamSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+    mStartSubtaskId = pStartSubtaskId;
+    mCudaStreams.reset(new pmCudaStreamAutoPtr[pEndSubtaskId - pStartSubtaskId + 1]);
 }
 
 void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAssign, ulong pStartSubtaskId, ulong pEndSubtaskId, bool pSuccess, pmSplitInfo* pSplitInfo)
 {
-        if(pSplitInfo && pStartSubtaskId != pEndSubtaskId)
-        PMTHROW(pmFatalErrorException());
-    
+    DEBUG_EXCEPTION_ASSERT(!pSplitInfo || pStartSubtaskId == pEndSubtaskId);
+
     if(pSuccess)
     {
-        mStreamSignalWait->Wait();
-
-    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
         for(ulong i = pStartSubtaskId; i <= pEndSubtaskId; ++i)
         {
-            pmSubtaskInfo lSubtaskInfo;
-            bool lOutputMemWriteOnly = false;
-            pTask->GetSubtaskInfo(this, i, pSplitInfo, pIsMultiAssign, lSubtaskInfo, lOutputMemWriteOnly);
-
-            CopyDataFromPinnedBuffers(pTask, i, pSplitInfo, lSubtaskInfo);
+            pmCudaInterface::WaitForStreamCompletion(((pmCudaStreamAutoPtr*)(mCudaStreams.get_ptr()))[i - pStartSubtaskId]);
+            
+        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+            CopyDataFromPinnedBuffers(pTask, i, pSplitInfo, pTask->GetSubscriptionManager().GetSubtaskInfo(this, i, pSplitInfo));
+        #endif
         }
+    }
+
+    uint lMemSectionCount = pTask->GetMemSectionCount();
+    
+    std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>>::iterator lIter = mSubtaskPointersMap.begin(), lEndIter = mSubtaskPointersMap.end();
+    for_each(mSubtaskPointersMap, [&] (decltype(mSubtaskPointersMap)::value_type& pPair)
+    {
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+        filtered_for_each(pPair.second, [] (pmCudaSubtaskMemoryStruct& pStruct) {return pStruct.requiresLoad;}, [&] (pmCudaSubtaskMemoryStruct& pStruct)
+        {
+            mPinnedBufferChunk->Deallocate(pStruct.pinnedPtr);
+        });
     #endif
-    }
-
-    mPendingStreams = 0;
-
-    if(mCudaAllocation)
+        
+        // Deallocate scratch buffer from device
+        if(pPair.second.size() > lMemSectionCount)
+            mCudaBufferChunk->Deallocate(pPair.second.back().cudaPtr);
+    });
+    
+    for_each(mSubtaskSecondaryBuffersMap, [&] (decltype(mSubtaskSecondaryBuffersMap)::value_type& pPair)
     {
-        pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->DeallocateCudaMem(mCudaAllocation);
-        mCudaAllocation = NULL;
-    }
+        mCudaBufferChunk->Deallocate(pPair.second.reservedMemCudaPtr);  // Reserved mem and status are allocated as a single entity
 
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+        mPinnedBufferChunk->Deallocate(pPair.second.statusPinnedPtr);
+    #endif
+    });
+    
+    mSubtaskPointersMap.clear();
+    mSubtaskSecondaryBuffersMap.clear();
+    
+    mCudaStreams.release();
+    
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    if(mPinnedAllocation)
-    {
-        mPinnedBufferChunk->Deallocate(mPinnedAllocation);
-        mPinnedAllocation = NULL;
-    }
+    EXCEPTION_ASSERT(mPinnedBufferChunk->GetBiggestAvaialbleContiguousAllocation() == mPinnedBufferChunk->GetSize());
 #endif
-    
-    mStreamSignalWait.reset(NULL);
 }
     
-void pmStubCUDA::StreamFinishCallback()
-{
-#ifdef _DEBUG
-    if(mPendingStreams == 0)
-        PMTHROW(pmFatalErrorException());
-#endif
-    
-    --mPendingStreams;
-    
-    if(!mPendingStreams)
-        mStreamSignalWait->Signal();
-}
-
 void pmStubCUDA::TerminateUserModeExecution()
 {
 }
@@ -2425,19 +2551,27 @@ void pmStubCUDA::TerminateUserModeExecution()
 #endif
 
 
-bool execEventMatchFunc(stubEvent& pEvent, void* pCriterion)
+bool execEventMatchFunc(const stubEvent& pEvent, void* pCriterion)
 {
-	if(pEvent.eventId == SUBTASK_EXEC && pEvent.execDetails.range.task == (pmTask*)pCriterion)
-		return true;
+	if(pEvent.eventId == SUBTASK_EXEC)
+    {
+        const subtaskExecEvent& lEvent = static_cast<const subtaskExecEvent&>(pEvent);
+        if(lEvent.range.task == (pmTask*)pCriterion)
+            return true;
+    }
 
 	return false;
 }
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
-bool splitSubtaskCheckEventMatchFunc(stubEvent& pEvent, void* pCriterion)
+bool splitSubtaskCheckEventMatchFunc(const stubEvent& pEvent, void* pCriterion)
 {
-	if(pEvent.eventId == SPLIT_SUBTASK_CHECK && pEvent.execDetails.range.task == (pmTask*)pCriterion)
-		return true;
+	if(pEvent.eventId == SPLIT_SUBTASK_CHECK)
+    {
+        const splitSubtaskCheckEvent& lEvent = static_cast<const splitSubtaskCheckEvent&>(pEvent);
+        if(lEvent.task == (pmTask*)pCriterion)
+            return true;
+    }
 
 	return false;
 }
@@ -2481,7 +2615,7 @@ std::string pmExecutionStub::GetEventTimelineName()
 #endif
 
 /* struct stubEvent */
-bool execStub::stubEvent::BlocksSecondaryCommands()
+bool execStub::stubEvent::BlocksSecondaryOperations()
 {
     return (eventId == SUBTASK_EXEC);
 }

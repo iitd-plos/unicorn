@@ -40,9 +40,9 @@ double getCurrentTimeInSecs();
 	} \
 }
 
-#define FETCH_INT_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = atoi(argArray[argIndex+1]); }
-#define FETCH_BOOL_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = (bool)atoi(argArray[argIndex+1]); }
-#define FETCH_STR_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = argArray[argIndex+1]; }
+#define FETCH_INT_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = atoi(argArray[argIndex+1]); argName = argName;}
+#define FETCH_BOOL_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = (bool)atoi(argArray[argIndex+1]); argName = argName;}
+#define FETCH_STR_ARG(argName, argIndex, totalArgs, argArray) { if(argIndex+1 < totalArgs) argName = argArray[argIndex+1]; argName = argName;}
 
 typedef double (*serialProcessFunc)(int argc, char** argv, int pCommonArgs);
 typedef double (*singleGpuProcessFunc)(int argc, char** argv, int pCommonArgs);
@@ -72,31 +72,42 @@ bool isLazyMemEnabled();    /* by default, it's diabled */
 
 #define CREATE_MEM(memSize, memHandle) SAFE_PM_EXEC( pmCreateMemory(memSize, &memHandle) )
 
-#define CREATE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
+#define CREATE_TASK(totalSubtasks, cbHandle, schedPolicy) \
 	pmTaskHandle lTaskHandle = NULL; \
-	pmMemHandle lInputMemHandle = NULL; \
-	pmMemHandle lOutputMemHandle = NULL; \
-	pmTaskDetails lTaskDetails; \
-	if(inputMemSize) \
-		CREATE_MEM(inputMemSize, lInputMemHandle); \
-	if(outputMemSize) \
-		CREATE_MEM(outputMemSize, lOutputMemHandle); \
-	lTaskDetails.inputMemHandle = lInputMemHandle; \
-	lTaskDetails.outputMemHandle = lOutputMemHandle; \
-	lTaskDetails.inputMemInfo = INPUT_MEM_READ_ONLY; \
-	lTaskDetails.outputMemInfo = OUTPUT_MEM_WRITE_ONLY; \
+    pmTaskDetails lTaskDetails; \
 	lTaskDetails.callbackHandle = cbHandle; \
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \
 	lTaskDetails.multiAssignEnabled = isMultiAssignEnabled(); \
     lTaskDetails.overlapComputeCommunication = isComputeCommunicationOverlapEnabled();
 
+#define CREATE_SIMPLE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
+    CREATE_TASK(totalSubtasks, cbHandle, schedPolicy) \
+    pmTaskMem lTaskMem[2]; \
+    { \
+        uint lMemIndex = 0; \
+        if(inputMemSize) \
+        { \
+            lTaskMem[lMemIndex].memType = INPUT_MEM_READ_ONLY; \
+            CREATE_MEM(inputMemSize, lTaskMem[lMemIndex].memHandle); \
+            ++lMemIndex; \
+        } \
+        if(outputMemSize) \
+        { \
+            lTaskMem[lMemIndex].memType = OUTPUT_MEM_WRITE_ONLY; \
+            CREATE_MEM(outputMemSize, lTaskMem[lMemIndex].memHandle); \
+            ++lMemIndex; \
+        } \
+        if(lMemIndex) \
+            lTaskDetails.taskMem = (pmTaskMem*)(lTaskMem); \
+        lTaskDetails.taskMemCount = lMemIndex; \
+    }
+
+
 #define FREE_TASK_AND_RESOURCES \
 	SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) ); \
-    if(lTaskDetails.inputMemHandle) \
-        SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.inputMemHandle) ); \
-    if(lTaskDetails.outputMemHandle) \
-        SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.outputMemHandle) );
+    for(size_t dIndex = 0; dIndex < lTaskDetails.taskMemCount; ++dIndex) \
+        SAFE_PM_EXEC( pmReleaseMemory(lTaskDetails.taskMem[dIndex].memHandle) ); \
 
 
 #ifdef ENABLE_BLAS

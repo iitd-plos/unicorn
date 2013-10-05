@@ -29,6 +29,8 @@
 namespace pm
 {
 
+using namespace communicator;
+    
 pmMachine* PM_LOCAL_MACHINE = NULL;
 
 /* class pmMachinePool */
@@ -41,100 +43,84 @@ pmMachinePool* pmMachinePool::GetMachinePool()
 pmMachinePool::pmMachinePool()
     : mResourceLock __LOCK_NAME__("pmMachinePool::mResourceLock")
 {
-	uint i=0;
     uint lMachineCount = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 
-	FINALIZE_PTR_ARRAY(fAll2AllBuffer, pmCommunicatorCommand::machinePool, new pmCommunicatorCommand::machinePool[lMachineCount]);
+    mMachinesVector.reserve(lMachineCount);
+    for(uint i = 0; i < lMachineCount; ++i)
+        mMachinesVector.push_back(pmMachine(i));
 
-	{
-		FINALIZE_RESOURCE(fMachinePoolResource, (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::MACHINE_POOL_STRUCT)), (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::MACHINE_POOL_STRUCT)));
-
-		All2AllMachineData(fAll2AllBuffer);
-	}
-
-	for(i=0; i<lMachineCount; ++i)
-	{
-		pmMachine lMachine(i);
-
-        pmMachineData lData;
-		lData.cpuCores = fAll2AllBuffer[i].cpuCores;
-		lData.gpuCards = fAll2AllBuffer[i].gpuCards;
-		
-        mMachinesVector.push_back(lMachine);
-		mMachineDataVector.push_back(lData);
-	}
+    All2AllMachineData(lMachineCount);
     
 	uint lLocalId = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
     PM_LOCAL_MACHINE = &(mMachinesVector[lLocalId]);
 
 	pmDevicePool* lDevicePool = pmDevicePool::GetDevicePool();
 
-	FINALIZE_RESOURCE(fDevicePoolResource, (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(pmCommunicatorCommand::DEVICE_POOL_STRUCT)), (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(pmCommunicatorCommand::DEVICE_POOL_STRUCT)));
+	FINALIZE_RESOURCE(fDevicePoolResource, (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(DEVICE_POOL_STRUCT)), (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(DEVICE_POOL_STRUCT)));
 
-	for(uint i=0; i<lMachineCount; ++i)
+    mFirstDeviceIndexOnMachine.reserve(lMachineCount);
+	for(uint i = 0; i < lMachineCount; ++i)
 	{
 		pmMachineData& lData = GetMachineData(i);
-		pmMachine* lMachine = GetMachine(i);
+		const pmMachine* lMachine = GetMachine(i);
 
 		uint lGlobalIndex = lDevicePool->GetDeviceCount();
 		mFirstDeviceIndexOnMachine.push_back(lGlobalIndex);
 
 		uint lDevicesCount = lData.cpuCores + lData.gpuCards;
 
-		FINALIZE_PTR_ARRAY(fDevicesBuffer, pmCommunicatorCommand::devicePool, new pmCommunicatorCommand::devicePool[lDevicesCount]);
-		lDevicePool->BroadcastDeviceData(lMachine, fDevicesBuffer, lDevicesCount);
-
-		lDevicePool->CreateMachineDevices(lMachine, lData.cpuCores, fDevicesBuffer, lGlobalIndex, lDevicesCount);
+		lDevicePool->BroadcastAndCreateDeviceData(lMachine, lDevicesCount, lData.cpuCores, lGlobalIndex);
 	}
 }
 
-pmMachinePool::~pmMachinePool()
+void pmMachinePool::All2AllMachineData(size_t pMachineCount)
 {
-}
-
-pmStatus pmMachinePool::All2AllMachineData(pmCommunicatorCommand::machinePool* pAll2AllBuffer)
-{
-	pmCommunicatorCommand::machinePool lSendBuffer;
+    FINALIZE_RESOURCE(fMachinePoolResource, (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MACHINE_POOL_STRUCT)), (NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MACHINE_POOL_STRUCT)));
 
 	pmStubManager* lManager = pmStubManager::GetStubManager();
-	lSendBuffer.cpuCores = (uint)(lManager->GetProcessingElementsCPU());
-	lSendBuffer.gpuCards = (uint)(lManager->GetProcessingElementsGPU());
+    
+	machinePool lSendBuffer((uint)(lManager->GetProcessingElementsCPU()), (uint)(lManager->GetProcessingElementsGPU()));
+    finalize_ptr<all2AllWrapper<machinePool> > lWrapper(new all2AllWrapper<machinePool>(lSendBuffer, pMachineCount));
 
-	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::ALL2ALL, pmCommunicatorCommand::MACHINE_POOL_TRANSFER_TAG, NULL, pmCommunicatorCommand::MACHINE_POOL_STRUCT, &lSendBuffer, 1, pAll2AllBuffer, 1);
+    // lWrapper's ownership is now transferred to lCommand
+	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<all2AllWrapper<machinePool> >::CreateSharedPtr(MAX_PRIORITY_LEVEL, ALL2ALL, MACHINE_POOL_TRANSFER_TAG, NULL, MACHINE_POOL_STRUCT, lWrapper, 1);
 
-	pmCommunicator::GetCommunicator()->All2All(lCommand);
+	pmCommunicator::GetCommunicator()->All2All(lCommand, true);
 
-	lCommand->WaitForFinish();
-	return lCommand->GetStatus();
+    all2AllWrapper<machinePool>* lData = ((all2AllWrapper<machinePool>*)(lCommand->GetData()));
+    DEBUG_EXCEPTION_ASSERT(pMachineCount == lData->all2AllData.size());
+
+    mMachineDataVector.reserve(lData->all2AllData.size());
+    std::vector<machinePool>::const_iterator lIter = lData->all2AllData.begin(), lEndIter = lData->all2AllData.end();
+	for(; lIter != lEndIter; ++lIter)
+		mMachineDataVector.push_back(pmMachineData((*lIter).cpuCores, (*lIter).gpuCards));
 }
 
 pmMachinePool::pmMachineData& pmMachinePool::GetMachineData(uint pIndex)
 {
-	if(pIndex >= (uint)mMachinesVector.size())
-		PMTHROW(pmUnknownMachineException(pIndex));
+	DEBUG_EXCEPTION_ASSERT(pIndex < (uint)mMachinesVector.size());
 	
 	return mMachineDataVector[pIndex];
 }
 
-pmMachinePool::pmMachineData& pmMachinePool::GetMachineData(pmMachine* pMachine)
+pmMachinePool::pmMachineData& pmMachinePool::GetMachineData(const pmMachine* pMachine)
 {
 	return GetMachineData(*pMachine);
 }
 
-pmMachine* pmMachinePool::GetMachine(uint pIndex)
+const pmMachine* pmMachinePool::GetMachine(uint pIndex) const
 {
-	if(pIndex >= (uint)mMachinesVector.size())
-		PMTHROW(pmUnknownMachineException(pIndex));
+	DEBUG_EXCEPTION_ASSERT(pIndex < (uint)mMachinesVector.size());
 
 	return &(mMachinesVector[pIndex]);
 }
 
-pmStatus pmMachinePool::GetAllDevicesOnMachine(uint pMachineIndex, std::vector<pmProcessingElement*>& pDevices)
+void pmMachinePool::GetAllDevicesOnMachine(uint pMachineIndex, std::vector<const pmProcessingElement*>& pDevices) const
 {
-	return GetAllDevicesOnMachine(GetMachine(pMachineIndex), pDevices);
+	GetAllDevicesOnMachine(GetMachine(pMachineIndex), pDevices);
 }
 
-pmStatus pmMachinePool::GetAllDevicesOnMachine(pmMachine* pMachine, std::vector<pmProcessingElement*>& pDevices)
+void pmMachinePool::GetAllDevicesOnMachine(const pmMachine* pMachine, std::vector<const pmProcessingElement*>& pDevices) const
 {
 	pDevices.clear();
 
@@ -142,62 +128,53 @@ pmStatus pmMachinePool::GetAllDevicesOnMachine(pmMachine* pMachine, std::vector<
 	uint lTotalDevices = lDevicePool->GetDeviceCount();
 	uint lGlobalIndex = mFirstDeviceIndexOnMachine[*pMachine];
 
-	for(uint i=lGlobalIndex; i<lTotalDevices; ++i)
+	for(uint i = lGlobalIndex; i < lTotalDevices; ++i)
 	{
-		pmProcessingElement* lDevice = lDevicePool->GetDeviceAtGlobalIndex(i);
+		const pmProcessingElement* lDevice = lDevicePool->GetDeviceAtGlobalIndex(i);
 
 		if(lDevice->GetMachine() == pMachine)
 			pDevices.push_back(lDevice);
 		else
 			break;
 	}
-
-	return pmSuccess;
 }
 
-uint pmMachinePool::GetFirstDeviceIndexOnMachine(uint pMachineIndex)
+uint pmMachinePool::GetFirstDeviceIndexOnMachine(uint pMachineIndex) const
 {
-	if(pMachineIndex >= (uint)mMachinesVector.size())
-		PMTHROW(pmUnknownMachineException(pMachineIndex));
+	DEBUG_EXCEPTION_ASSERT(pMachineIndex < (uint)mMachinesVector.size());
 
 	return mFirstDeviceIndexOnMachine[pMachineIndex];
 }
 
-uint pmMachinePool::GetFirstDeviceIndexOnMachine(pmMachine* pMachine)
+uint pmMachinePool::GetFirstDeviceIndexOnMachine(const pmMachine* pMachine) const
 {
 	return GetFirstDeviceIndexOnMachine(*pMachine);
 }
 
-pmStatus pmMachinePool::RegisterSendCompletion(pmMachine* pMachine, ulong pDataSent, double pSendTime)
+void pmMachinePool::RegisterSendCompletion(const pmMachine* pMachine, ulong pDataSent, double pSendTime)
 {
 	size_t lIndex = (size_t)(*pMachine);
 
-	if(lIndex >= (uint)mMachinesVector.size())
-		PMTHROW(pmUnknownMachineException((uint)lIndex));
+	DEBUG_EXCEPTION_ASSERT(lIndex < (uint)mMachinesVector.size());
 
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	mMachineDataVector[lIndex].dataSent += pDataSent;
 	mMachineDataVector[lIndex].sendTime += pSendTime;
 	++(mMachineDataVector[lIndex].sendCount);
-
-	return pmSuccess;
 }
 
-pmStatus pmMachinePool::RegisterReceiveCompletion(pmMachine* pMachine, ulong pDataReceived, double pReceiveTime)
+void pmMachinePool::RegisterReceiveCompletion(const pmMachine* pMachine, ulong pDataReceived, double pReceiveTime)
 {
 	size_t lIndex = (size_t)(*pMachine);
 
-	if(lIndex >= (uint)mMachinesVector.size())
-		PMTHROW(pmUnknownMachineException((uint)lIndex));
+	DEBUG_EXCEPTION_ASSERT(lIndex < (uint)mMachinesVector.size());
 
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	mMachineDataVector[lIndex].dataReceived += pDataReceived;
 	mMachineDataVector[lIndex].receiveTime += pReceiveTime;
 	++(mMachineDataVector[lIndex].receiveCount);
-
-	return pmSuccess;
 }
 
 
@@ -208,106 +185,88 @@ pmDevicePool* pmDevicePool::GetDevicePool()
     return &lDevicePool;
 }
 
-pmDevicePool::pmDevicePool()
+void pmDevicePool::CreateMachineDevices(const pmMachine* pMachine, uint pCpuDeviceCount, const devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount)
 {
-}
-
-pmDevicePool::~pmDevicePool()
-{
-}
-
-pmStatus pmDevicePool::CreateMachineDevices(pmMachine* pMachine, uint pCpuDeviceCount, pmCommunicatorCommand::devicePool* pDeviceData, uint pGlobalStartingDeviceIndex, uint pDeviceCount)
-{
-	for(uint i=0; i<pDeviceCount; ++i)
+	for(uint i = 0; i < pDeviceCount; ++i)
 	{
 		pmDeviceType lDeviceType = CPU;
-#ifdef SUPPORT_CUDA
+    #ifdef SUPPORT_CUDA
 		if(i >= pCpuDeviceCount)
 			lDeviceType = GPU_CUDA;
-#endif
+    #endif
 
-        pmProcessingElement lDevice(pMachine, lDeviceType, i, pGlobalStartingDeviceIndex + i);
-
-		pmDeviceData lData;
-		lData.name = pDeviceData[i].name;
-		lData.description = pDeviceData[i].description;
-
-		mDevicesVector.push_back(lDevice);
-		mDeviceDataVector.push_back(lData);
+		mDevicesVector.push_back(pmProcessingElement(pMachine, lDeviceType, i, pGlobalStartingDeviceIndex + i, pDeviceData));
+		mDeviceDataVector.push_back(pmDeviceData(pDeviceData[i].name, pDeviceData[i].description));
 	}
-
-	return pmSuccess;
 }
 
-pmStatus pmDevicePool::BroadcastDeviceData(pmMachine* pMachine, pmCommunicatorCommand::devicePool* pDeviceArray, uint pDeviceCount)
+void pmDevicePool::BroadcastAndCreateDeviceData(const pmMachine* pMachine, uint pDeviceCount, uint pCpuDeviceCount, uint pGlobalStartingDeviceIndex)
 {
+    finalize_ptr<devicePool, deleteArrayDeallocator<devicePool> > lDevicePoolArray(new devicePool[pDeviceCount]);
+
 	pmStubManager* lManager = pmStubManager::GetStubManager();
 	if(pMachine == PM_LOCAL_MACHINE)
 	{
-		for(uint i=0; i<pDeviceCount; ++i)
+		for(uint i = 0; i < pDeviceCount; ++i)
 		{
-			strncpy(pDeviceArray[i].name, lManager->GetStub(i)->GetDeviceName().c_str(), MAX_NAME_STR_LEN-1);
-			strncpy(pDeviceArray[i].description, lManager->GetStub(i)->GetDeviceDescription().c_str(), MAX_DESC_STR_LEN-1);
+            devicePool& lDevicePool = (lDevicePoolArray.get_ptr())[i];
+			strncpy(lDevicePool.name, lManager->GetStub(i)->GetDeviceName().c_str(), MAX_NAME_STR_LEN - 1);
+			strncpy(lDevicePool.description, lManager->GetStub(i)->GetDeviceDescription().c_str(), MAX_DESC_STR_LEN - 1);
 
-			pDeviceArray[i].name[MAX_NAME_STR_LEN-1] = '\0';
-			pDeviceArray[i].description[MAX_DESC_STR_LEN-1] = '\0';
+			lDevicePool.name[MAX_NAME_STR_LEN - 1] = '\0';
+			lDevicePool.description[MAX_DESC_STR_LEN - 1] = '\0';
 		}
 	}
-	
-	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_PRIORITY_LEVEL, pmCommunicatorCommand::BROADCAST, pmCommunicatorCommand::DEVICE_POOL_TRANSFER_TAG, pMachine,
-		pmCommunicatorCommand::DEVICE_POOL_STRUCT, pDeviceArray, pDeviceCount, NULL, NULL);
 
-	pmCommunicator::GetCommunicator()->Broadcast(lCommand);
+    // Ownership of lDevicePoolArray is now transferred to lCommand
+	pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<devicePool, deleteArrayDeallocator<devicePool> >::CreateSharedPtr(MAX_PRIORITY_LEVEL, BROADCAST, DEVICE_POOL_TRANSFER_TAG, pMachine, DEVICE_POOL_STRUCT, lDevicePoolArray, pDeviceCount);
 
-	lCommand->WaitForFinish();
-	return lCommand->GetStatus();
+	pmCommunicator::GetCommunicator()->Broadcast(lCommand, true);
+
+    CreateMachineDevices(pMachine, pCpuDeviceCount, (devicePool*)(lCommand->GetData()), pGlobalStartingDeviceIndex, pDeviceCount);
 }
 
-uint pmDevicePool::GetDeviceCount()
+uint pmDevicePool::GetDeviceCount() const
 {
 	return (uint)mDevicesVector.size();
 }
 
-pmDevicePool::pmDeviceData& pmDevicePool::GetDeviceData(pmProcessingElement* pDevice)
+const pmDevicePool::pmDeviceData& pmDevicePool::GetDeviceData(const pmProcessingElement* pDevice) const
 {
 	uint lGlobalIndex = pDevice->GetGlobalDeviceIndex();
-	if(lGlobalIndex >= (uint)mDevicesVector.size())
-		PMTHROW(pmUnknownDeviceException(lGlobalIndex));
+    
+    DEBUG_EXCEPTION_ASSERT(lGlobalIndex < (uint)mDevicesVector.size());
 
 	return mDeviceDataVector[lGlobalIndex];
 }
 
-pmProcessingElement* pmDevicePool::GetDeviceAtMachineIndex(pmMachine* pMachine, uint pDeviceIndexOnMachine)
+const pmProcessingElement* pmDevicePool::GetDeviceAtMachineIndex(const pmMachine* pMachine, uint pDeviceIndexOnMachine) const
 {
 	uint lGlobalIndex = pmMachinePool::GetMachinePool()->GetFirstDeviceIndexOnMachine(pMachine) + pDeviceIndexOnMachine;
-	if(lGlobalIndex >= (uint)mDevicesVector.size())
-		PMTHROW(pmUnknownDeviceException(lGlobalIndex));
 
-	pmProcessingElement* lDevice = GetDeviceAtGlobalIndex(lGlobalIndex);
-	if(lDevice->GetMachine() != pMachine)
-		PMTHROW(pmFatalErrorException());
+    DEBUG_EXCEPTION_ASSERT(lGlobalIndex < (uint)mDevicesVector.size());
+
+	const pmProcessingElement* lDevice = GetDeviceAtGlobalIndex(lGlobalIndex);
+
+	DEBUG_EXCEPTION_ASSERT(lDevice->GetMachine() == pMachine);
 
 	return lDevice;
 }
 
-pmProcessingElement* pmDevicePool::GetDeviceAtGlobalIndex(uint pGlobalDeviceIndex)
+const pmProcessingElement* pmDevicePool::GetDeviceAtGlobalIndex(uint pGlobalDeviceIndex) const
 {
-	if(pGlobalDeviceIndex >= (uint)mDevicesVector.size())
-		PMTHROW(pmUnknownDeviceException(pGlobalDeviceIndex));
+	DEBUG_EXCEPTION_ASSERT(pGlobalDeviceIndex < (uint)mDevicesVector.size());
 
 	return &(mDevicesVector[pGlobalDeviceIndex]);
 }
 
-pmStatus pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceType pType, pmCluster* pCluster, std::vector<pmProcessingElement*>& pDevices)
+void pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceType pType, const pmCluster* pCluster, std::vector<const pmProcessingElement*>& pDevices) const
 {
-	std::vector<pmProcessingElement>::iterator lIter = mDevicesVector.begin(), lEndIter = mDevicesVector.end();
-	for(; lIter != lEndIter; ++lIter)
+	for(auto& lDevice: mDevicesVector)
 	{
-		if((*lIter).GetType() == pType && pCluster->ContainsMachine((*lIter).GetMachine()))
-			pDevices.push_back(&(*lIter));
+		if(lDevice.GetType() == pType && pCluster->ContainsMachine(lDevice.GetMachine()))
+			pDevices.push_back(&lDevice);
 	}
-
-	return pmSuccess;
 }
 
 }

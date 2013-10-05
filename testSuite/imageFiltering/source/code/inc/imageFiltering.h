@@ -25,6 +25,12 @@ size_t computeSubtaskReservedMemRequirement(pmTaskInfo pTaskInfo, pmDeviceInfo p
 pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
 int singleGpuImageFilter(void* pInvertedImageData, int pImageWidth, int pImageHeight, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, int pImageBytesPerLine, void* pOutputMem);
 #endif
+    
+enum memIndex
+{
+    OUTPUT_MEM_INDEX = 0,
+    MAX_MEM_INDICES
+};
 
 typedef struct imageFilterTaskConf
 {
@@ -37,7 +43,7 @@ typedef struct imageFilterTaskConf
     char filter[MAX_FILTER_DIM][MAX_FILTER_DIM];
 } imageFilterTaskConf;
     
-bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, int* pStartCol, int* pEndCol, int* pStartRow, int* pEndRow);
+bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, int* pStartCol, int* pEndCol, int* pStartRow, int* pEndRow);
 
 #pragma pack(push)
 #pragma pack(1)

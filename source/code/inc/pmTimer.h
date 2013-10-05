@@ -51,11 +51,11 @@ class pmTimer : public pmBase
 		virtual pmStatus Pause() = 0;
 		virtual pmStatus Resume() = 0;
 
-		virtual double GetElapsedTimeInSecs() = 0;
+		virtual double GetElapsedTimeInSecs() const = 0;
 	
 	protected:
 		pmStatus SetState(timerState pState);
-		timerState GetState();
+		timerState GetState() const;
 
 	private:
 		timerState mState;
@@ -73,7 +73,7 @@ class pmLinuxTimer : public pmTimer
 		virtual pmStatus Pause();
 		virtual pmStatus Resume();
 
-		virtual double GetElapsedTimeInSecs();
+		virtual double GetElapsedTimeInSecs() const;
 
 	private:
 		double mStartTime;

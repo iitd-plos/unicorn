@@ -233,7 +233,7 @@ void serialMatrixTranspose(bool pInplace, MATRIX_DATA_TYPE* pInputMatrix, MATRIX
     free(lFlags);
 }
 
-pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
+pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
     size_t i;
 	pmSubscriptionInfo lSubscriptionInfo;
@@ -241,9 +241,12 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazy
     
     size_t lBlockCountRows = lTaskConf->matrixDimRows / lTaskConf->blockSizeRows;
     size_t lBlockCountCols = lTaskConf->matrixDimCols / lTaskConf->blockSizeCols;
-    size_t lBlockIdRow = (int)(pSubtaskId / lBlockCountCols);
-    size_t lBlockIdCol = (int)(pSubtaskId % lBlockCountCols);
+    size_t lBlockIdRow = (int)(pSubtaskInfo.subtaskId / lBlockCountCols);
+    size_t lBlockIdCol = (int)(pSubtaskInfo.subtaskId % lBlockCountCols);
 
+    unsigned int lInputMemIndex = (lTaskConf->inplace ? INPLACE_MEM_INDEX : INPUT_MEM_INDEX);
+    unsigned int lOutputMemIndex = (lTaskConf->inplace ? INPLACE_MEM_INDEX : OUTPUT_MEM_INDEX);
+    
 	// Subscribe to one block of the output matrix for reading and it's transposed block for writing
     size_t lBlockElemCount = lTaskConf->blockSizeRows * lTaskConf->blockSizeCols;
     size_t lBlockOffset = ((lBlockIdCol * lTaskConf->blockSizeCols) + (lBlockIdRow * lBlockCountCols * lBlockElemCount)) * sizeof(MATRIX_DATA_TYPE);
@@ -251,7 +254,7 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazy
     {
         lSubscriptionInfo.offset = lBlockOffset;
         lSubscriptionInfo.length = lTaskConf->blockSizeCols * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, (lTaskConf->inplace ? OUTPUT_MEM_READ_SUBSCRIPTION : INPUT_MEM_READ_SUBSCRIPTION), lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lInputMemIndex, (lTaskConf->inplace ? OUTPUT_MEM_READ_SUBSCRIPTION : INPUT_MEM_READ_SUBSCRIPTION), lSubscriptionInfo);
     
         lBlockOffset += lTaskConf->matrixDimCols * sizeof(MATRIX_DATA_TYPE);
     }
@@ -261,7 +264,7 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazy
     {
         lSubscriptionInfo.offset = lBlockOffset;
         lSubscriptionInfo.length = lTaskConf->blockSizeRows * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lOutputMemIndex, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
     
         lBlockOffset += lTaskConf->matrixDimRows * sizeof(MATRIX_DATA_TYPE);
     }
@@ -274,7 +277,7 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazy
 		pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, lBlockSize);
     }
 #endif
-    
+
 	return pmSuccess;
 }
 
@@ -282,14 +285,14 @@ pmStatus matrixTranspose_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 {
 	matrixTransposeTaskConf* lTaskConf = (matrixTransposeTaskConf*)(pTaskInfo.taskConf);
 
-    MATRIX_DATA_TYPE* lInputMem = lTaskConf->inplace ? (MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemRead : (MATRIX_DATA_TYPE*)pSubtaskInfo.inputMem;
+    MATRIX_DATA_TYPE* lInputMem = lTaskConf->inplace ? (MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].readPtr : (MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr;
     
 #ifdef USE_SQUARE_BLOCKS
     // For increased cache locality - copy the block into scratch buffer, transpose the scratch buffer and then write it to the transposed block
     size_t lBlockDim = lTaskConf->blockSizeRows;
     size_t lBlockDimSize = sizeof(MATRIX_DATA_TYPE) * lBlockDim;
     size_t lBlockSize = lBlockDimSize * lBlockDim;
-    MATRIX_DATA_TYPE* lBlock = (MATRIX_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, PRE_SUBTASK_TO_SUBTASK, lBlockSize, NULL);
+    MATRIX_DATA_TYPE* lBlock = (MATRIX_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo,  PRE_SUBTASK_TO_SUBTASK, lBlockSize, NULL);
     
     size_t i;
     for(i = 0; i < lBlockDim; ++i)
@@ -297,16 +300,18 @@ pmStatus matrixTranspose_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
     
     transposeMatrixBlock(lBlock, lBlockDim);
     
+    unsigned int lOutputMemIndex = (lTaskConf->inplace ? INPLACE_MEM_INDEX : OUTPUT_MEM_INDEX);
+
     for(i = 0; i < lBlockDim; ++i)
-        memcpy(((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemWrite) + i*lTaskConf->matrixDimRows, lBlock + i*lBlockDim, lBlockDimSize);
+        memcpy(((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr) + i * lTaskConf->matrixDimRows, lBlock + i * lBlockDim, lBlockDimSize);
 #else
-    transposeMatrixBlock(lInputMem, (MATRIX_DATA_TYPE*)pSubtaskInfo.outputMemWrite, lTaskConf->matrixDimRows, lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, lTaskConf->blockSizeCols, (pSubtaskInfo.subtaskId == 0), (pSubtaskInfo.subtaskId == pTaskInfo.subtaskCount - 1), pSubtaskInfo.subtaskId, lTaskConf->inplace);
+    transposeMatrixBlock(lInputMem, (MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr, lTaskConf->matrixDimRows, lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, lTaskConf->blockSizeCols, (pSubtaskInfo.subtaskId == 0), (pSubtaskInfo.subtaskId == pTaskInfo.subtaskCount - 1), pSubtaskInfo.subtaskId, lTaskConf->inplace);
 #endif
 
 	return pmSuccess;
 }
 
-double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemInfo pInputMemInfo, pmMemInfo pOutputMemInfo)
+double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemType pInputMemType, pmMemType pOutputMemType)
 {
     bool lInplace = (pInputMemHandle == pOutputMemHandle);
     
@@ -314,16 +319,25 @@ double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixD
     getBlockSize(pMatrixDimRows, pMatrixDimCols, &lBlockSizeRows, &lBlockSizeCols);
     size_t lBlocks = (pMatrixDimRows / lBlockSizeRows) * (pMatrixDimCols / lBlockSizeCols);
 
-	CREATE_TASK(0, 0, lBlocks, pCallbackHandle, pSchedulingPolicy)
+	CREATE_TASK(lBlocks, pCallbackHandle, pSchedulingPolicy)
 
-    if(!lInplace)
+    pmTaskMem lTaskMem[MAX_MEM_INDICES];
+
+    if(lInplace)
     {
-        lTaskDetails.inputMemHandle = pInputMemHandle;
-        lTaskDetails.inputMemInfo = pInputMemInfo;
+        lTaskMem[INPLACE_MEM_INDEX] = {pOutputMemHandle, pOutputMemType};
+        
+        lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
+        lTaskDetails.taskMemCount = INPLACE_MAX_MEM_INDICES;
     }
-    
-    lTaskDetails.outputMemHandle = pOutputMemHandle;
-    lTaskDetails.outputMemInfo = pOutputMemInfo;
+    else
+    {
+        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType};
+        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType};
+        
+        lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
+        lTaskDetails.taskMemCount = MAX_MEM_INDICES;
+    }
     
 	matrixTransposeTaskConf lTaskConf;
 	lTaskConf.matrixDimRows = pMatrixDimRows;
@@ -471,12 +485,12 @@ int DoInit(int argc, char** argv, int pCommonArgs)
     if(lInplace)
     {
         for(size_t i = 0; i < lMatrixElems; ++i)
-            gSerialOutput[i] = gParallelOutput[i] = i;  //(MATRIX_DATA_TYPE)rand(); // i;
+            gSerialOutput[i] = gParallelOutput[i] = (MATRIX_DATA_TYPE)rand(); // i;
     }
     else
     {
         for(size_t i = 0; i < lMatrixElems; ++i)
-            gSampleInput[i] = i;    //(MATRIX_DATA_TYPE)rand(); // i;
+            gSampleInput[i] = (MATRIX_DATA_TYPE)rand(); // i;
     }
 #else
 #endif

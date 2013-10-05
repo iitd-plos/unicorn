@@ -24,6 +24,7 @@
 #include "pmNetwork.h"
 #include "pmCommunicator.h"
 
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -43,7 +44,7 @@ void pmUtility::MapFileOnAllMachines(const char* pPath)
 {
     uint lCount = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 
-    std::tr1::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> lSignalWaitSharedPtr;
+    std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> lSignalWaitSharedPtr;
     
     // Auto lock/unlock scope
     {
@@ -60,7 +61,7 @@ void pmUtility::MapFileOnAllMachines(const char* pPath)
 
     for(uint i = 0; i < lCount; ++i)
     {
-        pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
+        const pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
     
         if(lMachine == PM_LOCAL_MACHINE)
         {
@@ -69,12 +70,9 @@ void pmUtility::MapFileOnAllMachines(const char* pPath)
         }
         else
         {
-            pmCommunicatorCommand::fileOperationsStruct* lFileOperationsData = new pmCommunicatorCommand::fileOperationsStruct();
-            strcpy((char*)(lFileOperationsData->fileName), pPath);
-            lFileOperationsData->fileOp = pmCommunicatorCommand::MMAP_FILE;
-            lFileOperationsData->sourceHost = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
+            finalize_ptr<communicator::fileOperationsStruct> lFileOperationsData(new communicator::fileOperationsStruct(pPath, communicator::MMAP_FILE, NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId()));
 
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::FILE_OPERATIONS_TAG, lMachine, pmCommunicatorCommand::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1, NULL, 0);
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::fileOperationsStruct>::CreateSharedPtr(MAX_CONTROL_PRIORITY, communicator::SEND, communicator::FILE_OPERATIONS_TAG, lMachine, communicator::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1);
 
             pmCommunicator::GetCommunicator()->Send(lCommand, false);
         }
@@ -87,7 +85,7 @@ void pmUtility::UnmapFileOnAllMachines(const char* pPath)
 {
     uint lCount = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount();
 
-    std::tr1::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> lSignalWaitSharedPtr;
+    std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> lSignalWaitSharedPtr;
 
     // Auto lock/unlock scope
     {
@@ -104,7 +102,7 @@ void pmUtility::UnmapFileOnAllMachines(const char* pPath)
     
     for(uint i = 0; i < lCount; ++i)
     {
-        pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
+        const pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
     
         if(lMachine == PM_LOCAL_MACHINE)
         {
@@ -113,12 +111,9 @@ void pmUtility::UnmapFileOnAllMachines(const char* pPath)
         }
         else
         {
-            pmCommunicatorCommand::fileOperationsStruct* lFileOperationsData = new pmCommunicatorCommand::fileOperationsStruct();
-            strcpy((char*)(lFileOperationsData->fileName), pPath);
-            lFileOperationsData->fileOp = pmCommunicatorCommand::MUNMAP_FILE;
-            lFileOperationsData->sourceHost = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId();
+            finalize_ptr<communicator::fileOperationsStruct> lFileOperationsData(new communicator::fileOperationsStruct(pPath, communicator::MUNMAP_FILE, NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId()));
 
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::FILE_OPERATIONS_TAG, lMachine, pmCommunicatorCommand::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1, NULL, 0);
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::fileOperationsStruct>::CreateSharedPtr(MAX_CONTROL_PRIORITY, communicator::SEND, communicator::FILE_OPERATIONS_TAG, lMachine, communicator::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1);
 
             pmCommunicator::GetCommunicator()->Send(lCommand, false);
         }
@@ -169,26 +164,20 @@ void pmUtility::RegisterFileUnmappingResponse(const char* pPath)
     }
 }
 
-void pmUtility::SendFileMappingAcknowledgement(const char* pPath, pmMachine* pSourceHost)
+void pmUtility::SendFileMappingAcknowledgement(const char* pPath, const pmMachine* pSourceHost)
 {
-    pmCommunicatorCommand::fileOperationsStruct* lFileOperationsData = new pmCommunicatorCommand::fileOperationsStruct();
-    strcpy((char*)(lFileOperationsData->fileName), pPath);
-    lFileOperationsData->fileOp = pmCommunicatorCommand::MMAP_ACK;
-    lFileOperationsData->sourceHost = (uint)(*pSourceHost);
+    finalize_ptr<communicator::fileOperationsStruct> lFileOperationsData(new communicator::fileOperationsStruct(pPath, communicator::MMAP_ACK, *pSourceHost));
 
-    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::FILE_OPERATIONS_TAG, pSourceHost, pmCommunicatorCommand::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1, NULL, 0);
+    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::fileOperationsStruct>::CreateSharedPtr(MAX_CONTROL_PRIORITY, communicator::SEND, communicator::FILE_OPERATIONS_TAG, pSourceHost, communicator::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1);
 
     pmCommunicator::GetCommunicator()->Send(lCommand, false);
 }
     
-void pmUtility::SendFileUnmappingAcknowledgement(const char* pPath, pmMachine* pSourceHost)
+void pmUtility::SendFileUnmappingAcknowledgement(const char* pPath, const pmMachine* pSourceHost)
 {
-    pmCommunicatorCommand::fileOperationsStruct* lFileOperationsData = new pmCommunicatorCommand::fileOperationsStruct();
-    strcpy((char*)(lFileOperationsData->fileName), pPath);
-    lFileOperationsData->fileOp = pmCommunicatorCommand::MUNMAP_ACK;
-    lFileOperationsData->sourceHost = (uint)(*pSourceHost);
+    finalize_ptr<communicator::fileOperationsStruct> lFileOperationsData(new communicator::fileOperationsStruct(pPath, communicator::MUNMAP_ACK, *pSourceHost));
 
-    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand::CreateSharedPtr(MAX_CONTROL_PRIORITY, pmCommunicatorCommand::SEND, pmCommunicatorCommand::FILE_OPERATIONS_TAG, pSourceHost, pmCommunicatorCommand::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1, NULL, 0);
+    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::fileOperationsStruct>::CreateSharedPtr(MAX_CONTROL_PRIORITY, communicator::SEND, communicator::FILE_OPERATIONS_TAG, pSourceHost, communicator::FILE_OPERATIONS_STRUCT, lFileOperationsData, 1);
 
     pmCommunicator::GetCommunicator()->Send(lCommand, false);
 }
@@ -267,10 +256,22 @@ pmStatus pmUtility::CloseLibrary(void* pLibHandle)
 
 void* pmUtility::GetExportedSymbol(void* pLibHandle, char* pSymbol)
 {
-	if(!pLibHandle)
+    static std::map<void*, std::map<std::string, void*>> sSymbolMap;    // map of libHandle versus map of symbol versus address in dynamic library
+
+	if(!pLibHandle || !pSymbol)
 		return NULL;
 
-	return dlsym(pLibHandle, pSymbol);
+    decltype(sSymbolMap)::iterator lIter = sSymbolMap.find(pLibHandle);
+    if(lIter == sSymbolMap.end())
+        lIter = sSymbolMap.emplace(std::make_pair(pLibHandle, std::map<std::string, void*>())).first;
+    
+    std::string lSymbolStr(pSymbol);
+    
+    std::map<std::string, void*>::iterator lInnerIter = lIter->second.find(lSymbolStr);
+    if(lInnerIter == lIter->second.end())
+        lInnerIter = lIter->second.emplace(lSymbolStr, dlsym(pLibHandle, pSymbol)).first;
+    
+	return lInnerIter->second;
 }
 
 } // end namespace pm

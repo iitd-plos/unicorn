@@ -35,7 +35,7 @@ pmStatus luDecomposition_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
 {
     cublasHandle_t lCublasHandle = GetCublasHandle(pDeviceInfo.deviceHandle);
 	luTaskConf* lTaskConf = (luTaskConf*)(pTaskInfo.taskConf);
-    MATRIX_DATA_TYPE* lMatrix = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMem);
+    MATRIX_DATA_TYPE* lMatrix = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
     
     CUBLAS_ERROR_CHECK("cublasSetStream", cublasSetStream(lCublasHandle, (cudaStream_t)pCudaStream));
 
@@ -75,7 +75,7 @@ pmStatus horizVertComp_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
     {
         size_t lOffsetElems = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim);
         
-        MATRIX_DATA_TYPE* lL00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMem);
+        MATRIX_DATA_TYPE* lL00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
         MATRIX_DATA_TYPE* lU01 = lL00 + lOffsetElems;
         
         CUBLAS_ERROR_CHECK("cublas_trsm", CUBLAS_TRSM(lCublasHandle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, BLOCK_DIM, BLOCK_DIM, &gOne, lL00, (int)lTaskConf->matrixDim, lU01, (int)lTaskConf->matrixDim));
@@ -87,7 +87,7 @@ pmStatus horizVertComp_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
         
         size_t lOffsetElems = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId - lStartingSubtask, pTaskInfo.taskId, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim);
         
-        MATRIX_DATA_TYPE* lU00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMem);
+        MATRIX_DATA_TYPE* lU00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
         MATRIX_DATA_TYPE* lL10 = lU00 + lOffsetElems;
         
         CUBLAS_ERROR_CHECK("cublas_trsm", CUBLAS_TRSM(lCublasHandle, CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_UNIT, BLOCK_DIM, BLOCK_DIM, &gOne, lU00, (int)lTaskConf->matrixDim, lL10, (int)lTaskConf->matrixDim));
@@ -112,7 +112,7 @@ pmStatus diagComp_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
     
     size_t lOffsetElems2 = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId + 1 + lCol, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId, lTaskConf->matrixDim);
     
-    MATRIX_DATA_TYPE* lL10 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.outputMem);
+    MATRIX_DATA_TYPE* lL10 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
     MATRIX_DATA_TYPE* lU01 = lL10 + lOffsetElems1;
     MATRIX_DATA_TYPE* lA11 = lL10 + lOffsetElems2;
     

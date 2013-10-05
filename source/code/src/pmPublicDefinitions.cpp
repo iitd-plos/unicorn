@@ -22,7 +22,7 @@
 #include "pmController.h"
 #include "pmLogger.h"
 
-#include "pmRangeAccessor.h"
+#include <limits>
 
 namespace pm
 {
@@ -42,7 +42,7 @@ namespace pm
 	{ \
 		pmController* dController; \
 		SAFE_GET_CONTROLLER(dController); \
-		dStatus = dController->controllerFunc(__VA_ARGS__); \
+		dController->controllerFunc(__VA_ARGS__); \
 	} \
 	catch(pmException& dException) \
 	{ \
@@ -50,7 +50,7 @@ namespace pm
 		pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::ERROR, pmErrorMessages[dStatus]); \
 		return dStatus; \
 	} \
-	return dStatus; \
+	return pmSuccess; \
 }
 
 
@@ -129,7 +129,7 @@ pmStatus pmInitialize()
 		return lStatus;
 	}
 
-	return lStatus;
+	return pmSuccess;
 }
 
 pmStatus pmFinalize()
@@ -141,7 +141,7 @@ pmStatus pmFinalize()
 		pmController* lController;
 		SAFE_GET_CONTROLLER(lController);
 
-		lStatus = lController->FinalizeController();
+		lController->FinalizeController();
 	}
 	catch(pmException& e)
 	{
@@ -150,7 +150,7 @@ pmStatus pmFinalize()
 		return lStatus;
 	}
 
-	return lStatus;
+	return pmSuccess;
 }
 
 unsigned int pmGetHostId()
@@ -196,17 +196,17 @@ pmGpuContext::pmGpuContext()
 }
     
 pmSubtaskInfo::pmSubtaskInfo()
-    : subtaskId((unsigned long)-1)
-    , inputMem(NULL)
-    , outputMem(NULL)
-    , outputMemRead(NULL)
-    , outputMemWrite(NULL)
-	, inputMemLength(0)
-    , outputMemLength(0)
-    , outputMemReadLength(0)
-    , outputMemWriteLength(0)
-    , gpuContext()
+    : subtaskId(std::numeric_limits<ulong>::max())
+    , memCount(0)
 {
+}
+
+pmSubtaskInfo::pmSubtaskInfo(unsigned long pSubtaskId, pmMemInfo* pMemInfo, unsigned int pMemCount)
+    : subtaskId(pSubtaskId)
+    , memCount(pMemCount)
+{
+    for(size_t i = 0; i < pMemCount; ++i)
+        memInfo[i] = pMemInfo[i];
 }
     
 pmTaskInfo::pmTaskInfo()
@@ -219,23 +219,7 @@ pmTaskInfo::pmTaskInfo()
 	, originatingHost(0)
 {
 }
-    
-pmLazyMemInfo::pmLazyMemInfo()
-    : lazyInputMem(NULL)
-    , lazyOutputMem(NULL)
-    , lazyInputMemLength(0)
-    , lazyOutputMemLength(0)
-{
-}
-    
-pmLazyMemInfo::pmLazyMemInfo(pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, size_t pLazyInputMemLength, size_t pLazyOutputMemLength)
-    : lazyInputMem(pLazyInputMem)
-    , lazyOutputMem(pLazyOutputMem)
-    , lazyInputMemLength(pLazyInputMemLength)
-    , lazyOutputMemLength(pLazyOutputMemLength)
-{
-}
-    
+
 pmSplitInfo::pmSplitInfo()
     : splitId(0)
     , splitCount(0)
@@ -248,11 +232,27 @@ pmSplitInfo::pmSplitInfo(unsigned int pSplitId, unsigned int pSplitCount)
 {
 }
 
+pmMemInfo::pmMemInfo()
+    : ptr(NULL)
+    , readPtr(NULL)
+    , writePtr(NULL)
+    , length(0)
+{
+}
+    
+pmMemInfo::pmMemInfo(pmRawMemPtr pPtr, pmRawMemPtr pReadPtr, pmRawMemPtr pWritePtr, size_t pLength)
+    : ptr(pPtr)
+    , readPtr(pReadPtr)
+    , writePtr(pWritePtr)
+    , length(pLength)
+{
+}
+
 pmDataTransferInfo::pmDataTransferInfo()
     : memHandle(NULL)
 	, memLength(0)
 	, operatedMemLength(NULL)
-	, memInfo(MAX_MEM_INFO)
+	, memType(MAX_MEM_TYPE)
 	, srcHost((unsigned int)-1)
 	, destHost((unsigned int)-1)
 {
@@ -267,8 +267,8 @@ pmDeviceInfo::pmDeviceInfo()
 	description[0] = '\0';
 }
 
-void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferInfo& pScratchBufferInfo, size_t pBufferSize);
-void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferInfo& pScratchBufferInfo, size_t pBufferSize)
+void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize);
+void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize)
 {
     try
     {
@@ -276,10 +276,11 @@ void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDevic
 		if(!lController)
 			return NULL;
     
-        if(pScratchBufferInfo != PRE_SUBTASK_TO_SUBTASK && pScratchBufferInfo != SUBTASK_TO_POST_SUBTASK && pScratchBufferInfo != PRE_SUBTASK_TO_POST_SUBTASK)
+        if(pScratchBufferType != PRE_SUBTASK_TO_SUBTASK && pScratchBufferType != SUBTASK_TO_POST_SUBTASK && pScratchBufferType != PRE_SUBTASK_TO_POST_SUBTASK)
             PMTHROW(pmFatalErrorException());
-        
-        return lController->GetScratchBuffer_Public(pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pScratchBufferInfo, pBufferSize);
+
+        pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
+        return lController->GetScratchBuffer_Public(pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pScratchBufferType, pBufferSize);
     }
     catch(pmException& e)
     {
@@ -341,13 +342,23 @@ pmStatus pmGetRawMemPtr(pmMemHandle pMem, void** pPtr)
     SAFE_EXECUTE_ON_CONTROLLER(GetRawMemPtr_Public, pMem, pPtr);
 }
 
+pmTaskMem::pmTaskMem()
+    : memHandle(NULL)
+    , memType(MAX_MEM_TYPE)
+{
+}
+    
+pmTaskMem::pmTaskMem(pmMemHandle pMemHandle, pmMemType pMemType)
+    : memHandle(pMemHandle)
+    , memType(pMemType)
+{
+}
+
 pmTaskDetails::pmTaskDetails()
     : taskConf(NULL)
 	, taskConfLength(0)
-	, inputMemHandle(NULL)
-	, outputMemHandle(NULL)
-    , inputMemInfo(INPUT_MEM_READ_ONLY)
-    , outputMemInfo(OUTPUT_MEM_WRITE_ONLY)
+	, taskMem(NULL)
+    , taskMemCount(0)
 	, subtaskCount(0)
 	, taskId(0)
 	, priority(DEFAULT_PRIORITY_LEVEL)
@@ -386,12 +397,17 @@ pmStatus pmReleaseTaskAndResources(pmTaskDetails pTaskDetails, pmTaskHandle pTas
 {
 	pmStatus lStatus1 = pmReleaseTask(pTaskHandle);
 	pmStatus lStatus2 = pmReleaseCallbacks(pTaskDetails.callbackHandle);
-	pmStatus lStatus3 = pmReleaseMemory(pTaskDetails.inputMemHandle);
-	pmStatus lStatus4 = pmReleaseMemory(pTaskDetails.outputMemHandle);
+    
+    pmStatus lStatus3 = pmSuccess;
+    for(uint i = 0; i < pTaskDetails.taskMemCount; ++i)
+    {
+        pmStatus lStatus4 = pmReleaseMemory(pTaskDetails.taskMem[i].memHandle);
+        if(lStatus4 != pmSuccess)
+            lStatus3 = lStatus4;
+    }
 
 	if(lStatus2 != pmSuccess) return lStatus1;
 	if(lStatus3 != pmSuccess) return lStatus2;
-	if(lStatus4 != pmSuccess) return lStatus3;
 	
 	return lStatus1;
 }
@@ -407,14 +423,18 @@ pmCudaLaunchConf::pmCudaLaunchConf()
 {
 }
     
-pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf)
+pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf)
 {
-	SAFE_EXECUTE_ON_CONTROLLER(SetCudaLaunchConf_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pCudaLaunchConf);
+    pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
+
+	SAFE_EXECUTE_ON_CONTROLLER(SetCudaLaunchConf_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pCudaLaunchConf);
 }
     
-pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize)
+pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, size_t pSize)
 {
-	SAFE_EXECUTE_ON_CONTROLLER(ReserveCudaGlobalMem_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pSize);
+    pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
+
+	SAFE_EXECUTE_ON_CONTROLLER(ReserveCudaGlobalMem_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pSize);
 }
 
 pmSubscriptionInfo::pmSubscriptionInfo()
@@ -422,40 +442,65 @@ pmSubscriptionInfo::pmSubscriptionInfo()
 	, length(0)
 {
 }
-
-pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo)
+    
+pmSubscriptionInfo::pmSubscriptionInfo(size_t pOffset, size_t pLength)
+    : offset(pOffset)
+    , length(pLength)
 {
-	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pSubscriptionType, pSubscriptionInfo);
+}
+
+pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo)
+{
+    pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
+
+	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pMemIndex, pSubscriptionType, pSubscriptionInfo);
 }
     
-pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo* pSplitInfo, size_t pOffset, size_t pLength, unsigned int pOrder)
+pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, size_t pOffset, size_t pLength, unsigned int pOrder)
 {
-    SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pOffset, pLength, pOrder);
+    pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
+
+    SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pMemIndex, pOffset, pLength, pOrder);
 }
     
-pmStatus pmReduceInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+pmStatus pmReduceInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
 {
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceInts_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pSplitInfo1, pDevice2Handle, pSubtask2Id, pSplitInfo2, pReductionType);
+    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
+    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
+
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceInts_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
 }
 
-pmStatus pmReduceUInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+pmStatus pmReduceUInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
 {
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceUInts_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pSplitInfo1, pDevice2Handle, pSubtask2Id, pSplitInfo2, pReductionType);
+    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
+    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
+
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceUInts_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
 }
 
-pmStatus pmReduceLongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+pmStatus pmReduceLongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
 {
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceLongs_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pSplitInfo1, pDevice2Handle, pSubtask2Id, pSplitInfo2, pReductionType);
+    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
+    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
+
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceLongs_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
 }
 
-pmStatus pmReduceULongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+pmStatus pmReduceULongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
 {
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceULongs_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pSplitInfo1, pDevice2Handle, pSubtask2Id, pSplitInfo2, pReductionType);
+    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
+    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
+
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceULongs_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
 }
 
-pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
 {
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceFloats_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, pSplitInfo1, pDevice2Handle, pSubtask2Id, pSplitInfo2, pReductionType);
+    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
+    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
+
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceFloats_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
 }
 
 pmStatus pmMapFile(const char* pPath)
