@@ -44,9 +44,7 @@ SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared
 endif
 endif
 
-SO_FLAGS += -std=c++11
-
-LIBRARIES= $(PTHREAD_LIBS) $(MPI_LIBS) -L$(STD_LIB_PATH) -lstdc++ -lm
+LIBRARIES= $(PTHREAD_LIBS) $(MPI_LIBS) -lstdc++ -lm
 ifeq ($(PLATFORM), LINUX)
 LIBRARIES += -lrt
 endif

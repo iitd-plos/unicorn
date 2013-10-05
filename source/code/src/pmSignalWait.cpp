@@ -21,10 +21,6 @@
 #include "pmSignalWait.h"
 #include TIMER_IMPLEMENTATION_HEADER
 
-#ifndef MACOS
-#include STANDARD_ERROR_HEADER
-#endif
-
 #ifdef TRACK_THREADS
 #include <pthread.h>
 #endif

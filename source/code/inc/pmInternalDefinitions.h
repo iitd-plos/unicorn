@@ -38,7 +38,6 @@
 
 #define TIMER_IMPLEMENTATION_CLASS pmLinuxTimer
 #define TIMER_IMPLEMENTATION_HEADER <sys/time.h>
-#define STANDARD_ERROR_HEADER <sys/errno.h>
 
 #define VM_IMPLEMENTATION_HEADER1 <sys/mman.h>
 #define VM_IMPLEMENTATION_HEADER2 <signal.h>

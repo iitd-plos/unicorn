@@ -113,7 +113,7 @@ pmCudaStreamAutoPtr::pmCudaStreamAutoPtr()
 {
 }
     
-void pmCudaStreamAutoPtr::Initialize(void* pRuntimeHandle/)
+void pmCudaStreamAutoPtr::Initialize(void* pRuntimeHandle)
 {
     mRuntimeHandle = pRuntimeHandle;
 

@@ -5,7 +5,6 @@
 COMPILER=g++
 NVCC_COMPILER=nvcc
 
-LINK_FLAGS = -std=c++11
 FLAGS += -Wall -DUNIX -DLINUX -DSAMPLE_NAME=$(SAMPLE_NAME) -std=c++11
 CUDAFLAGS += -DUNIX -DSAMPLE_NAME=$(SAMPLE_NAME) --machine 64
 CUDAFLAGS += --compiler-options
@@ -78,7 +77,7 @@ precompile:
 
 link: 
 	@echo "\n*** Linking ***"
-	$(COMPILER) $(LINK_FLAGS) -o $(PROGRAM) $(OBJECTS:%.o=$(OUTDIR)/%.o) $(LIBRARIES) -L/opt/gcc-4.8.1/lib -lstdc++
+	$(COMPILER) -o $(PROGRAM) $(OBJECTS:%.o=$(OUTDIR)/%.o) $(LIBRARIES) -lstdc++
 
 ifeq ($(DEBUG), 1)
 postbuild:

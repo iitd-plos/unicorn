@@ -113,12 +113,12 @@ void pmStubManager::CreateExecutionStubs()
     lVendor.append(std::string((char*)(&lC), 4));
     
     size_t lPhysicalCores = 0, lPos = 0;
-    if(lVendor.find(std::string("Intel"), lPos) != string::npos)
+    if(lVendor.find(std::string("Intel"), lPos) != std::string::npos)
     {
         GetCpuIdInfo(4, 0, lA, lB, lC, lD);
         lPhysicalCores = ((lA >> 26) & 0x3f) + 1;
     }
-    else if(lVendor.find(std::string("AMD"), lPos) != string::npos)
+    else if(lVendor.find(std::string("AMD"), lPos) != std::string::npos)
     {
         GetCpuIdInfo(0x80000008, 0, lA, lB, lC, lD);
         lPhysicalCores = ((size_t)(lC & 0xff)) + 1;
