@@ -119,7 +119,6 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmTaskMemor
 
 pmTask::~pmTask()
 {
-    mSubscriptionManager.DropAllSubscriptions();
 }
 
 pmStatus pmTask::FlushMemoryOwnerships()
@@ -136,6 +135,8 @@ pmStatus pmTask::FlushMemoryOwnerships()
     
 void pmTask::UnlockMemories()
 {
+    mSubscriptionManager.DropAllSubscriptions();
+
     std::vector<pmMemSection*>::iterator lIter = mMemSections.begin(), lEndIter = mMemSections.end();
     for(; lIter != lEndIter; ++lIter)
         (*lIter)->Unlock(this);
@@ -328,8 +329,8 @@ pmSubtaskInfo pmTask::GetPreSubscriptionSubtaskInfo(ulong pSubtaskId, pmSplitInf
 
 pmPoolAllocator& pmTask::GetPoolAllocator(uint pMemSectionIndex, size_t pIndividualAllocationSize, size_t pMaxAllocations)
 {
-    DEBUG_EXCEPTION_ASSERT(GetMemSection(pMemSectionIndex)->IsOutput() && DoSubtasksNeedShadowMemory(GetMemSection(pMemSectionIndex)));
-    
+    DEBUG_EXCEPTION_ASSERT(GetMemSection(pMemSectionIndex)->IsOutput());
+
     FINALIZE_RESOURCE_PTR(dPoolAllocatorMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mPoolAllocatorMapLock, Lock(), Unlock());
 
     decltype(mPoolAllocatorMap)::iterator lIter = mPoolAllocatorMap.find(pMemSectionIndex);
@@ -682,8 +683,6 @@ void pmLocalTask::MarkLocalStubsFreeOfCancellations()
 
 void pmLocalTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
-    DEBUG_EXCEPTION_ASSERT(DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions());
-
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
     if(mUserSideTaskCompleted && (!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations))

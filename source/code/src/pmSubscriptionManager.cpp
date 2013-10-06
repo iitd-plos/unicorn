@@ -677,10 +677,6 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
 
     if(!lShadowMem)
     {
-#if 0
-        std::cout << "Additional shadow mem allocation for " << lUnifiedSubscriptionInfo.length << " bytes" << std::endl;
-#endif
-
         lShadowMem = reinterpret_cast<char*>(MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(lUnifiedSubscriptionInfo.length));
         lExplicitAllocation = true;
     }

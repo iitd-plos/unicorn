@@ -89,10 +89,10 @@ namespace pm
 	pmStatus pmFinalize();
 
 	/** This function returns the id of the calling host */
-	unsigned int pmGetHostId();
+	uint pmGetHostId();
 
 	/** This function returns the total number of hosts */
-	unsigned int pmGetHostCount();
+	uint pmGetHostCount();
     
 	
 	/** Some basic type definitions */
@@ -124,11 +124,11 @@ namespace pm
 	/** Some utility typedefs */
     typedef struct pmSplitInfo
     {
-        unsigned int splitId;
-        unsigned int splitCount;
+        uint splitId;
+        uint splitCount;
         
         pmSplitInfo();
-        pmSplitInfo(unsigned int pSplitId, unsigned int pSplitCount);
+        pmSplitInfo(uint pSplitId, uint pSplitCount);
     } pmSplitInfo;
     
     typedef struct pmMemInfo
@@ -144,25 +144,25 @@ namespace pm
 
 	typedef struct pmSubtaskInfo
 	{
-		unsigned long subtaskId;
+		ulong subtaskId;
         pmMemInfo memInfo[MAX_MEM_SECTIONS_PER_TASK];
-        unsigned int memCount;
+        uint memCount;
         pmGpuContext gpuContext;
         pmSplitInfo splitInfo;
         
         pmSubtaskInfo();
-        pmSubtaskInfo(unsigned long pSubtaskId, pmMemInfo* pMemInfo, unsigned int pMemCount);
+        pmSubtaskInfo(ulong pSubtaskId, pmMemInfo* pMemInfo, uint pMemCount);
 	} pmSubtaskInfo;
 
 	typedef struct pmTaskInfo
 	{
 		pmTaskHandle taskHandle;
 		void* taskConf;
-		unsigned int taskConfLength;
-		unsigned long taskId;
-		unsigned long subtaskCount;
-		unsigned short priority;
-		unsigned int originatingHost;
+		uint taskConfLength;
+		ulong taskId;
+		ulong subtaskCount;
+		ushort priority;
+		uint originatingHost;
         
         pmTaskInfo();
 	} pmTaskInfo;
@@ -192,8 +192,8 @@ namespace pm
 		size_t memLength;
 		size_t* operatedMemLength;	// Mem Length after programmer's compression/encryption
 		pmMemType memType;
-		unsigned int srcHost;
-		unsigned int destHost;
+		uint srcHost;
+		uint destHost;
         
         pmDataTransferInfo();
 	} pmDataTransferInfo;
@@ -213,7 +213,7 @@ namespace pm
 		char name[MAX_NAME_STR_LEN];
 		char description[MAX_DESC_STR_LEN];
 		pmDeviceType deviceType;
-		unsigned int host;
+		uint host;
         
         pmDeviceInfo();
 	} pmDeviceInfo;
@@ -297,7 +297,7 @@ namespace pm
      *  This function can only be called from DataDistribution callback. The effect
      *  of calling this function otherwise is undefined.
      */
-	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, unsigned int pMemIndex, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo);
+	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo);
     
 	/** The memory redistribution API. It establishes memory ordering for the
 	 *	output section computed by a subtask in the final task memory. Order 0 is assumed
@@ -306,7 +306,7 @@ namespace pm
      *  produce data for that order. This function can only be called from DataRedistribution
      *  callback. The effect of calling this function otherwise is undefined.
      */
-    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, unsigned int pMemIndex, size_t pOffset, size_t pLength, unsigned int pOrder);
+    pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, size_t pOffset, size_t pLength, uint pOrder);
 
     /** The CUDA launch configuration structure */
     typedef struct pmCudaLaunchConf
@@ -327,7 +327,7 @@ namespace pm
      *  This function can only be called from DataDistribution callback. The effect
      *  of calling this function otherwise is undefined.
      */
-    pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf);
+    pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf);
     
     /** If subtask_gpu_custom is set, application may need to allocate a CUDA buffer in the custom callback.
      *  cudaMalloc and like functions are synchronous and they interrupt any possibility of asynchronous launches,
@@ -336,7 +336,7 @@ namespace pm
      *  This function can only be called from DataDistribution callback. The effect of calling this function otherwise
      *  is undefined.
      */
-    pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, size_t pSize);
+    pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, size_t pSize);
 	
     /** The structure that associates tasks to mem sections */
     typedef struct pmTaskMem
@@ -352,13 +352,13 @@ namespace pm
 	typedef struct pmTaskDetails
 	{
 		void* taskConf;
-		unsigned int taskConfLength;
+		uint taskConfLength;
         pmTaskMem* taskMem;
-        unsigned int taskMemCount;
+        uint taskMemCount;
 		pmCallbackHandle callbackHandle;
-		unsigned long subtaskCount;
-		unsigned long taskId;                   /* Meant for application to assign and identify tasks */
-		unsigned short priority;                /* By default, this is set to max priority level (0) */
+		ulong subtaskCount;
+		ulong taskId;                   /* Meant for application to assign and identify tasks */
+		ushort priority;                /* By default, this is set to max priority level (0) */
         pmSchedulingPolicy policy;              /* By default, this is SLOW_START */
         int timeOutInSecs;                      /* By default, this is max possible value in signed int, negative values mean no timeout */
         bool multiAssignEnabled;                /* By default, this is true */
@@ -405,12 +405,12 @@ namespace pm
     #ifdef __CUDACC__
     __host__ __device__
     #endif
-    inline void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize, pmGpuContext* pGpuContext)
+    inline void* pmGetScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize, pmGpuContext* pGpuContext)
     {
     #if defined(__CUDA_ARCH__)
         return (pGpuContext ? pGpuContext->scratchBuffer : NULL);
     #else
-        void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize);
+        void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize);
         return pmGetScratchBufferHostFunc(pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pScratchBufferType, pBufferSize);
     #endif
     }
