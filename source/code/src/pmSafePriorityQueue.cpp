@@ -211,6 +211,8 @@ pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr
                         
                         return pmSuccess;
                     }
+                    
+                    ++lListIter;
                 }
             
                 return pmOk;
