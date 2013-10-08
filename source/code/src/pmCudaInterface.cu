@@ -73,11 +73,13 @@ std::vector<std::pair<int, cudaDeviceProp> >& GetDeviceVector()
     return gDeviceVector;
 }
 
+#ifdef CREATE_EXPLICIT_CUDA_CONTEXTS
 std::map<int, CUcontext>& GetContextMap()
 {
     static std::map<int, CUcontext> gContextMap;
     return gContextMap;
 }
+#endif
 
 #define THROW_CUDA_ERROR(errorCUDA) \
 { \
@@ -194,10 +196,10 @@ void* pmCudaInterface::AllocateCudaMem(size_t pSize)
     return lAddr;
 }
     
-void pmCudaInterface::DeallocateCudaMem(void* pPtr)
+void pmCudaInterface::DeallocateCudaMem(const void* pPtr)
 {
     if(pPtr)
-        SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaFree", gFuncPtr_cudaFree, pPtr );
+        SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaFree", gFuncPtr_cudaFree, const_cast<void*>(pPtr) );
 }
     
 void pmCudaInterface::CopyDataToCudaDevice(void* pCudaPtr, const void* pHostPtr, size_t pSize)
@@ -228,9 +230,11 @@ void pmCudaInterface::BindToDevice(size_t pDeviceIndex)
 {
 	int lHardwareId = GetDeviceVector()[pDeviceIndex].first;
 
+#ifdef CREATE_EXPLICIT_CUDA_CONTEXTS
     CUcontext& lContext = GetContextMap()[pDeviceIndex];
     if(cuCtxCreate(&lContext, 0, lHardwareId) != CUDA_SUCCESS)
         PMTHROW(pmFatalErrorException());
+#endif
     
 	SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaSetDevice", gFuncPtr_cudaSetDevice, lHardwareId );
     pmCudaAutoPtr lAutoPtr(1024);    // Initialize context with a dummy allocation and deallocation
@@ -238,9 +242,11 @@ void pmCudaInterface::BindToDevice(size_t pDeviceIndex)
 
 void pmCudaInterface::UnbindFromDevice(size_t pDeviceIndex)
 {
+#ifdef CREATE_EXPLICIT_CUDA_CONTEXTS
     CUcontext& lContext = GetContextMap()[pDeviceIndex];
     if(cuCtxDestroy(lContext) != CUDA_SUCCESS)
         PMTHROW(pmFatalErrorException());
+#endif
 }
 
 std::string pmCudaInterface::GetDeviceName(size_t pDeviceIndex)
@@ -281,9 +287,9 @@ void* pmCudaInterface::AllocatePinnedBuffer(size_t pSize)
     return lMem;
 }
     
-void pmCudaInterface::DeallocatePinnedBuffer(void* pMem)
+void pmCudaInterface::DeallocatePinnedBuffer(const void* pMem)
 {
-    SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaFreeHost", gFuncPtr_cudaFreeHost, pMem );
+    SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaFreeHost", gFuncPtr_cudaFreeHost, const_cast<void*>(pMem) );
 }
 #endif
 

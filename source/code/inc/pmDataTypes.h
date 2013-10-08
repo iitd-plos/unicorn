@@ -216,6 +216,7 @@ namespace pm
 
 #ifdef SUPPORT_CUDA
     class pmStubCUDA;
+    class pmMemChunk;
 
     struct pmCudaCacheKey
     {
@@ -263,8 +264,43 @@ namespace pm
     private:
         pmStubCUDA* mStub;
     };
-#endif
     
+    struct pmCudaMemChunkTraits
+    {
+        typedef pmMemChunk allocator;
+        static const bool alignedAllocations = true;
+
+        struct creator
+        {
+            std::shared_ptr<pmMemChunk> operator()(size_t pSize);
+        };
+        
+        struct destructor
+        {
+            void operator()(const std::shared_ptr<pmMemChunk>& pPtr);
+        };
+    };
+
+#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+    struct pmPinnedMemChunkTraits
+    {
+        typedef pmMemChunk allocator;
+        static const bool alignedAllocations = true;
+
+        struct creator
+        {
+            std::shared_ptr<pmMemChunk> operator()(size_t pSize);
+        };
+        
+        struct destructor
+        {
+            void operator()(const std::shared_ptr<pmMemChunk>& pPtr);
+        };
+    };
+#endif
+
+#endif
+
 #ifdef ENABLE_TASK_PROFILING
     class pmTaskProfiler;
 

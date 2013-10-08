@@ -5,7 +5,7 @@
 COMPILER=g++
 NVCC_COMPILER=nvcc
 
-FLAGS += -Wall -DUNIX -DLINUX -DSAMPLE_NAME=$(SAMPLE_NAME) -std=c++11
+FLAGS += -Wall -DUNIX -DLINUX -DSAMPLE_NAME=$(SAMPLE_NAME) -std=c++11 -MMD
 CUDAFLAGS += -DUNIX -DSAMPLE_NAME=$(SAMPLE_NAME) --machine 64
 CUDAFLAGS += --compiler-options
 
@@ -107,6 +107,6 @@ strip: $(PROGRAM)
 	$(STRIP) $(PROGRAM)
 
 clean: 
-	rm -f $(OUTDIR)/*.o core.* $(PROGRAM)
+	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
 
-
+-include $(OUTDIR)/*.d

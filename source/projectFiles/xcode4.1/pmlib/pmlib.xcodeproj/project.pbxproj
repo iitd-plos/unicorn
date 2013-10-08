@@ -84,6 +84,7 @@
 		2BCCEDA8151C7B07006AA45D /* pmTaskManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED6B151C7B07006AA45D /* pmTaskManager.cpp */; };
 		2BCCEDA9151C7B07006AA45D /* pmThread.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED6C151C7B07006AA45D /* pmThread.cpp */; };
 		2BCCEDAA151C7B07006AA45D /* pmTimer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED6D151C7B07006AA45D /* pmTimer.cpp */; };
+		2BEB038E1801E9B300890B3C /* pmAllocatorCollection.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BEB038C1801E9B300890B3C /* pmAllocatorCollection.cpp */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -180,6 +181,8 @@
 		2BCCED6C151C7B07006AA45D /* pmThread.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmThread.cpp; sourceTree = "<group>"; };
 		2BCCED6D151C7B07006AA45D /* pmTimer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTimer.cpp; sourceTree = "<group>"; };
 		2BD5487017FC328B00A95158 /* pmCudaInterface.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmCudaInterface.h; sourceTree = "<group>"; };
+		2BEB038B1801E68F00890B3C /* pmAllocatorCollection.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmAllocatorCollection.h; sourceTree = "<group>"; };
+		2BEB038C1801E9B300890B3C /* pmAllocatorCollection.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmAllocatorCollection.cpp; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -236,6 +239,7 @@
 		2BCCED2E151C7B07006AA45D /* inc */ = {
 			isa = PBXGroup;
 			children = (
+				2BEB038B1801E68F00890B3C /* pmAllocatorCollection.h */,
 				2BCCED2F151C7B07006AA45D /* pmBase.h */,
 				2BC0D9CF17F9F0C3001CAE05 /* pmCache.h */,
 				2BCCED30151C7B07006AA45D /* pmCallback.h */,
@@ -289,6 +293,7 @@
 		2BCCED4F151C7B07006AA45D /* src */ = {
 			isa = PBXGroup;
 			children = (
+				2BEB038C1801E9B300890B3C /* pmAllocatorCollection.cpp */,
 				2BCCED50151C7B07006AA45D /* pmBase.cpp */,
 				2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */,
 				2BCCED51151C7B07006AA45D /* pmCallback.cpp */,
@@ -297,9 +302,9 @@
 				2BCCED54151C7B07006AA45D /* pmCommand.cpp */,
 				2BCCED55151C7B07006AA45D /* pmCommunicator.cpp */,
 				2BCCED56151C7B07006AA45D /* pmController.cpp */,
+				2BCCED58151C7B07006AA45D /* pmCudaInterface.cu */,
 				0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */,
 				2BCCED57151C7B07006AA45D /* pmDevicePool.cpp */,
-				2BCCED58151C7B07006AA45D /* pmCudaInterface.cu */,
 				2BCCED59151C7B07006AA45D /* pmDispatcherGPU.cpp */,
 				0E05C9201686229D0044891C /* pmEventTimeline.cpp */,
 				2BCCED5A151C7B07006AA45D /* pmExecutionStub.cpp */,
@@ -440,6 +445,7 @@
 				2BCCED95151C7B07006AA45D /* pmDevicePool.cpp in Sources */,
 				2BCCED96151C7B07006AA45D /* pmDispatcherGPU.cpp in Sources */,
 				2BCCED97151C7B07006AA45D /* pmExecutionStub.cpp in Sources */,
+				2BEB038E1801E9B300890B3C /* pmAllocatorCollection.cpp in Sources */,
 				2BCCED98151C7B07006AA45D /* pmHardware.cpp in Sources */,
 				2BCCED99151C7B07006AA45D /* pmLogger.cpp in Sources */,
 				2B23A24117F61C600019FCD3 /* pmPoolAllocator.cpp in Sources */,
@@ -552,6 +558,7 @@
 					pmSafePriorityQueue.cpp,
 					pmThread.cpp,
 					pmCache.cpp,
+					pmAllocatorCollection.cpp,
 				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				"GCC_PREPROCESSOR_DEFINITIONS[arch=*]" = (
@@ -584,6 +591,7 @@
 					pmSafePriorityQueue.cpp,
 					pmThread.cpp,
 					pmCache.cpp,
+					pmAllocatorCollection.cpp,
 				);
 				GCC_C_LANGUAGE_STANDARD = c11;
 				GCC_OPTIMIZATION_LEVEL = 3;

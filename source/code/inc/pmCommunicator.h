@@ -182,10 +182,10 @@ struct remoteTaskAssignStruct
     
     remoteTaskAssignStruct(pmLocalTask* pLocalTask);
 
-    typedef enum fieldCount
+    enum fieldCount
     {
         FIELD_COUNT_VALUE = 11
-    } fieldCount;
+    };
 
 };
 
@@ -858,7 +858,7 @@ class pmCommunicator : public pmBase
 	private:
 		pmCommunicator();
 
-		void SendPacked(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
+		void SendPacked(pmCommunicatorCommandPtr&& pCommand, bool pBlocking = false);
 };
 
 } // end namespace pm

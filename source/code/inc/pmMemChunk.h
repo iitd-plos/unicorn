@@ -33,17 +33,17 @@ class pmMemChunk : public pmBase
 {
 public:
     pmMemChunk(void* pChunk, size_t pSize);
-
-    const void* GetChunk() const;
     
     void* Allocate(size_t pSize, size_t pAlignment);
     void Deallocate(void* pPtr);
     
-    size_t GetBiggestAvaialbleContiguousAllocation();
-
-    size_t GetSize() const;
+    const void* GetChunk() const;
+    bool HasNoAllocations();
     
 private:
+    size_t GetBiggestAvaialbleContiguousAllocation();
+    size_t GetSize() const;
+
     const void* mChunk;
     const size_t mSize;
     

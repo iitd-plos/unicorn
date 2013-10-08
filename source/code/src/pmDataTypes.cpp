@@ -30,6 +30,7 @@
 #ifdef SUPPORT_CUDA
 #include "pmMemChunk.h"
 #include "pmDispatcherGPU.h"
+#include "pmCudaInterface.h"
 #endif
 
 #include <iostream>
@@ -427,13 +428,41 @@ void pmAccumulatedTimesSorter::Unlock()
 }
 #endif
 
-
 #ifdef SUPPORT_CUDA
 /* class pmCudaCacheEvictor */
 void pmCudaCacheEvictor::operator() (const std::shared_ptr<pmCudaCacheValue>& pValue)
 {
-    mStub->GetCudaBufferChunk()->Deallocate(pValue->cudaPtr);
+    mStub->GetCudaChunkCollection()->Deallocate(pValue->cudaPtr);
 }
+
+
+/* struct pmCudaMemChunkTraits */
+std::shared_ptr<pmMemChunk> pmCudaMemChunkTraits::creator::operator()(size_t pSize)
+{
+    void* lCudaBuffer = pmCudaInterface::AllocateCudaMem(pSize);
+    return std::shared_ptr<pmMemChunk>(new pmMemChunk(lCudaBuffer, pSize));
+}
+
+void pmCudaMemChunkTraits::destructor::operator()(const std::shared_ptr<pmMemChunk>& pPtr)
+{
+    pmCudaInterface::DeallocateCudaMem(pPtr->GetChunk());
+}
+
+
+#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+/* struct pmPinnedMemChunkTraits */
+std::shared_ptr<pmMemChunk> pmPinnedMemChunkTraits::creator::operator()(size_t pSize)
+{
+    void* lPinnedBuffer = pmCudaInterface::AllocatePinnedBuffer(pSize);
+    return std::shared_ptr<pmMemChunk>(new pmMemChunk(lPinnedBuffer, pSize));
+}
+
+void pmPinnedMemChunkTraits::destructor::operator()(const std::shared_ptr<pmMemChunk>& pPtr)
+{
+    pmCudaInterface::DeallocatePinnedBuffer(pPtr->GetChunk());
+}
+#endif
+
 #endif
 
     
@@ -480,7 +509,7 @@ bool pmDestroyOnException::ShouldDelete()
     return mDestroy;
 }
 
-    
+
 #ifdef SUPPORT_SPLIT_SUBTASKS
 bool operator<(const pmSplitInfo& pInfo1, const pmSplitInfo& pInfo2)
 {

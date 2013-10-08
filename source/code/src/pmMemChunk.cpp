@@ -162,6 +162,11 @@ void pmMemChunk::Deallocate(void* pPtr)
     mFree.insert(std::make_pair(lSize, lAddr - reinterpret_cast<size_t>(mChunk)));
 }
     
+bool pmMemChunk::HasNoAllocations()
+{
+    return (GetBiggestAvaialbleContiguousAllocation() == GetSize());
+}
+    
 size_t pmMemChunk::GetBiggestAvaialbleContiguousAllocation()
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());

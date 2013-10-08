@@ -144,9 +144,9 @@ void pmHeavyOperationsThreadPool::PackAndSendData(const pmCommunicatorCommandPtr
     SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new packEvent(PACK_DATA, pCommand)), pCommand->GetPriority());
 }
     
-void pmHeavyOperationsThreadPool::UnpackDataEvent(char* pPackedData, int pPackedLength, ushort pPriority)
+void pmHeavyOperationsThreadPool::UnpackDataEvent(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pPackedLength, ushort pPriority)
 {
-    SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new unpackEvent(UNPACK_DATA, pPackedData, pPackedLength)), pPriority);
+    SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new unpackEvent(UNPACK_DATA, std::move(pPackedData), pPackedLength)), pPriority);
 }
     
 void pmHeavyOperationsThreadPool::MemTransferEvent(memoryIdentifierStruct& pSrcMemIdentifier, memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
@@ -226,7 +226,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         {
             packEvent& lEventDetails = static_cast<packEvent&>(pEvent);
 
-			pmCommunicator::GetCommunicator()->SendPacked(lEventDetails.command, false);
+			pmCommunicator::GetCommunicator()->SendPacked(std::move(lEventDetails.command), false);
 
             break;
         }
@@ -235,12 +235,10 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         {
             unpackEvent& lEventDetails = static_cast<unpackEvent&>(pEvent);
         
-            pmCommunicatorCommandPtr lCommand = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnpackData(lEventDetails.packedData, lEventDetails.packedLength);
+            pmCommunicatorCommandPtr lCommand = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnpackData(lEventDetails.packedData.get_ptr(), lEventDetails.packedLength);
 
             lCommand->MarkExecutionStart();
             NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->ReceiveComplete(lCommand, pmSuccess);
-
-            delete[] lEventDetails.packedData;
 
             break;
         }
@@ -308,7 +306,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
 
                         pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(lEventDetails.priority, SEND, MEMORY_RECEIVE_TAG, lEventDetails.machine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 
-                        pmCommunicator::GetCommunicator()->SendPacked(lCommand, false);
+                        pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
                     }
                 }
                 else

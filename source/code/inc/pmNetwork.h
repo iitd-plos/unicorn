@@ -26,6 +26,8 @@
 #include "pmSignalWait.h"
 #include "pmThread.h"
 #include "pmCommand.h"
+#include "pmPoolAllocator.h"
+#include "pmAllocatorCollection.h"
 
 #include "mpi.h"
 #include <map>
@@ -91,6 +93,29 @@ class pmNetwork : public pmBase
 		void SendComplete(pmCommunicatorCommandPtr& pCommand, pmStatus pStatus);
 		void ReceiveComplete(pmCommunicatorCommandPtr& pCommand, pmStatus pStatus);
 };
+    
+struct pmMPIRequestAllocatorTraits
+{
+    typedef pmPoolAllocator allocator;
+
+    static const bool alignedAllocations = false;
+    static const size_t maxAllocationsPerPool = 1024;
+    
+    struct creator
+    {
+        std::shared_ptr<pmPoolAllocator> operator()(size_t pSize)
+        {
+            return std::shared_ptr<pmPoolAllocator>(new pmPoolAllocator(sizeof(MPI_Request), maxAllocationsPerPool, false));
+        }
+    };
+    
+    struct destructor
+    {
+        void operator()(const std::shared_ptr<pmPoolAllocator>& pPtr)
+        {
+        }
+    };
+};
 
 class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
 {
@@ -117,7 +142,7 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 
 				pmMPI* mMPI;
 				bool mThreadTerminationFlag;
-                pmSignalWait* mSignalWait;
+                finalize_ptr<pmSignalWait> mSignalWait;
 				std::vector<pmCommunicatorCommandPtr> mReceiveCommands;
 				RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 		} pmUnknownLengthReceiveThread;
@@ -172,15 +197,16 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		std::map<MPI_Request*, pmCommunicatorCommandPtr> mNonBlockingRequestMap;	// Map of MPI_Request objects and corresponding pmCommunicatorCommand objects
 		std::map<pmCommunicatorCommandPtr, size_t> mRequestCountMap;	// Maps MpiCommunicatorCommand object to the number of MPI_Requests issued
 		MPI_Request* mDummyReceiveRequest;
-		std::map<communicator::communicatorDataTypes, MPI_Datatype*> mRegisteredDataTypes;
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mDataTypesResourceLock;	   // Resource lock on mRegisteredDataTypes
+
+        std::map<pmCommunicatorCommandPtr, MPI_Request*> mPersistentSendRequest;
+		std::map<pmCommunicatorCommandPtr, MPI_Request*> mPersistentRecvRequest;
 
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	   // Resource lock on mDummyReceiveRequest, mNonBlockingRequestMap, mResourceCountMap, mPersistentSendRequest, mPersistentRecvRequest
 
-		std::map<pmCommunicatorCommandPtr, MPI_Request*> mPersistentSendRequest;
-		std::map<pmCommunicatorCommandPtr, MPI_Request*> mPersistentRecvRequest;
+		std::map<communicator::communicatorDataTypes, MPI_Datatype*> mRegisteredDataTypes;
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mDataTypesResourceLock;	   // Resource lock on mRegisteredDataTypes
 
-        pmSignalWait* mSignalWait;
+        finalize_ptr<pmSignalWait> mSignalWait;
     
 		bool mThreadTerminationFlag;
         bool mPersistentReceptionFreezed;
@@ -188,10 +214,8 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		pmUnknownLengthReceiveThread* mReceiveThread;
     
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mCommandCompletionSignalWait;
-
-#ifdef PROGRESSIVE_SLEEP_NETWORK_THREAD
-		long mProgressiveSleepTime;	// in ms
-#endif
+    
+        pmAllocatorCollection<pmMPIRequestAllocatorTraits> mMPIRequestAllocator;
 };
 
 } // end namespace pm

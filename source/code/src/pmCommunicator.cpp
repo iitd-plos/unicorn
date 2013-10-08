@@ -57,15 +57,15 @@ void pmCommunicator::Send(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* 
 		pCommand->WaitForFinish();
 }
 
-void pmCommunicator::SendPacked(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* = false */)
+void pmCommunicator::SendPacked(pmCommunicatorCommandPtr&& pCommand, bool pBlocking /* = false */)
 {
 	SAFE_GET_NETWORK(lNetwork);
 
-    lNetwork->PackData(pCommand);
-	lNetwork->SendNonBlocking(pCommand);
+    auto lCommand = lNetwork->PackData(pCommand);
+	lNetwork->SendNonBlocking(lCommand);
 
 	if(pBlocking)
-		pCommand->WaitForFinish();
+		lCommand->WaitForFinish();
 }
 
 void pmCommunicator::Broadcast(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* = false */)

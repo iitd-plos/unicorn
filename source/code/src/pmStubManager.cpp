@@ -171,13 +171,13 @@ void pmStubManager::CreateExecutionStubs()
 #ifdef SUPPORT_CUDA
 void pmStubManager::FreeGpuResources()
 {
-    for(size_t i=0; i<mStubCount; ++i)
+    for(size_t i = 0; i < mStubCount; ++i)
     {
         if(dynamic_cast<pmStubGPU*>(mStubVector[i]))
             (static_cast<pmStubGPU*>(mStubVector[i]))->FreeResources();
 	}
 
-    for(size_t i=0; i<mStubCount; ++i)
+    for(size_t i = 0; i < mStubCount; ++i)
     {
         if(dynamic_cast<pmStubGPU*>(mStubVector[i]))
             (static_cast<pmStubGPU*>(mStubVector[i]))->WaitForQueuedCommands();

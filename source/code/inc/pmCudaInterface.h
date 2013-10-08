@@ -115,7 +115,7 @@ public:
     static int GetCudaDriverVersion();
 
     static void* AllocateCudaMem(size_t pSize);
-    static void DeallocateCudaMem(void* pPtr);
+    static void DeallocateCudaMem(const void* pPtr);
     static void CopyDataToCudaDevice(void* pCudaPtr, const void* pHostPtr, size_t pSize);
 
     static void CountAndProbeProcessingElements();
@@ -133,7 +133,7 @@ public:
 
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     static void* AllocatePinnedBuffer(size_t pSize);
-    static void DeallocatePinnedBuffer(void* pMem);
+    static void DeallocatePinnedBuffer(const void* pMem);
 #endif
 
     static pmStatus InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, const pmSubtaskInfo& pSubtaskInfoCuda, const pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, const std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, const std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, pmStatus* pStatusCudaPtr, pmCudaStreamAutoPtr& pStreamPtr);

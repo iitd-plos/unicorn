@@ -17,7 +17,7 @@ PTHREAD_LIBS= -lpthread
 
 COMPILER=g++
 NVCC_COMPILER=nvcc
-FLAGS=-Wall -std=c++11 -fPIC -DUNIX -D$(PLATFORM)
+FLAGS=-Wall -std=c++11 -fPIC -DUNIX -D$(PLATFORM) -MMD
 CUDAFLAGS= -DUNIX --compiler-options -fPIC --machine 64
 
 ifeq ($(PLATFORM), LINUX)
@@ -152,6 +152,6 @@ strip: $(PROGRAM)
 	$(STRIP) $(PROGRAM)
 
 clean: 
-	rm -f $(OUTDIR)/*.o core.* $(PROGRAM)
+	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
 
-
+-include $(OUTDIR)/*.d

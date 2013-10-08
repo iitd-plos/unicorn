@@ -100,9 +100,9 @@ void pmController::FinalizeController()
     {
         pmScheduler::GetScheduler()->SendFinalizationSignal();
 
-        finalize_ptr<communicator::hostFinalizationStruct> lBroadcastData;
+        finalize_ptr<communicator::hostFinalizationStruct> lBroadcastData(new communicator::hostFinalizationStruct(false));
         pmCommunicatorCommandPtr lBroadcastCommand = pmCommunicatorCommand<communicator::hostFinalizationStruct>::CreateSharedPtr(MAX_CONTROL_PRIORITY, communicator::BROADCAST, communicator::HOST_FINALIZATION_TAG, lMasterHost, communicator::HOST_FINALIZATION_STRUCT, lBroadcastData, 1);
-    
+
         pmCommunicator::GetCommunicator()->Broadcast(lBroadcastCommand);
     }
     else

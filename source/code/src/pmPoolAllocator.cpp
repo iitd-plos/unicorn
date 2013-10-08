@@ -34,7 +34,7 @@ pmPoolAllocator::pmPoolAllocator(size_t pIndividualAllocationSize, size_t pMaxAl
     if(!mIndividualAllocationSize || !mMaxAllocations)
         PMTHROW(pmFatalErrorException());
     
-    if(pPageAlignedAllocations)
+    if(mPageAlignedAllocations)
     {
         size_t lPageCount = 0;
         mIndividualAllocationSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FindAllocationSize(mIndividualAllocationSize, lPageCount);
@@ -44,7 +44,12 @@ pmPoolAllocator::pmPoolAllocator(size_t pIndividualAllocationSize, size_t pMaxAl
 pmPoolAllocator::~pmPoolAllocator()
 {
     if(mMasterAllocation)
-        MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mMasterAllocation);
+    {
+        if(mPageAlignedAllocations)
+            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mMasterAllocation);
+        else
+            free(mMasterAllocation);
+    }
 }
     
 void* pmPoolAllocator::Allocate(size_t pSize)
@@ -60,7 +65,10 @@ void* pmPoolAllocator::Allocate(size_t pSize)
     {
         DEBUG_EXCEPTION_ASSERT(mUnallocatedPool.empty());
         
-        mMasterAllocation = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(mMaxAllocations * mIndividualAllocationSize);
+        if(mPageAlignedAllocations)
+            mMasterAllocation = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(mMaxAllocations * mIndividualAllocationSize);
+        else
+            mMasterAllocation = malloc(mMaxAllocations * mIndividualAllocationSize);
 
         mUnallocatedPool.reserve(mMaxAllocations);
         for(size_t i = 0, lAddr = reinterpret_cast<size_t>(mMasterAllocation); i < mMaxAllocations; ++i, lAddr += mIndividualAllocationSize)
@@ -88,6 +96,11 @@ void pmPoolAllocator::Deallocate(void* pMem)
     DEBUG_EXCEPTION_ASSERT(((reinterpret_cast<size_t>(pMem) - reinterpret_cast<size_t>(mMasterAllocation)) % mIndividualAllocationSize) == 0);
     
     mUnallocatedPool.push_back(pMem);
+}
+    
+bool pmPoolAllocator::HasNoAllocations()
+{
+    return (mUnallocatedPool.size() == mMaxAllocations);
 }
     
 }

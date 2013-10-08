@@ -70,12 +70,12 @@ struct packEvent : public heavyOperationsEvent
 
 struct unpackEvent : public heavyOperationsEvent
 {
-    char* packedData;
+    finalize_ptr<char, deleteArrayDeallocator<char>> packedData;
     int packedLength;
     
-    unpackEvent(eventIdentifier pEventId, char* pPackedData, int pPackedLength)
+    unpackEvent(eventIdentifier pEventId, finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pPackedLength)
     : heavyOperationsEvent(pEventId)
-    , packedData(pPackedData)
+    , packedData(std::move(pPackedData))
     , packedLength(pPackedLength)
     {}
 };
@@ -171,7 +171,7 @@ public:
     virtual ~pmHeavyOperationsThreadPool();
 
     void PackAndSendData(const pmCommunicatorCommandPtr& pCommand);
-    void UnpackDataEvent(char* pPackedData, int pPackedLength, ushort pPriority);
+    void UnpackDataEvent(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pPackedLength, ushort pPriority);
     void MemTransferEvent(communicator::memoryIdentifierStruct& pSrcMemIdentifier, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
     void CancelMemoryTransferEvents(pmMemSection* pMemSection);
     void CancelTaskSpecificMemoryTransferEvents(pmTask* pTask);

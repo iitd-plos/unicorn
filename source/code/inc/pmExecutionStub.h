@@ -33,6 +33,7 @@
 
 #ifdef SUPPORT_CUDA
 #include "pmMemChunk.h"
+#include "pmAllocatorCollection.h"
 #include "pmCudaInterface.h"
 #endif
 
@@ -481,15 +482,11 @@ class pmStubCUDA : public pmStubGPU
         void ReserveMemory(size_t pPhysicalMemory, size_t pTotalStubCount);
     
         pmCudaCacheType& GetCudaCache();
-        pmMemChunk* GetCudaBufferChunk();
+        pmAllocatorCollection<pmCudaMemChunkTraits>* GetCudaChunkCollection();
     
         const std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>>& GetSubtaskPointersMap() const;
         const std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct>& GetSubtaskSecondaryBuffersMap() const;
 
-    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        pmMemChunk* GetPinnedBufferChunk();
-    #endif
-    
         size_t GetDeviceIndex();
 
     protected:
@@ -514,18 +511,17 @@ class pmStubCUDA : public pmStubGPU
     
         bool CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, std::vector<std::shared_ptr<pmCudaCacheValue>>& pPreventCachePurgeVector, size_t pCudaAlignment);
 
-        void* AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment);
-        bool AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct);
+        void* AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection);
+        bool AllocateMemoryForDeviceCopy(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection);
     
         size_t mDeviceIndex;
 
         std::map<std::pair<const pmMachine*, ulong>, pmTaskInfo> mTaskInfoCudaMap; // pair of task originating host and sequence number
         void* mDeviceInfoCudaPtr;
     
-        std::unique_ptr<pmMemChunk> mCudaBufferChunk;
-        void* mCudaBuffer;
-
         pmCudaCacheType mCudaCache;
+        pmAllocatorCollection<pmCudaMemChunkTraits> mCudaChunkCollection;    // Chunks for cachable memory i.e. mem sections
+        pmAllocatorCollection<pmCudaMemChunkTraits> mScratchChunkCollection; // Chunks for non-cacheable memory i.e. scratch buffer, reserved mem, etc.
 
         std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>> mSubtaskPointersMap;  // subtask id versus CUDA and pinned pointers
         std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct> mSubtaskSecondaryBuffersMap;
@@ -536,9 +532,8 @@ class pmStubCUDA : public pmStubGPU
         std::vector<pmCudaMemcpyCommand> mDeviceToHostCommands;
         std::vector<pmCudaMemcpyCommand> mHostToDeviceCommands;
     
-     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        std::unique_ptr<pmMemChunk> mPinnedBufferChunk;
-        void* mPinnedBuffer;
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+        pmAllocatorCollection<pmPinnedMemChunkTraits> mPinnedChunkCollection;
     #else
         const pmStatus mStatusCopySrc;
         pmStatus mStatusCopyDest;

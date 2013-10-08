@@ -79,9 +79,9 @@ pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
 
 pmExecutionStub::~pmExecutionStub()
 {
-	#ifdef DUMP_THREADS
+#ifdef DUMP_THREADS
 	pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, "Shutting down stub thread");
-	#endif
+#endif
 }
 
 const pmProcessingElement* pmExecutionStub::GetProcessingElement() const
@@ -1811,11 +1811,9 @@ pmStubCUDA::pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine)
 	: pmStubGPU(pDeviceIndexOnMachine)
     , mDeviceIndex(pDeviceIndex)
     , mDeviceInfoCudaPtr(NULL)
-    , mCudaBuffer(NULL)
     , mCudaCache(pmCudaCacheEvictor(this))
     , mStartSubtaskId(std::numeric_limits<ulong>::max())
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    , mPinnedBuffer(NULL)
 #else
     , mStatusCopySrc(pmStatusUnavailable)
     , mStatusCopyDest(pmStatusUnavailable)
@@ -1831,15 +1829,14 @@ void pmStubCUDA::FreeResources()
 void pmStubCUDA::FreeExecutionResources()
 {
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    if(mPinnedBuffer)
-        pmCudaInterface::DeallocatePinnedBuffer(mPinnedBuffer);
+    mPinnedChunkCollection.Reset();
 #endif
 
     if(mDeviceInfoCudaPtr)
         DestroyDeviceInfoCudaPtr(mDeviceInfoCudaPtr);
-    
-    if(mCudaBuffer)
-        pmCudaInterface::DeallocateCudaMem(mCudaBuffer);
+
+    mCudaChunkCollection.Reset();
+    mScratchChunkCollection.Reset();
 
     EXCEPTION_ASSERT(mTaskInfoCudaMap.empty());
     
@@ -1851,18 +1848,11 @@ size_t pmStubCUDA::GetDeviceIndex()
     return mDeviceIndex;
 }
 
-pmMemChunk* pmStubCUDA::GetCudaBufferChunk()
+pmAllocatorCollection<pmCudaMemChunkTraits>* pmStubCUDA::GetCudaChunkCollection()
 {
-    return mCudaBufferChunk.get();
+    return &mCudaChunkCollection;
 }
 
-#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-pmMemChunk* pmStubCUDA::GetPinnedBufferChunk()
-{
-    return mPinnedBufferChunk.get();
-}
-#endif
-    
 void pmStubCUDA::FreeTaskResources(const pmMachine* pOriginatingHost, ulong pSequenceNumber)
 {
     std::pair<const pmMachine*, ulong> lPair(pOriginatingHost, pSequenceNumber);
@@ -1902,28 +1892,28 @@ pmStubCUDA::pmCudaCacheType& pmStubCUDA::GetCudaCache()
     return mCudaCache;
 }
 
-void* pmStubCUDA::AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment)
+void* pmStubCUDA::AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection)
 {
-    void* lPtr = mCudaBufferChunk->Allocate(pLength, pCudaAlignment);
+    void* lPtr = pChunkCollection.Allocate(pLength, pCudaAlignment);
 
     while(!lPtr && mCudaCache.Purge())
-        lPtr = mCudaBufferChunk->Allocate(pLength, pCudaAlignment);
+        lPtr = pChunkCollection.Allocate(pLength, pCudaAlignment);
     
     return lPtr;
 }
 
-bool pmStubCUDA::AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct)
+bool pmStubCUDA::AllocateMemoryForDeviceCopy(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection)
 {
-    pMemoryStruct.cudaPtr = AllocateMemoryOnDevice(pLength, pCudaAlignment);
-    
+    pMemoryStruct.cudaPtr = AllocateMemoryOnDevice(pLength, pCudaAlignment, pChunkCollection);
+
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     if(pMemoryStruct.cudaPtr)
     {
-        pMemoryStruct.pinnedPtr = mPinnedBufferChunk->Allocate(pLength, pCudaAlignment);
+        pMemoryStruct.pinnedPtr = mPinnedChunkCollection.Allocate(pLength, pCudaAlignment);
         
         if(!pMemoryStruct.pinnedPtr)
         {
-            mCudaBufferChunk->Deallocate(pMemoryStruct.cudaPtr);
+            pChunkCollection.Deallocate(pMemoryStruct.cudaPtr);
             pMemoryStruct.cudaPtr = NULL;
         }
     }
@@ -1939,7 +1929,9 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, pSplitInfo);
     
-    std::vector<pmCudaSubtaskMemoryStruct> lSubtaskMemoryVector(pTask->GetMemSectionCount());
+    size_t lMemSectionCount = pTask->GetMemSectionCount();
+    
+    std::vector<pmCudaSubtaskMemoryStruct> lSubtaskMemoryVector(lMemSectionCount);
     std::vector<std::pair<pmCudaCacheKey, std::shared_ptr<pmCudaCacheValue>>> lPendingCacheInsertions;
 
     // Data is not fetched till this stage and shadow mem is also not created; so not using GetSubtaskInfo call here
@@ -1976,7 +1968,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
 
         if(lNeedsAllocation)
         {
-            if(!AllocateMemoryOnDevice(lSubscriptionInfo.length, pCudaAlignment, lSubtaskMemoryVector[pMemSectionIndex]))
+            if(!AllocateMemoryForDeviceCopy(lSubscriptionInfo.length, pCudaAlignment, lSubtaskMemoryVector[pMemSectionIndex], mCudaChunkCollection))
             {
                 lLoadStatus = false;
                 return;     // Return from lambda expression
@@ -1998,7 +1990,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
             pmCudaSubtaskMemoryStruct lStruct;
             lLoadStatus = false;
 
-            if(AllocateMemoryOnDevice(lScratchBufferSize, pCudaAlignment, lStruct))
+            if(AllocateMemoryForDeviceCopy(lScratchBufferSize, pCudaAlignment, lStruct, mScratchChunkCollection))
             {
                 lStruct.requiresLoad = true;
                 lLoadStatus = true;
@@ -2013,7 +2005,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
         pmCudaSubtaskSecondaryBuffersStruct& lStruct = mSubtaskSecondaryBuffersMap.emplace(std::make_pair(pSubtaskId, pmCudaSubtaskSecondaryBuffersStruct())).first->second;
 
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        lStruct.statusPinnedPtr = mPinnedBufferChunk->Allocate(sizeof(pmStatus), pCudaAlignment);
+        lStruct.statusPinnedPtr = mPinnedChunkCollection.Allocate(sizeof(pmStatus), pCudaAlignment);
         
         if(!lStruct.statusPinnedPtr)
         {
@@ -2030,7 +2022,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                 void* lPtr = NULL;
                 lLoadStatus = false;
 
-                if((lPtr = AllocateMemoryOnDevice(lTotalMem, pCudaAlignment)) != NULL)
+                if((lPtr = AllocateMemoryOnDevice(lTotalMem, pCudaAlignment, mScratchChunkCollection)) != NULL)
                 {
                     lLoadStatus = true;
 
@@ -2047,7 +2039,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
             #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
                 else
                 {
-                    mPinnedBufferChunk->Deallocate(lStruct.statusPinnedPtr);
+                    mPinnedChunkCollection.Deallocate(lStruct.statusPinnedPtr);
                 }
             #endif
             }
@@ -2066,13 +2058,17 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
     }
     else
     {
-        for_each(lSubtaskMemoryVector, [&] (const pmCudaSubtaskMemoryStruct& pStruct)
+        for_each_with_index(lSubtaskMemoryVector, [&] (const pmCudaSubtaskMemoryStruct& pStruct, size_t pIndex)
         {
             if(pStruct.requiresLoad)
             {
-                mCudaBufferChunk->Deallocate(pStruct.cudaPtr);
+                if(pIndex == lMemSectionCount)
+                    mScratchChunkCollection.Deallocate(pStruct.cudaPtr);
+                else
+                    mCudaChunkCollection.Deallocate(pStruct.cudaPtr);
+
             #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                mPinnedBufferChunk->Deallocate(pStruct.pinnedPtr);
+                mPinnedChunkCollection.Deallocate(pStruct.pinnedPtr);
             #endif
             }
         });
@@ -2150,7 +2146,7 @@ void* pmStubCUDA::CreateTaskConf(const pmTaskInfo& pTaskInfo)
     {
         size_t lCudaAlignment = pmCudaInterface::GetCudaAlignment(mDeviceIndex);
 
-        lTaskConfCudaPtr = mCudaBufferChunk->Allocate((size_t)pTaskInfo.taskConfLength, lCudaAlignment);
+        lTaskConfCudaPtr = mScratchChunkCollection.Allocate((size_t)pTaskInfo.taskConfLength, lCudaAlignment);
         if(!lTaskConfCudaPtr)
             PMTHROW(pmOutOfMemoryException());
 
@@ -2162,14 +2158,14 @@ void* pmStubCUDA::CreateTaskConf(const pmTaskInfo& pTaskInfo)
 
 void pmStubCUDA::DestroyTaskConf(void* pTaskConfCudaPtr)
 {
-    mCudaBufferChunk->Deallocate(pTaskConfCudaPtr);
+    mScratchChunkCollection.Deallocate(pTaskConfCudaPtr);
 }
 
 void* pmStubCUDA::CreateDeviceInfoCudaPtr(const pmDeviceInfo& pDeviceInfo)
 {
     size_t lCudaAlignment = pmCudaInterface::GetCudaAlignment(mDeviceIndex);
 
-    void* lDeviceInfoCudaPtr = mCudaBufferChunk->Allocate(sizeof(pmDeviceInfo), lCudaAlignment);
+    void* lDeviceInfoCudaPtr = mScratchChunkCollection.Allocate(sizeof(pmDeviceInfo), lCudaAlignment);
     if(!lDeviceInfoCudaPtr)
         PMTHROW(pmOutOfMemoryException());
 
@@ -2180,7 +2176,7 @@ void* pmStubCUDA::CreateDeviceInfoCudaPtr(const pmDeviceInfo& pDeviceInfo)
 
 void pmStubCUDA::DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr)
 {
-    mCudaBufferChunk->Deallocate(pDeviceInfoCudaPtr);
+    mScratchChunkCollection.Deallocate(pDeviceInfoCudaPtr);
 }
     
 void* pmStubCUDA::GetDeviceInfoCudaPtr()
@@ -2331,34 +2327,29 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
 
 void pmStubCUDA::ReserveMemory(size_t pPhysicalMemory, size_t pTotalStubCount)
 {
-    DEBUG_EXCEPTION_ASSERT(!mCudaBuffer);
-
     size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
-    
-    // Allocate cuda/pinned buffer of size equal to stub's main mem share or available cuda mem (whichever is less), subject to a maximum of 4 GB
-    size_t lCudaMem = pmCudaInterface::GetAvailableCudaMem();
-    size_t lAllocationSize = std::min((size_t)4 * 1024 * 1024 * 1024, lCudaMem);
+    size_t lMaxMem = std::min((size_t)4 * 1024 * 1024 * 1024, pmCudaInterface::GetAvailableCudaMem());
 
     if(pPhysicalMemory && pTotalStubCount)
-        lAllocationSize = std::min(lAllocationSize, pPhysicalMemory / pTotalStubCount);
+        lMaxMem = std::min(lMaxMem, pPhysicalMemory / pTotalStubCount);
+    
+    size_t lGBs = std::max((size_t)1, lMaxMem / (1024 * 1024 * 1024));
+    
+    size_t lCudaChunkSizeMultiplier = CUDA_CHUNK_SIZE_MULTIPLIER_PER_GB * lGBs;
+    size_t lScratchChunkSizeMultiplier = SCRATCH_CHUNK_SIZE_MULTIPLIER_PER_GB * lGBs;
+    
+    lCudaChunkSizeMultiplier = ((lCudaChunkSizeMultiplier / lPageSize) + ((lCudaChunkSizeMultiplier % lPageSize) ? 1 : 0)) * lPageSize;
+    lScratchChunkSizeMultiplier = ((lScratchChunkSizeMultiplier / lPageSize) + ((lScratchChunkSizeMultiplier % lPageSize) ? 1 : 0)) * lPageSize;
 
-    if(lAllocationSize == lCudaMem) // Do not allocate entire CUDA memory
-        lAllocationSize = ((lCudaMem / lPageSize) - UNALLOCATED_CUDA_MEM_PAGES) * lPageSize;
-
-    EXCEPTION_ASSERT(lAllocationSize);
+    mCudaChunkCollection.SetChunkSizeMultiplier(lCudaChunkSizeMultiplier);
+    mScratchChunkCollection.SetChunkSizeMultiplier(SCRATCH_CHUNK_SIZE_MULTIPLIER_PER_GB * lGBs);
 
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    DEBUG_EXCEPTION_ASSERT(!mPinnedBuffer);
+    size_t lPinnedChunkSizeMultiplier = PINNED_CHUNK_SIZE_MULTIPLIER_PER_GB * lGBs;
+    lPinnedChunkSizeMultiplier = ((lPinnedChunkSizeMultiplier / lPageSize) + ((lPinnedChunkSizeMultiplier % lPageSize) ? 1 : 0)) * lPageSize;
 
-    if(pPhysicalMemory && pTotalStubCount)
-    {
-        mPinnedBuffer = pmCudaInterface::AllocatePinnedBuffer(lAllocationSize);
-        mPinnedBufferChunk.reset(new pmMemChunk(mPinnedBuffer, lAllocationSize));
-    }
+    mPinnedChunkCollection.SetChunkSizeMultiplier(PINNED_CHUNK_SIZE_MULTIPLIER_PER_GB * lGBs);
 #endif
-
-    mCudaBuffer = pmCudaInterface::AllocateCudaMem(lAllocationSize);
-    mCudaBufferChunk.reset(new pmMemChunk(mCudaBuffer, lAllocationSize));
 }
     
 const std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>>& pmStubCUDA::GetSubtaskPointersMap() const
@@ -2516,21 +2507,24 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAs
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
         filtered_for_each(pPair.second, [] (pmCudaSubtaskMemoryStruct& pStruct) {return pStruct.requiresLoad;}, [&] (pmCudaSubtaskMemoryStruct& pStruct)
         {
-            mPinnedBufferChunk->Deallocate(pStruct.pinnedPtr);
+            mPinnedChunkCollection.Deallocate(pStruct.pinnedPtr);
         });
     #endif
         
         // Deallocate scratch buffer from device
         if(pPair.second.size() > lMemSectionCount)
-            mCudaBufferChunk->Deallocate(pPair.second.back().cudaPtr);
+            mScratchChunkCollection.Deallocate(pPair.second.back().cudaPtr);
     });
     
     for_each(mSubtaskSecondaryBuffersMap, [&] (decltype(mSubtaskSecondaryBuffersMap)::value_type& pPair)
     {
-        mCudaBufferChunk->Deallocate(pPair.second.reservedMemCudaPtr);  // Reserved mem and status are allocated as a single entity
+        if(pPair.second.reservedMemCudaPtr)   // Reserved mem and status are allocated as a single entity
+            mScratchChunkCollection.Deallocate(pPair.second.reservedMemCudaPtr);
+        else
+            mScratchChunkCollection.Deallocate(pPair.second.statusCudaPtr);
 
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-        mPinnedBufferChunk->Deallocate(pPair.second.statusPinnedPtr);
+        mPinnedChunkCollection.Deallocate(pPair.second.statusPinnedPtr);
     #endif
     });
     
@@ -2538,10 +2532,6 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAs
     mSubtaskSecondaryBuffersMap.clear();
     
     mCudaStreams.release();
-    
-#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    EXCEPTION_ASSERT(mPinnedBufferChunk->GetBiggestAvaialbleContiguousAllocation() == mPinnedBufferChunk->GetSize());
-#endif
 }
     
 void pmStubCUDA::TerminateUserModeExecution()

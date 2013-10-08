@@ -34,9 +34,11 @@ class pmPoolAllocator : public pmBase
 public:
     pmPoolAllocator(size_t pIndividualAllocationSize, size_t pMaxAllocations, bool pPageAlignedAllocations);
     ~pmPoolAllocator();
-    
+
     void* Allocate(size_t pSize);
     void Deallocate(void* pMem);
+    
+    bool HasNoAllocations();
     
 private:
     size_t mIndividualAllocationSize;
