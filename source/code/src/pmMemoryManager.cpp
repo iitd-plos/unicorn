@@ -476,7 +476,7 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmMemSection* pMemSection, ushort p
 }
 
 void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMemSection::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand)
-{	
+{
     using namespace linuxMemManager;
     
 	regionFetchData lFetchData;
@@ -489,16 +489,13 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
 	finalize_ptr<communicator::memoryTransferRequest> lData(new communicator::memoryTransferRequest(communicator::memoryIdentifierStruct(pRangeOwner.memIdentifier.memOwnerHost, pRangeOwner.memIdentifier.generationNumber), communicator::memoryIdentifierStruct(*pMemSection->GetMemOwnerHost(), pMemSection->GetGenerationNumber()), pOffset, pRangeOwner.hostOffset, pLength, *PM_LOCAL_MACHINE, 0, (ushort)(lLockingTask != NULL), lOriginatingHost, lSequenceNumber, pPriority));
     
 	pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand<communicator::memoryTransferRequest>::CreateSharedPtr(pPriority, communicator::SEND, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
-
-	pmCommunicator::GetCommunicator()->Send(lSendCommand);
-
-    MEM_REQ_DUMP(pMemSection, pMem, pOffset, pRangeOwner.hostOffset, pLength, (uint)(*pRangeOwner.host));
     
     finalize_ptr<char> lDummyAutoPtr;
-	lFetchData.receiveCommand = pmCommunicatorCommand<char>::CreateSharedPtr(pPriority, communicator::RECEIVE, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::BYTE, lDummyAutoPtr, 0);	// Dummy command just to allow threads to wait on it
+	pCommand = lFetchData.receiveCommand = pmCommunicatorCommand<char>::CreateSharedPtr(pPriority, communicator::RECEIVE, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::BYTE, lDummyAutoPtr, 0);	// Dummy command just to allow threads to wait on it
     
-	char* lAddr = (char*)pMem + lData->receiverOffset;
-    pInFlightMap[lAddr] = std::make_pair(lData->length, lFetchData);
+    communicator::memoryTransferRequest* lRequestData = (communicator::memoryTransferRequest*)(lSendCommand->GetData());
+	char* lAddr = (char*)pMem + lRequestData->receiverOffset;
+    pInFlightMap.emplace(std::piecewise_construct, std::forward_as_tuple(lAddr), std::forward_as_tuple(lRequestData->length, lFetchData));
 
 #ifdef ENABLE_TASK_PROFILING
     if(lLockingTask)
@@ -506,7 +503,10 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmM
 #endif
     
 	lFetchData.receiveCommand->MarkExecutionStart();
-	pCommand = lFetchData.receiveCommand;
+
+    MEM_REQ_DUMP(pMemSection, pMem, pOffset, pRangeOwner.hostOffset, pLength, (uint)(*pRangeOwner.host));
+
+	pmCommunicator::GetCommunicator()->Send(lSendCommand);
 }
     
 pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask)
@@ -877,12 +877,6 @@ linuxMemManager::memSectionSpecifics::memSectionSpecifics()
     : mInFlightLock __LOCK_NAME__("linuxMemManager::memSectionSpecifics::mInFlightLock")
 {
 }
-
-linuxMemManager::regionFetchData::regionFetchData()
-{
-    accumulatedPartialReceivesLength = 0;
-}
-
     
 /* pmLinuxMemoryManager::sharedMemAutoPtr */
 pmLinuxMemoryManager::sharedMemAutoPtr::sharedMemAutoPtr(const char* pSharedMemName)

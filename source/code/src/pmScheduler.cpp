@@ -211,7 +211,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
 	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, stealResponseStruct, lStealResponseRecvData);
 	mMemTransferRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_TRANSFER_REQUEST_TAG, MEMORY_TRANSFER_REQUEST_STRUCT, memoryTransferRequest, lMemTransferRequestData);
     mSubtaskRangeCancelCommand = PERSISTENT_RECV_COMMAND(SUBTASK_RANGE_CANCEL_TAG, SUBTASK_RANGE_CANCEL_STRUCT, subtaskRangeCancelStruct, lSubtaskRangeCancelData);
-    
+
     mRemoteSubtaskRecvCommand->SetPersistent();
     mTaskEventRecvCommand->SetPersistent();
     mStealRequestRecvCommand->SetPersistent();
@@ -252,6 +252,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
 void pmScheduler::DestroyPersistentCommunicationCommands()
 {
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
+
     lNetwork->TerminatePersistentCommand(mRemoteSubtaskRecvCommand);
     lNetwork->TerminatePersistentCommand(mTaskEventRecvCommand);
     lNetwork->TerminatePersistentCommand(mStealRequestRecvCommand);
@@ -870,7 +871,7 @@ void pmScheduler::SendRangeNegotiationSuccess(const pmProcessingElement* pReques
 	}
 	else
 	{
-		finalize_ptr<remoteSubtaskAssignStruct> lSubtaskData(new remoteSubtaskAssignStruct(pNegotiatedRange.task->GetSequenceNumber(), pNegotiatedRange.startSubtask, pNegotiatedRange.endSubtask, pNegotiatedRange.originalAllottee->GetGlobalDeviceIndex(), *pNegotiatedRange.task->GetOriginatingHost(), pRequestingDevice->GetGlobalDeviceIndex(), SUBTASK_ASSIGNMENT_RANGE_NEGOTIATED));
+		finalize_ptr<remoteSubtaskAssignStruct> lSubtaskData(new remoteSubtaskAssignStruct(pNegotiatedRange.task->GetSequenceNumber(), pNegotiatedRange.startSubtask, pNegotiatedRange.endSubtask, *pNegotiatedRange.task->GetOriginatingHost(), pRequestingDevice->GetGlobalDeviceIndex(), pNegotiatedRange.originalAllottee->GetGlobalDeviceIndex(), SUBTASK_ASSIGNMENT_RANGE_NEGOTIATED));
 
 		pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<remoteSubtaskAssignStruct>::CreateSharedPtr(pNegotiatedRange.task->GetPriority(), SEND, REMOTE_SUBTASK_ASSIGNMENT_TAG, lMachine, REMOTE_SUBTASK_ASSIGN_STRUCT, lSubtaskData, 1, SchedulerCommandCompletionCallback);
 
@@ -1266,6 +1267,9 @@ void pmScheduler::ReceiveFailedStealResponse(const pmProcessingElement* pStealin
 
 void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmSubtaskRange& pRange, const std::vector<ownershipDataStruct>& pOwnershipVector, const std::vector<uint>& pMemSectionIndexVector)
 {
+    if(pOwnershipVector.empty())
+        return;
+
     filtered_for_each_with_index(pRange.task->GetMemSections(), [] (const pmMemSection* pMemSection) {return pMemSection->IsOutput();}, [&] (pmMemSection* pMemSection, size_t pMemSectionIndex, size_t pOutputMemSectionIndex)
         {
             std::vector<ownershipDataStruct>::const_iterator lDataIter = pOwnershipVector.begin() + pMemSectionIndexVector[pOutputMemSectionIndex];

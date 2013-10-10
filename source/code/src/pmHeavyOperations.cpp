@@ -95,7 +95,7 @@ pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
         PMTHROW(pmFatalErrorException());
 
     for(size_t i = 0; i < pThreadCount; ++i)
-        mThreadVector.push_back(new pmHeavyOperationsThread(i));
+        mThreadVector.emplace_back(new pmHeavyOperationsThread(i));
     
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(FILE_OPERATIONS_STRUCT);
 	SetupPersistentCommunicationCommands();
@@ -103,10 +103,6 @@ pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
 
 pmHeavyOperationsThreadPool::~pmHeavyOperationsThreadPool()
 {
-    size_t lThreadCount = mThreadVector.size();
-    for(size_t i = 0; i < lThreadCount; ++i)
-        delete mThreadVector[i];
-
     mThreadVector.clear();
     
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(FILE_OPERATIONS_STRUCT);
@@ -189,10 +185,10 @@ void pmHeavyOperationsThreadPool::SubmitToThreadPool(const std::shared_ptr<heavy
 
 void pmHeavyOperationsThreadPool::SubmitToAllThreadsInPool(const std::shared_ptr<heavyOperationsEvent>& pEvent, ushort pPriority) const
 {
-    std::vector<pmHeavyOperationsThread*>::const_iterator lIter = mThreadVector.begin(), lEndIter = mThreadVector.end();
-
-    for(; lIter != lEndIter; ++lIter)
-        (*lIter)->SwitchThread(pEvent, pPriority);
+    for_each(mThreadVector, [&] (const std::unique_ptr<pmHeavyOperationsThread>& pThread)
+    {
+        pThread->SwitchThread(pEvent, pPriority);
+    });
 }
 
 

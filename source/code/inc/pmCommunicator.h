@@ -281,7 +281,7 @@ struct sendAcknowledgementStruct
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 8
+        FIELD_COUNT_VALUE = 9
     } fieldCount;
     
     sendAcknowledgementStruct()

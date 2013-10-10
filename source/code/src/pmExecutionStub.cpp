@@ -1658,15 +1658,13 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommunicatorComman
 {
     if(pNetworkCommands.empty())
         return;
-    
-    pmCommandPtr lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
 
 #ifdef _DEBUG
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
         
-        DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->accumulatorCommandPtr);
+        DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats);
     }
 #endif
     
@@ -1682,6 +1680,8 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommunicatorComman
 
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::STUB_WAIT_ON_NETWORK);
 #endif
+
+    pmCommandPtr lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
 
     guarded_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, pmCommandPtr> lGuardedPtr(&mCurrentSubtaskRangeLock, &(mCurrentSubtaskRangeStats->accumulatorCommandPtr), &lAccumulatorCommand);
 

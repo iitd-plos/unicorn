@@ -909,8 +909,6 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 
 void pmRemoteTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
-    DEBUG_EXCEPTION_ASSERT(DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions());
-
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
     if(mUserSideTaskCompleted && (!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations))

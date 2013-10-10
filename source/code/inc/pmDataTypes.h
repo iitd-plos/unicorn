@@ -975,31 +975,31 @@ namespace pm
     }
     
     template<typename _Container, typename _Filter_Function, typename _Command_Function>
-    _Command_Function filtered_for_each(_Container __container, _Filter_Function __f1, _Command_Function __f2)
+    _Command_Function filtered_for_each(_Container& __container, _Filter_Function __f1, _Command_Function __f2)
     {
         return filtered_for_each(__container.begin(), __container.end(), __f1, __f2);
     }
     
     template<typename _Container, typename _Filter_Function, typename _Command_Function>
-    _Command_Function filtered_for_each_with_index(_Container __container, _Filter_Function __f1, _Command_Function __f2)
+    _Command_Function filtered_for_each_with_index(_Container& __container, _Filter_Function __f1, _Command_Function __f2)
     {
         return filtered_for_each_with_index(__container.begin(), __container.end(), __f1, __f2);
     }
 
     template<typename _Container, typename _Command_Function>
-    _Command_Function for_each_with_index(_Container __container, _Command_Function __f)
+    _Command_Function for_each_with_index(_Container& __container, _Command_Function __f)
     {
         return for_each_with_index(__container.begin(), __container.end(), __f);
     }
 
     template<typename _Container, typename _Command_Function>
-    _Command_Function for_each(_Container __container, _Command_Function __f)
+    _Command_Function for_each(_Container& __container, _Command_Function __f)
     {
         return std::for_each(__container.begin(), __container.end(), __f);
     }
 
     template<typename _LockType, typename _Container, typename _Command_Function>
-    _Command_Function for_each_while_locked(_LockType __l, _Container __container, _Command_Function __f)
+    _Command_Function for_each_while_locked(_LockType& __l, _Container& __container, _Command_Function __f)
     {
         FINALIZE_RESOURCE_PTR(dLock, _LockType, &__l, Lock(), Unlock());
 

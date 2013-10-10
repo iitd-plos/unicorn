@@ -42,11 +42,13 @@ typedef unsigned long ulong;
     
 #ifdef DUMP_EXCEPTION_BACKTRACE
 #define PMTHROW(x) { \
-			char dInteger[64]; \
-			sprintf(dInteger, " %d\n", __LINE__); \
+			char dInteger[64], dHost[32]; \
+            sprintf(dInteger, " %d", __LINE__); \
+            sprintf(dHost, " [Host %d]\n", pmGetHostId()); \
 			std::string dStr("Generating Exception "); \
 			dStr += __FILE__; \
-			dStr += dInteger; \
+            dStr += dInteger; \
+            dStr += dHost; \
 			std::cout << dStr.c_str() << std::flush; \
             \
             void* dCallstack[128]; \

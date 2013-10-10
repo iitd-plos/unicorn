@@ -158,8 +158,8 @@ double pmCommand::GetExecutionTimeInSecs() const
 /* class pmAccumulatorCommand */
 pmCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<pmCommunicatorCommandPtr>& pVector)
 {
-    pmAccumulatorCommand* lCommand = new pmAccumulatorCommand();
-    pmCommandPtr lSharedPtr(lCommand);
+    pmCommandPtr lSharedPtr(new pmAccumulatorCommand());
+    pmAccumulatorCommand* lCommand = (pmAccumulatorCommand*)lSharedPtr.get();
 
     FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lCommand->mAccumulatorResourceLock, Lock(), Unlock());
 

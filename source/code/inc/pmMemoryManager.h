@@ -90,7 +90,9 @@ namespace linuxMemManager
         std::map<size_t, size_t> partialReceiveRecordMap;
         size_t accumulatedPartialReceivesLength;
         
-        regionFetchData();
+        regionFetchData()
+        : accumulatedPartialReceivesLength(0)
+        {}
     } regionFetchData;
         
     typedef std::map<void*, std::pair<size_t, regionFetchData> > pmInFlightRegions;

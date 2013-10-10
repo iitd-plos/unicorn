@@ -189,7 +189,7 @@ private:
 
     void CommandCompletionEvent(pmCommandPtr pCommand);
     
-    std::vector<pmHeavyOperationsThread*> mThreadVector;
+    std::vector<std::unique_ptr<pmHeavyOperationsThread>> mThreadVector;
     size_t mCurrentThread;
     
     pmCommunicatorCommandPtr mFileOperationsRecvCommand;
