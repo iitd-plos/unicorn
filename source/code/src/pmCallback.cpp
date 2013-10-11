@@ -125,11 +125,7 @@ bool pmSubtaskCB::HasBothCpuAndGpuCallbacks() const
 }
 
 pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, void* pStreamPtr /* = NULL */) const
-{
-#ifdef ENABLE_TASK_PROFILING
-    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
-#endif
-    
+{    
     pmStatus lStatus = pmStatusUnavailable;
 
 	switch(pStub->GetType())

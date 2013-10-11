@@ -24,7 +24,7 @@
 #include <stdio.h>
 #include <iostream>
 
-#define PMLIB_VERSION "1.0.0" /* Format MajorVersion_MinorVersion_Update */
+#define PMLIB_VERSION "1.0.0" /* Format MajorVersion.MinorVersion.Update */
 
 #define SYSTEM_CONFIGURATION_HEADER <unistd.h>
 
