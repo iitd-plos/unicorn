@@ -118,7 +118,8 @@ pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
 	size_t lPowMatrixDim = DEFAULT_POW_MATRIX_DIM; \
 	FETCH_INT_ARG(lPowMatrixDim, pCommonArgs, argc, argv); \
     size_t lMatrixDim = (1 << lPowMatrixDim); \
-	size_t lMatrixElems = lMatrixDim * lMatrixDim;
+	size_t lMatrixElems = lMatrixDim * lMatrixDim; \
+    lMatrixElems = lMatrixElems;        // Supress unused variable warning
 
 // Returns execution time on success; 0 on error
 double DoSerialProcess(int argc, char** argv, int pCommonArgs)
