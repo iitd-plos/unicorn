@@ -21,7 +21,7 @@
 #include "pmDispatcherGPU.h"
 #include "pmExecutionStub.h"
 #include "pmHardware.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 #include "pmDevicePool.h"
 #include "pmTaskManager.h"
 #include "pmSubscriptionManager.h"
@@ -140,26 +140,26 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const 
     const std::vector<pmCudaSubtaskMemoryStruct>& lSubtaskPointers = pStub->GetSubtaskPointersMap().find(pSubtaskInfo.subtaskId)->second;
     const pmCudaSubtaskSecondaryBuffersStruct& lSubtaskSecondaryBuffers = pStub->GetSubtaskSecondaryBuffersMap().find(pSubtaskInfo.subtaskId)->second;
     
-    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
+    for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        void* lCpuPtr = lSubtaskInfoCuda.memInfo[pMemSectionIndex].ptr;
+        void* lCpuPtr = lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr;
 
-        lSubtaskInfoCuda.memInfo[pMemSectionIndex].ptr = lSubtaskPointers[pMemSectionIndex].cudaPtr;
+        lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr = lSubtaskPointers[pAddressSpaceIndex].cudaPtr;
 
-        if(lSubtaskInfoCuda.memInfo[pMemSectionIndex].readPtr)
+        if(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].readPtr)
         {
-            size_t lOffset = reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pMemSectionIndex].readPtr) - reinterpret_cast<size_t>(lCpuPtr);
-            lSubtaskInfoCuda.memInfo[pMemSectionIndex].readPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pMemSectionIndex].ptr) + lOffset);
+            size_t lOffset = reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].readPtr) - reinterpret_cast<size_t>(lCpuPtr);
+            lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].readPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr) + lOffset);
         }
         
-        if(lSubtaskInfoCuda.memInfo[pMemSectionIndex].writePtr)
+        if(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].writePtr)
         {
-            size_t lOffset = reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pMemSectionIndex].writePtr) - reinterpret_cast<size_t>(lCpuPtr);
-            lSubtaskInfoCuda.memInfo[pMemSectionIndex].writePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pMemSectionIndex].ptr) + lOffset);
+            size_t lOffset = reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].writePtr) - reinterpret_cast<size_t>(lCpuPtr);
+            lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].writePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr) + lOffset);
         }
     });
 
-    if(lSubtaskPointers.size() > pTask->GetMemSectionCount())
+    if(lSubtaskPointers.size() > pTask->GetAddressSpaceCount())
     {
         DEBUG_EXCEPTION_ASSERT(lSubtaskInfoCuda.gpuContext.scratchBuffer);
         lSubtaskInfoCuda.gpuContext.scratchBuffer = lSubtaskPointers.back().cudaPtr;

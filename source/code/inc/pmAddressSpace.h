@@ -51,20 +51,20 @@ namespace pm
 {
 
 class pmMachine;
-class pmMemSection;
+class pmAddressSpace;
 
 typedef class pmUserMemHandle
 {
 public:
-    pmUserMemHandle(pmMemSection* pMemSection);
+    pmUserMemHandle(pmAddressSpace* pAddressSpace);
     ~pmUserMemHandle();
     
-    void Reset(pmMemSection* pMemSection);
+    void Reset(pmAddressSpace* pAddressSpace);
     
-    pmMemSection* GetMemSection();
+    pmAddressSpace* GetAddressSpace();
     
 private:
-    pmMemSection* mMemSection;
+    pmAddressSpace* mAddressSpace;
 } pmUserMemHandle;
     
 typedef std::map<const pmMachine*, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> > > pmOwnershipTransferMap;
@@ -73,10 +73,10 @@ typedef std::map<const pmMachine*, std::shared_ptr<std::vector<communicator::own
  * \brief Encapsulation of task memory
  */
 
-class pmMemSection : public pmBase
+class pmAddressSpace : public pmBase
 {
-    typedef std::map<std::pair<const pmMachine*, ulong>, pmMemSection*> memSectionMapType;
-    typedef std::map<void*, pmMemSection*> augmentaryMemSectionMapType;
+    typedef std::map<std::pair<const pmMachine*, ulong>, pmAddressSpace*> addressSpaceMapType;
+    typedef std::map<void*, pmAddressSpace*> augmentaryAddressSpaceMapType;
     
 	public:
 		typedef struct vmRangeOwner
@@ -113,10 +113,10 @@ class pmMemSection : public pmBase
 
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
-        static pmMemSection* CreateMemSection(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
-        static pmMemSection* CheckAndCreateMemSection(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
+        static pmAddressSpace* CreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
+        static pmAddressSpace* CheckAndCreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
 
-        ~pmMemSection();
+        ~pmAddressSpace();
     
 		void* GetMem();
         size_t GetLength();
@@ -130,8 +130,8 @@ class pmMemSection : public pmBase
 		void FlushOwnerships();
 
         bool IsRegionLocallyOwned(ulong pOffset, ulong pLength);
-		void GetOwners(ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
-        void GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmMemSection::pmMemOwnership& pOwnerships);
+		void GetOwners(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
+        void GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
 
         void Fetch(ushort pPriority);
         void FetchRange(ushort pPriority, ulong pOffset, ulong pLength);
@@ -167,9 +167,9 @@ class pmMemSection : public pmBase
         void RecordMemTransfer(size_t pTransferSize);
 #endif
             
-        static pmMemSection* FindMemSection(const pmMachine* pOwner, ulong pGenerationNumber);
-        static pmMemSection* FindMemSectionContainingLazyAddress(void* pPtr);
-        static void DeleteAllLocalMemSections();
+        static pmAddressSpace* FindAddressSpace(const pmMachine* pOwner, ulong pGenerationNumber);
+        static pmAddressSpace* FindAddressSpaceContainingLazyAddress(void* pPtr);
+        static void DeleteAllLocalAddressSpaces();
 
         ulong GetGenerationNumber() const;
         const pmMachine* GetMemOwnerHost() const;
@@ -177,7 +177,7 @@ class pmMemSection : public pmBase
         const char* GetName();
 
     private:    
-		pmMemSection(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
+		pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
     
         static ulong GetNextGenerationNumber();
     
@@ -206,8 +206,8 @@ class pmMemSection : public pmBase
         static ulong& GetGenerationId();
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetGenerationLock();
     
-        static memSectionMapType& GetMemSectionMap();
-        static augmentaryMemSectionMapType& GetAugmentaryMemSectionMap(); // Maps actual allocated memory regions to pmMemSection objects
+        static addressSpaceMapType& GetAddressSpaceMap();
+        static augmentaryAddressSpaceMapType& GetAugmentaryAddressSpaceMap(); // Maps actual allocated memory regions to pmAddressSpace objects
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetResourceLock();
                 
         pmMemOwnership mOwnershipMap;       // offset versus pair of length of region and vmRangeOwner

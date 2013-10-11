@@ -23,7 +23,7 @@
 #include "pmDispatcherGPU.h"
 #include "pmTask.h"
 #include "pmHardware.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 #include "pmExecutionStub.h"
 #include "pmCudaInterface.h"
 

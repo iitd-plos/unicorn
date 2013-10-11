@@ -106,7 +106,7 @@ pmStatus luDecompositionDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDev
 	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
     {
         size_t lDiagonalElemSize = sizeof(MATRIX_DATA_TYPE);
-		pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, pSplitInfo, lDiagonalElemSize);
+		pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lDiagonalElemSize);
     }
 #endif
 

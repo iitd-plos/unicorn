@@ -25,7 +25,7 @@
 #include "pmHardware.h"
 #include "pmCallbackUnit.h"
 #include "pmDevicePool.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 
 namespace pm
 {
@@ -72,7 +72,7 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(communicator::remoteTaskAssignPack
         communicator::taskMemoryStruct& lTaskMemStruct = pRemoteTaskData->taskMem[memIndex];
         const pmMachine* lOwnerHost = pmMachinePool::GetMachinePool()->GetMachine(lTaskMemStruct.memIdentifier.memOwnerHost);
 
-        lTaskMemVector[memIndex].memSection = pmMemSection::CheckAndCreateMemSection(lTaskMemStruct.memLength, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
+        lTaskMemVector[memIndex].addressSpace = pmAddressSpace::CheckAndCreateAddressSpace(lTaskMemStruct.memLength, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
         lTaskMemVector[memIndex].memType = (pmMemType)(lTaskMemStruct.memType);
     }
 

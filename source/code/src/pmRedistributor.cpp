@@ -21,7 +21,7 @@
 #include "pmRedistributor.h"
 #include "pmHardware.h"
 #include "pmTask.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 #include "pmStubManager.h"
 #include "pmExecutionStub.h"
 #include "pmDevicePool.h"
@@ -29,11 +29,11 @@
 namespace pm
 {
 
-pmRedistributor::pmRedistributor(pmTask* pTask, uint pMemSectionIndex)
+pmRedistributor::pmRedistributor(pmTask* pTask, uint pAddressSpaceIndex)
 	: mTask(pTask)
-    , mMemSectionIndex(pMemSectionIndex)
+    , mAddressSpaceIndex(pAddressSpaceIndex)
     , mSubtasksAccounted(0)
-    , mRedistributedMemSection(NULL)
+    , mRedistributedAddressSpace(NULL)
     , mGlobalRedistributionLock __LOCK_NAME__("pmRedistributor::mGlobalRedistributionLock")
     , mLocalRedistributionLock __LOCK_NAME__("pmRedistributor::mLocalRedistributionLock")
     , mPendingBucketsCount(0)
@@ -51,12 +51,12 @@ void pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId,
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
 
-    pmSubscriptionInfo lSubscriptionInfo = mTask->GetSubscriptionManager().GetConsolidatedWriteSubscription(pStub, pSubtaskId, pSplitInfo, mMemSectionIndex);
+    pmSubscriptionInfo lSubscriptionInfo = mTask->GetSubscriptionManager().GetConsolidatedWriteSubscription(pStub, pSubtaskId, pSplitInfo, mAddressSpaceIndex);
     if(!lSubscriptionInfo.length)
         PMTHROW(pmFatalErrorException());
     
     size_t lGlobalOffset = lSubscriptionInfo.offset + pOffset;
-    if(lGlobalOffset >= mTask->GetMemSection(mMemSectionIndex)->GetLength())
+    if(lGlobalOffset >= mTask->GetAddressSpace(mAddressSpaceIndex)->GetLength())
         PMTHROW(pmFatalErrorException());
         
 	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLocalRedistributionLock, Lock(), Unlock());
@@ -75,7 +75,7 @@ void pmRedistributor::SendRedistributionInfo()
 
 	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLocalRedistributionLock, Lock(), Unlock());
 
-    pmScheduler::GetScheduler()->RedistributionMetaDataEvent(mTask, mMemSectionIndex, &mLocalRedistributionVector);
+    pmScheduler::GetScheduler()->RedistributionMetaDataEvent(mTask, mAddressSpaceIndex, &mLocalRedistributionVector);
 
     ComputeRedistributionBuckets();
 }
@@ -112,7 +112,7 @@ void pmRedistributor::PerformRedistribution(const pmMachine* pHost, ulong pSubta
 
     if(mSubtasksAccounted == mTask->GetSubtaskCount())
     {
-        CreateRedistributedMemSection();
+        CreateRedistributedAddressSpace();
 
         ComputeGlobalOffsets();
         SendGlobalOffsets();
@@ -124,7 +124,7 @@ void pmRedistributor::ComputeGlobalOffsets()
     size_t lRunningOffset = 0;
     uint lHostId = (uint)(*PM_LOCAL_MACHINE);
     
-    pmMemSection::vmRangeOwner lRangeOwner(NULL, 0, communicator::memoryIdentifierStruct(*mRedistributedMemSection->GetMemOwnerHost(), mRedistributedMemSection->GetGenerationNumber()));
+    pmAddressSpace::vmRangeOwner lRangeOwner(NULL, 0, communicator::memoryIdentifierStruct(*mRedistributedAddressSpace->GetMemOwnerHost(), mRedistributedAddressSpace->GetGenerationNumber()));
 
     globalRedistributionMapType::iterator lIter = mGlobalRedistributionMap.begin(), lEndIter = mGlobalRedistributionMap.end();
     for(; lIter != lEndIter; ++lIter)
@@ -134,7 +134,7 @@ void pmRedistributor::ComputeGlobalOffsets()
             lRangeOwner.host = pmMachinePool::GetMachinePool()->GetMachine(lIter->first.second);
             lRangeOwner.hostOffset = lRunningOffset;
 
-            mRedistributedMemSection->TransferOwnershipPostTaskCompletion(lRangeOwner, lRunningOffset, lIter->second);
+            mRedistributedAddressSpace->TransferOwnershipPostTaskCompletion(lRangeOwner, lRunningOffset, lIter->second);
         }
         
         mGlobalOffsetsMap[lIter->first.second].push_back((ulong)lRunningOffset);
@@ -148,7 +148,7 @@ void pmRedistributor::SendGlobalOffsets()
     std::map<uint, std::vector<ulong> >::iterator lIter = mGlobalOffsetsMap.begin(), lEndIter = mGlobalOffsetsMap.end();
     
     for(; lIter != lEndIter; ++lIter)
-        pmScheduler::GetScheduler()->RedistributionOffsetsEvent(mTask, mMemSectionIndex, mRedistributedMemSection, lIter->first, &(lIter->second));
+        pmScheduler::GetScheduler()->RedistributionOffsetsEvent(mTask, mAddressSpaceIndex, mRedistributedAddressSpace, lIter->first, &(lIter->second));
 }
     
 void pmRedistributor::ReceiveGlobalOffsets(const std::vector<ulong>& pGlobalOffsetsVector, ulong pGenerationNumber)
@@ -160,7 +160,7 @@ void pmRedistributor::ReceiveGlobalOffsets(const std::vector<ulong>& pGlobalOffs
     mGlobalOffsetsVector = pGlobalOffsetsVector;
 
     if(mTask->GetOriginatingHost() != PM_LOCAL_MACHINE)
-       CreateRedistributedMemSection(pGenerationNumber);
+       CreateRedistributedAddressSpace(pGenerationNumber);
     
     DoParallelRedistribution();
 }
@@ -191,19 +191,19 @@ void pmRedistributor::DoParallelRedistribution()
 
     pmStubManager* lStubManager = pmStubManager::GetStubManager();
     for(size_t i = 0; i < mPendingBucketsCount; ++i)
-        lStubManager->GetStub((uint)i)->ProcessRedistributionBucket(mTask, mMemSectionIndex, i);
+        lStubManager->GetStub((uint)i)->ProcessRedistributionBucket(mTask, mAddressSpaceIndex, i);
 }
 
-void pmRedistributor::CreateRedistributedMemSection(ulong pGenerationNumber /* = std::numeric_limits<ulong>::max() */)
+void pmRedistributor::CreateRedistributedAddressSpace(ulong pGenerationNumber /* = std::numeric_limits<ulong>::max() */)
 {
-    pmMemSection* lMemSection = mTask->GetMemSection(mMemSectionIndex);
+    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(mAddressSpaceIndex);
 
     if(mTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
-        mRedistributedMemSection = pmMemSection::CreateMemSection(lMemSection->GetLength(), PM_LOCAL_MACHINE);
+        mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetLength(), PM_LOCAL_MACHINE);
     else
-        mRedistributedMemSection = pmMemSection::CreateMemSection(lMemSection->GetLength(), lMemSection->GetMemOwnerHost(), pGenerationNumber);
+        mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetLength(), lAddressSpace->GetMemOwnerHost(), pGenerationNumber);
 
-    mRedistributedMemSection->Lock(mTask, lMemSection->GetMemType());
+    mRedistributedAddressSpace->Lock(mTask, lAddressSpace->GetMemType());
 }
     
 void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
@@ -212,10 +212,10 @@ void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
 
-    pmMemSection* lMemSection = mTask->GetMemSection(mMemSectionIndex);
-    char* lMemAddr = reinterpret_cast<char*>(lMemSection->GetMem());
+    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(mAddressSpaceIndex);
+    char* lMemAddr = reinterpret_cast<char*>(lAddressSpace->GetMem());
 
-    pmMemSection::vmRangeOwner lRangeOwner(PM_LOCAL_MACHINE, 0, communicator::memoryIdentifierStruct(*mRedistributedMemSection->GetMemOwnerHost(), mRedistributedMemSection->GetGenerationNumber()));
+    pmAddressSpace::vmRangeOwner lRangeOwner(PM_LOCAL_MACHINE, 0, communicator::memoryIdentifierStruct(*mRedistributedAddressSpace->GetMemOwnerHost(), mRedistributedAddressSpace->GetGenerationNumber()));
 
     localRedistributionBucket& lBucket = mLocalRedistributionBucketsVector[pBucketIndex];
 
@@ -235,12 +235,12 @@ void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
             
             DEBUG_EXCEPTION_ASSERT(lData.order == lIter->first);
             
-            mRedistributedMemSection->Update(lCurrentOffset, lData.length, lMemAddr + mLocalRedistributionOffsets[*lInnerIter]);
+            mRedistributedAddressSpace->Update(lCurrentOffset, lData.length, lMemAddr + mLocalRedistributionOffsets[*lInnerIter]);
 
             if(mTask->GetOriginatingHost() != PM_LOCAL_MACHINE)
             {
                 lRangeOwner.hostOffset = lCurrentOffset;
-                mRedistributedMemSection->TransferOwnershipPostTaskCompletion(lRangeOwner, lCurrentOffset, lData.length);
+                mRedistributedAddressSpace->TransferOwnershipPostTaskCompletion(lRangeOwner, lCurrentOffset, lData.length);
             }
 
             lCurrentOffset += lData.length;
@@ -260,21 +260,21 @@ void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
 
 void pmRedistributor::DoPostParallelRedistribution()
 {
-    pmMemSection* lMemSection = mTask->GetMemSection(mMemSectionIndex);
+    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(mAddressSpaceIndex);
 
     if(mTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
     {
-        lMemSection->GetUserMemHandle()->Reset(mRedistributedMemSection);
+        lAddressSpace->GetUserMemHandle()->Reset(mRedistributedAddressSpace);
 
-        lMemSection->Unlock(mTask);
-        lMemSection->UserDelete();
-        static_cast<pmLocalTask*>(mTask)->TaskRedistributionDone(mMemSectionIndex, mRedistributedMemSection);
+        lAddressSpace->Unlock(mTask);
+        lAddressSpace->UserDelete();
+        static_cast<pmLocalTask*>(mTask)->TaskRedistributionDone(mAddressSpaceIndex, mRedistributedAddressSpace);
     }
     else
     {
-        lMemSection->Unlock(mTask);
-        lMemSection->UserDelete();
-        static_cast<pmRemoteTask*>(mTask)->MarkRedistributionFinished(mMemSectionIndex, mRedistributedMemSection);
+        lAddressSpace->Unlock(mTask);
+        lAddressSpace->UserDelete();
+        static_cast<pmRemoteTask*>(mTask)->MarkRedistributionFinished(mAddressSpaceIndex, mRedistributedAddressSpace);
     }
 }
     

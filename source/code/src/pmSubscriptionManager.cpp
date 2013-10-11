@@ -22,7 +22,7 @@
 #include "pmCommunicator.h"
 #include "pmTaskManager.h"
 #include "pmMemoryManager.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 #include "pmTask.h"
 #include "pmStubManager.h"
 #include "pmExecutionStub.h"
@@ -299,11 +299,11 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
 
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     
-    pmMemSection* lMemSection = mTask->GetMemSection(pMemIndex);
-    CheckAppropriateSubscription(lMemSection, pSubscriptionType);
+    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(pMemIndex);
+    CheckAppropriateSubscription(lAddressSpace, pSubscriptionType);
 
-    pmSubtaskMemSectionData& lMemSectionData = lSubtask.mMemSectionsData[pMemIndex];
-    pmSubtaskSubscriptionData& lSubscriptionData = (IsReadSubscription(pSubscriptionType) ? lMemSectionData.mReadSubscriptionData : lMemSectionData.mWriteSubscriptionData);
+    pmSubtaskAddressSpaceData& lAddressSpaceData = lSubtask.mAddressSpacesData[pMemIndex];
+    pmSubtaskSubscriptionData& lSubscriptionData = (IsReadSubscription(pSubscriptionType) ? lAddressSpaceData.mReadSubscriptionData : lAddressSpaceData.mWriteSubscriptionData);
 
     subscriptionRecordType& lMap = lSubscriptionData.mSubscriptionRecords;
     pmSubscriptionInfo& lConsolidatedSubscription = lSubscriptionData.mConsolidatedSubscriptions;
@@ -547,16 +547,16 @@ bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptionsDifferentStubs(pmEx
 bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptionsInternal(const pmSubtask& pSubtask1, const pmSubtask& pSubtask2, pmSubscriptionType pSubscriptionType) const
 {
 #ifdef _DEBUG
-    if(pSubtask1.mMemSectionsData.size() != pSubtask2.mMemSectionsData.size())
+    if(pSubtask1.mAddressSpacesData.size() != pSubtask2.mAddressSpacesData.size())
         PMTHROW(pmFatalErrorException());   // both subtasks belong to same task; so must have same mem section entries
 #endif
     
-    std::vector<pmSubtaskMemSectionData>::const_iterator lIter1 = pSubtask1.mMemSectionsData.begin(), lEndIter1 = pSubtask2.mMemSectionsData.end();
-    std::vector<pmSubtaskMemSectionData>::const_iterator lIter2 = pSubtask2.mMemSectionsData.begin();
+    std::vector<pmSubtaskAddressSpaceData>::const_iterator lIter1 = pSubtask1.mAddressSpacesData.begin(), lEndIter1 = pSubtask2.mAddressSpacesData.end();
+    std::vector<pmSubtaskAddressSpaceData>::const_iterator lIter2 = pSubtask2.mAddressSpacesData.begin();
     
     for(; lIter1 != lEndIter1; ++lIter1, ++lIter2)
     {
-        if(!MemSectionsHaveMatchingSubscriptionsInternal((*lIter1), (*lIter2)))
+        if(!AddressSpacesHaveMatchingSubscriptionsInternal((*lIter1), (*lIter2)))
             return false;
     }
     
@@ -564,9 +564,9 @@ bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptionsInternal(const pmSu
 }
     
 /* Must be called with mSubtaskMapVector stub's lock acquired for both subtasks */
-bool pmSubscriptionManager::MemSectionsHaveMatchingSubscriptionsInternal(const pmSubtaskMemSectionData& pMemSectionData1, const pmSubtaskMemSectionData& pMemSectionData2) const
+bool pmSubscriptionManager::AddressSpacesHaveMatchingSubscriptionsInternal(const pmSubtaskAddressSpaceData& pAddressSpaceData1, const pmSubtaskAddressSpaceData& pAddressSpaceData2) const
 {
-    return (pMemSectionData1.mReadSubscriptionData == pMemSectionData2.mReadSubscriptionData && pMemSectionData1.mWriteSubscriptionData == pMemSectionData2.mWriteSubscriptionData);
+    return (pAddressSpaceData1.mReadSubscriptionData == pAddressSpaceData2.mReadSubscriptionData && pAddressSpaceData1.mWriteSubscriptionData == pAddressSpaceData2.mWriteSubscriptionData);
 }
 
 void pmSubscriptionManager::GetNonConsolidatedReadSubscriptions(const pmExecutionStub* pStub, ulong pSubtaskId, const pmSplitInfo* pSplitInfo, uint pMemIndex, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd)
@@ -607,39 +607,39 @@ pmSubscriptionInfo pmSubscriptionManager::GetUnifiedReadWriteSubscription(const 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 void pmSubscriptionManager::GetNonConsolidatedReadSubscriptionsInternal(pmSubtask& pSubtask, uint pMemIndex, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd)
 {
-	pBegin = pSubtask.mMemSectionsData[pMemIndex].mReadSubscriptionData.mSubscriptionRecords.begin();
-	pEnd = pSubtask.mMemSectionsData[pMemIndex].mReadSubscriptionData.mSubscriptionRecords.end();
+	pBegin = pSubtask.mAddressSpacesData[pMemIndex].mReadSubscriptionData.mSubscriptionRecords.begin();
+	pEnd = pSubtask.mAddressSpacesData[pMemIndex].mReadSubscriptionData.mSubscriptionRecords.end();
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 void pmSubscriptionManager::GetNonConsolidatedWriteSubscriptionsInternal(pmSubtask& pSubtask, uint pMemIndex, subscription::subscriptionRecordType::const_iterator& pBegin, subscription::subscriptionRecordType::const_iterator& pEnd)
 {
-	pBegin = pSubtask.mMemSectionsData[pMemIndex].mWriteSubscriptionData.mSubscriptionRecords.begin();
-	pEnd = pSubtask.mMemSectionsData[pMemIndex].mWriteSubscriptionData.mSubscriptionRecords.end();
+	pBegin = pSubtask.mAddressSpacesData[pMemIndex].mWriteSubscriptionData.mSubscriptionRecords.begin();
+	pEnd = pSubtask.mAddressSpacesData[pMemIndex].mWriteSubscriptionData.mSubscriptionRecords.end();
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 const pmSubscriptionInfo& pmSubscriptionManager::GetConsolidatedReadSubscriptionInternal(pmSubtask& pSubtask, uint pMemIndex)
 {
-    return pSubtask.mMemSectionsData[pMemIndex].mReadSubscriptionData.mConsolidatedSubscriptions;
+    return pSubtask.mAddressSpacesData[pMemIndex].mReadSubscriptionData.mConsolidatedSubscriptions;
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 const pmSubscriptionInfo& pmSubscriptionManager::GetConsolidatedWriteSubscriptionInternal(pmSubtask& pSubtask, uint pMemIndex)
 {
-    return pSubtask.mMemSectionsData[pMemIndex].mWriteSubscriptionData.mConsolidatedSubscriptions;
+    return pSubtask.mAddressSpacesData[pMemIndex].mWriteSubscriptionData.mConsolidatedSubscriptions;
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 pmSubscriptionInfo pmSubscriptionManager::GetUnifiedReadWriteSubscriptionInternal(pmSubtask& pSubtask, uint pMemIndex)
 {
-    pmSubtaskMemSectionData& lMemSectionData = pSubtask.mMemSectionsData[pMemIndex];
+    pmSubtaskAddressSpaceData& lAddressSpaceData = pSubtask.mAddressSpacesData[pMemIndex];
 
-    size_t lReadOffset = lMemSectionData.mReadSubscriptionData.mConsolidatedSubscriptions.offset;
-    size_t lReadLength = lMemSectionData.mReadSubscriptionData.mConsolidatedSubscriptions.length;
+    size_t lReadOffset = lAddressSpaceData.mReadSubscriptionData.mConsolidatedSubscriptions.offset;
+    size_t lReadLength = lAddressSpaceData.mReadSubscriptionData.mConsolidatedSubscriptions.length;
     size_t lReadSpan = lReadOffset + lReadLength;
-    size_t lWriteOffset = lMemSectionData.mWriteSubscriptionData.mConsolidatedSubscriptions.offset;
-    size_t lWriteLength = lMemSectionData.mWriteSubscriptionData.mConsolidatedSubscriptions.length;
+    size_t lWriteOffset = lAddressSpaceData.mWriteSubscriptionData.mConsolidatedSubscriptions.offset;
+    size_t lWriteLength = lAddressSpaceData.mWriteSubscriptionData.mConsolidatedSubscriptions.length;
     size_t lWriteSpan = lWriteOffset + lWriteLength;
     
     if(!lReadLength && !lWriteLength)
@@ -662,15 +662,15 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
     {
         GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-        if(lSubtask.mMemSectionsData[pMemIndex].mShadowMem.get_ptr() != NULL)
+        if(lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.get_ptr() != NULL)
             PMTHROW(pmFatalErrorException());
     }
 #endif
 
     pmSubscriptionInfo lUnifiedSubscriptionInfo = GetUnifiedReadWriteSubscription(pStub, pSubtaskId, pSplitInfo, pMemIndex);
     
-    pmMemSection* lMemSection = mTask->GetMemSection(pMemIndex);
-    bool lIsLazyMem = (lMemSection->IsLazy() && pStub->GetType() == CPU && !pMem);
+    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(pMemIndex);
+    bool lIsLazyMem = (lAddressSpace->IsLazy() && pStub->GetType() == CPU && !pMem);
 
     bool lExplicitAllocation = false;
     char* lShadowMem = reinterpret_cast<char*>(mTask->CheckOutSubtaskMemory(lUnifiedSubscriptionInfo.length, pMemIndex));
@@ -692,18 +692,18 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
     {
         GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-        lSubtask.mMemSectionsData[pMemIndex].mShadowMem.reset(lShadowMem);
+        lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.reset(lShadowMem);
 
         if(lExplicitAllocation)
-            lSubtask.mMemSectionsData[pMemIndex].mShadowMem.GetDeallocator().SetExplicitAllocation();
+            lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.GetDeallocator().SetExplicitAllocation();
 
-        lSubtask.mMemSectionsData[pMemIndex].mShadowMem.GetDeallocator().SetTaskAndMemSectionIndex(mTask, pMemIndex);
+        lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.GetDeallocator().SetTaskAndAddressSpaceIndex(mTask, pMemIndex);
     }
 
     if(pMem)
     {
     #ifdef SUPPORT_LAZY_MEMORY
-        if(lMemSection->IsLazyWriteOnly())
+        if(lAddressSpace->IsLazyWriteOnly())
         {
             GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
@@ -711,9 +711,9 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
             char* lSrcMem = (char*)pMem;
 
             typedef std::map<size_t, size_t> mapType;
-            mapType& lMap = lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyUnprotectedPageRangesMap;
+            mapType& lMap = lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageRangesMap;
 
-            lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount = 0;
+            lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount = 0;
             
             for(size_t i = 0; i < pWriteOnlyUnprotectedRanges; ++i)
             {
@@ -721,7 +721,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
                 uint lCount = pUnprotectedRanges[2 * i +1];
 
                 lMap[lStartPage] = lCount;
-                lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount += lCount;
+                lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount += lCount;
                 
                 size_t lMemSize = std::min(lCount * lPageSize, lUnifiedSubscriptionInfo.length - lStartPage * lPageSize);
                 memcpy(lShadowMem + lStartPage * lPageSize, lSrcMem, lMemSize);
@@ -748,7 +748,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
         subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
         GetNonConsolidatedReadSubscriptions(pStub, pSubtaskId, pSplitInfo, pMemIndex, lBeginIter, lEndIter);
 
-        char* lMem = (char*)(lMemSection->GetMem());
+        char* lMem = (char*)(lAddressSpace->GetMem());
         for(; lBeginIter != lEndIter; ++lBeginIter)
             memcpy(lShadowMem + (lBeginIter->first - lUnifiedSubscriptionInfo.offset), lMem + lBeginIter->first, lBeginIter->second.first);
     }
@@ -759,7 +759,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
         // Lazy protect read subscriptions
         subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
     
-        if(lMemSection->IsReadWrite())
+        if(lAddressSpace->IsReadWrite())
         {
             GetNonConsolidatedReadSubscriptions(pStub, pSubtaskId, pSplitInfo, pMemIndex, lBeginIter, lEndIter);
             for(; lBeginIter != lEndIter; ++lBeginIter)
@@ -773,7 +773,7 @@ pmStatus pmSubscriptionManager::CreateSubtaskShadowMem(pmExecutionStub* pStub, u
         FINALIZE_RESOURCE(dShadowMemLock, GetShadowMemLock().Lock(), GetShadowMemLock().Unlock());
         shadowMemMapType& lShadowMemMap = GetShadowMemMap();
         lShadowMemMap[(void*)lShadowMem].subscriptionInfo = lUnifiedSubscriptionInfo;
-        lShadowMemMap[(void*)lShadowMem].memSection = lMemSection;
+        lShadowMemMap[(void*)lShadowMem].addressSpace = lAddressSpace;
     }
 #endif
     
@@ -786,12 +786,12 @@ void* pmSubscriptionManager::GetSubtaskShadowMem(pmExecutionStub* pStub, ulong p
 
 #ifdef DUMP_SHADOW_MEM
     if(pSplitInfo)
-        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem accessed for device/subtask " << pStub << "/" << pSubtaskId << " (Split " << pSplitInfo->splitId << " of " << pSplitInfo->splitCount << ") Mem Index " << pMemIndex << " " << (void*)(lSubtask.mMemSectionsData[pMemIndex].mShadowMem.get_ptr)() << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem accessed for device/subtask " << pStub << "/" << pSubtaskId << " (Split " << pSplitInfo->splitId << " of " << pSplitInfo->splitCount << ") Mem Index " << pMemIndex << " " << (void*)(lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.get_ptr)() << std::endl;
     else
-        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem accessed for device/subtask " << pStub << "/" << pSubtaskId << " Mem Index " << pMemIndex << " " << (void*)(lSubtask.mMemSectionsData[pMemIndex].mShadowMem.get_ptr)() << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem accessed for device/subtask " << pStub << "/" << pSubtaskId << " Mem Index " << pMemIndex << " " << (void*)(lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.get_ptr)() << std::endl;
 #endif
 
-	return (void*)(lSubtask.mMemSectionsData[pMemIndex].mShadowMem.get_ptr());
+	return (void*)(lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.get_ptr());
 }
 
 void pmSubscriptionManager::DestroySubtaskRangeShadowMem(pmExecutionStub* pStub, ulong pStartSubtaskId, ulong pEndSubtaskId, uint pMemIndex)
@@ -812,12 +812,12 @@ pmStatus pmSubscriptionManager::DestroySubtaskShadowMemInternal(pmSubtask& pSubt
 {
 #ifdef DUMP_SHADOW_MEM
     if(pSplitInfo)
-        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem destroyed for device/subtask " << pStub << "/" << pSubtaskId << " (Split " << pSplitInfo->splitId << " of " << pSplitInfo->splitCount << ") Mem Index " << pMemIndex << " " << (void*)(pSubtask.mMemSectionsData[pMemIndex].mShadowMem.get_ptr()) << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem destroyed for device/subtask " << pStub << "/" << pSubtaskId << " (Split " << pSplitInfo->splitId << " of " << pSplitInfo->splitCount << ") Mem Index " << pMemIndex << " " << (void*)(pSubtask.mAddressSpacesData[pMemIndex].mShadowMem.get_ptr()) << std::endl;
     else
-        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem destroyed for device/subtask " << pStub << "/" << pSubtaskId << " Mem Index " << pMemIndex << " " << (void*)(pSubtask.mMemSectionsData[pMemIndex].mShadowMem.get_ptr()) << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem destroyed for device/subtask " << pStub << "/" << pSubtaskId << " Mem Index " << pMemIndex << " " << (void*)(pSubtask.mAddressSpacesData[pMemIndex].mShadowMem.get_ptr()) << std::endl;
 #endif
 
-	pSubtask.mMemSectionsData[pMemIndex].mShadowMem.reset(NULL);
+	pSubtask.mAddressSpacesData[pMemIndex].mShadowMem.reset(NULL);
 
 	return pmSuccess;
 }
@@ -831,16 +831,16 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
     #ifdef DUMP_SHADOW_MEM
-        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem committed for device/subtask " << pStub << "/" << pSubtaskId << " Mem Index " << pMemIndex << " " << (void*)(lSubtask.mMemSectionsData[pMemIndex].mShadowMem.get_ptr()) << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: " << "Shadow Mem committed for device/subtask " << pStub << "/" << pSubtaskId << " Mem Index " << pMemIndex << " " << (void*)(lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.get_ptr()) << std::endl;
     #endif
     
-    char* lShadowMem = (char*)(lSubtask.mMemSectionsData[pMemIndex].mShadowMem.get_ptr());
+    char* lShadowMem = (char*)(lSubtask.mAddressSpacesData[pMemIndex].mShadowMem.get_ptr());
     
     if(!lShadowMem)
         PMTHROW(pmFatalErrorException());
 
-    pmMemSection* lMemSection = mTask->GetMemSection(pMemIndex);
-    char* lMem = (char*)(lMemSection->GetMem());
+    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(pMemIndex);
+    char* lMem = (char*)(lAddressSpace->GetMem());
     
     subscription::subscriptionRecordType::const_iterator lIter = pBeginIter;
     for(; lIter != pEndIter; ++lIter)
@@ -850,9 +850,9 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
 }
 
 #ifdef SUPPORT_LAZY_MEMORY
-pmMemSection* pmSubscriptionManager::FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr)
+pmAddressSpace* pmSubscriptionManager::FindAddressSpaceContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr)
 {
-    ACCUMULATION_TIMER(Timer_ACC, "FindMemSectionContainingShadowAddr");
+    ACCUMULATION_TIMER(Timer_ACC, "FindAddressSpaceContainingShadowAddr");
 
     char* lAddress = static_cast<char*>(pAddr);
 
@@ -884,7 +884,7 @@ pmMemSection* pmSubscriptionManager::FindMemSectionContainingShadowAddr(void* pA
     {
         pShadowMemOffset = lShadowMemDetails->subscriptionInfo.offset;
         pShadowMemBaseAddr = lMemAddress;
-        return lShadowMemDetails->memSection;
+        return lShadowMemDetails->addressSpace;
     }
     
     return NULL;
@@ -897,17 +897,17 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
 
     ushort lPriority = (mTask->GetPriority() + (pPrefetch ? 1 : 0));    // Prefetch at slightly low priority
 
-    std::vector<pmMemSection*>& lMemSections = mTask->GetMemSections();
-    std::vector<pmMemSection*>::const_iterator lMemSectionIter = lMemSections.begin();
+    std::vector<pmAddressSpace*>& lAddressSpaces = mTask->GetAddressSpaces();
+    std::vector<pmAddressSpace*>::const_iterator lAddressSpaceIter = lAddressSpaces.begin();
     
-    std::vector<pmSubtaskMemSectionData>::iterator lMemSectionDataIter = lSubtask.mMemSectionsData.begin(), lMemSectionDataEndIter = lSubtask.mMemSectionsData.end();
-    for(; lMemSectionDataIter != lMemSectionDataEndIter; ++lMemSectionDataIter, ++lMemSectionIter)
+    std::vector<pmSubtaskAddressSpaceData>::iterator lAddressSpaceDataIter = lSubtask.mAddressSpacesData.begin(), lAddressSpaceDataEndIter = lSubtask.mAddressSpacesData.end();
+    for(; lAddressSpaceDataIter != lAddressSpaceDataEndIter; ++lAddressSpaceDataIter, ++lAddressSpaceIter)
     {
-        pmMemSection* lMemSection = (*lMemSectionIter);
-        if(!lMemSection->IsLazy() || pDeviceType != CPU)
+        pmAddressSpace* lAddressSpace = (*lAddressSpaceIter);
+        if(!lAddressSpace->IsLazy() || pDeviceType != CPU)
         {
-            pmSubtaskMemSectionData& lMemSectionData = (*lMemSectionDataIter);
-            subscriptionRecordType& lMap = lMemSectionData.mReadSubscriptionData.mSubscriptionRecords;
+            pmSubtaskAddressSpaceData& lAddressSpaceData = (*lAddressSpaceDataIter);
+            subscriptionRecordType& lMap = lAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords;
             
             subscriptionRecordType::iterator lIter = lMap.begin(), lEndIter = lMap.end();
             for(; lIter != lEndIter; ++lIter)
@@ -915,8 +915,8 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
                 size_t lOffset = lIter->first;
                 size_t lLength = lIter->second.first;
 
-                lMemSection->GetPageAlignedAddresses(lOffset, lLength);
-                MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lMemSection, lPriority, lOffset, lLength, lIter->second.second.receiveCommandVector);
+                lAddressSpace->GetPageAlignedAddresses(lOffset, lLength);
+                MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lAddressSpace, lPriority, lOffset, lLength, lIter->second.second.receiveCommandVector);
             }
         }
     }
@@ -928,14 +928,14 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 void pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutionStub* pStub, pmDeviceType pDeviceType)
 {
-    std::vector<pmMemSection*>& lMemSections = mTask->GetMemSections();
-    std::vector<pmMemSection*>::const_iterator lMemSectionIter = lMemSections.begin();
+    std::vector<pmAddressSpace*>& lAddressSpaces = mTask->GetAddressSpaces();
+    std::vector<pmAddressSpace*>::const_iterator lAddressSpaceIter = lAddressSpaces.begin();
 
-    std::vector<pmSubtaskMemSectionData>::const_iterator lMemSectionDataIter = pSubtask.mMemSectionsData.begin(), lMemSectionDataEndIter = pSubtask.mMemSectionsData.end();
-    for(uint lMemSectionIndex = 0; lMemSectionDataIter != lMemSectionDataEndIter; ++lMemSectionDataIter, ++lMemSectionIter, ++lMemSectionIndex)
+    std::vector<pmSubtaskAddressSpaceData>::const_iterator lAddressSpaceDataIter = pSubtask.mAddressSpacesData.begin(), lAddressSpaceDataEndIter = pSubtask.mAddressSpacesData.end();
+    for(uint lAddressSpaceIndex = 0; lAddressSpaceDataIter != lAddressSpaceDataEndIter; ++lAddressSpaceDataIter, ++lAddressSpaceIter, ++lAddressSpaceIndex)
     {
-        const pmSubtaskMemSectionData& lMemSectionData = (*lMemSectionDataIter);
-        const subscriptionRecordType& lMap = lMemSectionData.mReadSubscriptionData.mSubscriptionRecords;
+        const pmSubtaskAddressSpaceData& lAddressSpaceData = (*lAddressSpaceDataIter);
+        const subscriptionRecordType& lMap = lAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords;
 
         subscriptionRecordType::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
         for(; lIter != lEndIter; ++lIter)
@@ -943,14 +943,14 @@ void pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutio
 
     #ifdef SUPPORT_CUDA
         #ifdef SUPPORT_LAZY_MEMORY
-            ClearInputMemLazyProtectionForCuda(pSubtask, *lMemSectionIter, lMemSectionIndex, pDeviceType);
+            ClearInputMemLazyProtectionForCuda(pSubtask, *lAddressSpaceIter, lAddressSpaceIndex, pDeviceType);
         #endif
     #endif
 	}
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
-void pmSubscriptionManager::CheckAppropriateSubscription(pmMemSection* pMemSection, pmSubscriptionType pSubscriptionType) const
+void pmSubscriptionManager::CheckAppropriateSubscription(pmAddressSpace* pAddressSpace, pmSubscriptionType pSubscriptionType) const
 {
 #ifdef _DEBUG
     // Read Write subscriptions are not collectively handled by this class. Instead do two subscriptions - one read and other write
@@ -958,13 +958,13 @@ void pmSubscriptionManager::CheckAppropriateSubscription(pmMemSection* pMemSecti
         PMTHROW(pmFatalErrorException());
 #endif
     
-    if(pMemSection->IsInput() && pSubscriptionType != INPUT_MEM_READ_SUBSCRIPTION)
+    if(pAddressSpace->IsInput() && pSubscriptionType != INPUT_MEM_READ_SUBSCRIPTION)
         PMTHROW(pmFatalErrorException());
     
-    if(pMemSection->IsOutput() && pSubscriptionType != OUTPUT_MEM_READ_SUBSCRIPTION && pSubscriptionType != OUTPUT_MEM_WRITE_SUBSCRIPTION)
+    if(pAddressSpace->IsOutput() && pSubscriptionType != OUTPUT_MEM_READ_SUBSCRIPTION && pSubscriptionType != OUTPUT_MEM_WRITE_SUBSCRIPTION)
         PMTHROW(pmFatalErrorException());
     
-    if(pMemSection->IsWriteOnly() && pSubscriptionType != OUTPUT_MEM_WRITE_SUBSCRIPTION)
+    if(pAddressSpace->IsWriteOnly() && pSubscriptionType != OUTPUT_MEM_WRITE_SUBSCRIPTION)
         PMTHROW(pmFatalErrorException());
 }
     
@@ -984,21 +984,21 @@ const pmSubtaskInfo& pmSubscriptionManager::GetSubtaskInfo(pmExecutionStub* pStu
 
     if(!lSubtask.mSubtaskInfo.get_ptr())
     {
-        const std::vector<pmMemSection*>& lMemSections = mTask->GetMemSections();
+        const std::vector<pmAddressSpace*>& lAddressSpaces = mTask->GetAddressSpaces();
 
-        std::vector<pmMemSection*>::const_iterator lIter = lMemSections.begin(), lEndIter = lMemSections.end();
+        std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaces.begin(), lEndIter = lAddressSpaces.end();
         for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
         {
-            pmMemSection* lMemSection = (*lIter);
+            pmAddressSpace* lAddressSpace = (*lIter);
             
             pmMemInfo lMemInfo;
-            if(lMemSection->IsInput())
+            if(lAddressSpace->IsInput())
             {
-                void* lAddr = lMemSection->GetMem();
+                void* lAddr = lAddressSpace->GetMem();
 
             #ifdef SUPPORT_LAZY_MEMORY
-                if(lMemSection->IsLazy())
-                    lAddr = lMemSection->GetReadOnlyLazyMemoryMapping();
+                if(lAddressSpace->IsLazy())
+                    lAddr = lAddressSpace->GetReadOnlyLazyMemoryMapping();
             #endif
                 
                 const pmSubscriptionInfo& lSubscriptionInfo = GetConsolidatedReadSubscriptionInternal(lSubtask, lMemIndex);
@@ -1013,13 +1013,13 @@ const pmSubtaskInfo& pmSubscriptionManager::GetSubtaskInfo(pmExecutionStub* pStu
                 pmSubscriptionInfo lUnifiedSubscriptionInfo = GetUnifiedReadWriteSubscriptionInternal(lSubtask, lMemIndex);
                 if(lUnifiedSubscriptionInfo.length)
                 {
-                    lMemInfo.ptr = (lSubtask.mMemSectionsData[lMemIndex].mShadowMem.get_ptr());
+                    lMemInfo.ptr = (lSubtask.mAddressSpacesData[lMemIndex].mShadowMem.get_ptr());
                     if(!lMemInfo.ptr)
-                        lMemInfo.ptr = (reinterpret_cast<char*>(lMemSection->GetMem()) + lUnifiedSubscriptionInfo.offset);
+                        lMemInfo.ptr = (reinterpret_cast<char*>(lAddressSpace->GetMem()) + lUnifiedSubscriptionInfo.offset);
                     
                     lMemInfo.length = lUnifiedSubscriptionInfo.length;
 
-                    if(lMemSection->IsWriteOnly())
+                    if(lAddressSpace->IsWriteOnly())
                     {
                         lMemInfo.writePtr = lMemInfo.ptr;
                         //lMemInfo.writeLength = lUnifiedSubscriptionInfo.length;
@@ -1057,9 +1057,9 @@ pmStatus pmSubscriptionManager::SetWriteOnlyLazyDefaultValue(pmExecutionStub* pS
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     
-    lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyDefaultValue.clear();
+    lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyDefaultValue.clear();
     
-    lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyDefaultValue.insert(lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyDefaultValue.end(), pVal, pVal + pLength);
+    lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyDefaultValue.insert(lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyDefaultValue.end(), pVal, pVal + pLength);
     
     return pmSuccess;
 }
@@ -1070,8 +1070,8 @@ void pmSubscriptionManager::InitializeWriteOnlyLazyMemory(pmExecutionStub* pStub
 
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     
-    size_t lDataLength = lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyDefaultValue.size();
-    char* lData = &(lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyDefaultValue[0]);
+    size_t lDataLength = lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyDefaultValue.size();
+    char* lData = &(lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyDefaultValue[0]);
     char lDefaultValue = 0;
     
     if(!lDataLength)
@@ -1107,7 +1107,7 @@ void pmSubscriptionManager::AddWriteOnlyLazyUnprotection(pmExecutionStub* pStub,
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
     typedef std::map<size_t, size_t> mapType;
-    mapType& lMap = lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyUnprotectedPageRangesMap;
+    mapType& lMap = lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageRangesMap;
     
     mapType::iterator lIter, lNextIter, lEndIter = lMap.end();
     mapType::iterator *lIterAddr = &lIter;
@@ -1156,7 +1156,7 @@ void pmSubscriptionManager::AddWriteOnlyLazyUnprotection(pmExecutionStub* pStub,
 
     lMap[lStartPage] = lEndPage - lStartPage + 1;
     
-    ++lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount;
+    ++lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount;
 
 #ifdef _DEBUG
     if(lMap.size() > 1)
@@ -1185,26 +1185,26 @@ size_t pmSubscriptionManager::GetWriteOnlyLazyUnprotectedPagesCount(pmExecutionS
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-    return lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount;
+    return lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount;
 }
     
 const std::map<size_t, size_t>& pmSubscriptionManager::GetWriteOnlyLazyUnprotectedPageRanges(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-    return lSubtask.mMemSectionsData[pMemIndex].mWriteOnlyLazyUnprotectedPageRangesMap;
+    return lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageRangesMap;
 }
 
 #ifdef SUPPORT_CUDA
 /* Must be called with mSubtaskMapVector stub's lock acquired */
-void pmSubscriptionManager::ClearInputMemLazyProtectionForCuda(pmSubtask& pSubtask, pmMemSection* pMemSection, uint pMemSectionIndex, pmDeviceType pDeviceType)
+void pmSubscriptionManager::ClearInputMemLazyProtectionForCuda(pmSubtask& pSubtask, pmAddressSpace* pAddressSpace, uint pAddressSpaceIndex, pmDeviceType pDeviceType)
 {
-    if(pDeviceType == GPU_CUDA && pMemSection->IsInput() && pMemSection->IsLazy())
+    if(pDeviceType == GPU_CUDA && pAddressSpace->IsInput() && pAddressSpace->IsLazy())
     {
-        size_t lLazyMemAddr = reinterpret_cast<size_t>(pMemSection->GetReadOnlyLazyMemoryMapping());
+        size_t lLazyMemAddr = reinterpret_cast<size_t>(pAddressSpace->GetReadOnlyLazyMemoryMapping());
 
         subscriptionRecordType::const_iterator lIter, lBeginIter, lEndIter;
-        GetNonConsolidatedReadSubscriptionsInternal(pSubtask, pMemSectionIndex, lBeginIter, lEndIter);
+        GetNonConsolidatedReadSubscriptionsInternal(pSubtask, pAddressSpaceIndex, lBeginIter, lEndIter);
 
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
         {
@@ -1221,11 +1221,11 @@ void pmSubscriptionManager::ClearInputMemLazyProtectionForCuda(pmSubtask& pSubta
 pmSubtask::pmSubtask(pmTask* pTask)
     : mScratchBufferSize(0)
     , mScratchBufferType(SUBTASK_TO_POST_SUBTASK)
-    , mMemSectionsData(pTask->GetMemSectionCount())
+    , mAddressSpacesData(pTask->GetAddressSpaceCount())
     , mReadyForExecution(false)
     , mReservedCudaGlobalMemSize(0)
 {
-    mMemInfo.reserve(pTask->GetMemSectionCount());
+    mMemInfo.reserve(pTask->GetAddressSpaceCount());
 }
 
 

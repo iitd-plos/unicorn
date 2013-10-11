@@ -27,7 +27,7 @@
 #include "pmCommand.h"
 #include "pmCallbackUnit.h"
 #include "pmScheduler.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 #include "pmTaskManager.h"
 #include "pmTls.h"
 #include "pmLogger.h"
@@ -267,9 +267,9 @@ void pmExecutionStub::ReductionFinishEvent(pmTask* pTask)
     SwitchThread(std::shared_ptr<stubEvent>(new reductionFinishEvent(REDUCTION_FINISH, pTask)), pTask->GetPriority());
 }
     
-void pmExecutionStub::ProcessRedistributionBucket(pmTask* pTask, uint pMemSectionIndex, size_t pBucketIndex)
+void pmExecutionStub::ProcessRedistributionBucket(pmTask* pTask, uint pAddressSpaceIndex, size_t pBucketIndex)
 {
-    SwitchThread(std::shared_ptr<stubEvent>(new processRedistributionBucketEvent(PROCESS_REDISTRIBUTION_BUCKET, pTask, pMemSectionIndex, pBucketIndex)), pTask->GetPriority());
+    SwitchThread(std::shared_ptr<stubEvent>(new processRedistributionBucketEvent(PROCESS_REDISTRIBUTION_BUCKET, pTask, pAddressSpaceIndex, pBucketIndex)), pTask->GetPriority());
 }
 
 void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange)
@@ -819,15 +819,15 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             {
                 std::unique_ptr<pmSplitInfo> lAutoPtr((*lIter).second.operator std::unique_ptr<pmSplitInfo>());
                 
-                const std::vector<pmMemSection*>& lMemSectionVector = lTask->GetMemSections();
+                const std::vector<pmAddressSpace*>& lAddressSpaceVector = lTask->GetAddressSpaces();
                 
-                std::vector<pmMemSection*>::const_iterator lMemIter = lMemSectionVector.begin(), lMemEndIter = lMemSectionVector.end();
-                for(uint lMemSectionIndex = 0; lMemIter != lMemEndIter; ++lMemIter, ++lMemSectionIndex)
+                std::vector<pmAddressSpace*>::const_iterator lMemIter = lAddressSpaceVector.begin(), lMemEndIter = lAddressSpaceVector.end();
+                for(uint lAddressSpaceIndex = 0; lMemIter != lMemEndIter; ++lMemIter, ++lAddressSpaceIndex)
                 {
-                    const pmMemSection* lMemSection = (*lMemIter);
+                    const pmAddressSpace* lAddressSpace = (*lMemIter);
                     
-                    if(lMemSection->IsOutput() && lMemSection->IsReadWrite() && !lTask->HasDisjointReadWritesAcrossSubtasks())
-                        CommitSubtaskShadowMem(lTask, (*lIter).first, lAutoPtr.get(), lMemSectionIndex);
+                    if(lAddressSpace->IsOutput() && lAddressSpace->IsReadWrite() && !lTask->HasDisjointReadWritesAcrossSubtasks())
+                        CommitSubtaskShadowMem(lTask, (*lIter).first, lAutoPtr.get(), lAddressSpaceIndex);
                 }
             }
         
@@ -853,7 +853,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             processRedistributionBucketEvent& lEvent = static_cast<processRedistributionBucketEvent&>(pEvent);
             pmTask* lTask = lEvent.task;
             
-            lTask->GetRedistributor(lTask->GetMemSection(lEvent.memSectionIndex))->ProcessRedistributionBucket(lEvent.bucketIndex);
+            lTask->GetRedistributor(lTask->GetAddressSpace(lEvent.addressSpaceIndex))->ProcessRedistributionBucket(lEvent.bucketIndex);
             
             break;
         }
@@ -999,22 +999,22 @@ void pmExecutionStub::HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmS
 void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
 {
     std::vector<communicator::ownershipDataStruct> lOwnershipVector;
-    std::vector<uint> lMemSectionIndexVector;
+    std::vector<uint> lAddressSpaceIndexVector;
 
     if(!pRange.task->GetCallbackUnit()->GetDataReductionCB() && !pRange.task->GetCallbackUnit()->GetDataRedistributionCB())
     {
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
-        const std::vector<pmMemSection*>& lMemSectionVector = pRange.task->GetMemSections();
+        const std::vector<pmAddressSpace*>& lAddressSpaceVector = pRange.task->GetAddressSpaces();
         
-        filtered_for_each_with_index(lMemSectionVector.begin(), lMemSectionVector.end(), [] (const pmMemSection* pMemSection) {return pMemSection->IsOutput();},
-            [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex, size_t pOutputMemSectionIndex)
+        filtered_for_each_with_index(lAddressSpaceVector.begin(), lAddressSpaceVector.end(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();},
+            [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
             {
                 subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-                lMemSectionIndexVector.push_back((uint)lOwnershipVector.size());
+                lAddressSpaceIndexVector.push_back((uint)lOwnershipVector.size());
 
                 for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
                 {
-                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, lSubtaskId, NULL, (uint)pMemSectionIndex, lBeginIter, lEndIter);
+                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
                     
                     std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
                     {
@@ -1024,7 +1024,7 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
             });
     }
 
-    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lMemSectionIndexVector));
+    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector));
 }
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -1115,18 +1115,18 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
 void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, const std::map<ulong, std::vector<pmExecutionStub*> >& pMap, pmStatus pExecStatus)
 {
     std::vector<communicator::ownershipDataStruct> lOwnershipVector;
-    std::vector<uint> lMemSectionIndexVector;
+    std::vector<uint> lAddressSpaceIndexVector;
 
     if(!pRange.task->GetCallbackUnit()->GetDataReductionCB() && !pRange.task->GetCallbackUnit()->GetDataRedistributionCB())
     {
         subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
-        std::vector<pmMemSection*>& lMemSectionVector = pRange.task->GetMemSections();
+        std::vector<pmAddressSpace*>& lAddressSpaceVector = pRange.task->GetAddressSpaces();
 
-        filtered_for_each_with_index(lMemSectionVector.begin(), lMemSectionVector.end(), [] (const pmMemSection* pMemSection) {return pMemSection->IsOutput();},
-        [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex, size_t pOutputMemSectionIndex)
+        filtered_for_each_with_index(lAddressSpaceVector.begin(), lAddressSpaceVector.end(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();},
+        [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
         {
-            lMemSectionIndexVector.push_back((uint)lOwnershipVector.size());
+            lAddressSpaceIndexVector.push_back((uint)lOwnershipVector.size());
 
             for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId < pRange.endSubtask; ++lSubtaskId)
             {
@@ -1136,7 +1136,7 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
                 for_each_with_index(lVector.begin(), lVector.end(), [&] (const pmExecutionStub* pStub, size_t pSplitIndex)
                 {
                     pmSplitInfo lSplitInfo((uint)pSplitIndex, lSplitCount);
-                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, lSubtaskId, &lSplitInfo, (uint)pMemSectionIndex, lBeginIter, lEndIter);
+                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, lSubtaskId, &lSplitInfo, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
 
                     std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
                     {
@@ -1147,7 +1147,7 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
         });
     }
 
-    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lMemSectionIndexVector));
+    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector));
 }
 
 bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)
@@ -1296,16 +1296,16 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>&
 }
 #endif
     
-void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemSectionIndex)
+void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex)
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     
-    const pmSubscriptionInfo& lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+    const pmSubscriptionInfo& lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
     
     subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBeginIter, lEndIter);
+    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBeginIter, lEndIter);
 
-    lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
+    lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
 }
 
 void pmExecutionStub::DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
@@ -1552,16 +1552,16 @@ void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, boo
     
     if(!pPrefetch)
     {
-        const std::vector<pmMemSection*>& lMemSectionVector = pTask->GetMemSections();
+        const std::vector<pmAddressSpace*>& lAddressSpaceVector = pTask->GetAddressSpaces();
 
-        std::vector<pmMemSection*>::const_iterator lIter = lMemSectionVector.begin(), lEndIter = lMemSectionVector.end();
+        std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaceVector.begin(), lEndIter = lAddressSpaceVector.end();
         for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
         {
-            const pmMemSection* lMemSection = (*lIter);
+            const pmAddressSpace* lAddressSpace = (*lIter);
             
-            if(lMemSection->IsOutput())
+            if(lAddressSpace->IsOutput())
             {
-                if(pTask->DoSubtasksNeedShadowMemory(lMemSection) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
+                if(pTask->DoSubtasksNeedShadowMemory(lAddressSpace) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
                     lSubscriptionManager.CreateSubtaskShadowMem(this, pSubtaskId, pSplitInfo, lMemIndex);
             }
         }
@@ -1582,18 +1582,18 @@ void pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId
 
     if(!lReduceCallback)
     {
-        const std::vector<pmMemSection*>& lMemSectionVector = pTask->GetMemSections();
+        const std::vector<pmAddressSpace*>& lAddressSpaceVector = pTask->GetAddressSpaces();
 
-        std::vector<pmMemSection*>::const_iterator lIter = lMemSectionVector.begin(), lEndIter = lMemSectionVector.end();
+        std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaceVector.begin(), lEndIter = lAddressSpaceVector.end();
         for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
         {
-            const pmMemSection* lMemSection = (*lIter);
+            const pmAddressSpace* lAddressSpace = (*lIter);
             
-            if(lMemSection->IsOutput())
+            if(lAddressSpace->IsOutput())
             {
-                if(pTask->DoSubtasksNeedShadowMemory(lMemSection) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
+                if(pTask->DoSubtasksNeedShadowMemory(lAddressSpace) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
                 {
-                    if(lMemSection->IsReadWrite() && !pTask->HasDisjointReadWritesAcrossSubtasks())
+                    if(lAddressSpace->IsReadWrite() && !pTask->HasDisjointReadWritesAcrossSubtasks())
                         lDeferCommit = true;
                     else
                         CommitSubtaskShadowMem(pTask, pSubtaskId, pSplitInfo, lMemIndex);
@@ -1612,14 +1612,14 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
 	pmStatus lStatus = pTask->GetCallbackUnit()->GetDataReductionCB()->Invoke(pTask, this, pSubtaskId1, pSplitInfo1, true, pStub2, pSubtaskId2, pSplitInfo2, true);
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
 
-    const std::vector<pmMemSection*>& lMemSectionVector = pTask->GetMemSections();
+    const std::vector<pmAddressSpace*>& lAddressSpaceVector = pTask->GetAddressSpaces();
 
-    std::vector<pmMemSection*>::const_iterator lIter = lMemSectionVector.begin(), lEndIter = lMemSectionVector.end();
+    std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaceVector.begin(), lEndIter = lAddressSpaceVector.end();
     for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
     {
-        const pmMemSection* lMemSection = (*lIter);
+        const pmAddressSpace* lAddressSpace = (*lIter);
         
-        if(lMemSection->IsOutput())
+        if(lAddressSpace->IsOutput())
         {
             pTask->GetSubscriptionManager().DestroySubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2, lMemIndex);
             
@@ -1907,28 +1907,28 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, pSplitInfo);
     
-    size_t lMemSectionCount = pTask->GetMemSectionCount();
+    size_t lAddressSpaceCount = pTask->GetAddressSpaceCount();
     
-    std::vector<pmCudaSubtaskMemoryStruct> lSubtaskMemoryVector(lMemSectionCount);
+    std::vector<pmCudaSubtaskMemoryStruct> lSubtaskMemoryVector(lAddressSpaceCount);
     std::vector<std::pair<pmCudaCacheKey, std::shared_ptr<pmCudaCacheValue>>> lPendingCacheInsertions;
 
     // Data is not fetched till this stage and shadow mem is also not created; so not using GetSubtaskInfo call here
-    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
+    for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
         bool lNeedsAllocation = false;
         pmSubscriptionInfo lSubscriptionInfo;
 
-        if(pMemSection->IsInput())
+        if(pAddressSpace->IsInput())
         {
-            lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
 
             if(lSubscriptionInfo.length)
             {
-                std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(pmCudaCacheKey(pMemSection, lSubscriptionInfo.offset, lSubscriptionInfo.length));
+                std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(pmCudaCacheKey(pAddressSpace, lSubscriptionInfo.offset, lSubscriptionInfo.length));
 
                 if(lDeviceMemoryPtr.get())
                 {
-                    lSubtaskMemoryVector[pMemSectionIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
+                    lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
                     pPreventCachePurgeVector.push_back(lDeviceMemoryPtr);   // increase ref count of cache value
                 }
                 else
@@ -1939,21 +1939,21 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
         }
         else
         {
-            lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
             if(lSubscriptionInfo.length)
                 lNeedsAllocation = true;
         }
 
         if(lNeedsAllocation)
         {
-            if(!AllocateMemoryForDeviceCopy(lSubscriptionInfo.length, pCudaAlignment, lSubtaskMemoryVector[pMemSectionIndex], mCudaChunkCollection))
+            if(!AllocateMemoryForDeviceCopy(lSubscriptionInfo.length, pCudaAlignment, lSubtaskMemoryVector[pAddressSpaceIndex], mCudaChunkCollection))
             {
                 lLoadStatus = false;
                 return;     // Return from lambda expression
             }
 
-            lSubtaskMemoryVector[pMemSectionIndex].requiresLoad = true;
-            lPendingCacheInsertions.emplace_back(std::make_pair(pmCudaCacheKey(pMemSection, lSubscriptionInfo.offset, lSubscriptionInfo.length), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pMemSectionIndex].cudaPtr))));
+            lSubtaskMemoryVector[pAddressSpaceIndex].requiresLoad = true;
+            lPendingCacheInsertions.emplace_back(std::make_pair(pmCudaCacheKey(pAddressSpace, lSubscriptionInfo.offset, lSubscriptionInfo.length), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr))));
         }
     });
 
@@ -2040,7 +2040,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
         {
             if(pStruct.requiresLoad)
             {
-                if(pIndex == lMemSectionCount)
+                if(pIndex == lAddressSpaceCount)
                     mScratchChunkCollection.Deallocate(pStruct.cudaPtr);
                 else
                     mCudaChunkCollection.Deallocate(pStruct.cudaPtr);
@@ -2174,35 +2174,35 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
 
     std::vector<pmCudaSubtaskMemoryStruct>& lVector = mSubtaskPointersMap[pSubtaskId];
 
-    uint lMemSectionCount = pTask->GetMemSectionCount();
+    uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
 
-    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lMemSectionCount + 1);
+    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lAddressSpaceCount + 1);
     
-    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
+    for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        if(lVector[pMemSectionIndex].requiresLoad)
+        if(lVector[pAddressSpaceIndex].requiresLoad)
         {
             pmSubscriptionInfo lSubscriptionInfo;
 
-            if(pMemSection->IsInput())
-                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            if(pAddressSpace->IsInput())
+                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
             else
-                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
 
             if(lSubscriptionInfo.length)
             {
                 subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-                lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBegin, lEnd);
+                lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
 
                 for(lIter = lBegin; lIter != lEnd; ++lIter)
                 {
                 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
                 #else
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pMemSectionIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
                 #endif
                     
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
 
                     mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
                 }
@@ -2210,7 +2210,7 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
         }
     });
     
-    if(lVector.size() > lMemSectionCount)
+    if(lVector.size() > lAddressSpaceCount)
     {
         pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
@@ -2242,28 +2242,28 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
     }
 #endif
     
-    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
+    for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        if(!pMemSection->IsInput())
+        if(!pAddressSpace->IsInput())
         {
-            pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
 
             if(lSubscriptionInfo.length)
             {
-                DEBUG_EXCEPTION_ASSERT(lVector[pMemSectionIndex].requiresLoad);
+                DEBUG_EXCEPTION_ASSERT(lVector[pAddressSpaceIndex].requiresLoad);
                 
                 subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBegin, lEnd);
+                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
                 
                 for(lIter = lBegin; lIter != lEnd; ++lIter)
                 {
                 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
                 #else
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pMemSectionIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
                 #endif
                     
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
 
                     mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
                 }
@@ -2271,7 +2271,7 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
         }
     });
 
-    if(lVector.size() > lMemSectionCount)
+    if(lVector.size() > lAddressSpaceCount)
     {
         pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
@@ -2345,31 +2345,31 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
-    uint lMemSectionCount = pTask->GetMemSectionCount();
+    uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
     std::vector<pmCudaSubtaskMemoryStruct>& lVector = mSubtaskPointersMap[pSubtaskId];
     
-    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lMemSectionCount + 1);
+    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lAddressSpaceCount + 1);
 
-    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
+    for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        if(lVector[pMemSectionIndex].requiresLoad)
+        if(lVector[pAddressSpaceIndex].requiresLoad)
         {
             pmSubscriptionInfo lSubscriptionInfo;
 
-            if(pMemSection->IsInput())
-                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            if(pAddressSpace->IsInput())
+                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
             else
-                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
 
             if(lSubscriptionInfo.length)
             {
                 subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-                lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBegin, lEnd);
+                lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
 
                 for(lIter = lBegin; lIter != lEnd; ++lIter)
                 {
-                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
-                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pMemSectionIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
 
                     memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
                 }
@@ -2377,7 +2377,7 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
         }
     });
 
-    if(lVector.size() > lMemSectionCount)
+    if(lVector.size() > lAddressSpaceCount)
     {
         pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
@@ -2399,26 +2399,26 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     
-    uint lMemSectionCount = pTask->GetMemSectionCount();
+    uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
     std::vector<pmCudaSubtaskMemoryStruct>& lVector = mSubtaskPointersMap[pSubtaskId];
     
-    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lMemSectionCount + 1);
+    DEBUG_EXCEPTION_ASSERT(lVector.size() <= lAddressSpaceCount + 1);
 
-    for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex)
+    for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        if(!pMemSection->IsInput())
+        if(!pAddressSpace->IsInput())
         {
-            pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pMemSectionIndex);
+            pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
             
             if(lSubscriptionInfo.length)
             {
                 subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pMemSectionIndex, lBegin, lEnd);
+                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
 
                 for(lIter = lBegin; lIter != lEnd; ++lIter)
                 {
-                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pMemSectionIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
-                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pMemSectionIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
 
                     memcpy(lDataPtr, lPinnedPtr, lIter->second.first);
                 }
@@ -2426,7 +2426,7 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
         }
     });
     
-    if(lVector.size() > lMemSectionCount)
+    if(lVector.size() > lAddressSpaceCount)
     {
         pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
@@ -2477,7 +2477,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAs
         }
     }
 
-    uint lMemSectionCount = pTask->GetMemSectionCount();
+    uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
     
     std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>>::iterator lIter = mSubtaskPointersMap.begin(), lEndIter = mSubtaskPointersMap.end();
     for_each(mSubtaskPointersMap, [&] (decltype(mSubtaskPointersMap)::value_type& pPair)
@@ -2490,7 +2490,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAs
     #endif
         
         // Deallocate scratch buffer from device
-        if(pPair.second.size() > lMemSectionCount)
+        if(pPair.second.size() > lAddressSpaceCount)
             mScratchChunkCollection.Deallocate(pPair.second.back().cudaPtr);
     });
     

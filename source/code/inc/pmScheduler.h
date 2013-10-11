@@ -33,7 +33,7 @@ namespace pm
 class pmHardware;
 class pmTask;
 class pmProcessingElement;
-class pmMemSection;
+class pmAddressSpace;
 class pmExecutionStub;
 
 namespace scheduler
@@ -216,15 +216,15 @@ struct sendAcknowledgementEvent : public schedulerEvent
 	const pmSubtaskRange range;
 	pmStatus execStatus;
     std::vector<communicator::ownershipDataStruct> ownershipVector;
-    std::vector<uint> memSectionIndexVector;
+    std::vector<uint> addressSpaceIndexVector;
     
-    sendAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipData, std::vector<uint>&& pMemSectionIndexVector)
+    sendAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipData, std::vector<uint>&& pAddressSpaceIndexVector)
     : schedulerEvent(pEventId)
     , device(pDevice)
     , range(pRange)
     , execStatus(pExecStatus)
     , ownershipVector(pOwnershipData)
-    , memSectionIndexVector(pMemSectionIndexVector)
+    , addressSpaceIndexVector(pAddressSpaceIndexVector)
     {}
 };
 
@@ -325,13 +325,13 @@ struct redistributionMetaDataEvent : public schedulerEvent
     typedef std::vector<communicator::redistributionOrderStruct> redistributionOrderVectorType;
 
     pmTask* task;
-    uint memSectionIndex;
+    uint addressSpaceIndex;
     redistributionOrderVectorType* redistributionData;
     
-    redistributionMetaDataEvent(eventIdentifier pEventId, pmTask* pTask, uint pMemSectionIndex, redistributionOrderVectorType* pRedistributionData)
+    redistributionMetaDataEvent(eventIdentifier pEventId, pmTask* pTask, uint pAddressSpaceIndex, redistributionOrderVectorType* pRedistributionData)
     : schedulerEvent(pEventId)
     , task(pTask)
-    , memSectionIndex(pMemSectionIndex)
+    , addressSpaceIndex(pAddressSpaceIndex)
     , redistributionData(pRedistributionData)
     {}
 };
@@ -339,18 +339,18 @@ struct redistributionMetaDataEvent : public schedulerEvent
 struct redistributionOffsetsEvent : public schedulerEvent
 {
     pmTask* task;
-    uint memSectionIndex;
+    uint addressSpaceIndex;
     std::vector<ulong>* offsetsData;
     uint destHostId;
-    pmMemSection* redistributedMemSection;
+    pmAddressSpace* redistributedAddressSpace;
     
-    redistributionOffsetsEvent(eventIdentifier pEventId, pmTask* pTask, uint pMemSectionIndex, std::vector<ulong>* pOffsetsData, uint pDestHostId, pmMemSection* pRedistributedMemSection)
+    redistributionOffsetsEvent(eventIdentifier pEventId, pmTask* pTask, uint pAddressSpaceIndex, std::vector<ulong>* pOffsetsData, uint pDestHostId, pmAddressSpace* pRedistributedAddressSpace)
     : schedulerEvent(pEventId)
     , task(pTask)
-    , memSectionIndex(pMemSectionIndex)
+    , addressSpaceIndex(pAddressSpaceIndex)
     , offsetsData(pOffsetsData)
     , destHostId(pDestHostId)
-    , redistributedMemSection(pRedistributedMemSection)
+    , redistributedAddressSpace(pRedistributedAddressSpace)
     {}
 };
     
@@ -393,8 +393,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         virtual ~pmScheduler();
 		static pmScheduler* GetScheduler();
 
-		void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
-		void ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
+		void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
+		void ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 
         virtual void ThreadSwitchCallback(std::shared_ptr<scheduler::schedulerEvent>& pEvent);
 
@@ -409,23 +409,23 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void StealFailedEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
 		void StealSuccessReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 		void StealFailedReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
-        void AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
-		void AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
+        void AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
+		void AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 		void TaskCancelEvent(pmTask* pTask);
         void TaskFinishEvent(pmTask* pTask);
         void TaskCompleteEvent(pmLocalTask* pLocalTask);
 		void ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, const pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
-		void MemTransferEvent(pmMemSection* pSrcMemSection, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
+		void MemTransferEvent(pmAddressSpace* pSrcAddressSpace, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
     
         void CommandCompletionEvent(const pmCommandPtr& pCommand);
         void RangeCancellationEvent(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
-        void RedistributionMetaDataEvent(pmTask* pTask, uint pMemSectionIndex, std::vector<communicator::redistributionOrderStruct>* pRedistributionData);
-        void RedistributionOffsetsEvent(pmTask* pTask, uint pMemSectionIndex, pmMemSection* pRedistributedMemSection, uint pDestHostId, std::vector<ulong>* pOffsetsData);
+        void RedistributionMetaDataEvent(pmTask* pTask, uint pAddressSpaceIndex, std::vector<communicator::redistributionOrderStruct>* pRedistributionData);
+        void RedistributionOffsetsEvent(pmTask* pTask, uint pAddressSpaceIndex, pmAddressSpace* pRedistributedAddressSpace, uint pDestHostId, std::vector<ulong>* pOffsetsData);
         void RangeNegotiationEvent(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange);
         void RangeNegotiationSuccessEvent(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pNegotiatedRange);
         void TerminateTaskEvent(pmTask* pTask);
 
-        void SendPostTaskOwnershipTransfer(pmMemSection* pMemSection, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> >& pChangeData);
+        void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> >& pChangeData);
         void SendSubtaskRangeCancellationMessage(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 
         void HandleCommandCompletion(const pmCommandPtr& pCommand);
@@ -444,8 +444,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
     
         void NegotiateSubtaskRangeWithOriginalAllottee(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange);
         void SendRangeNegotiationSuccess(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pNegotiatedRange);
-        void SendRedistributionData(pmTask* pTask, uint pMemSectionIndex, std::vector<communicator::redistributionOrderStruct>* pRedistributionData);
-        void SendRedistributionOffsets(pmTask* pTask, uint pMemSectionIndex, std::vector<ulong>* pOffsetsData, pmMemSection* pRedistributedMemSection, uint pDestHostId);
+        void SendRedistributionData(pmTask* pTask, uint pAddressSpaceIndex, std::vector<communicator::redistributionOrderStruct>* pRedistributionData);
+        void SendRedistributionOffsets(pmTask* pTask, uint pAddressSpaceIndex, std::vector<ulong>* pOffsetsData, pmAddressSpace* pRedistributedAddressSpace, uint pDestHostId);
 
         void SendTaskCompleteToTaskOwner(pmTask* pTask);
 
@@ -481,7 +481,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void ReceiveFailedStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
 		void ReceiveStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 
-        void RegisterPostTaskCompletionOwnershipTransfers(const pmSubtaskRange& pRange, const std::vector<communicator::ownershipDataStruct>& pOwnershipVector, const std::vector<uint>& pMemSectionIndexVector);
+        void RegisterPostTaskCompletionOwnershipTransfers(const pmSubtaskRange& pRange, const std::vector<communicator::ownershipDataStruct>& pOwnershipVector, const std::vector<uint>& pAddressSpaceIndexVector);
     
         void ClearPendingTaskCommands(pmTask* pTask);
         void SendTaskFinishToMachines(pmLocalTask* pLocalTask);

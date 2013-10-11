@@ -33,7 +33,7 @@
 namespace pm
 {
 
-class pmMemSection;
+class pmAddressSpace;
 
 namespace heavyOperations
 {
@@ -115,12 +115,12 @@ struct memTransferEvent : public heavyOperationsEvent
     
 struct memTransferCancelEvent : public heavyOperationsEvent
 {
-    pmMemSection* memSection;
+    pmAddressSpace* addressSpace;
     SIGNAL_WAIT_IMPLEMENTATION_CLASS* signalWaitArray;
 
-    memTransferCancelEvent(eventIdentifier pEventId, pmMemSection* pMemSection, SIGNAL_WAIT_IMPLEMENTATION_CLASS* pSignalWaitArray)
+    memTransferCancelEvent(eventIdentifier pEventId, pmAddressSpace* pAddressSpace, SIGNAL_WAIT_IMPLEMENTATION_CLASS* pSignalWaitArray)
     : heavyOperationsEvent(pEventId)
-    , memSection(pMemSection)
+    , addressSpace(pAddressSpace)
     , signalWaitArray(pSignalWaitArray)
     {}
 };
@@ -173,7 +173,7 @@ public:
     void PackAndSendData(const pmCommunicatorCommandPtr& pCommand);
     void UnpackDataEvent(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pPackedLength, ushort pPriority);
     void MemTransferEvent(communicator::memoryIdentifierStruct& pSrcMemIdentifier, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
-    void CancelMemoryTransferEvents(pmMemSection* pMemSection);
+    void CancelMemoryTransferEvents(pmAddressSpace* pAddressSpace);
     void CancelTaskSpecificMemoryTransferEvents(pmTask* pTask);
     
     static pmHeavyOperationsThreadPool* GetHeavyOperationsThreadPool();

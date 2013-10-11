@@ -28,7 +28,7 @@ namespace pm
 {
 
 class pmStubCUDA;
-class pmMemSection;
+class pmAddressSpace;
 
 /**
  * \brief The class responsible for all GPU related operations on various graphics cards

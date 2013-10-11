@@ -41,7 +41,7 @@ namespace pm
 
 class pmCallbackUnit;
 class pmSubtaskManager;
-class pmMemSection;
+class pmAddressSpace;
 class pmMachine;
 class pmCluster;
 class pmReducer;
@@ -62,11 +62,11 @@ class pmTask : public pmBase
 	public:
 		virtual ~pmTask();
 
-        pmMemSection* GetMemSection(size_t pIndex) const;
-        size_t GetMemSectionCount() const;
-        std::vector<pmMemSection*>& GetMemSections();
-        const std::vector<pmMemSection*>& GetMemSections() const;
-        uint GetMemSectionIndex(const pmMemSection* pMemSection) const;
+        pmAddressSpace* GetAddressSpace(size_t pIndex) const;
+        size_t GetAddressSpaceCount() const;
+        std::vector<pmAddressSpace*>& GetAddressSpaces();
+        const std::vector<pmAddressSpace*>& GetAddressSpaces() const;
+        uint GetAddressSpaceIndex(const pmAddressSpace* pAddressSpace) const;
 
 		ulong GetTaskId() const;
 		const pmCallbackUnit* GetCallbackUnit() const;
@@ -88,17 +88,17 @@ class pmTask : public pmBase
     #endif
     
         pmReducer* GetReducer();
-        pmRedistributor* GetRedistributor(const pmMemSection* pMemSection);
+        pmRedistributor* GetRedistributor(const pmAddressSpace* pAddressSpace);
 		bool HasSubtaskExecutionFinished();
 		pmStatus IncrementSubtasksExecuted(ulong pSubtaskCount);
 		ulong GetSubtasksExecuted();
-		bool DoSubtasksNeedShadowMemory(const pmMemSection* pMemSection) const;
+		bool DoSubtasksNeedShadowMemory(const pmAddressSpace* pAddressSpace) const;
         bool CanForciblyCancelSubtasks();
         bool CanSplitCpuSubtasks();
         bool CanSplitGpuSubtasks();
     
-        bool IsReducible(const pmMemSection* pMemSection) const;
-        bool IsRedistributable(const pmMemSection* pMemSection) const;
+        bool IsReducible(const pmAddressSpace* pAddressSpace) const;
+        bool IsRedistributable(const pmAddressSpace* pAddressSpace) const;
     
         virtual void MarkSubtaskExecutionFinished();
         virtual void TerminateTask();
@@ -113,8 +113,8 @@ class pmTask : public pmBase
         void MarkAllStubsScannedForShadowMemCommitMessages();
         void RegisterStubShadowMemCommitMessage();
     
-        void* CheckOutSubtaskMemory(size_t pLength, uint pMemSectionIndex);
-        void RepoolCheckedOutSubtaskMemory(uint pMemSectionIndex, void* pMem);
+        void* CheckOutSubtaskMemory(size_t pLength, uint pAddressSpaceIndex);
+        void RepoolCheckedOutSubtaskMemory(uint pAddressSpaceIndex, void* pMem);
 
         void UnlockMemories();
     
@@ -139,7 +139,7 @@ class pmTask : public pmBase
         void BuildPreSubscriptionSubtaskInfo();
         void RandomizeDevices(std::vector<const pmProcessingElement*>& pDevices);
     
-        pmPoolAllocator& GetPoolAllocator(uint pMemSectionIndex, size_t pIndividualAllocationSize, size_t pMaxAllocations);
+        pmPoolAllocator& GetPoolAllocator(uint pAddressSpaceIndex, size_t pIndividualAllocationSize, size_t pMaxAllocations);
 
 		/* Constant properties -- no updates, locking not required */
 		ulong mTaskId;
@@ -177,7 +177,7 @@ class pmTask : public pmBase
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mExecLock;
 
         finalize_ptr<pmReducer> mReducer;    
-        std::map<const pmMemSection*, pmRedistributor> mRedistributorsMap;
+        std::map<const pmAddressSpace*, pmRedistributor> mRedistributorsMap;
     
         uint mCompletedRedistributions; // How many mem sections have finished redistribution
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mRedistributionLock;
@@ -194,13 +194,13 @@ class pmTask : public pmBase
         std::map<uint, pmPoolAllocator> mPoolAllocatorMap;  // mem section index vs pool allocator
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mPoolAllocatorMapLock;
     
-        bool mTaskHasReadWriteMemSectionWithDisjointSubscriptions;
+        bool mTaskHasReadWriteAddressSpaceWithDisjointSubscriptions;
 
     protected:
-        bool DoesTaskHaveReadWriteMemSectionWithDisjointSubscriptions() const;
+        bool DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() const;
         bool RegisterRedistributionCompletion();    // Returns true when all mem sections finish redistribution
     
-        std::vector<pmMemSection*> mMemSections;
+        std::vector<pmAddressSpace*> mAddressSpaces;
 		uint mAssignedDeviceCount;
 };
 
@@ -222,8 +222,8 @@ class pmLocalTask : public pmTask
         void DoPostInternalCompletion();
         void MarkUserSideTaskCompletion();
     
-        void TaskRedistributionDone(uint pOriginalMemSectionIndex, pmMemSection* pRedistributedMemSection);
-        void SaveFinalReducedOutput(pmExecutionStub* pStub, pmMemSection* pMemSection, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void TaskRedistributionDone(uint pOriginalAddressSpaceIndex, pmAddressSpace* pRedistributedAddressSpace);
+        void SaveFinalReducedOutput(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
     
         virtual void MarkSubtaskExecutionFinished();
         virtual void TerminateTask();
@@ -275,7 +275,7 @@ class pmRemoteTask : public pmTask
         void DoPostInternalCompletion();
         void MarkUserSideTaskCompletion();
         void MarkReductionFinished();
-        void MarkRedistributionFinished(uint pOriginalMemSectionIndex, pmMemSection* pRedistributedMemSection = NULL);
+        void MarkRedistributionFinished(uint pOriginalAddressSpaceIndex, pmAddressSpace* pRedistributedAddressSpace = NULL);
 
 	private:
         finalize_ptr<char, deleteArrayDeallocator<char> > mTaskConfAutoPtr;

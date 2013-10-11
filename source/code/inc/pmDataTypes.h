@@ -47,7 +47,7 @@ namespace pm
 	class pmTask;
     class pmProcessingElement;
     class pmExecutionStub;
-    class pmMemSection;
+    class pmAddressSpace;
 
     namespace communicator
     {
@@ -127,11 +127,11 @@ namespace pm
 
     struct pmTaskMemory
     {
-        pmMemSection* memSection;
+        pmAddressSpace* addressSpace;
         pmMemType memType;
         
-        pmTaskMemory(pmMemSection* pMemSection, pmMemType pMemType)
-        : memSection(pMemSection)
+        pmTaskMemory(pmAddressSpace* pAddressSpace, pmMemType pMemType)
+        : addressSpace(pAddressSpace)
         , memType(pMemType)
         {}
     };
@@ -220,19 +220,19 @@ namespace pm
 
     struct pmCudaCacheKey
     {
-        const pmMemSection* memSection;
+        const pmAddressSpace* addressSpace;
         ulong offset;
         ulong length;
         
-        pmCudaCacheKey(const pmMemSection* pMemSection, ulong pOffset, ulong pLength)
-        : memSection(pMemSection)
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength)
+        : addressSpace(pAddressSpace)
         , offset(pOffset)
         , length(pLength)
         {}
 
         bool operator== (const pmCudaCacheKey& pKey) const
         {
-            return (memSection == pKey.memSection && offset == pKey.offset && length == pKey.length);
+            return (addressSpace == pKey.addressSpace && offset == pKey.offset && length == pKey.length);
         }
     };
     
@@ -240,7 +240,7 @@ namespace pm
     {
         std::size_t operator() (const pmCudaCacheKey& pKey) const
         {
-            return (std::hash<size_t>()(((reinterpret_cast<size_t>(pKey.memSection)) ^ (std::hash<ulong>()(pKey.offset) << 1)) >> 1) ^ (std::hash<ulong>()(pKey.length) << 1));
+            return (std::hash<size_t>()(((reinterpret_cast<size_t>(pKey.addressSpace)) ^ (std::hash<ulong>()(pKey.offset) << 1)) >> 1) ^ (std::hash<ulong>()(pKey.length) << 1));
         }
     };
     

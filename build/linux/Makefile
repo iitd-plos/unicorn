@@ -66,7 +66,8 @@ else
 	PROGRAM=$(OUTDIR)/libpmlib.so
 endif
 
-OBJECTS= $(OUTDIR)/pmBase.o \
+OBJECTS= $(OUTDIR)/pmAddressSpace.o \
+	$(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmCallback.o \
 	$(OUTDIR)/pmCallbackUnit.o \
 	$(OUTDIR)/pmCluster.o \
@@ -83,7 +84,6 @@ OBJECTS= $(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmLogger.o \
 	$(OUTDIR)/pmMemChunk.o \
 	$(OUTDIR)/pmMemoryManager.o \
-	$(OUTDIR)/pmMemSection.o \
 	$(OUTDIR)/pmNetwork.o \
 	$(OUTDIR)/pmReducer.o \
 	$(OUTDIR)/pmRedistributor.o \

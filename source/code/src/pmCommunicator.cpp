@@ -24,7 +24,7 @@
 #include "pmTask.h"
 #include "pmHardware.h"
 #include "pmCallbackUnit.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 #include "pmMemoryManager.h"
 
 namespace pm
@@ -102,7 +102,7 @@ void pmCommunicator::All2All(pmCommunicatorCommandPtr& pCommand, bool pBlocking 
 /* struct remoteTaskAssignStruct */
 remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTask* pLocalTask)
     : taskConfLength(pLocalTask->GetTaskConfigurationLength())
-    , taskMemCount((uint)pLocalTask->GetMemSectionCount())
+    , taskMemCount((uint)pLocalTask->GetAddressSpaceCount())
 	, taskId(pLocalTask->GetTaskId())
 	, subtaskCount(pLocalTask->GetSubtaskCount())
 	, assignedDeviceCount(pLocalTask->GetAssignedDeviceCount())
@@ -144,9 +144,9 @@ remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTask* pLocalTask)
     {
         taskMem.reserve(taskStruct.taskMemCount);
 
-        const std::vector<pmMemSection*>& lMemSectionVector = pLocalTask->GetMemSections();
+        const std::vector<pmAddressSpace*>& lAddressSpaceVector = pLocalTask->GetAddressSpaces();
 
-        std::vector<pmMemSection*>::const_iterator lIter = lMemSectionVector.begin(), lEndIter = lMemSectionVector.end();
+        std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaceVector.begin(), lEndIter = lAddressSpaceVector.end();
         for(; lIter != lEndIter; ++lIter)
         {
             taskMem.push_back(taskMemoryStruct(memoryIdentifierStruct(*((*lIter)->GetMemOwnerHost()), (*lIter)->GetGenerationNumber()), (*lIter)->GetLength(), (ushort)((*lIter)->GetMemType())));
@@ -172,17 +172,17 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
-    filtered_for_each_with_index(pTask->GetMemSections(), [&] (const pmMemSection* pMemSection) {return (pMemSection->IsOutput() && pTask->IsReducible(pMemSection));},
-    [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex, size_t pOutputMemSectionIndex)
+    filtered_for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pAddressSpace->IsOutput() && pTask->IsReducible(pAddressSpace));},
+    [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
     {
-        uint lMemIndex = (uint)pMemSectionIndex;
+        uint lMemIndex = (uint)pAddressSpaceIndex;
 
         pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
         
         void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
         
     #ifdef SUPPORT_LAZY_MEMORY
-        if(pMemSection->IsLazyWriteOnly())
+        if(pAddressSpace->IsLazyWriteOnly())
         {
             size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
             const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
@@ -244,8 +244,8 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
 
 
 /* struct ownershipTransferPacked */
-    ownershipTransferPacked::ownershipTransferPacked(pmMemSection* pMemSection, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData)
-    : memIdentifier(*pMemSection->GetMemOwnerHost(), pMemSection->GetGenerationNumber())
+    ownershipTransferPacked::ownershipTransferPacked(pmAddressSpace* pAddressSpace, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData)
+    : memIdentifier(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber())
     , transferDataElements((uint)(pChangeData->size()))
     , transferData(pChangeData)
 {}
@@ -260,25 +260,25 @@ memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNu
 
     
 /* struct sendAcknowledgementPacked */
-sendAcknowledgementPacked::sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector)
-    : ackStruct(pSourceDevice->GetGlobalDeviceIndex(), *pRange.task->GetOriginatingHost(), pRange.task->GetSequenceNumber(), pRange.startSubtask, pRange.endSubtask, pExecStatus, (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pSourceDevice->GetGlobalDeviceIndex()), (uint)pOwnershipVector.size(), (uint)pMemSectionIndexVector.size())
+sendAcknowledgementPacked::sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
+    : ackStruct(pSourceDevice->GetGlobalDeviceIndex(), *pRange.task->GetOriginatingHost(), pRange.task->GetSequenceNumber(), pRange.startSubtask, pRange.endSubtask, pExecStatus, (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pSourceDevice->GetGlobalDeviceIndex()), (uint)pOwnershipVector.size(), (uint)pAddressSpaceIndexVector.size())
     , ownershipVector(pOwnershipVector)
-    , memSectionIndexVector(std::move(pMemSectionIndexVector))
+    , addressSpaceIndexVector(std::move(pAddressSpaceIndexVector))
 {
 }
 
     
 /* struct dataRedistributionPacked */
-dataRedistributionPacked::dataRedistributionPacked(pmTask* pTask, uint pMemSectionIndex, finalize_ptr<std::vector<redistributionOrderStruct>>& pRedistributionAutoPtr)
-    : redistributionStruct(*pTask->GetOriginatingHost(), pTask->GetSequenceNumber(), *PM_LOCAL_MACHINE, pTask->GetSubtasksExecuted(), (uint)pRedistributionAutoPtr->size(), pMemSectionIndex)
+dataRedistributionPacked::dataRedistributionPacked(pmTask* pTask, uint pAddressSpaceIndex, finalize_ptr<std::vector<redistributionOrderStruct>>& pRedistributionAutoPtr)
+    : redistributionStruct(*pTask->GetOriginatingHost(), pTask->GetSequenceNumber(), *PM_LOCAL_MACHINE, pTask->GetSubtasksExecuted(), (uint)pRedistributionAutoPtr->size(), pAddressSpaceIndex)
     , redistributionData(std::move(pRedistributionAutoPtr))
 {
 }
     
 
 /* struct redistributionOffsetsPacked */
-redistributionOffsetsPacked::redistributionOffsetsPacked(pmTask* pTask, uint pMemSectionIndex, finalize_ptr<std::vector<ulong>>& pOffsetsDataAutoPtr, pmMemSection* pRedistributedMemSection)
-    : redistributionStruct(*pTask->GetOriginatingHost(), pTask->GetSequenceNumber(), pRedistributedMemSection->GetGenerationNumber(), (uint)pOffsetsDataAutoPtr->size(), pMemSectionIndex)
+redistributionOffsetsPacked::redistributionOffsetsPacked(pmTask* pTask, uint pAddressSpaceIndex, finalize_ptr<std::vector<ulong>>& pOffsetsDataAutoPtr, pmAddressSpace* pRedistributedAddressSpace)
+    : redistributionStruct(*pTask->GetOriginatingHost(), pTask->GetSequenceNumber(), pRedistributedAddressSpace->GetGenerationNumber(), (uint)pOffsetsDataAutoPtr->size(), pAddressSpaceIndex)
     , offsetsData(std::move(pOffsetsDataAutoPtr))
 {
 }

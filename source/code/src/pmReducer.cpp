@@ -186,10 +186,10 @@ void pmReducer::AddReductionFinishEvent()
     
 void pmReducer::HandleReductionFinish()
 {
-    filtered_for_each(mTask->GetMemSections(), [&] (const pmMemSection* pMemSection) {return (pMemSection->IsOutput() && mTask->IsReducible(pMemSection));},
-    [&] (pmMemSection* pMemSection)
+    filtered_for_each(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pAddressSpace->IsOutput() && mTask->IsReducible(pAddressSpace));},
+    [&] (pmAddressSpace* pAddressSpace)
     {
-        (static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.stub, pMemSection, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
+        (static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.stub, pAddressSpace, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
     });
 }
 
@@ -202,20 +202,20 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
 
     pmSubscriptionManager& lSubscriptionManager = mTask->GetSubscriptionManager();
     
-    filtered_for_each_with_index(mTask->GetMemSections(), [&] (const pmMemSection* pMemSection) {return (pMemSection->IsOutput() && mTask->IsReducible(pMemSection));},
-    [&] (const pmMemSection* pMemSection, size_t pMemSectionIndex, size_t pOutputMemSectionIndex)
+    filtered_for_each_with_index(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pAddressSpace->IsOutput() && mTask->IsReducible(pAddressSpace));},
+    [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
     {
-        uint lMemSectionIndex = (uint)pMemSectionIndex;
+        uint lAddressSpaceIndex = (uint)pAddressSpaceIndex;
 
-        datatype* lShadowMem1 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub1, pSubtaskId1, pSplitInfo1, lMemSectionIndex);
-        datatype* lShadowMem2 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2, lMemSectionIndex);
+        datatype* lShadowMem1 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub1, pSubtaskId1, pSplitInfo1, lAddressSpaceIndex);
+        datatype* lShadowMem2 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2, lAddressSpaceIndex);
 
     #ifdef SUPPORT_LAZY_MEMORY
-        if(pMemSection->IsLazyWriteOnly())
+        if(pAddressSpace->IsLazyWriteOnly())
         {
             size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
 
-            const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pStub2, pSubtaskId2, pSplitInfo2, lMemSectionIndex);
+            const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pStub2, pSubtaskId2, pSplitInfo2, lAddressSpaceIndex);
             
             std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
             
@@ -246,8 +246,8 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
         else
     #endif
         {
-            pmSubscriptionInfo lUnifiedSubscriptionInfo1 = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub1, pSubtaskId1, pSplitInfo1, lMemSectionIndex);
-            pmSubscriptionInfo lUnifiedSubscriptionInfo2 = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub2, pSubtaskId2, pSplitInfo2, lMemSectionIndex);
+            pmSubscriptionInfo lUnifiedSubscriptionInfo1 = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub1, pSubtaskId1, pSplitInfo1, lAddressSpaceIndex);
+            pmSubscriptionInfo lUnifiedSubscriptionInfo2 = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub2, pSubtaskId2, pSplitInfo2, lAddressSpaceIndex);
             
             if(lUnifiedSubscriptionInfo1.length != lUnifiedSubscriptionInfo2.length)
                 PMTHROW(pmFatalErrorException());

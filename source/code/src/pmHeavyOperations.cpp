@@ -19,7 +19,7 @@
  */
 
 #include "pmHeavyOperations.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 #include "pmDevicePool.h"
 #include "pmHardware.h"
 #include "pmCommunicator.h"
@@ -41,38 +41,38 @@ using namespace heavyOperations;
 using namespace communicator;
 
 #ifdef TRACK_MEMORY_REQUESTS
-void __dump_mem_forward(const pmMemSection* memSection, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, memoryIdentifierStruct& newIdentifier, ulong newOffset);
-void __dump_mem_transfer(const pmMemSection* memSection, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host);
+void __dump_mem_forward(const pmAddressSpace* addressSpace, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, memoryIdentifierStruct& newIdentifier, ulong newOffset);
+void __dump_mem_transfer(const pmAddressSpace* addressSpace, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host);
     
-void __dump_mem_forward(const pmMemSection* memSection, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, memoryIdentifierStruct&  newIdentifier, ulong newOffset)
+void __dump_mem_forward(const pmAddressSpace* addressSpace, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, memoryIdentifierStruct&  newIdentifier, ulong newOffset)
 {
     char lStr[512];
     
-    if(memSection->IsInput())
-        sprintf(lStr, "Forwarding input mem section %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", memSection, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, newHost, host);
+    if(addressSpace->IsInput())
+        sprintf(lStr, "Forwarding input mem section %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", addressSpace, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, newHost, host);
     else
-        sprintf(lStr, "Forwarding out mem section %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", memSection, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, newHost, host);
+        sprintf(lStr, "Forwarding out mem section %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", addressSpace, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, newHost, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-void __dump_mem_transfer(const pmMemSection* memSection, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host)
+void __dump_mem_transfer(const pmAddressSpace* addressSpace, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host)
 {
     char lStr[512];
     
-    if(memSection->IsInput())
-        sprintf(lStr, "Transferring input mem section %p (Remote mem (%d, %ld)) from offset %ld (Remote offset %ld) for length %ld to host %d", memSection,identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, host);
+    if(addressSpace->IsInput())
+        sprintf(lStr, "Transferring input mem section %p (Remote mem (%d, %ld)) from offset %ld (Remote offset %ld) for length %ld to host %d", addressSpace,identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, host);
     else
-        sprintf(lStr, "Transferring out mem section %p (Remote mem (%d, %ld)) from offset %ld (Remote Offset %ld) for length %ld to host %d", memSection, identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, host);
+        sprintf(lStr, "Transferring out mem section %p (Remote mem (%d, %ld)) from offset %ld (Remote Offset %ld) for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-#define MEM_TRANSFER_DUMP(memSection, identifier, receiverOffset, offset, length, host) __dump_mem_transfer(memSection, identifier, receiverOffset, offset, length, host);
-#define MEM_FORWARD_DUMP(memSection, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset) __dump_mem_forward(memSection, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset);
+#define MEM_TRANSFER_DUMP(addressSpace, identifier, receiverOffset, offset, length, host) __dump_mem_transfer(addressSpace, identifier, receiverOffset, offset, length, host);
+#define MEM_FORWARD_DUMP(addressSpace, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset) __dump_mem_forward(addressSpace, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset);
 #else
-#define MEM_TRANSFER_DUMP(memSection, identifier, receiverOffset, offset, length, host)
-#define MEM_FORWARD_DUMP(memSection, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset)
+#define MEM_TRANSFER_DUMP(addressSpace, identifier, receiverOffset, offset, length, host)
+#define MEM_FORWARD_DUMP(addressSpace, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset)
 #endif
 
 void HeavyOperationsCommandCompletionCallback(const pmCommandPtr& pCommand)
@@ -155,13 +155,13 @@ void pmHeavyOperationsThreadPool::CommandCompletionEvent(pmCommandPtr pCommand)
 	SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new commandCompletionEvent(COMMAND_COMPLETION, pCommand)), pCommand->GetPriority());
 }
     
-void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmMemSection* pMemSection)
+void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmAddressSpace* pAddressSpace)
 {
     size_t lPoolSize = mThreadVector.size();
 
 	FINALIZE_PTR_ARRAY(dSignalWaitArray, SIGNAL_WAIT_IMPLEMENTATION_CLASS, new SIGNAL_WAIT_IMPLEMENTATION_CLASS[lPoolSize]);
     
-	SubmitToAllThreadsInPool(std::shared_ptr<heavyOperationsEvent>(new memTransferCancelEvent(MEM_TRANSFER_CANCEL, pMemSection, dSignalWaitArray)), MAX_CONTROL_PRIORITY);
+	SubmitToAllThreadsInPool(std::shared_ptr<heavyOperationsEvent>(new memTransferCancelEvent(MEM_TRANSFER_CANCEL, pAddressSpace, dSignalWaitArray)), MAX_CONTROL_PRIORITY);
     
     for(size_t i = 0; i < lPoolSize; ++i)
         dSignalWaitArray[i].Wait();
@@ -246,8 +246,8 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
             if(lEventDetails.machine == PM_LOCAL_MACHINE && !lEventDetails.isForwarded)
                 PMTHROW(pmFatalErrorException());   // Cyclic reference
 
-            pmMemSection* lSrcMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.srcMemIdentifier.memOwnerHost), lEventDetails.srcMemIdentifier.generationNumber);
-            if(!lSrcMemSection)
+            pmAddressSpace* lSrcAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.srcMemIdentifier.memOwnerHost), lEventDetails.srcMemIdentifier.generationNumber);
+            if(!lSrcAddressSpace)
                 return;
             
             pmTask* lRequestingTask = NULL;
@@ -261,44 +261,44 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
             }
             
             // Check if the memory is residing locally or forward the request to the owner machine
-            pmMemSection::pmMemOwnership lOwnerships;
-            lSrcMemSection->GetOwners(lEventDetails.offset, lEventDetails.length, lOwnerships);
+            pmAddressSpace::pmMemOwnership lOwnerships;
+            lSrcAddressSpace->GetOwners(lEventDetails.offset, lEventDetails.length, lOwnerships);
             
-            pmMemSection* lDestMemSection = NULL;
+            pmAddressSpace* lDestAddressSpace = NULL;
 
-            pmMemSection::pmMemOwnership::iterator lStartIter = lOwnerships.begin(), lEndIter = lOwnerships.end(), lIter;
+            pmAddressSpace::pmMemOwnership::iterator lStartIter = lOwnerships.begin(), lEndIter = lOwnerships.end(), lIter;
             for(lIter = lStartIter; lIter != lEndIter; ++lIter)
             {
                 ulong lInternalOffset = lIter->first;
                 ulong lInternalLength = lIter->second.first;
-                pmMemSection::vmRangeOwner& lRangeOwner = lIter->second.second;
+                pmAddressSpace::vmRangeOwner& lRangeOwner = lIter->second.second;
                 
                 if(lRangeOwner.host == PM_LOCAL_MACHINE)
                 {
-                    pmMemSection* lOwnerMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
+                    pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
                 
-                    if(!lOwnerMemSection)
+                    if(!lOwnerAddressSpace)
                         PMTHROW(pmFatalErrorException());
                 
                 #ifdef ENABLE_MEM_PROFILING
-                    lSrcMemSection->RecordMemTransfer(lInternalLength);
+                    lSrcAddressSpace->RecordMemTransfer(lInternalLength);
                 #endif
                 
                     if(lEventDetails.machine == PM_LOCAL_MACHINE)
                     {
-                        lDestMemSection = pmMemSection::FindMemSection(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.destMemIdentifier.memOwnerHost), lEventDetails.destMemIdentifier.generationNumber);
+                        lDestAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.destMemIdentifier.memOwnerHost), lEventDetails.destMemIdentifier.generationNumber);
                     
-                        if(!lDestMemSection)
+                        if(!lDestAddressSpace)
                             PMTHROW(pmFatalErrorException());
 
                         if(!lEventDetails.isTaskOriginated || lRequestingTask)
-                            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestMemSection, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset), lRequestingTask);
+                            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestAddressSpace, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), lRequestingTask);
                     }
                     else
                     {
-                        finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerMemSection->GetMem()) + lInternalOffset), lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber));
+                        finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber));
                     
-                        MEM_TRANSFER_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
+                        MEM_TRANSFER_DUMP(lSrcAddressSpace, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
 
                         pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(lEventDetails.priority, SEND, MEMORY_RECEIVE_TAG, lEventDetails.machine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 
@@ -312,7 +312,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                     
                     finalize_ptr<memoryTransferRequest> lData(new memoryTransferRequest(memoryIdentifierStruct(lRangeOwner.memIdentifier.memOwnerHost, lRangeOwner.memIdentifier.generationNumber), memoryIdentifierStruct(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber), lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lRangeOwner.hostOffset, lInternalLength, *lEventDetails.machine, 1, lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber, lEventDetails.priority));
                     
-                    MEM_FORWARD_DUMP(lSrcMemSection, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.memIdentifier, lRangeOwner.hostOffset)
+                    MEM_FORWARD_DUMP(lSrcAddressSpace, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.memIdentifier, lRangeOwner.hostOffset)
 
                     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryTransferRequest>::CreateSharedPtr(MAX_CONTROL_PRIORITY, SEND, MEMORY_TRANSFER_REQUEST_TAG, lRangeOwner.host, MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
                     
@@ -339,7 +339,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
             /* There is no need to actually cancel any mem transfer event becuase even after cancelling the ones in queue,
              another may still come (because of MA). These need to be handled separately anyway. This handling is done in
              MEM_TRANSFER event of this function, where a memory request is only processed if that memory is still alive.
-             The only requirement here is that when a pmMemSection is being deleted, it should not be currently being processed.
+             The only requirement here is that when a pmAddressSpace is being deleted, it should not be currently being processed.
              This is ensured by issuing a dummy MEM_TRANSFER_CANCEL event. */
 
             lEventDetails.signalWaitArray[mThreadIndex].Signal();

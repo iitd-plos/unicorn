@@ -34,12 +34,12 @@ namespace pm
 
 class pmTask;
 class pmMachine;
-class pmMemSection;
+class pmAddressSpace;
 
 class pmRedistributor : public pmBase
 {
 	public:
-		pmRedistributor(pmTask* pTask, uint pMemSectionIndex);
+		pmRedistributor(pmTask* pTask, uint pAddressSpaceIndex);
 
         void RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, ulong pOffset, ulong pLength, uint pOrder);
         void PerformRedistribution(const pmMachine* pHost, ulong pSubtasksAccounted, const std::vector<communicator::redistributionOrderStruct>& pVector);
@@ -67,7 +67,7 @@ class pmRedistributor : public pmBase
         } globalRedistributionBucket;
     
         void ComputeRedistributionBuckets();
-        void CreateRedistributedMemSection(ulong pGenerationNumber = std::numeric_limits<ulong>::max());
+        void CreateRedistributedAddressSpace(ulong pGenerationNumber = std::numeric_limits<ulong>::max());
 
         void DoParallelRedistribution();
         void DoPostParallelRedistribution();
@@ -76,9 +76,9 @@ class pmRedistributor : public pmBase
         void SendGlobalOffsets();
 
 		pmTask* mTask;
-        uint mMemSectionIndex;
+        uint mAddressSpaceIndex;
         ulong mSubtasksAccounted;
-        pmMemSection* mRedistributedMemSection;
+        pmAddressSpace* mRedistributedAddressSpace;
 
         std::vector<localRedistributionBucket> mLocalRedistributionBucketsVector;
     

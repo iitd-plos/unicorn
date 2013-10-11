@@ -39,7 +39,7 @@
 		2BCCED7B151C7B07006AA45D /* pmInternalDefinitions.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED3C151C7B07006AA45D /* pmInternalDefinitions.h */; };
 		2BCCED7C151C7B07006AA45D /* pmLogger.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED3D151C7B07006AA45D /* pmLogger.h */; };
 		2BCCED7D151C7B07006AA45D /* pmMemoryManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED3E151C7B07006AA45D /* pmMemoryManager.h */; };
-		2BCCED7E151C7B07006AA45D /* pmMemSection.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED3F151C7B07006AA45D /* pmMemSection.h */; };
+		2BCCED7E151C7B07006AA45D /* pmAddressSpace.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED3F151C7B07006AA45D /* pmAddressSpace.h */; };
 		2BCCED7F151C7B07006AA45D /* pmNetwork.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED40151C7B07006AA45D /* pmNetwork.h */; };
 		2BCCED80151C7B07006AA45D /* pmPublicDefinitions.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED41151C7B07006AA45D /* pmPublicDefinitions.h */; };
 		2BCCED81151C7B07006AA45D /* pmReducer.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED42151C7B07006AA45D /* pmReducer.h */; };
@@ -68,7 +68,7 @@
 		2BCCED98151C7B07006AA45D /* pmHardware.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED5B151C7B07006AA45D /* pmHardware.cpp */; };
 		2BCCED99151C7B07006AA45D /* pmLogger.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED5C151C7B07006AA45D /* pmLogger.cpp */; };
 		2BCCED9A151C7B07006AA45D /* pmMemoryManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */; };
-		2BCCED9B151C7B07006AA45D /* pmMemSection.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED5E151C7B07006AA45D /* pmMemSection.cpp */; };
+		2BCCED9B151C7B07006AA45D /* pmAddressSpace.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED5E151C7B07006AA45D /* pmAddressSpace.cpp */; };
 		2BCCED9C151C7B07006AA45D /* pmNetwork.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED5F151C7B07006AA45D /* pmNetwork.cpp */; };
 		2BCCED9D151C7B07006AA45D /* pmPublicDefinitions.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED60151C7B07006AA45D /* pmPublicDefinitions.cpp */; };
 		2BCCED9E151C7B07006AA45D /* pmReducer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BCCED61151C7B07006AA45D /* pmReducer.cpp */; };
@@ -134,7 +134,7 @@
 		2BCCED3C151C7B07006AA45D /* pmInternalDefinitions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmInternalDefinitions.h; sourceTree = "<group>"; };
 		2BCCED3D151C7B07006AA45D /* pmLogger.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmLogger.h; sourceTree = "<group>"; };
 		2BCCED3E151C7B07006AA45D /* pmMemoryManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmMemoryManager.h; sourceTree = "<group>"; };
-		2BCCED3F151C7B07006AA45D /* pmMemSection.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmMemSection.h; sourceTree = "<group>"; };
+		2BCCED3F151C7B07006AA45D /* pmAddressSpace.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmAddressSpace.h; sourceTree = "<group>"; };
 		2BCCED40151C7B07006AA45D /* pmNetwork.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmNetwork.h; sourceTree = "<group>"; };
 		2BCCED41151C7B07006AA45D /* pmPublicDefinitions.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmPublicDefinitions.h; sourceTree = "<group>"; };
 		2BCCED42151C7B07006AA45D /* pmReducer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmReducer.h; sourceTree = "<group>"; };
@@ -164,7 +164,7 @@
 		2BCCED5B151C7B07006AA45D /* pmHardware.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmHardware.cpp; sourceTree = "<group>"; };
 		2BCCED5C151C7B07006AA45D /* pmLogger.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmLogger.cpp; sourceTree = "<group>"; };
 		2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemoryManager.cpp; sourceTree = "<group>"; };
-		2BCCED5E151C7B07006AA45D /* pmMemSection.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemSection.cpp; sourceTree = "<group>"; };
+		2BCCED5E151C7B07006AA45D /* pmAddressSpace.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmAddressSpace.cpp; sourceTree = "<group>"; };
 		2BCCED5F151C7B07006AA45D /* pmNetwork.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmNetwork.cpp; sourceTree = "<group>"; };
 		2BCCED60151C7B07006AA45D /* pmPublicDefinitions.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = pmPublicDefinitions.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED61151C7B07006AA45D /* pmReducer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmReducer.cpp; sourceTree = "<group>"; };
@@ -239,6 +239,7 @@
 		2BCCED2E151C7B07006AA45D /* inc */ = {
 			isa = PBXGroup;
 			children = (
+				2BCCED3F151C7B07006AA45D /* pmAddressSpace.h */,
 				2BEB038B1801E68F00890B3C /* pmAllocatorCollection.h */,
 				2BCCED2F151C7B07006AA45D /* pmBase.h */,
 				2BC0D9CF17F9F0C3001CAE05 /* pmCache.h */,
@@ -261,7 +262,6 @@
 				2BCCED3D151C7B07006AA45D /* pmLogger.h */,
 				2B2E44011795C6E800309100 /* pmMemChunk.h */,
 				2BCCED3E151C7B07006AA45D /* pmMemoryManager.h */,
-				2BCCED3F151C7B07006AA45D /* pmMemSection.h */,
 				2BCCED40151C7B07006AA45D /* pmNetwork.h */,
 				2B23A23E17F61C300019FCD3 /* pmPoolAllocator.h */,
 				2BCCED41151C7B07006AA45D /* pmPublicDefinitions.h */,
@@ -293,6 +293,7 @@
 		2BCCED4F151C7B07006AA45D /* src */ = {
 			isa = PBXGroup;
 			children = (
+				2BCCED5E151C7B07006AA45D /* pmAddressSpace.cpp */,
 				2BEB038C1801E9B300890B3C /* pmAllocatorCollection.cpp */,
 				2BCCED50151C7B07006AA45D /* pmBase.cpp */,
 				2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */,
@@ -313,7 +314,6 @@
 				2BCCED5C151C7B07006AA45D /* pmLogger.cpp */,
 				2B2E44021795C8B900309100 /* pmMemChunk.cpp */,
 				2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */,
-				2BCCED5E151C7B07006AA45D /* pmMemSection.cpp */,
 				2BCCED5F151C7B07006AA45D /* pmNetwork.cpp */,
 				2B23A23F17F61C600019FCD3 /* pmPoolAllocator.cpp */,
 				2BCCED60151C7B07006AA45D /* pmPublicDefinitions.cpp */,
@@ -364,7 +364,7 @@
 				2BCCED7B151C7B07006AA45D /* pmInternalDefinitions.h in Headers */,
 				2BCCED7C151C7B07006AA45D /* pmLogger.h in Headers */,
 				2BCCED7D151C7B07006AA45D /* pmMemoryManager.h in Headers */,
-				2BCCED7E151C7B07006AA45D /* pmMemSection.h in Headers */,
+				2BCCED7E151C7B07006AA45D /* pmAddressSpace.h in Headers */,
 				2BCCED7F151C7B07006AA45D /* pmNetwork.h in Headers */,
 				2BCCED80151C7B07006AA45D /* pmPublicDefinitions.h in Headers */,
 				2BCCED81151C7B07006AA45D /* pmReducer.h in Headers */,
@@ -450,7 +450,7 @@
 				2BCCED99151C7B07006AA45D /* pmLogger.cpp in Sources */,
 				2B23A24117F61C600019FCD3 /* pmPoolAllocator.cpp in Sources */,
 				2BCCED9A151C7B07006AA45D /* pmMemoryManager.cpp in Sources */,
-				2BCCED9B151C7B07006AA45D /* pmMemSection.cpp in Sources */,
+				2BCCED9B151C7B07006AA45D /* pmAddressSpace.cpp in Sources */,
 				2BC0D9D217F9F0DC001CAE05 /* pmCache.cpp in Sources */,
 				2BCCED9C151C7B07006AA45D /* pmNetwork.cpp in Sources */,
 				2BCCED9D151C7B07006AA45D /* pmPublicDefinitions.cpp in Sources */,

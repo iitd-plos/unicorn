@@ -34,7 +34,7 @@ namespace pm
 
 class pmTask;
 class pmExecutionStub;
-class pmMemSection;
+class pmAddressSpace;
 
 namespace subscription
 {
@@ -57,7 +57,7 @@ namespace subscription
             , mExplicitAllocation(false)
             {}
     
-            void SetTaskAndMemSectionIndex(pmTask* pTask, uint pMemIndex)
+            void SetTaskAndAddressSpaceIndex(pmTask* pTask, uint pMemIndex)
             {
                 mTask = pTask;
                 mMemIndex = pMemIndex;
@@ -98,7 +98,7 @@ namespace subscription
         }
     };
     
-    struct pmSubtaskMemSectionData
+    struct pmSubtaskAddressSpaceData
     {
         pmSubtaskSubscriptionData mReadSubscriptionData;
         pmSubtaskSubscriptionData mWriteSubscriptionData;
@@ -111,7 +111,7 @@ namespace subscription
         size_t mWriteOnlyLazyUnprotectedPageCount;
     #endif
         
-        pmSubtaskMemSectionData()
+        pmSubtaskAddressSpaceData()
     #ifdef SUPPORT_LAZY_MEMORY
         : mWriteOnlyLazyUnprotectedPageCount(0)
     #endif
@@ -129,7 +129,7 @@ namespace subscription
         finalize_ptr<pmSubtaskInfo> mSubtaskInfo;
         
         std::vector<pmMemInfo> mMemInfo;
-        std::vector<pmSubtaskMemSectionData> mMemSectionsData;  // The mem section ordering is same as in class pmTask
+        std::vector<pmSubtaskAddressSpaceData> mAddressSpacesData;  // The mem section ordering is same as in class pmTask
     
         bool mReadyForExecution;    // a flag indicating that pmDataDistributionCB has already been executed (data may not be fetched)
         size_t mReservedCudaGlobalMemSize;
@@ -142,7 +142,7 @@ namespace subscription
     struct shadowMemDetails
     {
         pmSubscriptionInfo subscriptionInfo;
-        pmMemSection* memSection;
+        pmAddressSpace* addressSpace;
     };
 }
     
@@ -207,19 +207,19 @@ class pmSubscriptionManager : public pmBase
 		const pmSubtaskInfo& GetSubtaskInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
 
     #ifdef SUPPORT_LAZY_MEMORY
-        static pmMemSection* FindMemSectionContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr);
+        static pmAddressSpace* FindAddressSpaceContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr);
     #endif
 
 	private:
         void WaitForSubscriptions(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub, pmDeviceType pDeviceType);
 
-        void CheckAppropriateSubscription(pmMemSection* pMemSection, pmSubscriptionType pSubscriptionType) const;
+        void CheckAppropriateSubscription(pmAddressSpace* pAddressSpace, pmSubscriptionType pSubscriptionType) const;
         bool IsReadSubscription(pmSubscriptionType pSubscriptionType) const;
         bool IsWriteSubscription(pmSubscriptionType pSubscriptionType) const;
 
 #ifdef SUPPORT_CUDA
     #ifdef SUPPORT_LAZY_MEMORY
-        void ClearInputMemLazyProtectionForCuda(subscription::pmSubtask& pSubtask, pmMemSection* pMemSection, uint pMemSectionIndex, pmDeviceType pDeviceType);
+        void ClearInputMemLazyProtectionForCuda(subscription::pmSubtask& pSubtask, pmAddressSpace* pAddressSpace, uint pAddressSpaceIndex, pmDeviceType pDeviceType);
     #endif
 #endif
 
@@ -235,7 +235,7 @@ class pmSubscriptionManager : public pmBase
         bool SubtasksHaveMatchingSubscriptionsCommonStub(pmExecutionStub* pStub, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmSubscriptionType pSubscriptionType);
         bool SubtasksHaveMatchingSubscriptionsDifferentStubs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmSubscriptionType pSubscriptionType);
         bool SubtasksHaveMatchingSubscriptionsInternal(const subscription::pmSubtask& pSubtask1, const subscription::pmSubtask& pSubtask2, pmSubscriptionType pSubscriptionType) const;
-        bool MemSectionsHaveMatchingSubscriptionsInternal(const subscription::pmSubtaskMemSectionData& pMemSectionData1, const subscription::pmSubtaskMemSectionData& pMemSectionData2) const;
+        bool AddressSpacesHaveMatchingSubscriptionsInternal(const subscription::pmSubtaskAddressSpaceData& pAddressSpaceData1, const subscription::pmSubtaskAddressSpaceData& pAddressSpaceData2) const;
 
 		pmTask* mTask;
 
@@ -248,7 +248,7 @@ class pmSubscriptionManager : public pmBase
     #ifdef SUPPORT_LAZY_MEMORY
         typedef std::map<void*, subscription::shadowMemDetails> shadowMemMapType;
 
-        static shadowMemMapType& GetShadowMemMap();	// Maps shadow memory regions to pmMemSection objects
+        static shadowMemMapType& GetShadowMemMap();	// Maps shadow memory regions to pmAddressSpace objects
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetShadowMemLock();
     #endif
 };

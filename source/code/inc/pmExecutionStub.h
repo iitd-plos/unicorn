@@ -187,13 +187,13 @@ struct reductionFinishEvent : public stubEvent
 struct processRedistributionBucketEvent : public stubEvent
 {
     pmTask* task;
-    uint memSectionIndex;
+    uint addressSpaceIndex;
     size_t bucketIndex;
     
-    processRedistributionBucketEvent(eventIdentifier pEventId, pmTask* pTask, uint pMemSectionIndex, size_t pBucketIndex)
+    processRedistributionBucketEvent(eventIdentifier pEventId, pmTask* pTask, uint pAddressSpaceIndex, size_t pBucketIndex)
     : stubEvent(pEventId)
     , task(pTask)
-    , memSectionIndex(pMemSectionIndex)
+    , addressSpaceIndex(pAddressSpaceIndex)
     , bucketIndex(pBucketIndex)
     {}
 };
@@ -267,7 +267,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void ProcessNegotiatedRange(const pmSubtaskRange& pRange);
         void ProcessDeferredShadowMemCommits(pmTask* pTask);
         void ReductionFinishEvent(pmTask* pTask);
-        void ProcessRedistributionBucket(pmTask* pTask, uint pMemSectionIndex, size_t pBucketIndex);
+        void ProcessRedistributionBucket(pmTask* pTask, uint pAddressSpaceIndex, size_t pBucketIndex);
         void FreeTaskResources(pmTask* pTask);
 
     #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -368,7 +368,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, pmSplitInfo* pSplitInfo);
-        void CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemSectionIndex);
+        void CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex);
         void DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
         void CancelCurrentlyExecutingSubtaskRange(bool pTaskListeningOnCancellation);
         void TerminateCurrentSubtaskRange();

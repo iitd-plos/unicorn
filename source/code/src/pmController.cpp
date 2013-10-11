@@ -30,7 +30,7 @@
 #include "pmLogger.h"
 #include "pmCallbackUnit.h"
 #include "pmCallback.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 #include "pmTask.h"
 #include "pmSignalWait.h"
 #include "pmRedistributor.h"
@@ -89,7 +89,7 @@ void pmController::DestroyController()
     pmScheduler::GetScheduler()->WaitForAllCommandsToFinish();
     pmStubManager::GetStubManager()->WaitForAllStubsToFinish();
     
-    pmMemSection::DeleteAllLocalMemSections();
+    pmAddressSpace::DeleteAllLocalAddressSpaces();
 }
 
 void pmController::FinalizeController()
@@ -171,8 +171,8 @@ void pmController::CreateMemory_Public(size_t pLength, pmMemHandle* pMem)
 {
 	*pMem = NULL;
 
-    pmMemSection* lMemSection = pmMemSection::CreateMemSection(pLength, PM_LOCAL_MACHINE);
-    *pMem = new pmUserMemHandle(lMemSection);
+    pmAddressSpace* lAddressSpace = pmAddressSpace::CreateAddressSpace(pLength, PM_LOCAL_MACHINE);
+    *pMem = new pmUserMemHandle(lAddressSpace);
 }
 
 void pmController::ReleaseMemory_Public(pmMemHandle pMem)
@@ -180,10 +180,10 @@ void pmController::ReleaseMemory_Public(pmMemHandle pMem)
     if(!pMem)
         PMTHROW(pmFatalErrorException());
 
-	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
+	pmAddressSpace* lAddressSpace = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetAddressSpace();
 
     delete (reinterpret_cast<pmUserMemHandle*>(pMem));
-	lMemSection->UserDelete();
+	lAddressSpace->UserDelete();
 }
 
 void pmController::FetchMemory_Public(pmMemHandle pMem)
@@ -191,9 +191,9 @@ void pmController::FetchMemory_Public(pmMemHandle pMem)
     if(!pMem)
         PMTHROW(pmFatalErrorException());
 
-	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
+	pmAddressSpace* lAddressSpace = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetAddressSpace();
     
-    lMemSection->Fetch(MAX_PRIORITY_LEVEL);
+    lAddressSpace->Fetch(MAX_PRIORITY_LEVEL);
 }
 
 void pmController::FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, size_t pLength)
@@ -201,9 +201,9 @@ void pmController::FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, siz
     if(!pMem)
         PMTHROW(pmFatalErrorException());
 
-	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
+	pmAddressSpace* lAddressSpace = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetAddressSpace();
     
-    lMemSection->FetchRange(MAX_PRIORITY_LEVEL, pOffset, pLength);
+    lAddressSpace->FetchRange(MAX_PRIORITY_LEVEL, pOffset, pLength);
 }
     
 void pmController::GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr)
@@ -211,8 +211,8 @@ void pmController::GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr)
     if(!pMem)
         PMTHROW(pmFatalErrorException());
 
-	pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetMemSection();
-    *pPtr = lMemSection->GetMem();
+	pmAddressSpace* lAddressSpace = (reinterpret_cast<pmUserMemHandle*>(pMem))->GetAddressSpace();
+    *pPtr = lAddressSpace->GetMem();
 }
 
 void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)
@@ -263,11 +263,11 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
     lTaskMemVector.reserve(pTaskDetails.taskMemCount);
     for(size_t i = 0; i < pTaskDetails.taskMemCount; ++i)
     {
-        pmMemSection* lMemSection = (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.taskMem[i].memHandle))->GetMemSection();
-        if(!lMemSection || pTaskDetails.taskMem[i].memType == MAX_MEM_TYPE)
+        pmAddressSpace* lAddressSpace = (reinterpret_cast<pmUserMemHandle*>(pTaskDetails.taskMem[i].memHandle))->GetAddressSpace();
+        if(!lAddressSpace || pTaskDetails.taskMem[i].memType == MAX_MEM_TYPE)
             PMTHROW(pmFatalErrorException());
         
-        lTaskMemVector.push_back(pmTaskMemory(lMemSection, pTaskDetails.taskMem[i].memType));
+        lTaskMemVector.push_back(pmTaskMemory(lAddressSpace, pTaskDetails.taskMem[i].memType));
     }
     
 	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, &lTaskMemVector[0], pTaskDetails.taskMemCount, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags);
@@ -319,9 +319,9 @@ void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHa
 void pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, size_t pOffset, size_t pLength, uint pOrder)
 {
     pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
-    const pmMemSection* lMemSection = lTask->GetMemSection(pMemIndex);
+    const pmAddressSpace* lAddressSpace = lTask->GetAddressSpace(pMemIndex);
     
-    lTask->GetRedistributor(lMemSection)->RedistributeData(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pOffset, pLength, pOrder);
+    lTask->GetRedistributor(lAddressSpace)->RedistributeData(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pOffset, pLength, pOrder);
 }
     
 void pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf)

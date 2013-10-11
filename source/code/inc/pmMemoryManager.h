@@ -24,7 +24,7 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 #include "pmCommand.h"
-#include "pmMemSection.h"
+#include "pmAddressSpace.h"
 
 #include <map>
 #include <stdlib.h>
@@ -58,12 +58,12 @@ class pmMemoryManager : public pmBase
 	public:
 		virtual ~pmMemoryManager() {}
     
-		virtual void* AllocateMemory(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount) = 0;
-        virtual pmStatus DeallocateMemory(pmMemSection* pMemSection) = 0;
+		virtual void* AllocateMemory(pmAddressSpace* pAddressSpace, size_t& pLength, size_t& pPageCount) = 0;
+        virtual pmStatus DeallocateMemory(pmAddressSpace* pAddressSpace) = 0;
         virtual pmStatus DeallocateMemory(void* pMem) = 0;
 
-        virtual void FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector) = 0;
-        virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask) = 0;
+        virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector) = 0;
+        virtual pmStatus CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask) = 0;
     
         virtual size_t GetVirtualMemoryPageSize() const = 0;
         virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount) = 0;
@@ -71,7 +71,7 @@ class pmMemoryManager : public pmBase
         virtual void* CreateCheckOutMemory(size_t pLength) = 0;
     
 #ifdef SUPPORT_LAZY_MEMORY
-        virtual void* CreateReadOnlyMemoryMapping(pmMemSection* pMemSection) = 0;
+        virtual void* CreateReadOnlyMemoryMapping(pmAddressSpace* pAddressSpace) = 0;
         virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength) = 0;
         virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed) = 0;
 #endif
@@ -97,14 +97,14 @@ namespace linuxMemManager
         
     typedef std::map<void*, std::pair<size_t, regionFetchData> > pmInFlightRegions;
         
-    typedef struct memSectionSpecifics
+    typedef struct addressSpaceSpecifics
     {
-        memSectionSpecifics();
+        addressSpaceSpecifics();
 
         int mSharedMemDescriptor;
         pmInFlightRegions mInFlightMemoryMap;	// Map for regions being fetched; pair is length of region and regionFetchData
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mInFlightLock;
-    } memSectionSpecifics;
+    } addressSpaceSpecifics;
 }
     
 class pmLinuxMemoryManager : public pmMemoryManager
@@ -125,12 +125,12 @@ class pmLinuxMemoryManager : public pmMemoryManager
 	public:
         static pmMemoryManager* GetMemoryManager();
 
-		virtual void* AllocateMemory(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount);
-        virtual pmStatus DeallocateMemory(pmMemSection* pMemSection);
+		virtual void* AllocateMemory(pmAddressSpace* pAddressSpace, size_t& pLength, size_t& pPageCount);
+        virtual pmStatus DeallocateMemory(pmAddressSpace* pAddressSpace);
         virtual pmStatus DeallocateMemory(void* pMem);
 
-        virtual void FetchMemoryRegion(pmMemSection* pMemSection, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
-        virtual pmStatus CopyReceivedMemory(pmMemSection* pMemSection, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask);
+        virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
+        virtual pmStatus CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask);
 
         virtual size_t GetVirtualMemoryPageSize() const;
 
@@ -143,12 +143,12 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		pmLinuxMemoryManager();
 		virtual ~pmLinuxMemoryManager();
 
-        void CreateMemSectionSpecifics(pmMemSection* pMemSection, int pSharedMemDescriptor);
-        linuxMemManager::memSectionSpecifics& GetMemSectionSpecifics(pmMemSection* pMemSection);
+        void CreateAddressSpaceSpecifics(pmAddressSpace* pAddressSpace, int pSharedMemDescriptor);
+        linuxMemManager::addressSpaceSpecifics& GetAddressSpaceSpecifics(pmAddressSpace* pAddressSpace);
     
-        void* AllocatePageAlignedMemoryInternal(pmMemSection* pMemSection, size_t& pLength, size_t& pPageCount, int& pSharedMemDescriptor);
+        void* AllocatePageAlignedMemoryInternal(pmAddressSpace* pAddressSpace, size_t& pLength, size_t& pPageCount, int& pSharedMemDescriptor);
 
-        void FetchNonOverlappingMemoryRegion(ushort pPriority, pmMemSection* pMemSection, void* pMem, size_t pOffset, size_t pLength, pmMemSection::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand);
+        void FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, size_t pOffset, size_t pLength, pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand);
 
         void FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
 
@@ -156,23 +156,23 @@ class pmLinuxMemoryManager : public pmMemoryManager
 
 #ifdef SUPPORT_LAZY_MEMORY
     public:
-        virtual void* CreateReadOnlyMemoryMapping(pmMemSection* pMemSection);
+        virtual void* CreateReadOnlyMemoryMapping(pmAddressSpace* pAddressSpace);
         virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength);
         virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
 
     private:
-        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pLazyMemAddr);
-        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
-        pmStatus CopyLazyInputMemPage(pmExecutionStub* pStub, pmMemSection* pMemSection, void* pFaultAddr);
-        pmStatus CopyShadowMemPage(pmExecutionStub* pStub, pmMemSection* pMemSection, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
+        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr);
+        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
+        pmStatus CopyLazyInputMemPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pFaultAddr);
+        pmStatus CopyShadowMemPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
 
         void* CreateMemoryMapping(int pSharedMemDescriptor, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
         void DeleteMemoryMapping(void* pMem, size_t pLength);
 #endif
 
     private:
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mMemSectionSpecificsMapLock;
-        std::map<pmMemSection*, linuxMemManager::memSectionSpecifics> mMemSectionSpecificsMap;  // Singleton class (one instance of this map exists)
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mAddressSpaceSpecificsMapLock;
+        std::map<pmAddressSpace*, linuxMemManager::addressSpaceSpecifics> mAddressSpaceSpecificsMap;  // Singleton class (one instance of this map exists)
  
 #ifdef TRACK_MEMORY_ALLOCATIONS
 		ulong mTotalAllocatedMemory;	// Lazy + Non-Lazy

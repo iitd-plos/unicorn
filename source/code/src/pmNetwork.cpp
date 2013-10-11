@@ -492,7 +492,7 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 				PMTHROW(pmFatalErrorException());
             
 			sendAcknowledgementStruct& lStruct = lData->ackStruct;
-			lLength += sizeof(lStruct) + lData->ackStruct.ownershipDataElements * sizeof(ownershipDataStruct) + lData->ackStruct.memSectionIndices * sizeof(uint);
+			lLength += sizeof(lStruct) + lData->ackStruct.ownershipDataElements * sizeof(ownershipDataStruct) + lData->ackStruct.addressSpaceIndices * sizeof(uint);
             
 			if(lLength > __MAX_SIGNED(int))
 				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
@@ -512,9 +512,9 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
                     PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
             }
             
-            if(lData->ackStruct.memSectionIndices)
+            if(lData->ackStruct.addressSpaceIndices)
             {
-                if( MPI_CALL("MPI_Pack", (MPI_Pack(&(lData->memSectionIndexVector[0]), (int)lData->ackStruct.memSectionIndices, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(&(lData->addressSpaceIndexVector[0]), (int)lData->ackStruct.addressSpaceIndices, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
                     PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
             }
 
@@ -764,11 +764,11 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(void* pPackedData, int pDataLength)
                     PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
             }
             
-            if(lPackedData->ackStruct.memSectionIndices)
+            if(lPackedData->ackStruct.addressSpaceIndices)
             {
-                lPackedData->memSectionIndexVector.reserve(lPackedData->ackStruct.memSectionIndices);
+                lPackedData->addressSpaceIndexVector.reserve(lPackedData->ackStruct.addressSpaceIndices);
 
-                if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->memSectionIndexVector[0]), lPackedData->ackStruct.memSectionIndices, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+                if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->addressSpaceIndexVector[0]), lPackedData->ackStruct.addressSpaceIndices, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
                     PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
             }
 
@@ -1457,7 +1457,7 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.execStatus, lExecStatusMPI, MPI_UNSIGNED, 5, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originalAllotteeGlobalIndex, lOriginalAllotteeGlobalIndexMPI, MPI_UNSIGNED, 6, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.ownershipDataElements, lOwnershipDataElementsMPI, MPI_UNSIGNED, 7, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memSectionIndices, lMemSectionIndicesMPI, MPI_UNSIGNED, 8, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.addressSpaceIndices, lAddressSpaceIndicesMPI, MPI_UNSIGNED, 8, 1);
 
 			break;
 		}
@@ -1576,7 +1576,7 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.remoteHost, lRemoteHostMPI, MPI_UNSIGNED, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtasksAccounted, lSubtasksAccountedMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.orderDataCount, lOrderDataCountMPI, MPI_UNSIGNED, 4, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memSectionIndex, lMemSectionIndexMPI, MPI_UNSIGNED, 5, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.addressSpaceIndex, lAddressSpaceIndexMPI, MPI_UNSIGNED, 5, 1);
             
 			break;
 		}
@@ -1588,7 +1588,7 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.redistributedMemGenerationNumber, lRedistributedMemGenerationNumberMPI, MPI_UNSIGNED_LONG, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offsetsDataCount, lOffsetsDataCountMPI, MPI_UNSIGNED, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memSectionIndex, lMemSectionIndexMPI, MPI_UNSIGNED, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.addressSpaceIndex, lAddressSpaceIndexMPI, MPI_UNSIGNED, 4, 1);
             
 			break;
 		}

@@ -38,7 +38,7 @@ class pmLocalTask;
 class pmHardware;
 class pmMachine;
 class pmExecutionStub;
-class pmMemSection;
+class pmAddressSpace;
     
 namespace communicator
 {
@@ -277,7 +277,7 @@ struct sendAcknowledgementStruct
     uint execStatus;
     uint originalAllotteeGlobalIndex;
     uint ownershipDataElements;
-    uint memSectionIndices;
+    uint addressSpaceIndices;
 
     typedef enum fieldCount
     {
@@ -293,10 +293,10 @@ struct sendAcknowledgementStruct
     , execStatus(pmStatusUnavailable)
     , originalAllotteeGlobalIndex(std::numeric_limits<uint>::max())
     , ownershipDataElements(0)
-    , memSectionIndices(0)
+    , addressSpaceIndices(0)
     {}
 
-    sendAcknowledgementStruct(uint pSourceDeviceGlobalIndex, uint pOriginatingHost, ulong pSequenceNumber, ulong pStartSubtask, ulong pEndSubtask, uint pExecStatus, uint pOriginalAllotteeGlobalIndex, uint pOwnershipDataElements, uint pMemSectionIndices)
+    sendAcknowledgementStruct(uint pSourceDeviceGlobalIndex, uint pOriginatingHost, ulong pSequenceNumber, ulong pStartSubtask, ulong pEndSubtask, uint pExecStatus, uint pOriginalAllotteeGlobalIndex, uint pOwnershipDataElements, uint pAddressSpaceIndices)
     : sourceDeviceGlobalIndex(pSourceDeviceGlobalIndex)
     , originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
@@ -305,7 +305,7 @@ struct sendAcknowledgementStruct
     , execStatus(pExecStatus)
     , originalAllotteeGlobalIndex(pOriginalAllotteeGlobalIndex)
     , ownershipDataElements(pOwnershipDataElements)
-    , memSectionIndices(pMemSectionIndices)
+    , addressSpaceIndices(pAddressSpaceIndices)
     {}
 };
 
@@ -313,13 +313,13 @@ struct sendAcknowledgementPacked
 {
     sendAcknowledgementStruct ackStruct;
     std::vector<ownershipDataStruct> ownershipVector;
-    std::vector<uint> memSectionIndexVector;
+    std::vector<uint> addressSpaceIndexVector;
 
     sendAcknowledgementPacked()
     : ackStruct()
     {}
 
-    sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pMemSectionIndexVector);
+    sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 };
 
 enum taskEvents
@@ -463,7 +463,7 @@ struct ownershipTransferPacked
     , transferDataElements(0)
     {}
     
-    ownershipTransferPacked(pmMemSection* pMemSection, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData);
+    ownershipTransferPacked(pmAddressSpace* pAddressSpace, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData);
 };
 
 struct memoryTransferRequest
@@ -683,7 +683,7 @@ struct dataRedistributionStruct
     uint remoteHost;
     ulong subtasksAccounted;
     uint orderDataCount;
-    uint memSectionIndex;
+    uint addressSpaceIndex;
 
     typedef enum fieldCount
     {
@@ -696,16 +696,16 @@ struct dataRedistributionStruct
     , remoteHost(std::numeric_limits<uint>::max())
     , subtasksAccounted(0)
     , orderDataCount(0)
-    , memSectionIndex(std::numeric_limits<uint>::max())
+    , addressSpaceIndex(std::numeric_limits<uint>::max())
     {}
 
-    dataRedistributionStruct(uint pOriginatingHost, ulong pSequenceNumber, uint pRemoteHost, ulong pSubtasksAccounted, uint pOrderDataCount, uint pMemSectionIndex)
+    dataRedistributionStruct(uint pOriginatingHost, ulong pSequenceNumber, uint pRemoteHost, ulong pSubtasksAccounted, uint pOrderDataCount, uint pAddressSpaceIndex)
     : originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
     , remoteHost(pRemoteHost)
     , subtasksAccounted(pSubtasksAccounted)
     , orderDataCount(pOrderDataCount)
-    , memSectionIndex(pMemSectionIndex)
+    , addressSpaceIndex(pAddressSpaceIndex)
     {}
 };
 
@@ -718,7 +718,7 @@ struct dataRedistributionPacked
     : redistributionStruct()
     {}
     
-    dataRedistributionPacked(pmTask* pTask, uint pMemSectionIndex, finalize_ptr<std::vector<redistributionOrderStruct>>& pRedistributionAutoPtr);
+    dataRedistributionPacked(pmTask* pTask, uint pAddressSpaceIndex, finalize_ptr<std::vector<redistributionOrderStruct>>& pRedistributionAutoPtr);
 };
 
 struct redistributionOffsetsStruct
@@ -727,7 +727,7 @@ struct redistributionOffsetsStruct
     ulong sequenceNumber;	// sequence number of local task object (on originating host)
     ulong redistributedMemGenerationNumber;
     uint offsetsDataCount;
-    uint memSectionIndex;
+    uint addressSpaceIndex;
     
     typedef enum fieldCount
     {
@@ -739,15 +739,15 @@ struct redistributionOffsetsStruct
     , sequenceNumber(0)
     , redistributedMemGenerationNumber(std::numeric_limits<ulong>::max())
     , offsetsDataCount(0)
-    , memSectionIndex(0)
+    , addressSpaceIndex(0)
     {}
 
-    redistributionOffsetsStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pRedistributedMemGenerationNumber, uint pOffsetsDataCount, uint pMemSectionIndex)
+    redistributionOffsetsStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pRedistributedMemGenerationNumber, uint pOffsetsDataCount, uint pAddressSpaceIndex)
     : originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
     , redistributedMemGenerationNumber(pRedistributedMemGenerationNumber)
     , offsetsDataCount(pOffsetsDataCount)
-    , memSectionIndex(pMemSectionIndex)
+    , addressSpaceIndex(pAddressSpaceIndex)
     {}
 };
 
@@ -759,7 +759,7 @@ struct redistributionOffsetsPacked
     redistributionOffsetsPacked()
     {}
 
-    redistributionOffsetsPacked(pmTask* pTask, uint pMemSectionIndex, finalize_ptr<std::vector<ulong>>& pOffsetsDataAutoPtr, pmMemSection* pRedistributedMemSection);
+    redistributionOffsetsPacked(pmTask* pTask, uint pAddressSpaceIndex, finalize_ptr<std::vector<ulong>>& pOffsetsDataAutoPtr, pmAddressSpace* pRedistributedAddressSpace);
 };
 
 struct subtaskRangeCancelStruct
