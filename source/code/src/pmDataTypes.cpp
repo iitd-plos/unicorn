@@ -399,13 +399,13 @@ void pmAccumulatedTimesSorter::Insert(std::string& pName, double pAccumulatedTim
     if(strlen(lStr) > mMaxNameLength)
         mMaxNameLength = strlen(lStr);
     
+#if 0
     if(mLogsFlushed)
     {
-#if 0
         std::cout << std::left << std::setw(mMaxNameLength + 1) << lStr << " => " << std::fixed << "Accumulated Time: " << std::setw(MAX_FLOAT_WIDTH) << pAccumulatedTime << "s Actual Time: " << std::setw(MAX_FLOAT_WIDTH) << pActualTime << "s Min Time: " << std::setw(MAX_FLOAT_WIDTH) << pMinTime << "s Max Time: " << std::setw(MAX_FLOAT_WIDTH) << pMaxTime << "s Exec Count: " << std::setw(MAX_INT_WIDTH) << pExecCount << std::endl;
-#endif
     }
     else
+#endif
     {
         accumulatedData& lData = mAccumulatedTimesMap[std::make_pair(pAccumulatedTime, pName)];
         lData.minTime = pMinTime;

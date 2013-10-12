@@ -54,7 +54,7 @@ inline bool pmCache<__key, __value, __hasher, __evictor>::Purge()
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-        
+
         if(mCacheList.empty())
             return false;
 

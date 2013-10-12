@@ -167,7 +167,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const 
     
     if(lSubtaskSecondaryBuffers.reservedMemCudaPtr)
     {
-        DEBUG_EXCEPTION_ASSERT(lSubtaskInfoCuda.gpuContext.reservedGlobalMem);
+        DEBUG_EXCEPTION_ASSERT(!lSubtaskInfoCuda.gpuContext.reservedGlobalMem);
         lSubtaskInfoCuda.gpuContext.reservedGlobalMem = lSubtaskSecondaryBuffers.reservedMemCudaPtr;
     }
 

@@ -251,7 +251,7 @@ void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExe
             (*lInnerIter).first->CommonPostNegotiationOnCPU(mSubtaskSplitter->mTask, pSubtaskId, false, &lSplitInfo);
         }
 
-        pStub->HandleSplitSubtaskExecutionCompletion(mSubtaskSplitter->mTask, lSplitRecord, pmSuccess);
+        lSplitRecord.sourceStub->HandleSplitSubtaskExecutionCompletion(mSubtaskSplitter->mTask, lSplitRecord, pmSuccess);
     }
 }
 

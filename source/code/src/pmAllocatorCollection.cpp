@@ -85,10 +85,10 @@ void* pmAllocatorCollection<__allocator_traits>::Allocate(size_t pSize, size_t p
         
         lPtr = CallAllocate<typename __allocator_traits::allocator, __allocator_traits::alignedAllocations>()(*lChunkIter, pSize, pAlignment);
         
-        if(lPtr)
-            mAllocatedPtrs[lPtr] = lChunkIter;
-        else
-            PMTHROW(pmOutOfMemoryException());
+        if(!lPtr)
+            PMTHROW_NODUMP(pmOutOfMemoryException());
+        
+        mAllocatedPtrs[lPtr] = lChunkIter;
     }
 
     return lPtr;
@@ -99,6 +99,33 @@ void* pmAllocatorCollection<__allocator_traits>::Allocate(size_t pSize)
 {
     return Allocate(pSize, 1);
 }
+    
+template<typename __allocator_traits>
+void* pmAllocatorCollection<__allocator_traits>::AllocateNoThrow(size_t pSize, size_t pAlignment)
+{
+    try
+    {
+        return Allocate(pSize, pAlignment);
+    }
+    catch(pmOutOfMemoryException&)
+    {}
+    
+    return NULL;
+}
+
+template<typename __allocator_traits>
+void* pmAllocatorCollection<__allocator_traits>::AllocateNoThrow(size_t pSize)
+{
+    try
+    {
+        return Allocate(pSize);
+    }
+    catch(pmOutOfMemoryException&)
+    {}
+    
+    return NULL;
+}
+
 
 template<typename __allocator_traits>
 inline void pmAllocatorCollection<__allocator_traits>::Deallocate(void* pPtr)

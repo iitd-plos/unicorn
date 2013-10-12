@@ -81,6 +81,11 @@ std::map<int, CUcontext>& GetContextMap()
 }
 #endif
 
+#define THROW_OUT_OF_MEMORY_CUDA_ERROR(errorCUDA) \
+{ \
+    PMTHROW_NODUMP(pmOutOfMemoryException()); \
+}
+
 #define THROW_CUDA_ERROR(errorCUDA) \
 { \
     std::cout << cudaGetErrorString(errorCUDA) << std::endl; \
@@ -92,7 +97,11 @@ std::map<int, CUcontext>& GetContextMap()
     *(void**)(&gFuncPtr_cudaGetLastError) = GetCudaSymbol(libPtr, "cudaGetLastError"); \
     cudaError_t dErrorCUDA = (*gFuncPtr_cudaGetLastError)(); \
     if(dErrorCUDA != cudaSuccess) \
+    { \
+        if(dErrorCUDA == cudaErrorMemoryAllocation) \
+            THROW_OUT_OF_MEMORY_CUDA_ERROR(dErrorCUDA); \
         THROW_CUDA_ERROR(dErrorCUDA); \
+    } \
 }
 
 #define EXECUTE_CUDA_SYMBOL(libPtr, symbol, prototype, ...) \

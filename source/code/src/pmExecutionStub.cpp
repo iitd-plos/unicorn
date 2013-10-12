@@ -162,18 +162,18 @@ void pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCanc
     if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
         CancelCurrentlyExecutingSubtaskRange(pTaskListeningOnCancellation);
     
-#ifdef _DEBUG
     if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
     {
         std::map<std::pair<pmTask*, ulong>, std::vector<const pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.begin(), lEndIter = mSecondaryAllotteeMap.end();
     
-        for(; lIter != lEndIter; ++lIter)
+        for(; lIter != lEndIter; )
         {
             if(lIter->first.first == pTask)
-                PMTHROW(pmFatalErrorException());
+                mSecondaryAllotteeMap.erase(lIter++);
+            else
+                ++lIter;
         }
     }
-#endif
 }
     
 /* This is an asynchronous call. Current subtask is not cancelled immediately. */
@@ -375,10 +375,7 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
                     {
                         std::vector<const pmProcessingElement*>& lSecondaryAllottees = mSecondaryAllotteeMap[lPair];
 
-                    #ifdef _DEBUG
-                        if(std::find(lSecondaryAllottees.begin(), lSecondaryAllottees.end(), pRequestingDevice) == lSecondaryAllottees.end())
-                            PMTHROW(pmFatalErrorException());
-                    #endif
+                        DEBUG_EXCEPTION_ASSERT(std::find(lSecondaryAllottees.begin(), lSecondaryAllottees.end(), pRequestingDevice) != lSecondaryAllottees.end())
                     
                     #ifdef TRACK_MULTI_ASSIGN
                         std::cout << "[Host " << pmGetHostId() << "]: Range negotiation success from device " << GetProcessingElement()->GetGlobalDeviceIndex() << " to device " << pRequestingDevice->GetGlobalDeviceIndex() << "; Negotiated range [" << pRange.startSubtask << ", " << pRange.endSubtask << "]" << std::endl;
@@ -648,27 +645,18 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     #ifdef SUPPORT_SPLIT_SUBTASKS
                         if(mCurrentSubtaskRangeStats->splitData.valid)
                         {
-                            if(!mCurrentSubtaskRangeStats->splitSubtaskSourceStub)
-                                PMTHROW(pmFatalErrorException());
-                            
-                            if(mCurrentSubtaskRangeStats->startSubtaskId != mCurrentSubtaskRangeStats->endSubtaskId)
-                                PMTHROW(pmFatalErrorException());
+                            DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->splitSubtaskSourceStub);
+                            DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->startSubtaskId == mCurrentSubtaskRangeStats->endSubtaskId);
 
-                            if(mCurrentSubtaskRangeStats->splitSubtaskSourceStub == this)
-                            {
-                                if(!UpdateSecondaryAllotteeMapInternal(lPair, pRequestingDevice))
-                                    return;
-                            }
-                            else
-                            {
-                                lLocalDevice = mCurrentSubtaskRangeStats->splitSubtaskSourceStub->GetProcessingElement();
-                                if(!mCurrentSubtaskRangeStats->splitSubtaskSourceStub->UpdateSecondaryAllotteeMap(lPair, pRequestingDevice))
-                                    return;
-                            }
+                            lLocalDevice = mCurrentSubtaskRangeStats->splitSubtaskSourceStub->GetProcessingElement();
+                            if(!mCurrentSubtaskRangeStats->splitSubtaskSourceStub->UpdateSecondaryAllotteeMap(lPair, pRequestingDevice))
+                                return;
                         }
                         else
                     #endif
+                        {
                             mSecondaryAllotteeMap[lPair].push_back(pRequestingDevice);
+                        }
 
                         pmSubtaskRange lStolenRange(pTask, lLocalDevice, mCurrentSubtaskRangeStats->startSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId);
 
@@ -963,13 +951,16 @@ void pmExecutionStub::ClearSecondaryAllotteeMap(pmSubtaskRange& pRange)
     FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
 
     std::pair<pmTask*, ulong> lPair(pRange.task, pRange.endSubtask);
-    if(mSecondaryAllotteeMap.find(lPair) != mSecondaryAllotteeMap.end())
+    
+    auto lIter = mSecondaryAllotteeMap.find(lPair);
+    if(lIter != mSecondaryAllotteeMap.end())
     {
-        std::vector<const pmProcessingElement*>& lSecondaryAllottees = mSecondaryAllotteeMap[lPair];
+        std::vector<const pmProcessingElement*>& lSecondaryAllottees = lIter->second;
 
-        std::vector<const pmProcessingElement*>::iterator lIter = lSecondaryAllottees.begin(), lEnd = lSecondaryAllottees.end();
-        for(; lIter != lEnd; ++lIter)
-            pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(*lIter, pRange);
+        for_each(lSecondaryAllottees, [&pRange] (const pmProcessingElement* pProcessingElement)
+        {
+            pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(pProcessingElement, pRange);
+        });
 
     #ifdef TRACK_MULTI_ASSIGN
         std::cout << "Multi assign partition [" << pRange.startSubtask << " - " << pRange.endSubtask << "] completed by original allottee - Device " << GetProcessingElement()->GetGlobalDeviceIndex() << std::endl;
@@ -1039,7 +1030,7 @@ bool pmExecutionStub::UpdateSecondaryAllotteeMap(std::pair<pmTask*, ulong>& pPai
 bool pmExecutionStub::UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulong>& pPair, const pmProcessingElement* pRequestingDevice)
 {
     DEBUG_EXCEPTION_ASSERT(pPair.first->GetSchedulingModel() == scheduler::PULL);
-    
+
     std::map<std::pair<pmTask*, ulong>, std::vector<const pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.find(pPair);
     if(lIter != mSecondaryAllotteeMap.end())
     {
@@ -1056,14 +1047,14 @@ bool pmExecutionStub::UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulon
     return true;
 }
     
-/* This function is called on the stub which finishes last split.
- It may be different from the stub to which the original unsplitted subtask was assigned. */
+/* This method is called on the stub object of the stub to which the original unsplitted subtask was assigned.
+ But it is called on the thread for the last stub finishing it's assigned split. */
 void pmExecutionStub::HandleSplitSubtaskExecutionCompletion(pmTask* pTask, const splitter::splitRecord& pSplitRecord, pmStatus pExecStatus)
 {
     pmSubtaskRange lRange(pTask, NULL, pSplitRecord.subtaskId, pSplitRecord.subtaskId);
     
     if(pTask->IsMultiAssignEnabled())
-        pSplitRecord.sourceStub->ClearSecondaryAllotteeMap(lRange);
+        ClearSecondaryAllotteeMap(lRange);
 
     CommitSplitSubtask(lRange, pSplitRecord, pExecStatus);
 }
@@ -1092,9 +1083,9 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
 
         if(lIter->second.second.size() != lSubtasks)
             return;
-    
+
         pmSubtaskRange lRange(pRange.task, NULL, lIter->second.first.first, lIter->second.first.second);
-        pSplitRecord.sourceStub->SendSplitAcknowledgement(lRange, lIter->second.second, pExecStatus);
+        SendSplitAcknowledgement(lRange, lIter->second.second, pExecStatus);
 
         mPushAckHolder.erase(lIter);
     }
@@ -1108,7 +1099,7 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
         for(uint i = 0; i < pSplitRecord.splitCount; ++i)
             lMapIter->second.push_back(pSplitRecord.assignedStubs[i].first);
 
-        pSplitRecord.sourceStub->SendSplitAcknowledgement(pRange, lMap, pExecStatus);
+        SendSplitAcknowledgement(pRange, lMap, pExecStatus);
     }
 }
     
@@ -1222,6 +1213,10 @@ void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSpl
     {
     #ifdef DUMP_EVENT_TIMELINE
         lExecTimelineAutoPtr.SetGracefulCompletion();
+    #endif
+
+    #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
+        std::cout << "[Host " << pmGetHostId() << "]: Executed split subtask " << pSplitSubtaskAutoPtr->subtaskId << " (Split " << pSplitSubtaskAutoPtr->splitId << " of " << pSplitSubtaskAutoPtr->splitCount << ")" << std::endl;
     #endif
 
         pSplitSubtaskAutoPtr->task->GetTaskExecStats().RecordStubExecutionStats(this, 1, lTimer.GetElapsedTimeInSecs());   // Exec time of the split group
@@ -1872,10 +1867,10 @@ pmStubCUDA::pmCudaCacheType& pmStubCUDA::GetCudaCache()
 
 void* pmStubCUDA::AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection)
 {
-    void* lPtr = pChunkCollection.Allocate(pLength, pCudaAlignment);
+    void* lPtr = pChunkCollection.AllocateNoThrow(pLength, pCudaAlignment);
 
     while(!lPtr && mCudaCache.Purge())
-        lPtr = pChunkCollection.Allocate(pLength, pCudaAlignment);
+        lPtr = pChunkCollection.AllocateNoThrow(pLength, pCudaAlignment);
     
     return lPtr;
 }
@@ -2036,6 +2031,8 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
     }
     else
     {
+        mSubtaskSecondaryBuffersMap.erase(pSubtaskId);
+
         for_each_with_index(lSubtaskMemoryVector, [&] (const pmCudaSubtaskMemoryStruct& pStruct, size_t pIndex)
         {
             if(pStruct.requiresLoad)
@@ -2497,9 +2494,15 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAs
     for_each(mSubtaskSecondaryBuffersMap, [&] (decltype(mSubtaskSecondaryBuffersMap)::value_type& pPair)
     {
         if(pPair.second.reservedMemCudaPtr)   // Reserved mem and status are allocated as a single entity
+        {
+            if(!pPair.second.reservedMemCudaPtr) std::cout << "NULL 1" << std::endl;
             mScratchChunkCollection.Deallocate(pPair.second.reservedMemCudaPtr);
+        }
         else
+        {
+            if(!pPair.second.statusCudaPtr) std::cout << "NULL 2" << std::endl;
             mScratchChunkCollection.Deallocate(pPair.second.statusCudaPtr);
+        }
 
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
         mPinnedChunkCollection.Deallocate(pPair.second.statusPinnedPtr);

@@ -61,6 +61,10 @@ public:
     
     void* Allocate(size_t pSize, size_t pAlignment);
     void* Allocate(size_t pSize);
+
+    void* AllocateNoThrow(size_t pSize, size_t pAlignment);
+    void* AllocateNoThrow(size_t pSize);
+
     void Deallocate(void* pPtr);
     
     void Reset();
