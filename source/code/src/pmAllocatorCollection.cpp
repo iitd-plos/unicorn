@@ -74,7 +74,7 @@ void* pmAllocatorCollection<__allocator_traits>::Allocate(size_t pSize, size_t p
 
         size_t lTempSize = pSize + ((pAlignment > 1) ? pAlignment : 0);
         
-        size_t lChunkSize = (((lTempSize / mChunkSizeMultiplier) + (lTempSize % mChunkSizeMultiplier) ? 1 : 0) * mChunkSizeMultiplier);
+        size_t lChunkSize = (((lTempSize / mChunkSizeMultiplier) + ((lTempSize % mChunkSizeMultiplier) ? 1 : 0)) * mChunkSizeMultiplier);
         std::shared_ptr<typename __allocator_traits::allocator> lNewChunk = typename __allocator_traits::creator()(lChunkSize);
         
         if(!lNewChunk.get())

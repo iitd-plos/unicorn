@@ -997,21 +997,21 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
         
         filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();},
-            [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
-            {
-                subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-                lAddressSpaceIndexVector.push_back((uint)lOwnershipVector.size());
+        [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
+        {
+            subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+            lAddressSpaceIndexVector.push_back((uint)lOwnershipVector.size());
 
-                for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
+            for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
+            {
+                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
+                
+                std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
                 {
-                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
-                    
-                    std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
-                    {
-                        lOwnershipVector.push_back(communicator::ownershipDataStruct(pPair.first, pPair.second.first));
-                    });
-                }
-            });
+                    lOwnershipVector.push_back(communicator::ownershipDataStruct(pPair.first, pPair.second.first));
+                });
+            }
+        });
     }
 
     pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector));

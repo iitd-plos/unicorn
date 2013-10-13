@@ -758,7 +758,7 @@ void pmPushSchedulingManager::CancelAllButOneSecondaryAllottee(const pmProcessin
 
 pmStatus pmPushSchedulingManager::RegisterSubtaskCompletion(const pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus)
 {
-	FINALIZE_RESOURCE_PTR(dResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
 	std::map<const pmProcessingElement*, std::pair<pmUnfinishedPartitionPtr, pmCommandPtr> >::iterator lIter = mAssignedPartitions.find(pDevice);
 	if(lIter == mAssignedPartitions.end())
