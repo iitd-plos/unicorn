@@ -1285,7 +1285,7 @@ void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessin
 
         std::for_each(lDataIter, lDataEndIter, [&] (const ownershipDataStruct& pStruct)
         {
-            pAddressSpace->TransferOwnershipPostTaskCompletion(pmAddressSpace::vmRangeOwner(lMachine, (*lDataIter).offset, memoryIdentifierStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber())), pStruct.offset, pStruct.length);
+            pAddressSpace->TransferOwnershipPostTaskCompletion(pmAddressSpace::vmRangeOwner(lMachine, pStruct.offset, memoryIdentifierStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber())), pStruct.offset, pStruct.length);
         });
     });
 }

@@ -995,9 +995,8 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
     if(!pRange.task->GetCallbackUnit()->GetDataReductionCB() && !pRange.task->GetCallbackUnit()->GetDataRedistributionCB())
     {
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
-        const std::vector<pmAddressSpace*>& lAddressSpaceVector = pRange.task->GetAddressSpaces();
         
-        filtered_for_each_with_index(lAddressSpaceVector.begin(), lAddressSpaceVector.end(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();},
+        filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();},
             [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
             {
                 subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
