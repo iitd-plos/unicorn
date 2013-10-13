@@ -49,9 +49,9 @@ void __dump_mem_req(const pmAddressSpace* addressSpace, const void* addr, size_t
     char lStr[512];
    
     if(addressSpace->IsInput())
-        sprintf(lStr, "Requesting input memory %p (Mem Section %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
+        sprintf(lStr, "Requesting input memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
     else
-        sprintf(lStr, "Requesting output memory %p (Mem Section %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
+        sprintf(lStr, "Requesting output memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }

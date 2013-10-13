@@ -338,7 +338,7 @@ namespace pm
      */
     pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, size_t pSize);
 	
-    /** The structure that associates tasks to mem sections */
+    /** The structure that associates tasks to address spaces */
     typedef struct pmTaskMem
     {
         pmMemHandle memHandle;

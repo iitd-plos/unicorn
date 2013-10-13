@@ -179,7 +179,7 @@ class pmTask : public pmBase
         finalize_ptr<pmReducer> mReducer;    
         std::map<const pmAddressSpace*, pmRedistributor> mRedistributorsMap;
     
-        uint mCompletedRedistributions; // How many mem sections have finished redistribution
+        uint mCompletedRedistributions; // How many address spaces have finished redistribution
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mRedistributionLock;
 
         bool mAllStubsScannedForCancellationMessages, mAllStubsScannedForShadowMemCommitMessages;
@@ -191,14 +191,14 @@ class pmTask : public pmBase
     
         std::vector<pmMemInfo> mPreSubscriptionMemInfoForSubtasks;  // Used for lazy memory
 
-        std::map<uint, pmPoolAllocator> mPoolAllocatorMap;  // mem section index vs pool allocator
+        std::map<uint, pmPoolAllocator> mPoolAllocatorMap;  // address space index vs pool allocator
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mPoolAllocatorMapLock;
     
         bool mTaskHasReadWriteAddressSpaceWithDisjointSubscriptions;
 
     protected:
         bool DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() const;
-        bool RegisterRedistributionCompletion();    // Returns true when all mem sections finish redistribution
+        bool RegisterRedistributionCompletion();    // Returns true when all address spaces finish redistribution
     
         std::vector<pmAddressSpace*> mAddressSpaces;
 		uint mAssignedDeviceCount;

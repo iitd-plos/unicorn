@@ -505,7 +505,7 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
             
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(SEND_ACKNOWLEDGEMENT_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
-            
+
             if(lData->ackStruct.ownershipDataElements)
             {
                 if( MPI_CALL("MPI_Pack", (MPI_Pack(&(lData->ownershipVector[0]), (int)lData->ackStruct.ownershipDataElements, GetDataTypeMPI(OWNERSHIP_DATA_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
@@ -631,7 +631,7 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(void* pPackedData, int pDataLength)
             
             if(lPackedData->taskStruct.taskMemCount != 0)
             {
-                lPackedData->taskMem.reserve(lPackedData->taskStruct.taskMemCount);
+                lPackedData->taskMem.resize(lPackedData->taskStruct.taskMemCount);
 
                 if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->taskMem[0]), lPackedData->taskStruct.taskMemCount, GetDataTypeMPI(TASK_MEMORY_STRUCT), lCommunicator) != MPI_SUCCESS)) )
                     PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
@@ -673,7 +673,7 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(void* pPackedData, int pDataLength)
 
             if(lStruct.shadowMemsCount)
             {
-                lPackedData->shadowMems.reserve(lStruct.shadowMemsCount);
+                lPackedData->shadowMems.resize(lStruct.shadowMemsCount);
 
                 for(auto& lShadowMemTransfer: lPackedData->shadowMems)
                 {
@@ -755,10 +755,10 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(void* pPackedData, int pDataLength)
 
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->ackStruct), 1, GetDataTypeMPI(SEND_ACKNOWLEDGEMENT_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
-            
+
             if(lPackedData->ackStruct.ownershipDataElements)
             {
-                lPackedData->ownershipVector.reserve(lPackedData->ackStruct.ownershipDataElements);
+                lPackedData->ownershipVector.resize(lPackedData->ackStruct.ownershipDataElements);
                 
                 if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->ownershipVector[0]), lPackedData->ackStruct.ownershipDataElements, GetDataTypeMPI(OWNERSHIP_DATA_STRUCT), lCommunicator) != MPI_SUCCESS)) )
                     PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
@@ -766,7 +766,7 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(void* pPackedData, int pDataLength)
             
             if(lPackedData->ackStruct.addressSpaceIndices)
             {
-                lPackedData->addressSpaceIndexVector.reserve(lPackedData->ackStruct.addressSpaceIndices);
+                lPackedData->addressSpaceIndexVector.resize(lPackedData->ackStruct.addressSpaceIndices);
 
                 if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->addressSpaceIndexVector[0]), lPackedData->ackStruct.addressSpaceIndices, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
                     PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
@@ -787,7 +787,7 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(void* pPackedData, int pDataLength)
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->transferDataElements), 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
         
-			lPackedData->transferData->reserve(lPackedData->transferDataElements);
+			lPackedData->transferData->resize(lPackedData->transferDataElements);
             
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->transferData.get()[0]), lPackedData->transferDataElements, GetDataTypeMPI(OWNERSHIP_CHANGE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));

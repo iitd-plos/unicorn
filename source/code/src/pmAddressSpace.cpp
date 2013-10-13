@@ -446,7 +446,7 @@ void pmAddressSpace::SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffs
     if(pRangeOwner.memIdentifier.memOwnerHost == *(mOwner) && pRangeOwner.memIdentifier.generationNumber == mGenerationNumberOnOwner)
         std::cout << "Host " << pmGetHostId() << " Set Range Owner: (Offset, Length, Owner, Owner Offset): (" << pOffset << ", " << pLength << ", " << pRangeOwner.host << ", " << pRangeOwner.hostOffset << ")" << std::endl;
     else
-        std::cout << "Host " << pmGetHostId() << " Set Range Owner: (Offset, Length, Owner Mem Section (Host, Generation Number), Owner, Owner Offset): (" << pOffset << ", " << pLength << ", (" << pRangeOwner.memIdentifier.memOwnerHost << ", " << pRangeOwner.memIdentifier.generationNumber << ")," << pRangeOwner.host << ", " << pRangeOwner.hostOffset << ")" << std::endl;
+        std::cout << "Host " << pmGetHostId() << " Set Range Owner: (Offset, Length, Owner address space (Host, Generation Number), Owner, Owner Offset): (" << pOffset << ", " << pLength << ", (" << pRangeOwner.memIdentifier.memOwnerHost << ", " << pRangeOwner.memIdentifier.generationNumber << ")," << pRangeOwner.host << ", " << pRangeOwner.hostOffset << ")" << std::endl;
 #endif
 #endif
     
@@ -674,7 +674,7 @@ void pmAddressSpace::TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRa
 #endif
 
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
-    
+
     mOwnershipTransferVector.push_back(pmMemTransferData(pRangeOwner, pOffset, pLength));
 }
 

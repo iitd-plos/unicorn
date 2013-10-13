@@ -38,7 +38,7 @@ __global__ void pageRank_cuda(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, p
         lValueBuffer[k * lTaskConf->maxOutlinksPerWebPage + threadId] = lIncr;
 	}
 
-    // Make change to library to prevent output mem section from being copied back to CPU
+    // Make change to library to prevent output address space from being copied back to CPU
     
     *pStatus = pmSuccess;
 }

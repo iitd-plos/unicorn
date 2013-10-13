@@ -103,7 +103,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmTaskMemor
     #endif
         {
             pmMemInfo lMemInfo;
-            mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo); // Output mem sections do not have a global lazy protection, rather have at subtask level
+            mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo); // Output address spaces do not have a global lazy protection, rather have at subtask level
         }
         
         lAddressSpace->Lock(this, lTaskMem.memType);
@@ -665,7 +665,7 @@ void pmLocalTask::TaskRedistributionDone(uint pOriginalAddressSpaceIndex, pmAddr
 {
     mAddressSpaces[pOriginalAddressSpaceIndex] = pRedistributedAddressSpace;
 
-    if(RegisterRedistributionCompletion())  // Returns true when all mem sections finish redistributions
+    if(RegisterRedistributionCompletion())  // Returns true when all address spaces finish redistributions
         MarkUserSideTaskCompletion();
 }
 

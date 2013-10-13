@@ -77,9 +77,9 @@ void __dump_mem_ack_transfer(const pmAddressSpace* addressSpace, memoryIdentifie
     char lStr[512];
     
     if(addressSpace->IsInput())
-        sprintf(lStr, "Acknowledging input mem section %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
+        sprintf(lStr, "Acknowledging input address space %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
     else
-        sprintf(lStr, "Acknowledging out mem section %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
+        sprintf(lStr, "Acknowledging out address space %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
@@ -1265,33 +1265,35 @@ void pmScheduler::ReceiveFailedStealResponse(const pmProcessingElement* pStealin
     StealRequestEvent(pStealingDevice, pTask, lTaskExecStats.GetStubExecutionRate(lStub));
 }
 
-void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmSubtaskRange& pRange, const std::vector<ownershipDataStruct>& pOwnershipVector, const std::vector<uint>& pAddressSpaceIndexVector)
+void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, const std::vector<ownershipDataStruct>& pOwnershipVector, const std::vector<uint>& pAddressSpaceIndexVector)
 {
     if(pOwnershipVector.empty())
         return;
 
     filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();}, [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
+    {
+        std::vector<ownershipDataStruct>::const_iterator lDataIter = pOwnershipVector.begin() + pAddressSpaceIndexVector[pOutputAddressSpaceIndex];
+        std::vector<ownershipDataStruct>::const_iterator lDataEndIter = pOwnershipVector.end();
+        
+        if(pOutputAddressSpaceIndex != pAddressSpaceIndexVector.size() - 1)
         {
-            std::vector<ownershipDataStruct>::const_iterator lDataIter = pOwnershipVector.begin() + pAddressSpaceIndexVector[pOutputAddressSpaceIndex];
-            std::vector<ownershipDataStruct>::const_iterator lDataEndIter = pOwnershipVector.end();
-            
-            if(pOutputAddressSpaceIndex != pAddressSpaceIndexVector.size() - 1)
-            {
-                lDataEndIter = pOwnershipVector.begin() + pAddressSpaceIndexVector[pOutputAddressSpaceIndex + 1];
-                --lDataEndIter;
-            }
+            lDataEndIter = pOwnershipVector.begin() + pAddressSpaceIndexVector[pOutputAddressSpaceIndex + 1];
+            --lDataEndIter;
+        }
 
-            std::for_each(lDataIter, lDataEndIter, [&] (const ownershipDataStruct& pStruct)
-            {
-                pAddressSpace->TransferOwnershipPostTaskCompletion(pmAddressSpace::vmRangeOwner(PM_LOCAL_MACHINE, (*lDataIter).offset, memoryIdentifierStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber())), pStruct.offset, pStruct.length);
-            });
+        const pmMachine* lMachine = pDevice->GetMachine();
+
+        std::for_each(lDataIter, lDataEndIter, [&] (const ownershipDataStruct& pStruct)
+        {
+            pAddressSpace->TransferOwnershipPostTaskCompletion(pmAddressSpace::vmRangeOwner(lMachine, (*lDataIter).offset, memoryIdentifierStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber())), pStruct.offset, pStruct.length);
         });
+    });
 }
 
 // This method is executed at master host for the task
 void pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
 {
-    RegisterPostTaskCompletionOwnershipTransfers(pRange, pOwnershipVector, pAddressSpaceIndexVector);
+    RegisterPostTaskCompletionOwnershipTransfers(pDevice, pRange, pOwnershipVector, pAddressSpaceIndexVector);
 
 	pmSubtaskManager* lSubtaskManager = pLocalTask->GetSubtaskManager();
 	lSubtaskManager->RegisterSubtaskCompletion(pDevice, pRange.endSubtask - pRange.startSubtask + 1, pRange.startSubtask, pExecStatus);
@@ -1310,7 +1312,7 @@ void pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProces
 void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
 {
     if(pRange.task->GetOriginatingHost() != PM_LOCAL_MACHINE)
-        RegisterPostTaskCompletionOwnershipTransfers(pRange, pOwnershipVector, pAddressSpaceIndexVector);
+        RegisterPostTaskCompletionOwnershipTransfers(pDevice, pRange, pOwnershipVector, pAddressSpaceIndexVector);
 
 	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, std::move(pOwnershipVector), std::move(pAddressSpaceIndexVector));
 

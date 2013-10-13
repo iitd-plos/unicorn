@@ -548,7 +548,7 @@ bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptionsInternal(const pmSu
 {
 #ifdef _DEBUG
     if(pSubtask1.mAddressSpacesData.size() != pSubtask2.mAddressSpacesData.size())
-        PMTHROW(pmFatalErrorException());   // both subtasks belong to same task; so must have same mem section entries
+        PMTHROW(pmFatalErrorException());   // both subtasks belong to same task; so must have same address space entries
 #endif
     
     std::vector<pmSubtaskAddressSpaceData>::const_iterator lIter1 = pSubtask1.mAddressSpacesData.begin(), lEndIter1 = pSubtask2.mAddressSpacesData.end();

@@ -262,7 +262,7 @@ memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNu
 /* struct sendAcknowledgementPacked */
 sendAcknowledgementPacked::sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
     : ackStruct(pSourceDevice->GetGlobalDeviceIndex(), *pRange.task->GetOriginatingHost(), pRange.task->GetSequenceNumber(), pRange.startSubtask, pRange.endSubtask, pExecStatus, (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pSourceDevice->GetGlobalDeviceIndex()), (uint)pOwnershipVector.size(), (uint)pAddressSpaceIndexVector.size())
-    , ownershipVector(pOwnershipVector)
+    , ownershipVector(std::move(pOwnershipVector))
     , addressSpaceIndexVector(std::move(pAddressSpaceIndexVector))
 {
 }

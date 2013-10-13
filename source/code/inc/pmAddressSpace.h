@@ -81,9 +81,9 @@ class pmAddressSpace : public pmBase
 	public:
 		typedef struct vmRangeOwner
 		{
-			const pmMachine* host;		// Host where memory page lives
-            ulong hostOffset;       // Offset on host (in case of data redistribution offsets at source and destination hosts are different)
-            communicator::memoryIdentifierStruct memIdentifier;    // a different memory might be holding the required data (e.g. redistribution)
+            const pmMachine* host;                                  // Host where memory page lives
+            ulong hostOffset;                                       // Offset on host (in case of data redistribution offsets at source and destination hosts are different)
+            communicator::memoryIdentifierStruct memIdentifier;     // a different memory might be holding the required data (e.g. redistribution)
             
             vmRangeOwner(const pmMachine* pHost, ulong pHostOffset, const communicator::memoryIdentifierStruct& pMemIdentifier)
             : host(pHost)

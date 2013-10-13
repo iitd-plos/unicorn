@@ -520,7 +520,7 @@ class pmStubCUDA : public pmStubGPU
         void* mDeviceInfoCudaPtr;
     
         pmCudaCacheType mCudaCache;
-        pmAllocatorCollection<pmCudaMemChunkTraits> mCudaChunkCollection;    // Chunks for cachable memory i.e. mem sections
+        pmAllocatorCollection<pmCudaMemChunkTraits> mCudaChunkCollection;    // Chunks for cachable memory i.e. address spaces
         pmAllocatorCollection<pmCudaMemChunkTraits> mScratchChunkCollection; // Chunks for non-cacheable memory i.e. scratch buffer, reserved mem, etc.
 
         std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>> mSubtaskPointersMap;  // subtask id versus CUDA and pinned pointers

@@ -129,7 +129,7 @@ namespace subscription
         finalize_ptr<pmSubtaskInfo> mSubtaskInfo;
         
         std::vector<pmMemInfo> mMemInfo;
-        std::vector<pmSubtaskAddressSpaceData> mAddressSpacesData;  // The mem section ordering is same as in class pmTask
+        std::vector<pmSubtaskAddressSpaceData> mAddressSpacesData;  // The address space ordering is same as in class pmTask
     
         bool mReadyForExecution;    // a flag indicating that pmDataDistributionCB has already been executed (data may not be fetched)
         size_t mReservedCudaGlobalMemSize;
