@@ -25,13 +25,13 @@ namespace matrixMultiplyBlas
 
 #define BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) (((blockRow) * (matrixDim) + (blockCol)) * (blockDim))
 
-#define SUBSCRIBE_BLOCK(blockRow, blockCol, blockOffset, blockWidth, blockDim, matrixDim, subtaskId, splitInfo, memIndex, subscriptionType) \
+#define SUBSCRIBE_BLOCK(blockRow, blockCol, blockOffset, blockHeight, blockDim, matrixDim, subtaskId, splitInfo, memIndex, subscriptionType) \
 { \
-    size_t dBlockOffset = (BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) + (blockOffset)) * sizeof(MATRIX_DATA_TYPE); \
-    for(size_t row = 0; row < (blockDim); ++row) \
+    size_t dBlockOffset = BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) * sizeof(MATRIX_DATA_TYPE); \
+    for(size_t row = 0; row < (blockHeight); ++row) \
     { \
         lSubscriptionInfo.offset = dBlockOffset + row * matrixDim * sizeof(MATRIX_DATA_TYPE); \
-        lSubscriptionInfo.length = (blockWidth) * sizeof(MATRIX_DATA_TYPE); \
+        lSubscriptionInfo.length = blockDim * sizeof(MATRIX_DATA_TYPE); \
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, memIndex, subscriptionType, lSubscriptionInfo); \
     } \
 }
@@ -58,6 +58,6 @@ typedef struct matrixMultiplyTaskConf
     size_t blockDim;
 } matrixMultiplyTaskConf;
 
-bool GetSplitData(size_t* pBlockOffset, size_t* pBlockWidth, matrixMultiplyTaskConf* pTaskConf, pmSplitInfo& pSplitInfo);
+bool GetSplitData(size_t* pBlockOffset, size_t* pBlockHeight, matrixMultiplyTaskConf* pTaskConf, pmSplitInfo& pSplitInfo);
     
 }
