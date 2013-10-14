@@ -41,6 +41,7 @@
 #include <set>
 #include <algorithm>
 #include <limits>
+#include <memory>
 
 #include <boost/regex.hpp>
 

@@ -10,7 +10,7 @@ COMPILER=g++
 
 BOOST_INCLUDE= -I../../thirdparty/regex_boost
 
-FLAGS +=-Wall -DUNIX -DLINUX -MMD
+FLAGS +=-Wall -DUNIX -DLINUX -MMD -std=c++11
 
 ifeq ($(DEBUG), 1)
 	FLAGS += -DDEBUG -D_DEBUG -g
