@@ -764,14 +764,12 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 CommonPostNegotiationOnCPU(lRange.task, subtaskId, true, NULL);
             }
         
+        #ifdef TRACK_MULTI_ASSIGN
             if(lRange.task->GetSchedulingModel() == scheduler::PULL)
             {
-                DEBUG_EXCEPTION_ASSERT(lRange.startSubtask == lRange.endSubtask);
-            
-            #ifdef TRACK_MULTI_ASSIGN
                 std::cout << "Multi assign partition [" << lRange.startSubtask << " - " << lRange.endSubtask << "] completed by secondary allottee - Device " << GetProcessingElement()->GetGlobalDeviceIndex() << ", Original Allottee: Device " << lEvent.range.originalAllottee->GetGlobalDeviceIndex() << std::endl;
-            #endif
             }
+        #endif
 
             CommitRange(lRange, pmSuccess);
         
