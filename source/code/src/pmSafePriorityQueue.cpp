@@ -142,6 +142,19 @@ void pmSafePQ<T, P>::WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, v
 }
 
 template<typename T, typename P>
+void pmSafePQ<T, P>::WaitForCurrentItem()
+{
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+        if(!mCurrentItem.get())
+            return;
+    }
+
+    mCommandSignalWait.Wait();
+}
+
+template<typename T, typename P>
 void pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
 {
     while(1)

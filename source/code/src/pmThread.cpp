@@ -122,6 +122,8 @@ void pmPThread<T, P>::WaitForQueuedCommands()
 {
     while(!this->mSafePQ.IsEmpty())
         mReverseSignalWait.Wait();
+    
+    this->mSafePQ.WaitForCurrentItem();
 }
 
 template<typename T, typename P>

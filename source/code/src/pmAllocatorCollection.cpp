@@ -46,6 +46,8 @@ struct CallAllocate<__allocator, false>
 template<typename __allocator_traits>
 inline void pmAllocatorCollection<__allocator_traits>::SetChunkSizeMultiplier(size_t pMultiplier)
 {
+    DEBUG_EXCEPTION_ASSERT(pMultiplier);
+
     mChunkSizeMultiplier = pMultiplier;
 }
 
