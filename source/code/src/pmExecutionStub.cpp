@@ -722,10 +722,6 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 		{
             subtaskExecEvent& lEvent = static_cast<subtaskExecEvent&>(pEvent);
 
-        #ifdef ENABLE_TASK_PROFILING
-            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEvent.range.task->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
-        #endif
-
         #ifdef SUPPORT_SPLIT_SUBTASKS
             if(CheckSplittedExecution(lEvent))
                 break;
@@ -1232,6 +1228,10 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>&
 
     guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskRangeTerminus, currentSubtaskRangeStats> lScopedPtr(&mCurrentSubtaskRangeLock, &lTerminus, &mCurrentSubtaskRangeStats, new currentSubtaskRangeStats(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, !pMultiAssign, lSubtaskId, NULL, pmBase::GetCurrentTimeInSecs(), &lSplitInfo, pSplitSubtaskAutoPtr->sourceStub));
     
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pSplitSubtaskAutoPtr->task->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
+#endif
+
     bool lSuccess = true;
     
     try
@@ -1443,6 +1443,10 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 
     guarded_scoped_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskRangeTerminus, currentSubtaskRangeStats> lScopedPtr(&mCurrentSubtaskRangeLock, &lTerminus, &mCurrentSubtaskRangeStats, new currentSubtaskRangeStats(pCurrentRange.task, pCurrentRange.startSubtask, pCurrentRange.endSubtask, !pIsMultiAssign, lParentRange.startSubtask, NULL, pmBase::GetCurrentTimeInSecs(), NULL, NULL));
     
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pCurrentRange.task->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
+#endif
+
     bool lSuccess = true;
     
     try
@@ -2566,10 +2570,7 @@ void pmExecutionStub::currentSubtaskRangeTerminus::Terminating(currentSubtaskRan
             pStats->task->RegisterStubCancellationMessage();
     }
 
-#ifdef _DEBUG
-    if(mReassigned && !pStats->originalAllottee)
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(!mReassigned || pStats->originalAllottee);
 }
 
 #ifdef DUMP_EVENT_TIMELINE
