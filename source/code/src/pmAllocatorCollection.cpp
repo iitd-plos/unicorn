@@ -82,7 +82,7 @@ void* pmAllocatorCollection<__allocator_traits>::Allocate(size_t pSize, size_t p
         std::shared_ptr<typename __allocator_traits::allocator> lNewChunk = typename __allocator_traits::creator()(lChunkSize);
         
         if(!lNewChunk.get())
-            PMTHROW(pmOutOfMemoryException());
+            PMTHROW_NODUMP(pmOutOfMemoryException());
 
         mMemChunksList.emplace_back(std::move(lNewChunk));
         typename decltype(mMemChunksList)::iterator lChunkIter = --mMemChunksList.end();
