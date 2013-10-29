@@ -169,22 +169,29 @@ namespace pm
 
 	typedef enum pmMemType
 	{
-		INPUT_MEM_READ_ONLY,
-		OUTPUT_MEM_WRITE_ONLY,
-		OUTPUT_MEM_READ_WRITE,
-		INPUT_MEM_READ_ONLY_LAZY,
-        OUTPUT_MEM_WRITE_ONLY_LAZY,
-		OUTPUT_MEM_READ_WRITE_LAZY,
+		READ_ONLY,
+		WRITE_ONLY,
+		READ_WRITE,
+		READ_ONLY_LAZY,
+        WRITE_ONLY_LAZY,
+		READ_WRITE_LAZY,
         MAX_MEM_TYPE
 	} pmMemType;
     
     typedef enum pmSubscriptionType
     {
-        INPUT_MEM_READ_SUBSCRIPTION,
-        OUTPUT_MEM_READ_SUBSCRIPTION,
-        OUTPUT_MEM_WRITE_SUBSCRIPTION,
-        OUTPUT_MEM_READ_WRITE_SUBSCRIPTION
+        READ_SUBSCRIPTION,
+        WRITE_SUBSCRIPTION,
+        READ_WRITE_SUBSCRIPTION
     } pmSubscriptionType;
+    
+    typedef enum pmSubscriptionVisibilityType
+    {
+        SUBSCRIPTION_NATURAL,           // Disjoint subscriptions are mapped at same distances as in task memory (default option)
+        SUBSCRIPTION_COMPACT,           // Disjoint subscriptions are mapped back to back
+        SUBSCRIPTION_OPTIMAL,           // Either SUBSCRIPTION_NATURAL or SUBSCRIPTION_COMPACT whichever is optimal for the subtask
+        MAX_SUBSCRIPTION_VISBILITY_TYPE
+    } pmSubscriptionVisibilityType;
     
 	typedef struct pmDataTransferInfo
 	{
@@ -261,12 +268,18 @@ namespace pm
 			pmPostDataTransferCallback postDataTransfer;
 
 			pmCallbacks();
+            pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_CUDA);
+            pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_Custom);
+            pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_CUDA, pmDataReductionCallback);
+            pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_Custom, pmDataReductionCallback);
+            pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_CUDA, pmDataRedistributionCallback);
+            pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_Custom, pmDataRedistributionCallback);
 	} pmCallbacks;
 
 	/** The callback registeration API. The callbacks must be registered on all machines using the same key.
 	 *	The registered callbacks are returned in the pointer pCallbackHandle (if registeration is successful).
 	 */
-	pmStatus pmRegisterCallbacks(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
+	pmStatus pmRegisterCallbacks(const char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
 
 	/* The registered callbacks must be released by the application using the following API */
 	pmStatus pmReleaseCallbacks(pmCallbackHandle pCallbackHandle);
@@ -320,6 +333,8 @@ namespace pm
         int sharedMem;
         
         pmCudaLaunchConf();
+        pmCudaLaunchConf(int, int, int, int, int, int);
+        pmCudaLaunchConf(int, int, int, int, int, int, int);
     } pmCudaLaunchConf;
 
     /** The CUDA launch configuration setting API. It sets kernel launch configuration for the subtask specified by
@@ -343,9 +358,12 @@ namespace pm
     {
         pmMemHandle memHandle;
         pmMemType memType;
+        pmSubscriptionVisibilityType subscriptionVisibilityType;    /* By default, this is SUBSCRIPTION_NATURAL */
+        bool disjointReadWritesAcrossSubtasks;                      /* By default, this is false. Applies only to RW adress spaces. */
         
         pmTaskMem();
         pmTaskMem(pmMemHandle, pmMemType);
+        pmTaskMem(pmMemHandle, pmMemType, pmSubscriptionVisibilityType, bool);
     } pmTaskMem;
 
 	/** The task details structure used for task submission */
@@ -357,18 +375,18 @@ namespace pm
         uint taskMemCount;
 		pmCallbackHandle callbackHandle;
 		ulong subtaskCount;
-		ulong taskId;                   /* Meant for application to assign and identify tasks */
-		ushort priority;                /* By default, this is set to max priority level (0) */
+		ulong taskId;                           /* Meant for application to assign and identify tasks */
+		ushort priority;                        /* By default, this is set to max priority level (0) */
         pmSchedulingPolicy policy;              /* By default, this is SLOW_START */
         int timeOutInSecs;                      /* By default, this is max possible value in signed int, negative values mean no timeout */
         bool multiAssignEnabled;                /* By default, this is true */
-        bool disjointReadWritesAcrossSubtasks;  /* By default, this is false. Applies only to output memory of the task (only if it is RW). */
         bool overlapComputeCommunication;       /* By default, this is true */
         bool canSplitCpuSubtasks;               /* By default, this is false */
         bool canSplitGpuSubtasks;               /* By default, this is false */
 		pmClusterHandle cluster;                /* Unused */
 
 		pmTaskDetails();
+        pmTaskDetails(void* taskConf, uint taskConfLength, pmTaskMem*, uint taskMemCount, pmCallbackHandle, ulong subtaskCount);
 	} pmTaskDetails;
     
     /* The flag disjointReadWritesAcrossSubtasks should be true (for RW output memories) if the read subscriptions of a subtask do not overlap with write subscriptions of any subtasks other than itself. */

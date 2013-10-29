@@ -50,17 +50,17 @@ pmStatus matrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
 	// Subscribe to one row of the first input matrix
     lSubscriptionInfo.offset = pSubtaskInfo.subtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
     lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX1_MEM_INDEX, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX1_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
     
     // Subscribe to entire second input matrix
     lSubscriptionInfo.offset = 0;
     lSubscriptionInfo.length = lTaskConf->matrixDim * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX2_MEM_INDEX, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX2_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
 
 	// Subscribe to one row of the output matrix
 	lSubscriptionInfo.offset = pSubtaskInfo.subtaskId * lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
 	lSubscriptionInfo.length = lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE);
-	pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MATRIX_MEM_INDEX, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+	pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MATRIX_MEM_INDEX, WRITE_SUBSCRIPTION, lSubscriptionInfo);
 
 #ifdef BUILD_CUDA
 	// Set CUDA Launch Configuration
@@ -146,9 +146,9 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	memcpy(lRawInputPtr2, gSampleInput + lMatrixElems, lMatrixSize);
 
     pmTaskMem lTaskMem[MAX_MEM_INDICES];
-    lTaskMem[INPUT_MATRIX1_MEM_INDEX] = {lInputMem1, INPUT_MEM_READ_ONLY};
-    lTaskMem[INPUT_MATRIX2_MEM_INDEX] = {lInputMem2, INPUT_MEM_READ_ONLY};
-    lTaskMem[OUTPUT_MATRIX_MEM_INDEX] = {lOutputMem, OUTPUT_MEM_WRITE_ONLY};
+    lTaskMem[INPUT_MATRIX1_MEM_INDEX] = {lInputMem1, READ_ONLY};
+    lTaskMem[INPUT_MATRIX2_MEM_INDEX] = {lInputMem2, READ_ONLY};
+    lTaskMem[OUTPUT_MATRIX_MEM_INDEX] = {lOutputMem, WRITE_ONLY};
 
     lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
     lTaskDetails.taskMemCount = MAX_MEM_INDICES;

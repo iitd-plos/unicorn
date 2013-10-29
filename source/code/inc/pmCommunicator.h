@@ -132,22 +132,28 @@ struct taskMemoryStruct
     memoryIdentifierStruct memIdentifier;
     ulong memLength;
     ushort memType;     // enum pmMemType
+    ushort subscriptionVisibility;  // enum pmSubscriptionVisibilityType
+    ushort flags;       // LSB 1 - disjointReadWriteSubscriptionsAcrossSubtasks
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 3
+        FIELD_COUNT_VALUE = 5
     } fieldCount;
     
     taskMemoryStruct()
     : memIdentifier()
     , memLength(0)
     , memType(std::numeric_limits<ushort>::max())
+    , subscriptionVisibility(SUBSCRIPTION_NATURAL)
+    , flags(0)
     {}
 
-    taskMemoryStruct(const memoryIdentifierStruct& pMemStruct, ulong pMemLength, ushort pMemType)
+    taskMemoryStruct(const memoryIdentifierStruct& pMemStruct, ulong pMemLength, pmMemType pMemType, pmSubscriptionVisibilityType pSubscriptionVisibility, ushort pFlags)
     : memIdentifier(pMemStruct)
     , memLength(pMemLength)
-    , memType(pMemType)
+    , memType((ushort)pMemType)
+    , subscriptionVisibility(pSubscriptionVisibility)
+    , flags(pFlags)
     {}
 };
 
@@ -546,7 +552,7 @@ struct shadowMemTransferPacked
     
     shadowMemTransferPacked(uint pWriteOnlyUnprotectedPageRangesCount, uint pSubtaskMemLength)
     : shadowMemData(pWriteOnlyUnprotectedPageRangesCount, pSubtaskMemLength)
-    , shadowMem(pSubtaskMemLength ? new char[pSubtaskMemLength] : NULL)
+    , shadowMem((pWriteOnlyUnprotectedPageRangesCount + pSubtaskMemLength) ? new char[pWriteOnlyUnprotectedPageRangesCount + pSubtaskMemLength] : NULL)
     {}
 };
 

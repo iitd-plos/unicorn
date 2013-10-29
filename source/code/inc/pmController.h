@@ -64,7 +64,7 @@ class pmController : public pmBase
 		uint GetLastErrorCode() {return mLastErrorCode;}
 
 		/* User API Functions */
-		void RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
+		void RegisterCallbacks_Public(const char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
 		void ReleaseCallbacks_Public(pmCallbackHandle pCallbackHandle);
 		void CreateMemory_Public(size_t pLength, pmMemHandle* pMem);
         void ReleaseMemory_Public(pmMemHandle pMem);

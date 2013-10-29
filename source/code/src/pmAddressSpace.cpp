@@ -56,7 +56,6 @@ pmAddressSpace::pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pG
     , mTaskLock __LOCK_NAME__("pmAddressSpace::mTaskLock")
     , mUserDelete(false)
     , mDeleteLock __LOCK_NAME__("pmAddressSpace::mDeleteLock")
-    , mMemType(MAX_MEM_TYPE)
 #ifdef ENABLE_MEM_PROFILING
     , mMemReceived(0)
     , mMemTransferred(0)
@@ -89,14 +88,14 @@ pmAddressSpace::~pmAddressSpace()
 {
 #ifdef ENABLE_MEM_PROFILING
     std::stringstream lStream;
-    if(IsInput())
+    if(IsReadOnly())
         lStream << mMemReceived << " bytes input memory received in " << mMemReceiveEvents << " events";
     else
         lStream << mMemReceived << " bytes output memory received in " << mMemReceiveEvents << " events";
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
     
     lStream.str(std::string()); // clear stream
-    if(IsInput())
+    if(IsReadOnly())
         lStream << mMemTransferred << " bytes input memory transferred in " << mMemTransferEvents << " events";
     else
         lStream << mMemTransferred << " bytes output memory transferred in " << mMemTransferEvents << " events";
@@ -175,53 +174,10 @@ ulong pmAddressSpace::GetNextGenerationNumber()
 
 void pmAddressSpace::Update(size_t pOffset, size_t pLength, void* pSrcAddr)
 {
-#ifdef _DEBUG
-    if(IsInput())
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(!GetLockingTask()->IsReadOnly(this));
     
 	void* lDestAddr = (void*)((char*)GetMem() + pOffset);
 	memcpy(lDestAddr, pSrcAddr, pLength);
-}
-
-pmMemType pmAddressSpace::GetMemType()
-{
-	return mMemType;
-}
-    
-bool pmAddressSpace::IsInput() const
-{
-    return (mMemType == INPUT_MEM_READ_ONLY || mMemType == INPUT_MEM_READ_ONLY_LAZY);
-}
-
-bool pmAddressSpace::IsOutput() const
-{
-    return (mMemType == OUTPUT_MEM_WRITE_ONLY || mMemType == OUTPUT_MEM_READ_WRITE || mMemType == OUTPUT_MEM_READ_WRITE_LAZY || mMemType == OUTPUT_MEM_WRITE_ONLY_LAZY);
-}
-
-bool pmAddressSpace::IsWriteOnly() const
-{
-    return (mMemType == OUTPUT_MEM_WRITE_ONLY || mMemType == OUTPUT_MEM_WRITE_ONLY_LAZY);
-}
-
-bool pmAddressSpace::IsReadWrite() const
-{
-    return (mMemType == OUTPUT_MEM_READ_WRITE || mMemType == OUTPUT_MEM_READ_WRITE_LAZY);
-}
-    
-bool pmAddressSpace::IsLazy() const
-{
-    return ((mMemType == INPUT_MEM_READ_ONLY_LAZY) || (mMemType == OUTPUT_MEM_READ_WRITE_LAZY) || (mMemType == OUTPUT_MEM_WRITE_ONLY_LAZY));
-}
-
-bool pmAddressSpace::IsLazyWriteOnly() const
-{
-    return (mMemType == OUTPUT_MEM_WRITE_ONLY_LAZY);
-}
-
-bool pmAddressSpace::IsLazyReadWrite() const
-{
-    return (mMemType == OUTPUT_MEM_READ_WRITE_LAZY);
 }
 
 void pmAddressSpace::UserDelete()
@@ -277,17 +233,17 @@ void pmAddressSpace::Init(const pmMachine* pOwner)
 	mOwnershipMap.insert(std::make_pair(0, std::make_pair(mRequestedLength, vmRangeOwner(pOwner, 0, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)))));
 }
 
-void* pmAddressSpace::GetMem()
+void* pmAddressSpace::GetMem() const
 {
 	return mMem;
 }
 
-size_t pmAddressSpace::GetAllocatedLength()
+size_t pmAddressSpace::GetAllocatedLength() const
 {
 	return mAllocatedLength;
 }
 
-size_t pmAddressSpace::GetLength()
+size_t pmAddressSpace::GetLength() const
 {
 	return mRequestedLength;
 }
@@ -340,10 +296,9 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
             PMTHROW(pmFatalErrorException());
         
         mLockingTask = pTask;
-        mMemType = pMemType;
 
     #ifdef SUPPORT_LAZY_MEMORY
-        if((IsOutput() || !IsLazy()) && mReadOnlyLazyMapping)
+        if((pTask->IsWritable(this) || !pTask->IsLazy(this)) && mReadOnlyLazyMapping)
         {
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeleteReadOnlyMemoryMapping(mReadOnlyLazyMapping, mAllocatedLength);
  
@@ -355,7 +310,7 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
             mReadOnlyLazyMapping = NULL;
         }
     
-        if(IsInput() && IsLazy() && !mReadOnlyLazyMapping)
+        if(pTask->IsReadOnly(this) && pTask->IsLazy(this) && !mReadOnlyLazyMapping)
         {
             mReadOnlyLazyMapping = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateReadOnlyMemoryMapping(this);
 
@@ -367,14 +322,14 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
     #endif
     }
     
-    if(IsOutput())
+    if(pTask->IsWritable(this))
     {
         FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
         mOriginalOwnershipMap = mOwnershipMap;
     }
     
 #ifdef SUPPORT_LAZY_MEMORY
-    if(IsInput() && IsLazy())
+    if(pTask->IsReadOnly(this) && pTask->IsLazy(this))
     {
         if(IsRegionLocallyOwned(0, GetLength()))
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(mReadOnlyLazyMapping, mAllocatedLength, true, true);
@@ -391,7 +346,7 @@ void pmAddressSpace::Unlock(pmTask* pTask)
         
         if(!mOwnershipTransferVector.empty())
         {
-            std::cout << IsInput() << " " << (uint)(*GetMemOwnerHost()) << " " << GetGenerationNumber() << std::endl;
+            std::cout << mLockingTask->IsReadOnly(this) << " " << (uint)(*GetMemOwnerHost()) << " " << GetGenerationNumber() << std::endl;
             PMTHROW(pmFatalErrorException());
         }
     }
@@ -405,7 +360,6 @@ void pmAddressSpace::Unlock(pmTask* pTask)
             PMTHROW(pmFatalErrorException());
         
         mLockingTask = NULL;
-        mMemType = MAX_MEM_TYPE;
     }
 
     bool lUserDelete = false;
@@ -668,10 +622,7 @@ void pmAddressSpace::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
     
 void pmAddressSpace::TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
 {
-#ifdef _DEBUG
-    if(IsInput())
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(!GetLockingTask()->IsReadOnly(this));
 
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
 
@@ -680,10 +631,7 @@ void pmAddressSpace::TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRa
 
 void pmAddressSpace::FlushOwnerships()
 {
-#ifdef _DEBUG
-    if(!GetLockingTask() || !IsOutput())
-       PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(GetLockingTask() && GetLockingTask()->IsWritable(this));
     
 	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());    
  
@@ -758,7 +706,7 @@ void pmAddressSpace::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)
     lTimer.Stop();
     
     char lStr[512];
-    sprintf(lStr, "%s memory Fetch Time = %lfs", (IsInput()?(char*)"Input":(char*)"Output"), lTimer.GetElapsedTimeInSecs());
+    sprintf(lStr, "%s memory Fetch Time = %lfs", (IsReadOnly()?(char*)"Input":(char*)"Output"), lTimer.GetElapsedTimeInSecs());
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr, true);
 #endif

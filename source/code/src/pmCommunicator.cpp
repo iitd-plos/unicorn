@@ -115,9 +115,6 @@ remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTask* pLocalTask)
     if(pLocalTask->IsMultiAssignEnabled())
         flags |= TASK_MULTI_ASSIGN_FLAG_VAL;
     
-    if(pLocalTask->HasDisjointReadWritesAcrossSubtasks())
-        flags |= TASK_DISJOINT_READ_WRITES_ACROSS_SUBTASKS_FLAG_VAL;
-
     if(pLocalTask->ShouldOverlapComputeCommunication())
         flags |= TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL;
     
@@ -144,13 +141,11 @@ remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTask* pLocalTask)
     {
         taskMem.reserve(taskStruct.taskMemCount);
 
-        const std::vector<pmAddressSpace*>& lAddressSpaceVector = pLocalTask->GetAddressSpaces();
-
-        std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaceVector.begin(), lEndIter = lAddressSpaceVector.end();
-        for(; lIter != lEndIter; ++lIter)
+        for_each(pLocalTask->GetTaskMemVector(), [&] (const pmTaskMemory& pTaskMemory)
         {
-            taskMem.push_back(taskMemoryStruct(memoryIdentifierStruct(*((*lIter)->GetMemOwnerHost()), (*lIter)->GetGenerationNumber()), (*lIter)->GetLength(), (ushort)((*lIter)->GetMemType())));
-        }
+            const pmAddressSpace* lAddressSpace = pTaskMemory.addressSpace;
+            taskMem.emplace_back(memoryIdentifierStruct(*(lAddressSpace->GetMemOwnerHost()), lAddressSpace->GetGenerationNumber()), lAddressSpace->GetLength(), pLocalTask->GetMemType(lAddressSpace), pTaskMemory.subscriptionVisibilityType, (ushort)pTaskMemory.disjointReadWritesAcrossSubtasks);
+        });
     }
 
 	// Transfer device list if the task scehduling model is pull or if reduction callback is defined
@@ -172,70 +167,140 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
-    filtered_for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pAddressSpace->IsOutput() && pTask->IsReducible(pAddressSpace));},
+    filtered_for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pTask->IsWritable(pAddressSpace) && pTask->IsReducible(pAddressSpace));},
     [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
     {
         uint lMemIndex = (uint)pAddressSpaceIndex;
-
-        pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
         
         void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
         
-    #ifdef SUPPORT_LAZY_MEMORY
-        if(pAddressSpace->IsLazyWriteOnly())
+        if(pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, pReducingStub) == SUBSCRIPTION_NATURAL)
         {
-            size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
-            const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
-            size_t lRangesSize = lMap.size() * 2 * sizeof(uint);
-            size_t lUnprotectedLength = lRangesSize + std::min(lSubscriptionManager.GetWriteOnlyLazyUnprotectedPagesCount(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex) * lPageSize, lUnifiedSubscriptionInfo.length);
+            pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
 
-            shadowMems.push_back(shadowMemTransferPacked((uint)lMap.size(), (uint)lUnprotectedLength));
-            shadowMemTransferPacked& shadowMemTransfer = shadowMems.back();
+        #ifdef SUPPORT_LAZY_MEMORY
+            if(pTask->IsLazyWriteOnly(pAddressSpace))
+            {
+                size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+                const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
+                size_t lRangesSize = lMap.size() * 2 * sizeof(uint);
+                size_t lUnprotectedLength = lRangesSize + std::min(lSubscriptionManager.GetWriteOnlyLazyUnprotectedPagesCount(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex) * lPageSize, lUnifiedSubscriptionInfo.length);
 
-            uint* lPageRanges = (uint*)shadowMemTransfer.shadowMem.get_ptr();
-            char* lMem = (char*)(lPageRanges + lRangesSize);
-        
-            std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
-            for(; lIter != lEndIter; ++lIter)
-            {
-                *lPageRanges++ = (uint)lIter->first;
-                *lPageRanges++ = (uint)lIter->second;
-                
-                uint lMemSize = std::min((uint)(lIter->second * lPageSize), (uint)(lUnifiedSubscriptionInfo.length - lIter->first * lPageSize));
-                memcpy(lMem, ((char*)lShadowMem) + (lIter->first * lPageSize), lMemSize);
-                lMem += lMemSize;
-            }
-        }
-        else
-    #endif
-        {
-            subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-            lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex, lBeginIter, lEndIter);
+                shadowMems.push_back(shadowMemTransferPacked((uint)lMap.size(), (uint)lUnprotectedLength));
+                shadowMemTransferPacked& shadowMemTransfer = shadowMems.back();
+
+                uint* lPageRanges = (uint*)shadowMemTransfer.shadowMem.get_ptr();
+                char* lMem = (char*)(lPageRanges + lRangesSize);
             
-            shadowMems.push_back(shadowMemTransferPacked(0, 0));
-            shadowMemTransferPacked& shadowMemTransfer = shadowMems.back();
-            
-            if(std::distance(lBeginIter, lEndIter) == 1)    // Only one write subscription
-            {
-                shadowMemTransfer.shadowMemData.subtaskMemLength = (uint)lBeginIter->second.first;
-                shadowMemTransfer.shadowMem.reset(reinterpret_cast<char*>(reinterpret_cast<size_t>(lShadowMem) + lBeginIter->first - lUnifiedSubscriptionInfo.offset), false);
+                std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
+                for(; lIter != lEndIter; ++lIter)
+                {
+                    *lPageRanges++ = (uint)lIter->first;
+                    *lPageRanges++ = (uint)lIter->second;
+                    
+                    uint lMemSize = std::min((uint)(lIter->second * lPageSize), (uint)(lUnifiedSubscriptionInfo.length - lIter->first * lPageSize));
+                    memcpy(lMem, ((char*)lShadowMem) + (lIter->first * lPageSize), lMemSize);
+                    lMem += lMemSize;
+                }
             }
             else
+        #endif
             {
-                size_t lTotalWriteSubscriptionLength = 0;
-                for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
-                    lTotalWriteSubscriptionLength += lIter->second.first;
+                subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex, lBeginIter, lEndIter);
                 
-                shadowMemTransfer.shadowMemData.subtaskMemLength = (uint)lTotalWriteSubscriptionLength;
-                shadowMemTransfer.shadowMem.reset(new char[lTotalWriteSubscriptionLength]);
-            
-                uint lLocation = 0;
-                for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+                shadowMems.push_back(shadowMemTransferPacked(0, 0));
+                shadowMemTransferPacked& shadowMemTransfer = shadowMems.back();
+                
+                if(std::distance(lBeginIter, lEndIter) == 1)    // Only one write subscription
                 {
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lBeginIter->first - lUnifiedSubscriptionInfo.offset);
-                    memcpy((char*)(shadowMemTransfer.shadowMem.get_ptr()) + lLocation, lSrcPtr, lBeginIter->second.first);
+                    shadowMemTransfer.shadowMemData.subtaskMemLength = (uint)lBeginIter->second.first;
+                    shadowMemTransfer.shadowMem.reset(reinterpret_cast<char*>(reinterpret_cast<size_t>(lShadowMem) + lBeginIter->first - lUnifiedSubscriptionInfo.offset), false);
+                }
+                else
+                {
+                    size_t lTotalWriteSubscriptionLength = 0;
+                    for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+                        lTotalWriteSubscriptionLength += lIter->second.first;
+                    
+                    shadowMemTransfer.shadowMemData.subtaskMemLength = (uint)lTotalWriteSubscriptionLength;
+                    shadowMemTransfer.shadowMem.reset(new char[lTotalWriteSubscriptionLength]);
                 
-                    lLocation += (uint)lBeginIter->second.first;
+                    uint lLocation = 0;
+                    for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+                    {
+                        void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lBeginIter->first - lUnifiedSubscriptionInfo.offset);
+                        memcpy((char*)(shadowMemTransfer.shadowMem.get_ptr()) + lLocation, lSrcPtr, lBeginIter->second.first);
+                    
+                        lLocation += (uint)lBeginIter->second.first;
+                    }
+                }
+            }
+        }
+        else    // SUBSCRIPTION_COMPACT
+        {
+            const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
+
+        #ifdef SUPPORT_LAZY_MEMORY
+            if(pTask->IsLazyWriteOnly(pAddressSpace))
+            {
+                DEBUG_EXCEPTION_ASSERT(lCompactViewData.nonConsolidatedReadSubscriptionOffsets.empty());
+
+                size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+                const std::map<size_t, size_t>& lMap = lSubscriptionManager.GetWriteOnlyLazyUnprotectedPageRanges(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex);
+                size_t lRangesSize = lMap.size() * 2 * sizeof(uint);
+                size_t lUnprotectedLength = lRangesSize + std::min(lSubscriptionManager.GetWriteOnlyLazyUnprotectedPagesCount(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex) * lPageSize, lCompactViewData.subscriptionInfo.length);
+
+                shadowMems.push_back(shadowMemTransferPacked((uint)lMap.size(), (uint)lUnprotectedLength));
+                shadowMemTransferPacked& shadowMemTransfer = shadowMems.back();
+
+                uint* lPageRanges = (uint*)shadowMemTransfer.shadowMem.get_ptr();
+                char* lMem = (char*)(lPageRanges + lRangesSize);
+            
+                std::map<size_t, size_t>::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
+                for(; lIter != lEndIter; ++lIter)
+                {
+                    *lPageRanges++ = (uint)lIter->first;
+                    *lPageRanges++ = (uint)lIter->second;
+                    
+                    uint lMemSize = std::min((uint)(lIter->second * lPageSize), (uint)(lCompactViewData.subscriptionInfo.length - lIter->first * lPageSize));
+                    memcpy(lMem, ((char*)lShadowMem) + (lIter->first * lPageSize), lMemSize);
+                    lMem += lMemSize;
+                }
+            }
+            else
+        #endif
+            {
+                subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pReducingStub, pSubtaskId, pSplitInfo, lMemIndex, lBeginIter, lEndIter);
+                
+                shadowMems.push_back(shadowMemTransferPacked(0, 0));
+                shadowMemTransferPacked& shadowMemTransfer = shadowMems.back();
+                
+                auto lCompactWriteIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
+                
+                if(std::distance(lBeginIter, lEndIter) == 1)    // Only one write subscription
+                {
+                    shadowMemTransfer.shadowMemData.subtaskMemLength = (uint)lBeginIter->second.first;
+                    shadowMemTransfer.shadowMem.reset(reinterpret_cast<char*>(reinterpret_cast<size_t>(lShadowMem) + *lCompactWriteIter), false);
+                }
+                else
+                {
+                    size_t lTotalWriteSubscriptionLength = 0;
+                    for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+                        lTotalWriteSubscriptionLength += lIter->second.first;
+                    
+                    shadowMemTransfer.shadowMemData.subtaskMemLength = (uint)lTotalWriteSubscriptionLength;
+                    shadowMemTransfer.shadowMem.reset(new char[lTotalWriteSubscriptionLength]);
+                
+                    uint lLocation = 0;
+                    for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter, ++lCompactWriteIter)
+                    {
+                        void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + *lCompactWriteIter);
+                        memcpy((char*)(shadowMemTransfer.shadowMem.get_ptr()) + lLocation, lSrcPtr, lBeginIter->second.first);
+                    
+                        lLocation += (uint)lBeginIter->second.first;
+                    }
                 }
             }
         }

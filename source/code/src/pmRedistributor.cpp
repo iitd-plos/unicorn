@@ -203,7 +203,7 @@ void pmRedistributor::CreateRedistributedAddressSpace(ulong pGenerationNumber /*
     else
         mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetLength(), lAddressSpace->GetMemOwnerHost(), pGenerationNumber);
 
-    mRedistributedAddressSpace->Lock(mTask, lAddressSpace->GetMemType());
+    mRedistributedAddressSpace->Lock(mTask, mTask->GetMemType(lAddressSpace));
 }
     
 void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
@@ -260,22 +260,7 @@ void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
 
 void pmRedistributor::DoPostParallelRedistribution()
 {
-    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(mAddressSpaceIndex);
-
-    if(mTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
-    {
-        lAddressSpace->GetUserMemHandle()->Reset(mRedistributedAddressSpace);
-
-        lAddressSpace->Unlock(mTask);
-        lAddressSpace->UserDelete();
-        static_cast<pmLocalTask*>(mTask)->TaskRedistributionDone(mAddressSpaceIndex, mRedistributedAddressSpace);
-    }
-    else
-    {
-        lAddressSpace->Unlock(mTask);
-        lAddressSpace->UserDelete();
-        static_cast<pmRemoteTask*>(mTask)->MarkRedistributionFinished(mAddressSpaceIndex, mRedistributedAddressSpace);
-    }
+    static_cast<pmRemoteTask*>(mTask)->MarkRedistributionFinished(mAddressSpaceIndex, mRedistributedAddressSpace);
 }
     
 }

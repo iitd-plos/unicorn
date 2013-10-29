@@ -59,11 +59,11 @@ class pmMemoryManager : public pmBase
 		virtual ~pmMemoryManager() {}
     
 		virtual void* AllocateMemory(pmAddressSpace* pAddressSpace, size_t& pLength, size_t& pPageCount) = 0;
-        virtual pmStatus DeallocateMemory(pmAddressSpace* pAddressSpace) = 0;
-        virtual pmStatus DeallocateMemory(void* pMem) = 0;
+        virtual void DeallocateMemory(pmAddressSpace* pAddressSpace) = 0;
+        virtual void DeallocateMemory(void* pMem) = 0;
 
         virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector) = 0;
-        virtual pmStatus CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask) = 0;
+        virtual void CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask) = 0;
     
         virtual size_t GetVirtualMemoryPageSize() const = 0;
         virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount) = 0;
@@ -73,7 +73,7 @@ class pmMemoryManager : public pmBase
 #ifdef SUPPORT_LAZY_MEMORY
         virtual void* CreateReadOnlyMemoryMapping(pmAddressSpace* pAddressSpace) = 0;
         virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength) = 0;
-        virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed) = 0;
+        virtual void SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed) = 0;
 #endif
 
 	protected:
@@ -126,18 +126,18 @@ class pmLinuxMemoryManager : public pmMemoryManager
         static pmMemoryManager* GetMemoryManager();
 
 		virtual void* AllocateMemory(pmAddressSpace* pAddressSpace, size_t& pLength, size_t& pPageCount);
-        virtual pmStatus DeallocateMemory(pmAddressSpace* pAddressSpace);
-        virtual pmStatus DeallocateMemory(void* pMem);
+        virtual void DeallocateMemory(pmAddressSpace* pAddressSpace);
+        virtual void DeallocateMemory(void* pMem);
 
         virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
-        virtual pmStatus CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask);
+        virtual void CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask);
 
         virtual size_t GetVirtualMemoryPageSize() const;
 
         virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount);	// Allocation size must be a multiple of page size
     
-        pmStatus InstallSegFaultHandler();
-		pmStatus UninstallSegFaultHandler();
+        void InstallSegFaultHandler();
+		void UninstallSegFaultHandler();
 
     private:
 		pmLinuxMemoryManager();
@@ -158,13 +158,13 @@ class pmLinuxMemoryManager : public pmMemoryManager
     public:
         virtual void* CreateReadOnlyMemoryMapping(pmAddressSpace* pAddressSpace);
         virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength);
-        virtual pmStatus SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
+        virtual void SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
 
     private:
-        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr);
-        pmStatus LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
-        pmStatus CopyLazyInputMemPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pFaultAddr);
-        pmStatus CopyShadowMemPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
+        void LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr);
+        void LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr, uint pForwardPrefetchPageCount);
+        void CopyLazyInputMemPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pFaultAddr);
+        void CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmAddressSpace* pAddressSpace, pmTask* pTask, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr);
 
         void* CreateMemoryMapping(int pSharedMemDescriptor, size_t pLength, bool pReadAllowed, bool pWriteAllowed);
         void DeleteMemoryMapping(void* pMem, size_t pLength);

@@ -808,8 +808,8 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 {
                     const pmAddressSpace* lAddressSpace = (*lMemIter);
                     
-                    if(lAddressSpace->IsOutput() && lAddressSpace->IsReadWrite() && !lTask->HasDisjointReadWritesAcrossSubtasks())
-                        CommitSubtaskShadowMem(lTask, (*lIter).first, lAutoPtr.get(), lAddressSpaceIndex);
+                    if(lTask->IsReadWrite(lAddressSpace) && !lTask->HasDisjointReadWritesAcrossSubtasks(lAddressSpace))
+                        lTask->GetSubscriptionManager().CommitSubtaskShadowMem(this, (*lIter).first, lAutoPtr.get(), lAddressSpaceIndex);
                 }
             }
         
@@ -990,7 +990,7 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
     {
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
         
-        filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();},
+        filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
         [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
         {
             subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
@@ -1107,7 +1107,7 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
         std::vector<pmAddressSpace*>& lAddressSpaceVector = pRange.task->GetAddressSpaces();
 
-        filtered_for_each_with_index(lAddressSpaceVector.begin(), lAddressSpaceVector.end(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();},
+        filtered_for_each_with_index(lAddressSpaceVector, [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
         [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
         {
             lAddressSpaceIndexVector.push_back((uint)lOwnershipVector.size());
@@ -1287,18 +1287,6 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>&
     CleanupPostSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, pMultiAssign, lSubtaskId, lSubtaskId, lSuccess, &lSplitInfo);
 }
 #endif
-    
-void pmExecutionStub::CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex)
-{
-    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
-    
-    const pmSubscriptionInfo& lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-    
-    subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBeginIter, lEndIter);
-
-    lSubscriptionManager.CommitSubtaskShadowMem(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBeginIter, lEndIter, lUnifiedSubscriptionInfo.offset);
-}
 
 void pmExecutionStub::DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
@@ -1548,19 +1536,14 @@ void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, boo
     
     if(!pPrefetch)
     {
-        const std::vector<pmAddressSpace*>& lAddressSpaceVector = pTask->GetAddressSpaces();
-
-        std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaceVector.begin(), lEndIter = lAddressSpaceVector.end();
-        for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
+        for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
         {
-            const pmAddressSpace* lAddressSpace = (*lIter);
-            
-            if(lAddressSpace->IsOutput())
+            if(pTask->IsWritable(pAddressSpace))
             {
-                if(pTask->DoSubtasksNeedShadowMemory(lAddressSpace) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
-                    lSubscriptionManager.CreateSubtaskShadowMem(this, pSubtaskId, pSplitInfo, lMemIndex);
+                if(pTask->DoSubtasksNeedShadowMemory(pAddressSpace) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
+                    lSubscriptionManager.CreateSubtaskShadowMem(this, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex);
             }
-        }
+        });
     }
 }
 
@@ -1585,14 +1568,14 @@ void pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId
         {
             const pmAddressSpace* lAddressSpace = (*lIter);
             
-            if(lAddressSpace->IsOutput())
+            if(pTask->IsWritable(lAddressSpace))
             {
                 if(pTask->DoSubtasksNeedShadowMemory(lAddressSpace) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign))
                 {
-                    if(lAddressSpace->IsReadWrite() && !pTask->HasDisjointReadWritesAcrossSubtasks())
+                    if(pTask->IsReadWrite(lAddressSpace) && !pTask->HasDisjointReadWritesAcrossSubtasks(lAddressSpace))
                         lDeferCommit = true;
                     else
-                        CommitSubtaskShadowMem(pTask, pSubtaskId, pSplitInfo, lMemIndex);
+                        pTask->GetSubscriptionManager().CommitSubtaskShadowMem(this, pSubtaskId, pSplitInfo, lMemIndex);
                 }
             }
         }
@@ -1615,7 +1598,7 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
     {
         const pmAddressSpace* lAddressSpace = (*lIter);
         
-        if(lAddressSpace->IsOutput())
+        if(pTask->IsWritable(lAddressSpace))
         {
             pTask->GetSubscriptionManager().DestroySubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2, lMemIndex);
             
@@ -1731,7 +1714,7 @@ std::string pmStubCPU::GetDeviceDescription()
 	return std::string();
 }
 
-pmDeviceType pmStubCPU::GetType()
+pmDeviceType pmStubCPU::GetType() const
 {
 	return CPU;
 }
@@ -1747,6 +1730,14 @@ void pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ul
 
     if(pPreftechSubtaskIdPtr)
         CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true, NULL);
+    
+    // For read only address spaces, no shadow memory is created. In case user has asked for Compact subscription view, we need to create shadow mem
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+    for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
+    {
+        if(pTask->IsReadOnly(pAddressSpace) && pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this) == SUBSCRIPTION_COMPACT)
+            lSubscriptionManager.CreateSubtaskShadowMem(this, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex);
+    });
     
     const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo);
     
@@ -1856,7 +1847,7 @@ std::string pmStubCUDA::GetDeviceDescription()
 	return pmCudaInterface::GetDeviceDescription(mDeviceIndex);
 }
 
-pmDeviceType pmStubCUDA::GetType()
+pmDeviceType pmStubCUDA::GetType() const
 {
 	return GPU_CUDA;
 }
@@ -1911,36 +1902,53 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
     // Data is not fetched till this stage and shadow mem is also not created; so not using GetSubtaskInfo call here
     for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        bool lNeedsAllocation = false;
+        bool lNeedsAllocation = true;
+        pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
+        
         pmSubscriptionInfo lSubscriptionInfo;
 
-        if(pAddressSpace->IsInput())
+        if(lVisibilityType == SUBSCRIPTION_NATURAL)
         {
-            lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-
-            if(lSubscriptionInfo.length)
+            if(pTask->IsReadOnly(pAddressSpace))
             {
-                std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(pmCudaCacheKey(pAddressSpace, lSubscriptionInfo.offset, lSubscriptionInfo.length));
+                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+
+                if(lSubscriptionInfo.length)
+                {
+                    std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(pmCudaCacheKey(pAddressSpace, lSubscriptionInfo.offset, lSubscriptionInfo.length, lVisibilityType));
+
+                    if(lDeviceMemoryPtr.get())
+                    {
+                        lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
+                        pPreventCachePurgeVector.push_back(lDeviceMemoryPtr);   // increase ref count of cache value
+                        lNeedsAllocation = false;
+                    }
+                }
+            }
+            else
+            {
+                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+            }
+        }
+        else    // SUBSCRIPTION_COMPACT
+        {
+            const pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+            lSubscriptionInfo = lCompactViewData.subscriptionInfo;
+
+            if(pTask->IsReadOnly(pAddressSpace))
+            {
+                std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(pmCudaCacheKey(pAddressSpace, lSubscriptionInfo.offset, lSubscriptionInfo.length, lVisibilityType));
 
                 if(lDeviceMemoryPtr.get())
                 {
                     lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
                     pPreventCachePurgeVector.push_back(lDeviceMemoryPtr);   // increase ref count of cache value
-                }
-                else
-                {
-                    lNeedsAllocation = true;
+                    lNeedsAllocation = false;
                 }
             }
         }
-        else
-        {
-            lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-            if(lSubscriptionInfo.length)
-                lNeedsAllocation = true;
-        }
 
-        if(lNeedsAllocation)
+        if(lNeedsAllocation && lSubscriptionInfo.length)
         {
             if(!AllocateMemoryForDeviceCopy(lSubscriptionInfo.length, pCudaAlignment, lSubtaskMemoryVector[pAddressSpaceIndex], mCudaChunkCollection))
             {
@@ -1949,7 +1957,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
             }
 
             lSubtaskMemoryVector[pAddressSpaceIndex].requiresLoad = true;
-            lPendingCacheInsertions.emplace_back(std::make_pair(pmCudaCacheKey(pAddressSpace, lSubscriptionInfo.offset, lSubscriptionInfo.length), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr))));
+            lPendingCacheInsertions.emplace_back(std::make_pair(pmCudaCacheKey(pAddressSpace, lSubscriptionInfo.offset, lSubscriptionInfo.length, lVisibilityType), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr))));
         }
     });
 
@@ -2180,29 +2188,66 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
     {
         if(lVector[pAddressSpaceIndex].requiresLoad)
         {
-            pmSubscriptionInfo lSubscriptionInfo;
+            pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
 
-            if(pAddressSpace->IsInput())
-                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-            else
-                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+            lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
 
-            if(lSubscriptionInfo.length)
+            if(lVisibilityType == SUBSCRIPTION_NATURAL)
             {
-                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-                lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
+                pmSubscriptionInfo lSubscriptionInfo;
 
-                for(lIter = lBegin; lIter != lEnd; ++lIter)
+                if(pTask->IsReadOnly(pAddressSpace))
+                    lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+                else
+                    lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+
+                if(lSubscriptionInfo.length)
                 {
-                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
-                #else
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
-                #endif
-                    
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
+                    for(lIter = lBegin; lIter != lEnd; ++lIter)
+                    {
+                    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                        void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                    #else
+                        void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                    #endif
+                        
+                        void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
 
-                    mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
+                        mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
+                    }
+                }
+            }
+            else    // SUBSCRIPTION_COMPACT
+            {
+                const pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+
+                if(lCompactViewData.subscriptionInfo.length)
+                {
+                    auto lOffsetsIter = lCompactViewData.nonConsolidatedReadSubscriptionOffsets.begin();
+                    DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedReadSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
+
+                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                    if(pTask->IsReadOnly(pAddressSpace))
+                    {
+                        mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lVector[pAddressSpaceIndex].pinnedPtr, lVector[pAddressSpaceIndex].cudaPtr, lIter->second.first));
+                    }
+                    else
+                #endif
+                    {
+                        for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                        {
+                        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
+                        #else
+                            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+                        #endif
+                            
+                            void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+
+                            mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
+                        }
+                    }
                 }
             }
         }
@@ -2242,28 +2287,65 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
     
     for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        if(!pAddressSpace->IsInput())
+        if(!pTask->IsReadOnly(pAddressSpace))
         {
-            pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+            pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
 
-            if(lSubscriptionInfo.length)
+            if(lVisibilityType == SUBSCRIPTION_NATURAL)
             {
-                DEBUG_EXCEPTION_ASSERT(lVector[pAddressSpaceIndex].requiresLoad);
-                
-                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
-                
-                for(lIter = lBegin; lIter != lEnd; ++lIter)
-                {
-                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
-                #else
-                    void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
-                #endif
-                    
-                    void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
+                pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
 
-                    mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
+                if(lSubscriptionInfo.length)
+                {
+                    DEBUG_EXCEPTION_ASSERT(lVector[pAddressSpaceIndex].requiresLoad);
+                    
+                    subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
+                    
+                    for(lIter = lBegin; lIter != lEnd; ++lIter)
+                    {
+                    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                        void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                    #else
+                        void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                    #endif
+                        
+                        void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lSubscriptionInfo.offset);
+
+                        mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
+                    }
+                }
+            }
+            else    // SUBSCRIPTION_COMPACT
+            {
+                const pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+
+                if(lCompactViewData.subscriptionInfo.length)
+                {
+                    auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
+                    DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
+
+                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                    if(pTask->IsWriteOnly(pAddressSpace))
+                    {
+                        mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lVector[pAddressSpaceIndex].cudaPtr, lVector[pAddressSpaceIndex].pinnedPtr, lIter->second.first));
+                    }
+                    else
+                #endif
+                    {
+                        for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                        {
+                        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                            void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
+                        #else
+                            void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+                        #endif
+                            
+                            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+
+                            mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
+                        }
+                    }
                 }
             }
         }
@@ -2352,24 +2434,47 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
     {
         if(lVector[pAddressSpaceIndex].requiresLoad)
         {
-            pmSubscriptionInfo lSubscriptionInfo;
+            pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
 
-            if(pAddressSpace->IsInput())
-                lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-            else
-                lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+            lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
 
-            if(lSubscriptionInfo.length)
+            if(lVisibilityType == SUBSCRIPTION_NATURAL)
             {
-                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-                lSubscriptionManager.GetNonConsolidatedReadSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
+                pmSubscriptionInfo lSubscriptionInfo;
 
-                for(lIter = lBegin; lIter != lEnd; ++lIter)
+                if(pTask->IsReadOnly(pAddressSpace))
+                    lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+                else
+                    lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+
+                if(lSubscriptionInfo.length)
                 {
-                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
-                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                    for(lIter = lBegin; lIter != lEnd; ++lIter)
+                    {
+                        void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
 
-                    memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
+                        memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
+                    }
+                }
+            }
+            else    // SUBSCRIPTION_COMPACT
+            {
+                const pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+
+                if(lCompactViewData.subscriptionInfo.length)
+                {
+                    auto lOffsetsIter = lCompactViewData.nonConsolidatedReadSubscriptionOffsets.begin();
+                    DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedReadSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
+
+                    for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                    {
+                        void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
+                        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+
+                        memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
+                    }
                 }
             }
         }
@@ -2404,21 +2509,44 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
 
     for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        if(!pAddressSpace->IsInput())
+        if(!pTask->IsReadOnly(pAddressSpace))
         {
-            pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+            pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
             
-            if(lSubscriptionInfo.length)
+            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+            lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
+
+            if(lVisibilityType == SUBSCRIPTION_NATURAL)
             {
-                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
-
-                for(lIter = lBegin; lIter != lEnd; ++lIter)
+                pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+                
+                if(lSubscriptionInfo.length)
                 {
-                    void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
-                    void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                    for(lIter = lBegin; lIter != lEnd; ++lIter)
+                    {
+                        void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
 
-                    memcpy(lDataPtr, lPinnedPtr, lIter->second.first);
+                        memcpy(lDataPtr, lPinnedPtr, lIter->second.first);
+                    }
+                }
+            }
+            else    // SUBSCRIPTION_COMPACT
+            {
+                const pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+
+                if(lCompactViewData.subscriptionInfo.length)
+                {
+                    auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
+                    DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
+
+                    for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                    {
+                        void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
+                        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+
+                        memcpy(lDataPtr, lPinnedPtr, lIter->second.first);
+                    }
                 }
             }
         }

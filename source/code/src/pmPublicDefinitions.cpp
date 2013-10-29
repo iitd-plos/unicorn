@@ -303,8 +303,81 @@ pmCallbacks::pmCallbacks()
 	, postDataTransfer(NULL)
 {
 }
+    
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_CUDA pGpuCudaCallback)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(pCpuCallback)
+	, subtask_gpu_cuda(pGpuCudaCallback)
+    , subtask_gpu_custom(NULL)
+	, dataReduction(NULL)
+	, dataRedistribution(NULL)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+{}
 
-pmStatus pmRegisterCallbacks(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_Custom pGpuCustomCallback)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(pCpuCallback)
+	, subtask_gpu_cuda(NULL)
+    , subtask_gpu_custom(pGpuCustomCallback)
+	, dataReduction(NULL)
+	, dataRedistribution(NULL)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+{}
+
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_CUDA pGpuCudaCallback, pmDataReductionCallback pReductionCallback)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(pCpuCallback)
+	, subtask_gpu_cuda(pGpuCudaCallback)
+    , subtask_gpu_custom(NULL)
+	, dataReduction(pReductionCallback)
+	, dataRedistribution(NULL)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+{}
+
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_Custom pGpuCustomCallback, pmDataReductionCallback pReductionCallback)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(pCpuCallback)
+	, subtask_gpu_cuda(NULL)
+    , subtask_gpu_custom(pGpuCustomCallback)
+	, dataReduction(pReductionCallback)
+	, dataRedistribution(NULL)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+{}
+
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_CUDA pGpuCudaCallback, pmDataRedistributionCallback pRedistributionCallback)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(pCpuCallback)
+	, subtask_gpu_cuda(pGpuCudaCallback)
+    , subtask_gpu_custom(NULL)
+	, dataReduction(NULL)
+	, dataRedistribution(pRedistributionCallback)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+{}
+
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_Custom pGpuCustomCallback, pmDataRedistributionCallback pRedistributionCallback)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(pCpuCallback)
+	, subtask_gpu_cuda(NULL)
+    , subtask_gpu_custom(pGpuCustomCallback)
+	, dataReduction(NULL)
+	, dataRedistribution(pRedistributionCallback)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+{}
+
+
+pmStatus pmRegisterCallbacks(const char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
 {
     if(pCallbacks.subtask_gpu_cuda != NULL && pCallbacks.subtask_gpu_custom != NULL)
         return pmInvalidCallbacks;
@@ -351,6 +424,16 @@ pmTaskMem::pmTaskMem()
 pmTaskMem::pmTaskMem(pmMemHandle pMemHandle, pmMemType pMemType)
     : memHandle(pMemHandle)
     , memType(pMemType)
+    , subscriptionVisibilityType(SUBSCRIPTION_NATURAL)
+    , disjointReadWritesAcrossSubtasks(false)
+{
+}
+
+pmTaskMem::pmTaskMem(pmMemHandle pMemHandle, pmMemType pMemType, pmSubscriptionVisibilityType pVisibility, bool pDisjointReadWrites)
+    : memHandle(pMemHandle)
+    , memType(pMemType)
+    , subscriptionVisibilityType(pVisibility)
+    , disjointReadWritesAcrossSubtasks(pDisjointReadWrites)
 {
 }
 
@@ -365,13 +448,19 @@ pmTaskDetails::pmTaskDetails()
     , policy(SLOW_START)
     , timeOutInSecs(__MAX(int))
     , multiAssignEnabled(true)
-    , disjointReadWritesAcrossSubtasks(false)
     , overlapComputeCommunication(true)
     , canSplitCpuSubtasks(false)
     , canSplitGpuSubtasks(false)
 	, cluster(NULL)
-{
-}
+{}
+
+pmTaskDetails::pmTaskDetails(void* pTaskConf, uint pTaskConfLength, pmTaskMem* pTaskMem, uint pTaskMemCount, pmCallbackHandle pCallbackHandle, ulong pSubtaskCount)
+    : taskConf(pTaskConf)
+	, taskConfLength(pTaskConfLength)
+	, taskMem(pTaskMem)
+    , taskMemCount(pTaskMemCount)
+	, subtaskCount(pSubtaskCount)
+{}
 
 pmStatus pmSubmitTask(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)
 {
@@ -420,8 +509,27 @@ pmCudaLaunchConf::pmCudaLaunchConf()
     , threadsY(1)
     , threadsZ(1)
 	, sharedMem(0)
-{
-}
+{}
+    
+pmCudaLaunchConf::pmCudaLaunchConf(int pBlocksX, int pBlocksY, int pBlocksZ, int pThreadsX, int pThreadsY, int pThreadsZ)
+	: blocksX(pBlocksX)
+    , blocksY(pBlocksY)
+    , blocksZ(pBlocksZ)
+    , threadsX(pThreadsX)
+    , threadsY(pThreadsY)
+    , threadsZ(pThreadsZ)
+	, sharedMem(0)
+{}
+
+pmCudaLaunchConf::pmCudaLaunchConf(int pBlocksX, int pBlocksY, int pBlocksZ, int pThreadsX, int pThreadsY, int pThreadsZ, int pSharedMem)
+	: blocksX(pBlocksX)
+    , blocksY(pBlocksY)
+    , blocksZ(pBlocksZ)
+    , threadsX(pThreadsX)
+    , threadsY(pThreadsY)
+    , threadsZ(pThreadsZ)
+	, sharedMem(pSharedMem)
+{}
     
 pmStatus pmSetCudaLaunchConf(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf)
 {

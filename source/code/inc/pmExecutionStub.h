@@ -252,7 +252,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		virtual std::string GetDeviceName() = 0;
 		virtual std::string GetDeviceDescription() = 0;
 
-		virtual pmDeviceType GetType() = 0;
+		virtual pmDeviceType GetType() const = 0;
 
 		const pmProcessingElement* GetProcessingElement() const;
 
@@ -368,7 +368,6 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmStatus pExecStatus);
         void CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, pmSplitInfo* pSplitInfo);
-        void CommitSubtaskShadowMem(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex);
         void DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
         void CancelCurrentlyExecutingSubtaskRange(bool pTaskListeningOnCancellation);
         void TerminateCurrentSubtaskRange();
@@ -410,7 +409,7 @@ class pmStubGPU : public pmExecutionStub
 		virtual std::string GetDeviceName() = 0;
 		virtual std::string GetDeviceDescription() = 0;
 
-		virtual pmDeviceType GetType() = 0;
+		virtual pmDeviceType GetType() const = 0;
 
 		virtual void FreeResources() = 0;
 		virtual void FreeExecutionResources() = 0;
@@ -438,7 +437,7 @@ class pmStubCPU : public pmExecutionStub
 		virtual std::string GetDeviceName();
 		virtual std::string GetDeviceDescription();
 
-		virtual pmDeviceType GetType();
+		virtual pmDeviceType GetType() const;
 
 		virtual void Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL);
 
@@ -467,7 +466,7 @@ class pmStubCUDA : public pmStubGPU
 		virtual std::string GetDeviceName();
 		virtual std::string GetDeviceDescription();
 
-		virtual pmDeviceType GetType();
+		virtual pmDeviceType GetType() const;
 
 		virtual void FreeResources();
 		virtual void FreeExecutionResources();

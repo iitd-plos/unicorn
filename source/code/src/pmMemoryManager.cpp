@@ -48,7 +48,7 @@ void __dump_mem_req(const pmAddressSpace* addressSpace, const void* addr, size_t
 {
     char lStr[512];
    
-    if(addressSpace->IsInput())
+    if(addressSpace->IsReadOnly())
         sprintf(lStr, "Requesting input memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
     else
         sprintf(lStr, "Requesting output memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
@@ -275,7 +275,7 @@ void* pmLinuxMemoryManager::CreateCheckOutMemory(size_t pLength)
     return AllocateMemory(NULL, pLength, lPageCount);
 }
 
-pmStatus pmLinuxMemoryManager::DeallocateMemory(pmAddressSpace* pAddressSpace)
+void pmLinuxMemoryManager::DeallocateMemory(pmAddressSpace* pAddressSpace)
 {
     // Auto lock/unlock scope
     {
@@ -300,11 +300,9 @@ pmStatus pmLinuxMemoryManager::DeallocateMemory(pmAddressSpace* pAddressSpace)
         ++mTotalDeallocations;
     }
 #endif
-
-	return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::DeallocateMemory(void* pMem)
+void pmLinuxMemoryManager::DeallocateMemory(void* pMem)
 {
 	::free(pMem);
 
@@ -315,8 +313,6 @@ pmStatus pmLinuxMemoryManager::DeallocateMemory(void* pMem)
         ++mTotalDeallocations;
     }
 #endif
-
-	return pmSuccess;
 }
     
 size_t pmLinuxMemoryManager::FindAllocationSize(size_t pLength, size_t& pPageCount)
@@ -499,7 +495,7 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmA
 
 #ifdef ENABLE_TASK_PROFILING
     if(lLockingTask)
-        pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pAddressSpace->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, true);
+        pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, true);
 #endif
     
 	lFetchData.receiveCommand->MarkExecutionStart();
@@ -509,7 +505,7 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmA
 	pmCommunicator::GetCommunicator()->Send(lSendCommand);
 }
     
-pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask)
+void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask)
 {
     using namespace linuxMemManager;
 
@@ -518,7 +514,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace,
     
     pmTask* lLockingTask = pAddressSpace->GetLockingTask();
     if(lLockingTask != pRequestingTask)
-        return pmSuccess;
+        return;
     
     addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
     pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
@@ -540,7 +536,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace,
 
     #ifdef ENABLE_TASK_PROFILING
         if(lLockingTask)
-            lLockingTask->GetTaskProfiler()->RecordProfileEvent(pAddressSpace->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+            lLockingTask->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
     #endif
 
     #ifdef ENABLE_MEM_PROFILING
@@ -595,7 +591,7 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace,
             
         #ifdef ENABLE_TASK_PROFILING
             if(lLockingTask)
-                pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pAddressSpace->IsInput() ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+                pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
         #endif
 
         #ifdef ENABLE_MEM_PROFILING
@@ -619,12 +615,10 @@ pmStatus pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace,
             pAddressSpace->AcquireOwnershipImmediate(lOffset, pLength);
         }
     }
-    
-    return pmSuccess;
 }
     
 #ifdef SUPPORT_LAZY_MEMORY
-pmStatus pmLinuxMemoryManager::SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed)
+void pmLinuxMemoryManager::SetLazyProtection(void* pAddr, size_t pLength, bool pReadAllowed, bool pWriteAllowed)
 {
     ACCUMULATION_TIMER(Timer_ACC, "SetLazyProtection");
     
@@ -639,11 +633,9 @@ pmStatus pmLinuxMemoryManager::SetLazyProtection(void* pAddr, size_t pLength, bo
     
 	if(::mprotect(reinterpret_cast<void*>(lPageAddr), pLength + reinterpret_cast<size_t>(pAddr) - lPageAddr, lFlags) != 0)
         PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::MEM_PROT_RW_FAILED));
-    
-    return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr, uint pForwardPrefetchPageCount)
+void pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr, uint pForwardPrefetchPageCount)
 {
 	size_t lPageSize = GetVirtualMemoryPageSize();
     size_t lBytesToBeFetched = (1 + pForwardPrefetchPageCount) * lPageSize;
@@ -679,21 +671,16 @@ pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddr
 
         pStub->WaitForNetworkFetch(lCommandVector);
     }
-
-	return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr)
+void pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pLazyMemAddr)
 {
-    return LoadLazyMemoryPage(pStub, pAddressSpace, pLazyMemAddr, pAddressSpace->GetLazyForwardPrefetchPageCount());
+    LoadLazyMemoryPage(pStub, pAddressSpace, pLazyMemAddr, pAddressSpace->GetLazyForwardPrefetchPageCount());
 }
 
-pmStatus pmLinuxMemoryManager::CopyLazyInputMemPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pFaultAddr)
+void pmLinuxMemoryManager::CopyLazyInputMemPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, void* pFaultAddr)
 {
-#ifdef _DEBUG
-    if(pAddressSpace->IsOutput() || !pAddressSpace->IsLazy())
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(!pAddressSpace->GetLockingTask()->IsWritable(pAddressSpace) && pAddressSpace->GetLockingTask()->IsLazy(pAddressSpace));
 
 	size_t lPageSize = GetVirtualMemoryPageSize();
 	size_t lMemAddr = reinterpret_cast<size_t>(pFaultAddr);
@@ -705,41 +692,67 @@ pmStatus pmLinuxMemoryManager::CopyLazyInputMemPage(pmExecutionStub* pStub, pmAd
 
     LoadLazyMemoryPage(pStub, pAddressSpace, lSrcAddr);
     SetLazyProtection(lDestAddr, lPageSize, true, true);    // we may actually not allow writes here at all and abort if a write access is done to RO memory
-    
-    return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr)
+void pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmAddressSpace* pAddressSpace, pmTask* pTask, size_t pShadowMemOffset, void* pShadowMemBaseAddr, void* pFaultAddr)
 {
-#ifdef _DEBUG
-    if(pAddressSpace->IsInput() || !pAddressSpace->IsLazyReadWrite())
-        PMTHROW(pmFatalErrorException());
-#endif
-    
+    DEBUG_EXCEPTION_ASSERT(!pAddressSpace->GetLockingTask()->IsReadOnly(pAddressSpace) && pAddressSpace->GetLockingTask()->IsLazyReadWrite(pAddressSpace));
+
 	size_t lPageSize = GetVirtualMemoryPageSize();
 	size_t lMemAddr = reinterpret_cast<size_t>(pFaultAddr);
 	size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
-    size_t lOffset = pShadowMemOffset + (lPageAddr - reinterpret_cast<size_t>(pShadowMemBaseAddr));
     size_t lSrcMemBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
     
     void* lDestAddr = reinterpret_cast<void*>(lPageAddr);
-    void* lSrcAddr = reinterpret_cast<void*>(lSrcMemBaseAddr + lOffset);
 
-    LoadLazyMemoryPage(pStub, pAddressSpace, lSrcAddr);
-    SetLazyProtection(lDestAddr, lPageSize, true, true);
-    
-    size_t lMaxSrcAddr = lSrcMemBaseAddr + pAddressSpace->GetLength();
-    size_t lMaxCopyAddr = reinterpret_cast<size_t>(lSrcAddr) + lPageSize;
-    if(lMaxCopyAddr > lMaxSrcAddr)
-        ::memcpy(lDestAddr, lSrcAddr, lMaxSrcAddr - reinterpret_cast<size_t>(lSrcAddr));
-    else
-        ::memcpy(lDestAddr, lSrcAddr, lPageSize);
-    
-    return pmSuccess;
+    if(pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, pStub) == SUBSCRIPTION_NATURAL)
+    {
+        size_t lOffset = pShadowMemOffset + (lPageAddr - reinterpret_cast<size_t>(pShadowMemBaseAddr));
+
+        void* lSrcAddr = reinterpret_cast<void*>(lSrcMemBaseAddr + lOffset);
+
+        LoadLazyMemoryPage(pStub, pAddressSpace, lSrcAddr);
+        SetLazyProtection(lDestAddr, lPageSize, true, true);
+
+        size_t lMaxSrcAddr = lSrcMemBaseAddr + pAddressSpace->GetLength();
+        size_t lMaxCopyAddr = reinterpret_cast<size_t>(lSrcAddr) + lPageSize;
+
+        if(lMaxCopyAddr > lMaxSrcAddr)
+            ::memcpy(lDestAddr, lSrcAddr, lMaxSrcAddr - reinterpret_cast<size_t>(lSrcAddr));
+        else
+            ::memcpy(lDestAddr, lSrcAddr, lPageSize);
+    }
+    else    // SUBSCRIPTION_COMPACT
+    {
+        std::vector<subscription::pmCompactPageInfo> lCompactedPages = pTask->GetSubscriptionManager().GetReadSubscriptionPagesForCompactViewPage(pStub, pSubtaskId, pSplitInfo, pTask->GetAddressSpaceIndex(pAddressSpace), lPageAddr, lPageSize);
+
+        for_each(lCompactedPages, [&] (const subscription::pmCompactPageInfo& pInfo)
+        {
+            void* lSrcAddr = reinterpret_cast<void*>(lSrcMemBaseAddr + pInfo.addressSpaceOffset);
+
+            LoadLazyMemoryPage(pStub, pAddressSpace, lSrcAddr);
+        });
+
+        SetLazyProtection(lDestAddr, lPageSize, true, true);
+        
+        for_each(lCompactedPages, [&] (const subscription::pmCompactPageInfo& pInfo)
+        {
+            void* lSrcAddr = reinterpret_cast<void*>(lSrcMemBaseAddr + pInfo.addressSpaceOffset);
+            void* lCopyAddr = reinterpret_cast<void*>(lPageAddr + pInfo.compactViewOffset);
+
+            size_t lMaxSrcAddr = lSrcMemBaseAddr + pAddressSpace->GetLength();
+            size_t lMaxCopyAddr = reinterpret_cast<size_t>(lSrcAddr) + std::min(lPageSize, pInfo.length);
+
+            if(lMaxCopyAddr > lMaxSrcAddr)
+                ::memcpy(lCopyAddr, lSrcAddr, lMaxSrcAddr - reinterpret_cast<size_t>(lSrcAddr));
+            else
+                ::memcpy(lCopyAddr, lSrcAddr, std::min(lPageSize, pInfo.length));
+        });
+    }
 }
 #endif
     
-pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
+void pmLinuxMemoryManager::InstallSegFaultHandler()
 {
     void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext);
 
@@ -756,11 +769,9 @@ pmStatus pmLinuxMemoryManager::InstallSegFaultHandler()
 	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
 		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_INSTALL_FAILED));
 #endif
-    
-	return pmSuccess;
 }
 
-pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
+void pmLinuxMemoryManager::UninstallSegFaultHandler()
 {
 	struct sigaction lSigAction;
 
@@ -775,8 +786,6 @@ pmStatus pmLinuxMemoryManager::UninstallSegFaultHandler()
 	if(sigaction(SIGSEGV, &lSigAction, NULL) != 0)
 		PMTHROW(pmVirtualMemoryException(pmVirtualMemoryException::SEGFAULT_HANDLER_UNINSTALL_FAILED));
 #endif
-    
-	return pmSuccess;
 }
 
 void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
@@ -809,41 +818,37 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
         }
     #endif
     
-        /* Check if the address belongs to a lazy input memory */
+        /* Check if the address belongs to a lazy read only memory */
         pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpaceContainingLazyAddress((void*)(pSigInfo->si_addr));
         if(lAddressSpace)
         {
-            if(lMemoryManager->CopyLazyInputMemPage(lStub, lAddressSpace, (void*)(pSigInfo->si_addr)) != pmSuccess)
-                abort();
+            lMemoryManager->CopyLazyInputMemPage(lStub, lAddressSpace, (void*)(pSigInfo->si_addr));
         }
-        else    /* Check if the address belongs to a lazy output memory */
+        else    /* Check if the address belongs to a lazy read write/write only memory */
         {
-            lAddressSpace = pmSubscriptionManager::FindAddressSpaceContainingShadowAddr((void*)(pSigInfo->si_addr), lShadowMemOffset, lShadowMemBaseAddr);
-            if(lAddressSpace && lShadowMemBaseAddr)
+            pmTask* lTask = NULL;
+
+            lAddressSpace = pmSubscriptionManager::FindAddressSpaceContainingShadowAddr((void*)(pSigInfo->si_addr), lShadowMemOffset, lShadowMemBaseAddr, lTask);
+            if(lAddressSpace && lShadowMemBaseAddr && lTask)
             {
-                if(lAddressSpace->IsLazyReadWrite())
+                const std::pair<void*, void*>& lPair = TLS_IMPLEMENTATION_CLASS::GetTls()->GetThreadLocalStoragePair(TLS_SPLIT_ID, TLS_SPLIT_COUNT);
+
+                pmSplitInfo* lSplitInfoPtr = NULL;
+                pmSplitInfo lSplitInfo;
+
+                if(lPair.first && lPair.second)
                 {
-                    if(lMemoryManager->CopyShadowMemPage(lStub, lAddressSpace, lShadowMemOffset, lShadowMemBaseAddr, (void*)(pSigInfo->si_addr)) != pmSuccess)
-                        abort();
+                    lSplitInfoPtr = &lSplitInfo;
+                    lSplitInfo.splitId = *((uint*)lPair.first);
+                    lSplitInfo.splitCount = *((uint*)lPair.second);
                 }
-                else
+
+                if(lTask->IsLazyReadWrite(lAddressSpace))
                 {
-                    pmTask* lTask = lAddressSpace->GetLockingTask();
-                    if(!lTask)
-                        abort();
-                
-                    const std::pair<void*, void*>& lPair = TLS_IMPLEMENTATION_CLASS::GetTls()->GetThreadLocalStoragePair(TLS_SPLIT_ID, TLS_SPLIT_COUNT);
-
-                    pmSplitInfo* lSplitInfoPtr = NULL;
-                    pmSplitInfo lSplitInfo;
-
-                    if(lPair.first && lPair.second)
-                    {
-                        lSplitInfoPtr = &lSplitInfo;
-                        lSplitInfo.splitId = *((uint*)lPair.first);
-                        lSplitInfo.splitCount = *((uint*)lPair.second);
-                    }
-                    
+                    lMemoryManager->CopyShadowMemPage(lStub, lSubtaskId, lSplitInfoPtr, lAddressSpace, lTask, lShadowMemOffset, lShadowMemBaseAddr, (void*)(pSigInfo->si_addr));
+                }
+                else    // Write only address space
+                {
                 	size_t lPageSize = lMemoryManager->GetVirtualMemoryPageSize();
                     size_t lMemAddr = reinterpret_cast<size_t>((void*)(pSigInfo->si_addr));
                     size_t lPageAddr = GET_VM_PAGE_START_ADDRESS(lMemAddr, lPageSize);
@@ -854,7 +859,7 @@ void SegFaultHandler(int pSignalNum, siginfo_t* pSigInfo, void* pContext)
 
                     lMemoryManager->SetLazyProtection(reinterpret_cast<void*>(lPageAddr), lPageSize, true, true);
                     lTask->GetSubscriptionManager().AddWriteOnlyLazyUnprotection(lStub, lSubtaskId, lSplitInfoPtr, lAddressSpaceIndex, lMemOffset / lPageSize);
-                    lTask->GetSubscriptionManager().InitializeWriteOnlyLazyMemory(lStub, lSubtaskId, lSplitInfoPtr, lAddressSpaceIndex, lOffset, reinterpret_cast<void*>(lPageAddr), lPageSize);
+                    lTask->GetSubscriptionManager().InitializeWriteOnlyLazyMemory(lStub, lSubtaskId, lSplitInfoPtr, lAddressSpaceIndex, lTask, lAddressSpace, lOffset, reinterpret_cast<void*>(lPageAddr), lPageSize);
                 }
             }
             else

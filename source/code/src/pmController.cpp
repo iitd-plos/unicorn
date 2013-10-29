@@ -140,7 +140,7 @@ void pmController::ProcessTermination()
 }
 
 /* Public API */
-void pmController::RegisterCallbacks_Public(char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
+void pmController::RegisterCallbacks_Public(const char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
 {
     *pCallbackHandle = NULL;
 
@@ -244,10 +244,7 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
     
     if(pTaskDetails.multiAssignEnabled)
         lTaskFlags |= TASK_MULTI_ASSIGN_FLAG_VAL;
-    
-    if(pTaskDetails.disjointReadWritesAcrossSubtasks)
-        lTaskFlags |= TASK_DISJOINT_READ_WRITES_ACROSS_SUBTASKS_FLAG_VAL;
-        
+
     if(pTaskDetails.overlapComputeCommunication)
         lTaskFlags |= TASK_SHOULD_OVERLAP_COMPUTE_COMMUNICATION_FLAG_VAL;
 
@@ -267,10 +264,11 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
         if(!lAddressSpace || pTaskDetails.taskMem[i].memType == MAX_MEM_TYPE)
             PMTHROW(pmFatalErrorException());
         
-        lTaskMemVector.push_back(pmTaskMemory(lAddressSpace, pTaskDetails.taskMem[i].memType));
+        pmTaskMem& pTaskMem = pTaskDetails.taskMem[i];
+        lTaskMemVector.emplace_back(lAddressSpace, pTaskMem.memType, pTaskMem.subscriptionVisibilityType, pTaskMem.disjointReadWritesAcrossSubtasks);
     }
     
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, &lTaskMemVector[0], pTaskDetails.taskMemCount, pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags);
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags);
 
 	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
 }
@@ -304,11 +302,11 @@ void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHa
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
-    if(pSubscriptionType == OUTPUT_MEM_READ_WRITE_SUBSCRIPTION)
+    if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
     {
-        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, OUTPUT_MEM_READ_SUBSCRIPTION, pSubscriptionInfo);
+        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, READ_SUBSCRIPTION, pSubscriptionInfo);
         
-        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, OUTPUT_MEM_WRITE_SUBSCRIPTION, pSubscriptionInfo);
+        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, WRITE_SUBSCRIPTION, pSubscriptionInfo);
     }
     else
     {

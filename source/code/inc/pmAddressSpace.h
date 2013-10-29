@@ -118,9 +118,9 @@ class pmAddressSpace : public pmBase
 
         ~pmAddressSpace();
     
-		void* GetMem();
-        size_t GetLength();
-        size_t GetAllocatedLength();
+		void* GetMem() const;
+        size_t GetLength() const;
+        size_t GetAllocatedLength() const;
     
         void DisposeMemory();
     
@@ -145,15 +145,6 @@ class pmAddressSpace : public pmBase
         pmUserMemHandle* GetUserMemHandle();
 
         void Update(size_t pOffset, size_t pLength, void* pSrcAddr);
-    
-        pmMemType GetMemType();
-        bool IsInput() const;
-        bool IsOutput() const;
-        bool IsWriteOnly() const;
-        bool IsReadWrite() const;
-        bool IsLazy() const;
-        bool IsLazyWriteOnly() const;
-        bool IsLazyReadWrite() const;
 
 #ifdef SUPPORT_LAZY_MEMORY
         void* GetReadOnlyLazyMemoryMapping();
@@ -222,8 +213,6 @@ class pmAddressSpace : public pmBase
     
         bool mUserDelete;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeleteLock;
-    
-        pmMemType mMemType;
     
     protected:
 #ifdef ENABLE_MEM_PROFILING

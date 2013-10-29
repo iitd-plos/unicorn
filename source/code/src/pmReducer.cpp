@@ -186,7 +186,7 @@ void pmReducer::AddReductionFinishEvent()
     
 void pmReducer::HandleReductionFinish()
 {
-    filtered_for_each(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pAddressSpace->IsOutput() && mTask->IsReducible(pAddressSpace));},
+    filtered_for_each(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (mTask->IsWritable(pAddressSpace) && mTask->IsReducible(pAddressSpace));},
     [&] (pmAddressSpace* pAddressSpace)
     {
         (static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.stub, pAddressSpace, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
@@ -202,7 +202,7 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
 
     pmSubscriptionManager& lSubscriptionManager = mTask->GetSubscriptionManager();
     
-    filtered_for_each_with_index(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pAddressSpace->IsOutput() && mTask->IsReducible(pAddressSpace));},
+    filtered_for_each_with_index(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (mTask->IsWritable(pAddressSpace) && mTask->IsReducible(pAddressSpace));},
     [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
     {
         uint lAddressSpaceIndex = (uint)pAddressSpaceIndex;
@@ -211,7 +211,7 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
         datatype* lShadowMem2 = (datatype*)lSubscriptionManager.GetSubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2, lAddressSpaceIndex);
 
     #ifdef SUPPORT_LAZY_MEMORY
-        if(pAddressSpace->IsLazyWriteOnly())
+        if(mTask->IsLazyWriteOnly(pAddressSpace))
         {
             size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
 

@@ -129,10 +129,14 @@ namespace pm
     {
         pmAddressSpace* addressSpace;
         pmMemType memType;
+        pmSubscriptionVisibilityType subscriptionVisibilityType;
+        bool disjointReadWritesAcrossSubtasks;
         
-        pmTaskMemory(pmAddressSpace* pAddressSpace, pmMemType pMemType)
+        pmTaskMemory(pmAddressSpace* pAddressSpace, pmMemType pMemType, pmSubscriptionVisibilityType pVisibility, bool pDisjointReadWrites)
         : addressSpace(pAddressSpace)
         , memType(pMemType)
+        , subscriptionVisibilityType(pVisibility)
+        , disjointReadWritesAcrossSubtasks(pDisjointReadWrites)
         {}
     };
 
@@ -223,16 +227,18 @@ namespace pm
         const pmAddressSpace* addressSpace;
         ulong offset;
         ulong length;
+        pmSubscriptionVisibilityType visibility;
         
-        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength)
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, pmSubscriptionVisibilityType pVisibility)
         : addressSpace(pAddressSpace)
         , offset(pOffset)
         , length(pLength)
+        , visibility(pVisibility)
         {}
 
         bool operator== (const pmCudaCacheKey& pKey) const
         {
-            return (addressSpace == pKey.addressSpace && offset == pKey.offset && length == pKey.length);
+            return (addressSpace == pKey.addressSpace && offset == pKey.offset && length == pKey.length && visibility == pKey.visibility);
         }
     };
     
@@ -240,7 +246,10 @@ namespace pm
     {
         std::size_t operator() (const pmCudaCacheKey& pKey) const
         {
-            return (std::hash<size_t>()(((reinterpret_cast<size_t>(pKey.addressSpace)) ^ (std::hash<ulong>()(pKey.offset) << 1)) >> 1) ^ (std::hash<ulong>()(pKey.length) << 1));
+            size_t lHash1 = (std::hash<size_t>()(reinterpret_cast<size_t>(pKey.addressSpace)) ^ (std::hash<ulong>()(pKey.offset) << 1)) >> 1;
+            size_t lHash2 = (std::hash<ulong>()(pKey.length) ^ (std::hash<ushort>()((ushort)visibility) << 1)) >> 1;
+            
+            return (lHash1 ^ (lHash2 << 1));
         }
     };
     
@@ -1004,6 +1013,26 @@ namespace pm
         FINALIZE_RESOURCE_PTR(dLock, _LockType, &__l, Lock(), Unlock());
 
         return std::for_each(__container.begin(), __container.end(), __f);
+    }
+
+    template<typename _InputIterator, typename _Command_Function, typename _Arg_Type>
+    _Command_Function for_each_with_arg(_InputIterator __first, _InputIterator __last, _Command_Function __f, _Arg_Type& __arg)
+    {
+        for (; __first != __last; ++__first)
+            __f(*__first, __arg);
+        
+        return std::move(__f);
+    }
+
+    template<typename _InputIterator1, typename _InputIterator2, typename _Command_Function>
+    _Command_Function multi_for_each(_InputIterator1 __first1, _InputIterator1 __last1, _InputIterator2 __first2, _InputIterator2 __last2, _Command_Function __f)
+    {
+        DEBUG_EXCEPTION_ASSERT(std::distance(__first1 , __last1) <= std::distance(__first2, __last2));
+
+        for (; __first1 != __last1; ++__first1, ++__first2)
+            __f(*__first1, *__first2);
+        
+        return std::move(__f);
     }
 
 } // end namespace pm

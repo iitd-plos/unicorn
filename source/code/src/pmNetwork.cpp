@@ -1391,6 +1391,8 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memIdentifier, lMemIdentifierMPI, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), 0, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memLength, lMemLengthMPI, MPI_UNSIGNED_LONG, 1, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memType, lMemTypeMPI, MPI_UNSIGNED_SHORT, 2, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subscriptionVisibility, lSubscriptionVisibilityMPI, MPI_UNSIGNED_SHORT, 3, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.flags, lFlagsMPI, MPI_UNSIGNED_SHORT, 4, 1);
 
             break;
         }

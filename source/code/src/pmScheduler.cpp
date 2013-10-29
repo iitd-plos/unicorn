@@ -76,7 +76,7 @@ void __dump_mem_ack_transfer(const pmAddressSpace* addressSpace, memoryIdentifie
 {
     char lStr[512];
     
-    if(addressSpace->IsInput())
+    if(addressSpace->IsReadOnly())
         sprintf(lStr, "Acknowledging input address space %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
     else
         sprintf(lStr, "Acknowledging out address space %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
@@ -1270,7 +1270,8 @@ void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessin
     if(pOwnershipVector.empty())
         return;
 
-    filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [] (const pmAddressSpace* pAddressSpace) {return pAddressSpace->IsOutput();}, [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
+    filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
+    [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
     {
         std::vector<ownershipDataStruct>::const_iterator lDataIter = pOwnershipVector.begin() + pAddressSpaceIndexVector[pOutputAddressSpaceIndex];
         std::vector<ownershipDataStruct>::const_iterator lDataEndIter = pOwnershipVector.end();
@@ -1495,10 +1496,11 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 
                     std::vector<shadowMemTransferPacked>::iterator lShadowMemsIter = lData->shadowMems.begin();
 
-                    filtered_for_each_with_index(lTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pAddressSpace->IsOutput() && lTask->IsReducible(pAddressSpace));}, [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
+                    filtered_for_each_with_index(lTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (lTask->IsWritable(pAddressSpace) && lTask->IsReducible(pAddressSpace));},
+                    [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
                     {
                     #ifdef SUPPORT_LAZY_MEMORY
-                        if(pAddressSpace->IsLazyWriteOnly())
+                        if(lTask->IsLazyWriteOnly(pAddressSpace))
                         {
                             uint lUnprotectedRanges = lShadowMemsIter->shadowMemData.writeOnlyUnprotectedPageRangesCount;
                             uint lUnprotectedLength = lUnprotectedRanges * 2 * sizeof(uint);

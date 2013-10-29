@@ -57,11 +57,12 @@ extern pmCluster* PM_GLOBAL_CLUSTER;
 class pmTask : public pmBase
 {
 	protected:
-		pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmTaskMemory* pTaskMemPtr, uint pTaskMemCount, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags);
+    pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags);
 
 	public:
 		virtual ~pmTask();
 
+        const std::vector<pmTaskMemory>& GetTaskMemVector() const;
         pmAddressSpace* GetAddressSpace(size_t pIndex) const;
         size_t GetAddressSpaceCount() const;
         std::vector<pmAddressSpace*>& GetAddressSpaces();
@@ -104,7 +105,9 @@ class pmTask : public pmBase
         virtual void TerminateTask();
         virtual void MarkLocalStubsFreeOfCancellations();
         virtual void MarkLocalStubsFreeOfShadowMemCommits();
-    
+
+        virtual void MarkUserSideTaskCompletion() = 0;
+
         void RecordStubWillSendCancellationMessage();
         void MarkAllStubsScannedForCancellationMessages();
         void RegisterStubCancellationMessage();
@@ -121,14 +124,27 @@ class pmTask : public pmBase
         std::vector<const pmProcessingElement*>& GetStealListForDevice(const pmProcessingElement* pDevice);
     
         ulong GetSequenceNumber();
-        pmStatus SetSequenceNumber(ulong pSequenceNumber);
+        void SetSequenceNumber(ulong pSequenceNumber);
     
-        pmStatus FlushMemoryOwnerships();
+        void FlushMemoryOwnerships();
         bool IsMultiAssignEnabled();
     
-        bool HasDisjointReadWritesAcrossSubtasks() const;
-        bool ShouldOverlapComputeCommunication() const;
+        void MarkRedistributionFinished(uint pOriginalAddressSpaceIndex, pmAddressSpace* pRedistributedAddressSpace = NULL);
 
+        bool ShouldOverlapComputeCommunication() const;
+        bool HasDisjointReadWritesAcrossSubtasks(const pmAddressSpace* pAddressSpace) const;
+
+        pmSubscriptionVisibilityType GetAddressSpaceSubscriptionVisibility(const pmAddressSpace* pAddressSpace, const pmExecutionStub* pStub) const;
+        pmMemType GetMemType(const pmAddressSpace* pAddressSpace) const;
+
+        bool IsReadOnly(const pmAddressSpace* pAddressSpace) const;
+        bool IsWritable(const pmAddressSpace* pAddressSpace) const;
+        bool IsWriteOnly(const pmAddressSpace* pAddressSpace) const;
+        bool IsReadWrite(const pmAddressSpace* pAddressSpace) const;
+        bool IsLazy(const pmAddressSpace* pAddressSpace) const;
+        bool IsLazyWriteOnly(const pmAddressSpace* pAddressSpace) const;
+        bool IsLazyReadWrite(const pmAddressSpace* pAddressSpace) const;
+    
 #ifdef ENABLE_TASK_PROFILING
         pmTaskProfiler* GetTaskProfiler();
 #endif
@@ -156,12 +172,7 @@ class pmTask : public pmBase
 		pmSubscriptionManager mSubscriptionManager;
 		pmTaskExecStats mTaskExecStats;
         ulong mSequenceNumber;  // Sequence Id of task on originating host (This along with originating machine is the global unique identifier for a task)
-        bool mMultiAssignEnabled;
-        bool mDisjointReadWritesAcrossSubtasks;  // for RW memory
-        bool mOverlapComputeCommunication;
-        bool mCanForciblyCancelSubtasks;
-        bool mCanSplitCpuSubtasks;
-        bool mCanSplitGpuSubtasks;
+        ushort mTaskFlags;
 
     #ifdef SUPPORT_SPLIT_SUBTASKS
         pmSubtaskSplitter mSubtaskSplitter;
@@ -196,18 +207,22 @@ class pmTask : public pmBase
     
         bool mTaskHasReadWriteAddressSpaceWithDisjointSubscriptions;
 
+        std::vector<pmTaskMemory> mTaskMemVector;
+        std::vector<pmAddressSpace*> mAddressSpaces;
+        std::map<const pmAddressSpace*, size_t> mAddressSpaceTaskMemIndexMap;
+
     protected:
         bool DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() const;
         bool RegisterRedistributionCompletion();    // Returns true when all address spaces finish redistribution
+        void ReplaceTaskAddressSpace(uint pAddressSpaceIndex, pmAddressSpace* pNewAddressSpace);
     
-        std::vector<pmAddressSpace*> mAddressSpaces;
 		uint mAssignedDeviceCount;
 };
 
 class pmLocalTask : public pmTask
 {
 	public:
-		pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, pmTaskMemory* pTaskMemPtr, uint pTaskMemCount, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost = PM_LOCAL_MACHINE, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
+        pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost = PM_LOCAL_MACHINE, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
 
         virtual ~pmLocalTask();
 
@@ -220,9 +235,8 @@ class pmLocalTask : public pmTask
 		void MarkTaskEnd(pmStatus pStatus);
 
         void DoPostInternalCompletion();
-        void MarkUserSideTaskCompletion();
+        virtual void MarkUserSideTaskCompletion();
     
-        void TaskRedistributionDone(uint pOriginalAddressSpaceIndex, pmAddressSpace* pRedistributedAddressSpace);
         void SaveFinalReducedOutput(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
     
         virtual void MarkSubtaskExecutionFinished();
@@ -260,7 +274,7 @@ class pmLocalTask : public pmTask
 class pmRemoteTask : public pmTask
 {
 	public:
-        pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char> >& pTaskConf, uint pTaskConfLength, ulong pTaskId, pmTaskMemory* pTaskMemPtr, uint pTaskMemCount, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, ulong pSequenceNumber, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
+        pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char> >& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, ulong pSequenceNumber, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
 
         virtual ~pmRemoteTask();
 
@@ -273,9 +287,8 @@ class pmRemoteTask : public pmTask
         virtual void MarkLocalStubsFreeOfShadowMemCommits();
     
         void DoPostInternalCompletion();
-        void MarkUserSideTaskCompletion();
+        virtual void MarkUserSideTaskCompletion();
         void MarkReductionFinished();
-        void MarkRedistributionFinished(uint pOriginalAddressSpaceIndex, pmAddressSpace* pRedistributedAddressSpace = NULL);
 
 	private:
         finalize_ptr<char, deleteArrayDeallocator<char> > mTaskConfAutoPtr;

@@ -72,11 +72,11 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(communicator::remoteTaskAssignPack
         communicator::taskMemoryStruct& lTaskMemStruct = pRemoteTaskData->taskMem[memIndex];
         const pmMachine* lOwnerHost = pmMachinePool::GetMachinePool()->GetMachine(lTaskMemStruct.memIdentifier.memOwnerHost);
 
-        lTaskMemVector[memIndex].addressSpace = pmAddressSpace::CheckAndCreateAddressSpace(lTaskMemStruct.memLength, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
-        lTaskMemVector[memIndex].memType = (pmMemType)(lTaskMemStruct.memType);
+        pmAddressSpace* lAddressSpace = pmAddressSpace::CheckAndCreateAddressSpace(lTaskMemStruct.memLength, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
+        lTaskMemVector.emplace_back(lAddressSpace, (pmMemType)(lTaskMemStruct.memType), (pmSubscriptionVisibilityType)(lTaskMemStruct.subscriptionVisibility), (bool)lTaskMemStruct.flags);
     }
 
-	pmRemoteTask* lRemoteTask = new pmRemoteTask(pRemoteTaskData->taskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, &lTaskMemVector[0], pRemoteTaskData->taskStruct.taskMemCount, pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), pRemoteTaskData->taskStruct.flags);
+	pmRemoteTask* lRemoteTask = new pmRemoteTask(pRemoteTaskData->taskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, std::move(lTaskMemVector), pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), pRemoteTaskData->taskStruct.flags);
 
 	if(pRemoteTaskData->taskStruct.schedModel == scheduler::PULL || lRemoteTask->GetCallbackUnit()->GetDataReductionCB())
 	{
