@@ -37,6 +37,8 @@ pmStatus luDecomposition_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
 	luTaskConf* lTaskConf = (luTaskConf*)(pTaskInfo.taskConf);
     MATRIX_DATA_TYPE* lMatrix = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
     
+    size_t lColStepSize = ((pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->matrixDim : BLOCK_DIM);
+
     CUBLAS_ERROR_CHECK("cublasSetStream", cublasSetStream(lCublasHandle, (cudaStream_t)pCudaStream));
 
     MATRIX_DATA_TYPE* lDiagonalElemPtr = (MATRIX_DATA_TYPE*)(pSubtaskInfo.gpuContext.reservedGlobalMem);
@@ -56,7 +58,7 @@ pmStatus luDecomposition_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
         CUBLAS_ERROR_CHECK("cublas_scal", CUBLAS_SCAL(lCublasHandle, (int)(BLOCK_DIM - i - 1), lDiagonalElemPtr, lMatrix + i + (i + 1) * lTaskConf->matrixDim, (int)lTaskConf->matrixDim));
 
         CUBLAS_ERROR_CHECK("cublasSetPointerMode", cublasSetPointerMode(lCublasHandle, CUBLAS_POINTER_MODE_HOST));
-        CUBLAS_ERROR_CHECK("cublas_ger", CUBLAS_GER(lCublasHandle, (int)(BLOCK_DIM - i - 1), (int)(BLOCK_DIM - i - 1), &gMinusOne, lMatrix + (i + 1) + i * lTaskConf->matrixDim, 1, lMatrix + i + (i + 1) * lTaskConf->matrixDim, (int)lTaskConf->matrixDim, lMatrix + (i + 1) + (i + 1) * lTaskConf->matrixDim, (int)lTaskConf->matrixDim));
+        CUBLAS_ERROR_CHECK("cublas_ger", CUBLAS_GER(lCublasHandle, (int)(BLOCK_DIM - i - 1), (int)(BLOCK_DIM - i - 1), &gMinusOne, lMatrix + (i + 1) + i * lColStepSize, 1, lMatrix + i + (i + 1) * lColStepSize, (int)lColStepSize, lMatrix + (i + 1) + (i + 1) * lColStepSize, (int)lColStepSize));
     }
     
     return pmSuccess;
@@ -70,27 +72,47 @@ pmStatus horizVertComp_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
     CUBLAS_ERROR_CHECK("cublasSetStream", cublasSetStream(lCublasHandle, (cudaStream_t)pCudaStream));
     CUBLAS_ERROR_CHECK("cublasSetPointerMode", cublasSetPointerMode(lCublasHandle, CUBLAS_POINTER_MODE_HOST));
 
+    size_t lOffsetElems = 0;
+    int lSpanElems = 0;
+
     bool lUpperTriangularComputation = (pSubtaskInfo.subtaskId < (pTaskInfo.subtaskCount/2));
     if(lUpperTriangularComputation)   // Upper Triangular Matrix (Solve A10 = L00 * U01)
     {
-        size_t lOffsetElems = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim);
+        if(pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL)
+        {
+            lOffsetElems = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim);
+            lSpanElems = (int)lTaskConf->matrixDim;
+        }
+        else
+        {
+            lOffsetElems = BLOCK_DIM * BLOCK_DIM;
+            lSpanElems = (int)(BLOCK_DIM);
+        }
         
         MATRIX_DATA_TYPE* lL00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
         MATRIX_DATA_TYPE* lU01 = lL00 + lOffsetElems;
         
-        CUBLAS_ERROR_CHECK("cublas_trsm", CUBLAS_TRSM(lCublasHandle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, BLOCK_DIM, BLOCK_DIM, &gOne, lL00, (int)lTaskConf->matrixDim, lU01, (int)lTaskConf->matrixDim));
-
+        CUBLAS_ERROR_CHECK("cublas_trsm", CUBLAS_TRSM(lCublasHandle, CUBLAS_SIDE_LEFT, CUBLAS_FILL_MODE_LOWER, CUBLAS_OP_N, CUBLAS_DIAG_NON_UNIT, BLOCK_DIM, BLOCK_DIM, &gOne, lL00, lSpanElems, lU01, lSpanElems));
     }
     else    // Lower Triangular Matrix (Solve A01 = L10 * U00)
     {
         size_t lStartingSubtask = (pTaskInfo.subtaskCount/2);
         
-        size_t lOffsetElems = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId - lStartingSubtask, pTaskInfo.taskId, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim);
+        if(pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL)
+        {
+            lOffsetElems = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + pSubtaskInfo.subtaskId - lStartingSubtask, pTaskInfo.taskId, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId, lTaskConf->matrixDim);
+            lSpanElems = (int)lTaskConf->matrixDim;
+        }
+        else
+        {
+            lOffsetElems = BLOCK_DIM;
+            lSpanElems = (int)(2 * BLOCK_DIM);
+        }
         
         MATRIX_DATA_TYPE* lU00 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
         MATRIX_DATA_TYPE* lL10 = lU00 + lOffsetElems;
         
-        CUBLAS_ERROR_CHECK("cublas_trsm", CUBLAS_TRSM(lCublasHandle, CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_UNIT, BLOCK_DIM, BLOCK_DIM, &gOne, lU00, (int)lTaskConf->matrixDim, lL10, (int)lTaskConf->matrixDim));
+        CUBLAS_ERROR_CHECK("cublas_trsm", CUBLAS_TRSM(lCublasHandle, CUBLAS_SIDE_RIGHT, CUBLAS_FILL_MODE_UPPER, CUBLAS_OP_N, CUBLAS_DIAG_UNIT, BLOCK_DIM, BLOCK_DIM, &gOne, lU00, lSpanElems, lL10, lSpanElems));
     }
     
 	return pmSuccess;
@@ -108,16 +130,32 @@ pmStatus diagComp_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
     size_t lRow = (pSubtaskInfo.subtaskId / lDim);
     size_t lCol = (pSubtaskInfo.subtaskId % lDim);
     
-    size_t lOffsetElems1 = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId + 1 + lCol, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId, lTaskConf->matrixDim);
-    
-    size_t lOffsetElems2 = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId + 1 + lCol, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId, lTaskConf->matrixDim);
+    size_t lOffsetElems1 = 0, lOffsetElems2 = 0;
+    int lSpanElems1 = 0, lSpanElems2 = 0, lSpanElems3 = 0;
+
+    if(pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL)
+    {
+        lOffsetElems1 = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId, pTaskInfo.taskId + 1 + lCol, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId, lTaskConf->matrixDim);
+        
+        lOffsetElems2 = BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId + 1 + lCol, lTaskConf->matrixDim) - BLOCK_OFFSET_IN_ELEMS(pTaskInfo.taskId + 1 + lRow, pTaskInfo.taskId, lTaskConf->matrixDim);
+
+        lSpanElems1 = lSpanElems2 = lSpanElems3 = (int)lTaskConf->matrixDim;
+    }
+    else
+    {
+        lOffsetElems1 = BLOCK_DIM * BLOCK_DIM;
+        lOffsetElems2 = BLOCK_DIM * BLOCK_DIM + BLOCK_DIM;
+        
+        lSpanElems1 = (int)(BLOCK_DIM);
+        lSpanElems2 = lSpanElems3 = (int)(2 * BLOCK_DIM);
+    }
     
     MATRIX_DATA_TYPE* lL10 = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
     MATRIX_DATA_TYPE* lU01 = lL10 + lOffsetElems1;
     MATRIX_DATA_TYPE* lA11 = lL10 + lOffsetElems2;
     
     // Solve A11 = A11 - L10 * U01
-    CUBLAS_ERROR_CHECK("cublas_gemm", CUBLAS_GEMM(lCublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, BLOCK_DIM, BLOCK_DIM, BLOCK_DIM, &gMinusOne, lL10, (int)lTaskConf->matrixDim, lU01, (int)lTaskConf->matrixDim, &gOne, lA11, (int)lTaskConf->matrixDim));
+    CUBLAS_ERROR_CHECK("cublas_gemm", CUBLAS_GEMM(lCublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, BLOCK_DIM, BLOCK_DIM, BLOCK_DIM, &gMinusOne, lL10, lSpanElems1, lU01, lSpanElems2, &gOne, lA11, lSpanElems3));
     
 	return pmSuccess;
 }

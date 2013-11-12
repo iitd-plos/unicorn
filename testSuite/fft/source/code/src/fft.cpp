@@ -110,12 +110,12 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 
     if(lTaskConf->inplace)
     {
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPLACE_MEM_INDEX, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPLACE_MEM_INDEX, READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
     }
     else
     {
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lSubscriptionInfo);
     }
 
 	return pmSuccess;
@@ -305,8 +305,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.rowPlanner = true;
     lTaskConf.inplace = lInplace;
 
-    pmMemType lOutputMemType = (lInplace ? OUTPUT_MEM_READ_WRITE : OUTPUT_MEM_WRITE_ONLY);
-    pmMemType lInputMemType = INPUT_MEM_READ_ONLY;
+    pmMemType lOutputMemType = (lInplace ? READ_WRITE : WRITE_ONLY);
+    pmMemType lInputMemType = READ_ONLY;
     
 	double lStartTime = getCurrentTimeInSecs();
 

@@ -30,7 +30,7 @@
 namespace pm
 {
 
-/* An LRU cache will ref counted values */
+/* An LRU cache with ref counted values */
 template<typename __key, typename __value, typename __hasher, typename __evictor>
 class pmCache : public pmBase, pmNonCopyable
 {

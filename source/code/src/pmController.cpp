@@ -298,20 +298,24 @@ void pmController::GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, d
 	*pTime = (static_cast<pmLocalTask*>(pTaskHandle))->GetExecutionTimeInSecs();
 }
 
-void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo)
+void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
-    if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
+    (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, pSubscriptionInfo);
+}
+
+void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+{
+    if(pScatteredSubscriptionInfo.count == 1)
     {
-        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, READ_SUBSCRIPTION, pSubscriptionInfo);
-        
-        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, WRITE_SUBSCRIPTION, pSubscriptionInfo);
+        SubscribeToMemory_Public(pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, pmSubscriptionInfo(pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.size));
+        return;
     }
-    else
-    {
-        (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, pSubscriptionInfo);
-    }
+    
+    pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
+
+    (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, pScatteredSubscriptionInfo);
 }
 
 void pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, size_t pOffset, size_t pLength, uint pOrder)

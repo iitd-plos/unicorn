@@ -24,7 +24,7 @@
 #include "pmPublicDefinitions.h"
 #include "pmInternalDefinitions.h"
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <setjmp.h>
 
 #include <algorithm>
@@ -125,13 +125,21 @@ namespace pm
         };
     }
 
+    enum pmSubscriptionFormat
+    {
+        SUBSCRIPTION_CONTIGUOUS,
+        SUBSCRIPTION_SCATTERED,
+        SUBSCRIPTION_GENERAL,
+        SUBSCRIPTION_FORMAT_MAX
+    };
+
     struct pmTaskMemory
     {
         pmAddressSpace* addressSpace;
         pmMemType memType;
         pmSubscriptionVisibilityType subscriptionVisibilityType;
         bool disjointReadWritesAcrossSubtasks;
-        
+
         pmTaskMemory(pmAddressSpace* pAddressSpace, pmMemType pMemType, pmSubscriptionVisibilityType pVisibility, bool pDisjointReadWrites)
         : addressSpace(pAddressSpace)
         , memType(pMemType)
@@ -153,6 +161,10 @@ namespace pm
     /* Comparison operators for pmSubscriptionInfo */
     bool operator==(const pmSubscriptionInfo& pSubscription1, const pmSubscriptionInfo& pSubscription2);
     bool operator!=(const pmSubscriptionInfo& pSubscription1, const pmSubscriptionInfo& pSubscription2);
+
+    /* Comparison operators for pmScatteredSubscriptionInfo */
+    bool operator==(const pmScatteredSubscriptionInfo& pScatteredSubscription1, const pmScatteredSubscriptionInfo& pScatteredSubscription2);
+    bool operator!=(const pmScatteredSubscriptionInfo& pScatteredSubscription1, const pmScatteredSubscriptionInfo& pScatteredSubscription2);
 
     class pmSubtaskTerminationCheckPointAutoPtr
     {
@@ -225,20 +237,68 @@ namespace pm
     struct pmCudaCacheKey
     {
         const pmAddressSpace* addressSpace;
-        ulong offset;
-        ulong length;
         pmSubscriptionVisibilityType visibility;
+        pmSubscriptionFormat format;
         
-        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, pmSubscriptionVisibilityType pVisibility)
+        union
+        {
+            pmSubscriptionInfo subscriptionInfo;
+            pmScatteredSubscriptionInfo scatteredSubscriptionInfo;
+            std::vector<pmSubscriptionInfo> subscriptionVector;
+        };
+
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const pmSubscriptionInfo& pSubscriptionInfo)
         : addressSpace(pAddressSpace)
-        , offset(pOffset)
-        , length(pLength)
         , visibility(pVisibility)
+        , format(SUBSCRIPTION_CONTIGUOUS)
+        , subscriptionInfo(pSubscriptionInfo)
+        {}
+
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+        : addressSpace(pAddressSpace)
+        , visibility(pVisibility)
+        , format(SUBSCRIPTION_SCATTERED)
+        , scatteredSubscriptionInfo(pScatteredSubscriptionInfo)
+        {}
+
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const std::vector<pmSubscriptionInfo>& pSubscriptionVector)
+        : addressSpace(pAddressSpace)
+        , visibility(pVisibility)
+        , format(SUBSCRIPTION_GENERAL)
+        , subscriptionVector(pSubscriptionVector)
+        {}
+        
+        pmCudaCacheKey(const pmCudaCacheKey& pKey)
+        : addressSpace(pKey.addressSpace)
+        , visibility(pKey.visibility)
+        , format(pKey.format)
+        {
+            if(format == SUBSCRIPTION_CONTIGUOUS)
+                subscriptionInfo = pKey.subscriptionInfo;
+            else if(format == SUBSCRIPTION_SCATTERED)
+                scatteredSubscriptionInfo = pKey.scatteredSubscriptionInfo;
+            else if(format == SUBSCRIPTION_GENERAL)
+                subscriptionVector = pKey.subscriptionVector;
+        }
+        
+        ~pmCudaCacheKey()
         {}
 
         bool operator== (const pmCudaCacheKey& pKey) const
         {
-            return (addressSpace == pKey.addressSpace && offset == pKey.offset && length == pKey.length && visibility == pKey.visibility);
+            if(addressSpace != pKey.addressSpace || visibility != pKey.visibility || format != pKey.format)
+                return false;
+            
+            if(format == SUBSCRIPTION_CONTIGUOUS && subscriptionInfo == pKey.subscriptionInfo)
+                return true;
+            
+            if(format == SUBSCRIPTION_SCATTERED && scatteredSubscriptionInfo == pKey.scatteredSubscriptionInfo)
+                return true;
+
+            if(format == SUBSCRIPTION_GENERAL && subscriptionVector == pKey.subscriptionVector)
+                return true;
+            
+            return false;
         }
     };
     
@@ -246,8 +306,26 @@ namespace pm
     {
         std::size_t operator() (const pmCudaCacheKey& pKey) const
         {
-            size_t lHash1 = (std::hash<size_t>()(reinterpret_cast<size_t>(pKey.addressSpace)) ^ (std::hash<ulong>()(pKey.offset) << 1)) >> 1;
-            size_t lHash2 = (std::hash<ulong>()(pKey.length) ^ (std::hash<ushort>()((ushort)visibility) << 1)) >> 1;
+            size_t lVal = ((((size_t)pKey.visibility) << 8) | ((size_t)pKey.format));
+
+            size_t lHash1 = (std::hash<size_t>()(reinterpret_cast<size_t>(pKey.addressSpace)) ^ std::hash<size_t>()(lVal));
+            size_t lHash2 = 0;
+            
+            if(pKey.format == SUBSCRIPTION_CONTIGUOUS)
+                lHash2 = (std::hash<size_t>()(pKey.subscriptionInfo.offset) ^ std::hash<size_t>()(pKey.subscriptionInfo.length));
+            
+            if(pKey.format == SUBSCRIPTION_SCATTERED)
+            {
+                lHash2 = (std::hash<size_t>()(pKey.scatteredSubscriptionInfo.offset) ^ std::hash<size_t>()(pKey.scatteredSubscriptionInfo.size) ^ std::hash<size_t>()(pKey.scatteredSubscriptionInfo.step) ^ std::hash<size_t>()(pKey.scatteredSubscriptionInfo.count));
+            }
+
+            if(pKey.format == SUBSCRIPTION_GENERAL)
+            {
+                std::for_each(pKey.subscriptionVector.begin(), pKey.subscriptionVector.end(), [&lHash2] (const pmSubscriptionInfo& pInfo)
+                {
+                    lHash2 ^= (std::hash<size_t>()(pInfo.offset) ^ std::hash<size_t>()(pInfo.length));
+                });
+            }
             
             return (lHash1 ^ (lHash2 << 1));
         }

@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		0E4016D316A9C36F0099CF5B /* pmlib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E4016D216A9C36F0099CF5B /* pmlib.dylib */; };
 		0EBCECEA16772C5700479DB9 /* commonAPI.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EBCECE916772C5700479DB9 /* commonAPI.cpp */; };
-		2B3D2C8917D618B1003F1849 /* libcblas.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B3D2C8817D618B1003F1849 /* libcblas.dylib */; };
+		2BA74842182CCE9000A1EB30 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2BA74841182CCE9000A1EB30 /* Accelerate.framework */; };
 		2BD15E1317D64DB400B98367 /* matrixMultiplyBlas.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BD15E1117D64DB400B98367 /* matrixMultiplyBlas.cpp */; };
 /* End PBXBuildFile section */
 
@@ -30,6 +30,7 @@
 		0E8178D2166F894F0092C7D4 /* MatrixMultiplyBlas */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = MatrixMultiplyBlas; sourceTree = BUILT_PRODUCTS_DIR; };
 		0EBCECE916772C5700479DB9 /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
 		2B3D2C8817D618B1003F1849 /* libcblas.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libcblas.dylib; path = usr/lib/libcblas.dylib; sourceTree = SDKROOT; };
+		2BA74841182CCE9000A1EB30 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
 		2BD15E0F17D64DB400B98367 /* matrixMultiplyBlas.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = matrixMultiplyBlas.h; sourceTree = "<group>"; };
 		2BD15E1117D64DB400B98367 /* matrixMultiplyBlas.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = matrixMultiplyBlas.cpp; sourceTree = "<group>"; };
 		2BD15E1217D64DB400B98367 /* matrixMultiplyBlasCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = matrixMultiplyBlasCUDA.cu; sourceTree = "<group>"; };
@@ -40,7 +41,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2B3D2C8917D618B1003F1849 /* libcblas.dylib in Frameworks */,
+				2BA74842182CCE9000A1EB30 /* Accelerate.framework in Frameworks */,
 				0E4016D316A9C36F0099CF5B /* pmlib.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -51,6 +52,7 @@
 		0E8178C7166F894F0092C7D4 = {
 			isa = PBXGroup;
 			children = (
+				2BA74841182CCE9000A1EB30 /* Accelerate.framework */,
 				2B3D2C8817D618B1003F1849 /* libcblas.dylib */,
 				0E4016D216A9C36F0099CF5B /* pmlib.dylib */,
 				0EBCECE916772C5700479DB9 /* commonAPI.cpp */,

@@ -28,8 +28,8 @@ inline void pmCache<__key, __value, __hasher, __evictor>::Insert(const __key& pK
 
     EXCEPTION_ASSERT(mCacheHash.find(pKey) == mCacheHash.end());
     
-    mCacheList.push_front(std::make_pair(pKey, pValue));
-    mCacheHash[pKey] = mCacheList.begin();
+    mCacheList.emplace_front(pKey, pValue);
+    mCacheHash.emplace(pKey, mCacheList.begin());
 }
 
 template<typename __key, typename __value, typename __hasher, typename __evictor>

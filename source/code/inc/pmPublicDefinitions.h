@@ -38,7 +38,7 @@ namespace pm
     const size_t MAX_NAME_STR_LEN = 256;
     const size_t MAX_DESC_STR_LEN = 1024;
     const size_t MAX_CB_KEY_LEN = 128;
-    const size_t MAX_MEM_SECTIONS_PER_TASK = 4;
+    const size_t MAX_MEM_SECTIONS_PER_TASK = 3;
 
 	/**
 	 * This enumeration defines success and all error conditions for the PMLIB Application Programming Interface (API).
@@ -103,70 +103,6 @@ namespace pm
 	typedef void* pmCallbackHandle;
 	typedef void* pmClusterHandle;
 
-	/** Structure for memory subscription */
-	typedef struct pmSubscriptionInfo
-	{
-		size_t offset;				/* Offset from the start of the memory region */
-		size_t length;				/* Number of bytes to be subscribed */
-
-		pmSubscriptionInfo();
-        pmSubscriptionInfo(size_t pOffset, size_t pLength);
-	} pmSubscriptionInfo;
-    
-    typedef struct pmGpuContext
-    {
-        void* scratchBuffer;
-        void* reservedGlobalMem;
-
-        pmGpuContext();
-    } pmGpuContext;
-
-	/** Some utility typedefs */
-    typedef struct pmSplitInfo
-    {
-        uint splitId;
-        uint splitCount;
-        
-        pmSplitInfo();
-        pmSplitInfo(uint pSplitId, uint pSplitCount);
-    } pmSplitInfo;
-    
-    typedef struct pmMemInfo
-    {
-        pmRawMemPtr ptr;
-        pmRawMemPtr readPtr;
-        pmRawMemPtr writePtr;
-        size_t length;
-        
-        pmMemInfo();
-        pmMemInfo(pmRawMemPtr pPtr, pmRawMemPtr pReadPtr, pmRawMemPtr pWritePtr, size_t pLength);
-    } pmMemInfo;
-
-	typedef struct pmSubtaskInfo
-	{
-		ulong subtaskId;
-        pmMemInfo memInfo[MAX_MEM_SECTIONS_PER_TASK];
-        uint memCount;
-        pmGpuContext gpuContext;
-        pmSplitInfo splitInfo;
-        
-        pmSubtaskInfo();
-        pmSubtaskInfo(ulong pSubtaskId, pmMemInfo* pMemInfo, uint pMemCount);
-	} pmSubtaskInfo;
-
-	typedef struct pmTaskInfo
-	{
-		pmTaskHandle taskHandle;
-		void* taskConf;
-		uint taskConfLength;
-		ulong taskId;
-		ulong subtaskCount;
-		ushort priority;
-		uint originatingHost;
-        
-        pmTaskInfo();
-	} pmTaskInfo;
-
 	typedef enum pmMemType
 	{
 		READ_ONLY,
@@ -192,6 +128,84 @@ namespace pm
         SUBSCRIPTION_OPTIMAL,           // Either SUBSCRIPTION_NATURAL or SUBSCRIPTION_COMPACT whichever is optimal for the subtask
         MAX_SUBSCRIPTION_VISBILITY_TYPE
     } pmSubscriptionVisibilityType;
+
+	/** Structures for memory subscription */
+	typedef struct pmSubscriptionInfo
+	{
+		size_t offset;				/* Offset from the start of the memory region */
+		size_t length;				/* Number of bytes to be subscribed */
+
+		pmSubscriptionInfo();
+        pmSubscriptionInfo(size_t, size_t);
+	} pmSubscriptionInfo;
+    
+    typedef struct pmScatteredSubscriptionInfo
+    {
+        size_t offset;
+        size_t size;
+        size_t step;
+        size_t count;
+        
+        pmScatteredSubscriptionInfo();
+        pmScatteredSubscriptionInfo(size_t, size_t, size_t, size_t);
+    } pmScatteredSubscriptionInfo;
+    
+    /** GPU context for subtask */
+    typedef struct pmGpuContext
+    {
+        void* scratchBuffer;
+        void* reservedGlobalMem;
+
+        pmGpuContext();
+    } pmGpuContext;
+
+	/** User information typedefs */
+    typedef struct pmSplitInfo
+    {
+        uint splitId;
+        uint splitCount;
+        
+        pmSplitInfo();
+        pmSplitInfo(uint, uint);
+    } pmSplitInfo;
+    
+    typedef struct pmMemInfo
+    {
+        pmRawMemPtr ptr;
+        pmRawMemPtr readPtr;
+        pmRawMemPtr writePtr;
+        size_t length;
+        pmSubscriptionVisibilityType visibilityType;
+        
+        pmMemInfo();
+        pmMemInfo(pmRawMemPtr, pmRawMemPtr, pmRawMemPtr, size_t);
+        pmMemInfo(pmRawMemPtr, pmRawMemPtr, pmRawMemPtr, size_t, pmSubscriptionVisibilityType);
+    } pmMemInfo;
+
+	typedef struct pmSubtaskInfo
+	{
+		ulong subtaskId;
+        pmMemInfo memInfo[MAX_MEM_SECTIONS_PER_TASK];
+        uint memCount;
+        pmGpuContext gpuContext;
+        pmSplitInfo splitInfo;
+        
+        pmSubtaskInfo();
+        pmSubtaskInfo(ulong, pmMemInfo*, uint);
+	} pmSubtaskInfo;
+
+	typedef struct pmTaskInfo
+	{
+		pmTaskHandle taskHandle;
+		void* taskConf;
+		uint taskConfLength;
+		ulong taskId;
+		ulong subtaskCount;
+		ushort priority;
+		uint originatingHost;
+        
+        pmTaskInfo();
+	} pmTaskInfo;
     
 	typedef struct pmDataTransferInfo
 	{
@@ -305,12 +319,14 @@ namespace pm
      */
     pmStatus pmGetRawMemPtr(pmMemHandle pMemHandle, pmRawMemPtr* pPtr);
 
-	/** The memory subscription API. It establishes memory dependencies for a subtask.
-	 *	Any subtask is also allowed to subscribe on behalf any other subtask.
-     *  This function can only be called from DataDistribution callback. The effect
-     *  of calling this function otherwise is undefined.
+	/** The memory subscription APIs. These establish memory dependencies for a subtask.
+	 *	Any subtask is not allowed to subscribe on behalf any other subtask.
+     *  These function can only be called from DataDistribution callback. The effect
+     *  of calling this function otherwise is undefined. The functions can be mixed in
+     *  any order and may be called multiple times for a particular subtask.
      */
-	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo);
+	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo);
+	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
     
 	/** The memory redistribution API. It establishes memory ordering for the
 	 *	output section computed by a subtask in the final task memory. Order 0 is assumed
@@ -363,6 +379,7 @@ namespace pm
         
         pmTaskMem();
         pmTaskMem(pmMemHandle, pmMemType);
+        pmTaskMem(pmMemHandle, pmMemType, pmSubscriptionVisibilityType);
         pmTaskMem(pmMemHandle, pmMemType, pmSubscriptionVisibilityType, bool);
     } pmTaskMem;
 

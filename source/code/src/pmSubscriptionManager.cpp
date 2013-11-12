@@ -287,18 +287,63 @@ void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, u
         }
     }
 }
-    
+
 void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo)
 {
     if(!pSubscriptionInfo.length)
         return;
+    
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+
+    if(lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat == SUBSCRIPTION_FORMAT_MAX)
+        lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat = SUBSCRIPTION_CONTIGUOUS;
+    else
+        lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat = SUBSCRIPTION_GENERAL;
+    
+    if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
+    {
+        RegisterSubscriptionInternal(lSubtask, pMemIndex, READ_SUBSCRIPTION, pSubscriptionInfo);
+        RegisterSubscriptionInternal(lSubtask, pMemIndex, WRITE_SUBSCRIPTION, pSubscriptionInfo);
+    }
+    else
+    {
+        RegisterSubscriptionInternal(lSubtask, pMemIndex, pSubscriptionType, pSubscriptionInfo);
+    }
+}
+
+void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+{
+    if(!pScatteredSubscriptionInfo.size || !pScatteredSubscriptionInfo.count)
+        return;
 
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
-    
+
+    if(lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat == SUBSCRIPTION_FORMAT_MAX)
+        lSubtask.mAddressSpacesData[pMemIndex].mScatteredSubscriptionInfo = pScatteredSubscriptionInfo;
+        
+    if(lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat == SUBSCRIPTION_FORMAT_MAX)
+        lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat = SUBSCRIPTION_SCATTERED;
+    else
+        lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat = SUBSCRIPTION_GENERAL;
+
+    if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
+    {
+        RegisterSubscriptionInternal(lSubtask, pMemIndex, READ_SUBSCRIPTION, pScatteredSubscriptionInfo);
+        RegisterSubscriptionInternal(lSubtask, pMemIndex, WRITE_SUBSCRIPTION, pScatteredSubscriptionInfo);
+    }
+    else
+    {
+        RegisterSubscriptionInternal(lSubtask, pMemIndex, pSubscriptionType, pScatteredSubscriptionInfo);
+    }
+}
+
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+void pmSubscriptionManager::RegisterSubscriptionInternal(pmSubtask& pSubtask, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo)
+{
     pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(pMemIndex);
     CheckAppropriateSubscription(lAddressSpace, pSubscriptionType);
 
-    pmSubtaskAddressSpaceData& lAddressSpaceData = lSubtask.mAddressSpacesData[pMemIndex];
+    pmSubtaskAddressSpaceData& lAddressSpaceData = pSubtask.mAddressSpacesData[pMemIndex];
     pmSubtaskSubscriptionData& lSubscriptionData = (IsReadSubscription(pSubscriptionType) ? lAddressSpaceData.mReadSubscriptionData : lAddressSpaceData.mWriteSubscriptionData);
 
     subscriptionRecordType& lMap = lSubscriptionData.mSubscriptionRecords;
@@ -307,7 +352,7 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
     subscriptionRecordType::iterator lIter = lMap.find(pSubscriptionInfo.offset);
     if(lIter != lMap.end() && lIter->second.first == pSubscriptionInfo.length)
         return;     // Subscription information already present
-    
+
     if(lMap.empty())
     {
         lConsolidatedSubscription = pSubscriptionInfo;
@@ -328,6 +373,128 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
     AddSubscriptionRecordToMap(pSubscriptionInfo, lMap);
 }
 
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+void pmSubscriptionManager::RegisterSubscriptionInternal(pmSubtask& pSubtask, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+{
+    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(pMemIndex);
+    CheckAppropriateSubscription(lAddressSpace, pSubscriptionType);
+
+    pmSubtaskAddressSpaceData& lAddressSpaceData = pSubtask.mAddressSpacesData[pMemIndex];
+    pmSubtaskSubscriptionData& lSubscriptionData = (IsReadSubscription(pSubscriptionType) ? lAddressSpaceData.mReadSubscriptionData : lAddressSpaceData.mWriteSubscriptionData);
+
+    subscriptionRecordType& lMap = lSubscriptionData.mSubscriptionRecords;
+    pmSubscriptionInfo& lConsolidatedSubscription = lSubscriptionData.mConsolidatedSubscriptions;
+    
+    subscriptionRecordType::iterator lIter = lMap.find(pScatteredSubscriptionInfo.offset);
+    if(lIter != lMap.end() && lIter->second.first == pScatteredSubscriptionInfo.size)
+        return;     // Subscription information already present
+    
+    if(lMap.empty())
+    {
+        lConsolidatedSubscription = pmSubscriptionInfo(pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.step * pScatteredSubscriptionInfo.count);
+    }
+    else
+    {
+        size_t lExistingOffset = lConsolidatedSubscription.offset;
+        size_t lExistingLength = lConsolidatedSubscription.length;
+        size_t lExistingSpan = lExistingOffset + lExistingLength;
+        size_t lNewOffset = pScatteredSubscriptionInfo.offset;
+        size_t lNewLength = pScatteredSubscriptionInfo.step * pScatteredSubscriptionInfo.count;
+        size_t lNewSpan = lNewOffset + lNewLength;
+        
+        lConsolidatedSubscription.offset = std::min(lExistingOffset, lNewOffset);
+        lConsolidatedSubscription.length = (std::max(lExistingSpan, lNewSpan) - lConsolidatedSubscription.offset);
+    }
+
+    for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
+        AddSubscriptionRecordToMap(pmSubscriptionInfo(pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size), lMap);
+}
+    
+pmSubscriptionFormat pmSubscriptionManager::GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+    
+    return lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat;
+}
+
+const pmScatteredSubscriptionInfo& pmSubscriptionManager::GetScatteredSubscriptionInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
+{
+    DEBUG_EXCEPTION_ASSERT(GetSubscriptionFormat(pStub, pSubtaskId, pSplitInfo, pMemIndex) == SUBSCRIPTION_SCATTERED);
+
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+
+    return lSubtask.mAddressSpacesData[pMemIndex].mScatteredSubscriptionInfo;
+}
+
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+subscriptionRecordType pmSubscriptionManager::GetNonConsolidatedReadWriteSubscriptionsAsMapInternal(pmSubtask& pSubtask, uint pMemIndex)
+{
+    subscriptionRecordType lMap;
+
+    subscriptionRecordType& lReadMap = pSubtask.mAddressSpacesData[pMemIndex].mReadSubscriptionData.mSubscriptionRecords;
+    subscriptionRecordType& lWriteMap = pSubtask.mAddressSpacesData[pMemIndex].mWriteSubscriptionData.mSubscriptionRecords;
+    
+    if(!lReadMap.empty() && !lWriteMap.empty())
+    {
+        lMap.insert(lReadMap.begin(), lReadMap.end());
+        
+        for_each(lWriteMap, [this, &lMap] (subscriptionRecordType::value_type& pPair)
+        {
+            AddSubscriptionRecordToMap(pmSubscriptionInfo(pPair.first, pPair.second.first), lMap);
+        });
+    }
+    else
+    {
+        if(!lReadMap.empty())
+            return lReadMap;
+        else
+            return lWriteMap;
+    }
+
+    return lMap;
+}
+    
+std::vector<pmSubscriptionInfo> pmSubscriptionManager::GetNonConsolidatedReadWriteSubscriptions(const pmExecutionStub* pStub, ulong pSubtaskId, const pmSplitInfo* pSplitInfo, uint pMemIndex)
+{
+    std::vector<pmSubscriptionInfo> lVector;
+    
+    subscriptionRecordType* lTargetMap = NULL;
+    subscriptionRecordType lMap;
+
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+    
+    subscriptionRecordType& lReadMap = lSubtask.mAddressSpacesData[pMemIndex].mReadSubscriptionData.mSubscriptionRecords;
+    subscriptionRecordType& lWriteMap = lSubtask.mAddressSpacesData[pMemIndex].mWriteSubscriptionData.mSubscriptionRecords;
+    
+    if(!lReadMap.empty() && !lWriteMap.empty())
+    {
+        lMap.insert(lReadMap.begin(), lReadMap.end());
+        
+        for_each(lWriteMap, [this, &lMap] (subscriptionRecordType::value_type& pPair)
+        {
+            AddSubscriptionRecordToMap(pmSubscriptionInfo(pPair.first, pPair.second.first), lMap);
+        });
+        
+        lTargetMap = &lMap;
+    }
+    else
+    {
+        if(!lReadMap.empty())
+            lTargetMap = &lReadMap;
+        else
+            lTargetMap = &lWriteMap;
+    }
+
+    lVector.reserve(lTargetMap->size());
+    for_each(*lTargetMap, [&lVector] (subscriptionRecordType::value_type& pPair)
+    {
+        lVector.emplace_back(pPair.first, pPair.second.first);
+    });
+    
+    return lVector;
+}
+
+/* Must be called with mSubtaskMapVector stub's lock acquired */
 void pmSubscriptionManager::AddSubscriptionRecordToMap(const pmSubscriptionInfo& pSubscriptionInfo, subscriptionRecordType& pMap)
 {
     /* Only add the region which is yet not subscribed */
@@ -447,8 +614,6 @@ void pmSubscriptionManager::SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSub
 
 void pmSubscriptionManager::ReserveCudaGlobalMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize)
 {
-    EXCEPTION_ASSERT(!mTask->GetCallbackUnit()->GetSubtaskCB()->HasCustomGpuCallback());
-    
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     
 #ifdef SUPPORT_CUDA
@@ -965,12 +1130,8 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
         auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
         DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBeginIter, lEndIter));
 
-        void* lCurrPtr = lMem;
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter, ++lOffsetsIter)
-        {
-            memcpy(lCurrPtr, lShadowMem + (*lOffsetsIter), lIter->second.first);
-            lCurrPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lCurrPtr) + lIter->second.first);
-        }
+            memcpy(lMem + lIter->first, lShadowMem + (*lOffsetsIter), lIter->second.first);
     }
 
     DestroySubtaskShadowMemInternal(lSubtask, pStub, pSubtaskId, pSplitInfo, pMemIndex);
@@ -1112,7 +1273,9 @@ const pmSubtaskInfo& pmSubscriptionManager::GetSubtaskInfo(pmExecutionStub* pStu
             pmMemInfo lMemInfo;
             uint lMemIndex = (uint)pAddressSpaceIndex;
 
-            if(mTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, pStub) == SUBSCRIPTION_NATURAL || pStub->GetType() != CPU)
+            lMemInfo.visibilityType = mTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, pStub);
+
+            if(lMemInfo.visibilityType == SUBSCRIPTION_NATURAL || pStub->GetType() != CPU)
             {
                 if(mTask->IsReadOnly(pAddressSpace))
                 {
@@ -1200,21 +1363,12 @@ const pmCompactViewData& pmSubscriptionManager::GetCompactedSubscription(pmExecu
     if(!lData.mCompactedSubscription.get_ptr())
     {
         pmCompactViewData lCompactViewData;
-        subscriptionRecordType lTempMap;
+        subscriptionRecordType lTempMap = GetNonConsolidatedReadWriteSubscriptionsAsMapInternal(lSubtask, pMemIndex);
 
         subscriptionRecordType::const_iterator lBeginIter1, lEndIter1, lBeginIter2, lEndIter2;
 
         GetNonConsolidatedReadSubscriptionsInternal(lSubtask, pMemIndex, lBeginIter1, lEndIter1);
-        std::for_each(lBeginIter1, lEndIter1, [this, &lTempMap, &lData] (const subscriptionRecordType::value_type& pPair)
-        {
-            AddSubscriptionRecordToMap(pmSubscriptionInfo(pPair.first, pPair.second.first), lTempMap);
-        });
-        
         GetNonConsolidatedWriteSubscriptionsInternal(lSubtask, pMemIndex, lBeginIter2, lEndIter2);
-        std::for_each(lBeginIter2, lEndIter2, [this, &lTempMap, &lData] (const subscriptionRecordType::value_type& pPair)
-        {
-            AddSubscriptionRecordToMap(pmSubscriptionInfo(pPair.first, pPair.second.first), lTempMap);
-        });
 
         if(!lTempMap.empty())
         {
@@ -1226,21 +1380,26 @@ const pmCompactViewData& pmSubscriptionManager::GetCompactedSubscription(pmExecu
 
             auto lLambda = [lCoveredLength, lTempIter, &lTempEndIter] (const subscriptionRecordType::value_type& pPair, std::vector<size_t>& pVector) mutable
             {
-                while(pPair.first < lTempIter->first)
+                while(pPair.first < lTempIter->first || pPair.first >= lTempIter->first + lTempIter->second.first)
                 {
-                    EXCEPTION_ACTION(lTempIter == lTempEndIter);
+                    EXCEPTION_ASSERT(lTempIter != lTempEndIter);
 
-                    lCoveredLength += lTempEndIter->second.first;
+                    lCoveredLength += lTempIter->second.first;
                     ++lTempIter;
                 }
                 
-                EXCEPTION_ASSERT(pPair.first >= lTempIter->first && pPair.first + pPair.second.first < lTempIter->first + lTempIter->second.first);
+                EXCEPTION_ASSERT(pPair.first >= lTempIter->first && pPair.first + pPair.second.first <= lTempIter->first + lTempIter->second.first);
                 
                 pVector.push_back(lCoveredLength + pPair.first - lTempIter->first);
             };
             
             for_each_with_arg(lBeginIter1, lEndIter1, lLambda, lCompactViewData.nonConsolidatedReadSubscriptionOffsets);
             for_each_with_arg(lBeginIter2, lEndIter2, lLambda, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets);
+            
+            for_each(lTempMap, [&lCoveredLength] (const subscriptionRecordType::value_type& pPair)
+            {
+                lCoveredLength += pPair.second.first;
+            });
             
             lCompactViewData.subscriptionInfo = pmSubscriptionInfo(lTempMap.begin()->first, lCoveredLength);
         }

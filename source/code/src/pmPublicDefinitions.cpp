@@ -237,6 +237,7 @@ pmMemInfo::pmMemInfo()
     , readPtr(NULL)
     , writePtr(NULL)
     , length(0)
+    , visibilityType(SUBSCRIPTION_NATURAL)
 {
 }
     
@@ -245,6 +246,16 @@ pmMemInfo::pmMemInfo(pmRawMemPtr pPtr, pmRawMemPtr pReadPtr, pmRawMemPtr pWriteP
     , readPtr(pReadPtr)
     , writePtr(pWritePtr)
     , length(pLength)
+    , visibilityType(SUBSCRIPTION_NATURAL)
+{
+}
+
+pmMemInfo::pmMemInfo(pmRawMemPtr pPtr, pmRawMemPtr pReadPtr, pmRawMemPtr pWritePtr, size_t pLength, pmSubscriptionVisibilityType pVisibilityType)
+    : ptr(pPtr)
+    , readPtr(pReadPtr)
+    , writePtr(pWritePtr)
+    , length(pLength)
+    , visibilityType(pVisibilityType)
 {
 }
 
@@ -418,6 +429,8 @@ pmStatus pmGetRawMemPtr(pmMemHandle pMem, void** pPtr)
 pmTaskMem::pmTaskMem()
     : memHandle(NULL)
     , memType(MAX_MEM_TYPE)
+    , subscriptionVisibilityType(SUBSCRIPTION_NATURAL)
+    , disjointReadWritesAcrossSubtasks(false)
 {
 }
     
@@ -425,6 +438,14 @@ pmTaskMem::pmTaskMem(pmMemHandle pMemHandle, pmMemType pMemType)
     : memHandle(pMemHandle)
     , memType(pMemType)
     , subscriptionVisibilityType(SUBSCRIPTION_NATURAL)
+    , disjointReadWritesAcrossSubtasks(false)
+{
+}
+
+pmTaskMem::pmTaskMem(pmMemHandle pMemHandle, pmMemType pMemType, pmSubscriptionVisibilityType pVisibility)
+    : memHandle(pMemHandle)
+    , memType(pMemType)
+    , subscriptionVisibilityType(pVisibility)
     , disjointReadWritesAcrossSubtasks(false)
 {
 }
@@ -557,11 +578,32 @@ pmSubscriptionInfo::pmSubscriptionInfo(size_t pOffset, size_t pLength)
 {
 }
 
-pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, pmSubscriptionInfo& pSubscriptionInfo)
+pmScatteredSubscriptionInfo::pmScatteredSubscriptionInfo()
+    : offset(0)
+    , size(0)
+    , step(0)
+    , count(0)
+{}
+
+pmScatteredSubscriptionInfo::pmScatteredSubscriptionInfo(size_t pOffset, size_t pSize, size_t pStep, size_t pCount)
+    : offset(pOffset)
+    , size(pSize)
+    , step(pStep)
+    , count(pCount)
+{}
+
+pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo)
 {
     pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
 
 	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pMemIndex, pSubscriptionType, pSubscriptionInfo);
+}
+
+pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+{
+    pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
+
+	SAFE_EXECUTE_ON_CONTROLLER(SubscribeToMemory_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pMemIndex, pSubscriptionType, pScatteredSubscriptionInfo);
 }
     
 pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, size_t pOffset, size_t pLength, unsigned int pOrder)

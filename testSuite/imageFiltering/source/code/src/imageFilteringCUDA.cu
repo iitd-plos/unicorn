@@ -69,7 +69,7 @@ size_t getTexturePitch(size_t pTextureWidth)
 
 texture<TEXEL_TYPE, cudaTextureType2D, cudaReadModeElementType> gInvertedTextureRef;
 
-__global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth, int pSubImageHeight, size_t pAlignmentOffset, void* pOutputMem, int pImageWidth, int pEffectiveTextureWidth, char* pFilter, int pFilterRadius)
+__global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth, int pSubImageHeight, size_t pAlignmentOffset, void* pOutputMem, int pOutputMemRowStep, int pEffectiveTextureWidth, char* pFilter, int pFilterRadius)
 {
     extern __shared__ char4 lImage[];   // [GPU_BLOCK_DIM + 2 * pFilterRadius][GPU_BLOCK_DIM + 2 * pFilterRadius];
 
@@ -175,14 +175,14 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     }
 
     int lUninvertedRow = pSubImageHeight - y - 1;
-    size_t lOffset = (lUninvertedRow * pImageWidth + x) * PIXEL_COUNT;
+    size_t lOffset = (lUninvertedRow * pOutputMemRowStep + x) * PIXEL_COUNT;
 
     ((char*)pOutputMem)[lOffset] = lRedVal;
     ((char*)pOutputMem)[lOffset + 1] = lGreenVal;
     ((char*)pOutputMem)[lOffset + 2] = lBlueVal;
 }
     
-void prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImageData, int pImageBytesPerLine, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, void* pOutputMem, int pImageWidth, int pOffsetX, int pOffsetY, int pCols, int pRows, size_t pTexturePitch, void* pTextureMem, char* pFilterPtr, cudaStream_t pCudaStream)
+void prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImageData, int pImageBytesPerLine, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, void* pOutputMem, int pOutputMemRowStep, int pOffsetX, int pOffsetY, int pCols, int pRows, size_t pTexturePitch, void* pTextureMem, char* pFilterPtr, cudaStream_t pCudaStream)
 {
     int lEffectiveTextureWidth = pTextureWidth * PIXEL_COUNT;
 
@@ -214,9 +214,8 @@ void prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImag
 
     dim3 gridConf(lBlocksX, lBlocksY, 1);
     dim3 blockConf(GPU_BLOCK_DIM, GPU_BLOCK_DIM, 1);
-    imageFilter_cuda <<<gridConf, blockConf, lSharedMemReqd, pCudaStream>>> (pOffsetX, pOffsetY, pCols, pRows, lAlignmentOffset, pOutputMem, pImageWidth, lEffectiveTextureWidth, pFilterPtr, pFilterRadius);
+    imageFilter_cuda <<<gridConf, blockConf, lSharedMemReqd, pCudaStream>>> (pOffsetX, pOffsetY, pCols, pRows, lAlignmentOffset, pOutputMem, pOutputMemRowStep, lEffectiveTextureWidth, pFilterPtr, pFilterRadius);
 
-    //CUDA_ERROR_CHECK("cudaStreamSynchronize", cudaStreamSynchronize(pCudaStream));
     CUDA_ERROR_CHECK("cudaUnbindTexture", cudaUnbindTexture(gInvertedTextureRef));
 }
     
@@ -273,7 +272,8 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     char* lFilterPtr = (char*)(pSubtaskInfo.gpuContext.reservedGlobalMem);
     void* lTextureMem  = (void*)(lFilterPtr + (MAX_FILTER_DIM * MAX_FILTER_DIM));
     
-    prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr, lTaskConf->imageWidth, lOffsetX, lOffsetY, lCols, lRows, getTexturePitch(lSubImageWidth), lTextureMem, lFilterPtr, (cudaStream_t)pCudaStream);
+    size_t lWidth = ((pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->imageWidth : (lSubscriptionEndCol - lSubscriptionStartCol));
+    prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr, lWidth, lOffsetX, lOffsetY, lCols, lRows, getTexturePitch(lSubImageWidth), lTextureMem, lFilterPtr, (cudaStream_t)pCudaStream);
 
     return pmSuccess;
 }

@@ -12,7 +12,6 @@
 SUPPORT_CUDA=$(BUILD_FOR_CUDA)
 DEBUG=0
 
-STD_TR1_INCLUDE= -I/usr/include/c++/4.4.3
 PTHREAD_LIBS= -lpthread
 
 COMPILER=g++
@@ -115,7 +114,7 @@ OBJECTS += $(CUDA_OBJECTS)
 LIBRARIES += -L$(CUDA_LIB_PATH) -L$(CUDA_DRIVER_LIB_PATH) -lcuda -lcudart
 endif
 
-INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(STD_TR1_INCLUDE)
+INCLUDES += -I../../source/code/inc $(MPI_INCLUDE)
 
 all: prebuild compile link postbuild final
 

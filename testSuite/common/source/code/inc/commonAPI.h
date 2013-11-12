@@ -88,13 +88,13 @@ bool isLazyMemEnabled();    /* by default, it's diabled */
         uint lMemIndex = 0; \
         if(inputMemSize) \
         { \
-            lTaskMem[lMemIndex].memType = INPUT_MEM_READ_ONLY; \
+            lTaskMem[lMemIndex].memType = READ_ONLY; \
             CREATE_MEM(inputMemSize, lTaskMem[lMemIndex].memHandle); \
             ++lMemIndex; \
         } \
         if(outputMemSize) \
         { \
-            lTaskMem[lMemIndex].memType = OUTPUT_MEM_WRITE_ONLY; \
+            lTaskMem[lMemIndex].memType = WRITE_ONLY; \
             CREATE_MEM(outputMemSize, lTaskMem[lMemIndex].memHandle); \
             ++lMemIndex; \
         } \
@@ -113,7 +113,7 @@ bool isLazyMemEnabled();    /* by default, it's diabled */
 #ifdef ENABLE_BLAS
 
 #ifdef MACOS
-#include <vecLib/cblas.h>
+#include <Accelerate/Accelerate.h>
 #else
 extern "C"
 {

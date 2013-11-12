@@ -49,8 +49,8 @@ ifeq ($(ENABLE_BLAS), 1)
 FLAGS += -DENABLE_BLAS
 
 ifeq ($(PLATFORM), MACOS)
-INCLUDES += -I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/System/Library//Frameworks/vecLib.framework/Versions/A/Headers
-LIBRARIES += -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.8.sdk/usr/lib/
+INCLUDES += -I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/Headers
+LIBRARIES += -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk/usr/lib/
 else
 LIBRARIES += -L/usr/lib64/atlas
 endif

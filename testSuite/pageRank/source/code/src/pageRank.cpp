@@ -233,7 +233,7 @@ pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMe
         lSubscriptionInfo.offset = lStartPage * sizeof(PAGE_RANK_DATA_TYPE);
         lSubscriptionInfo.length = sizeof(PAGE_RANK_DATA_TYPE) * lWebPages;
 
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, READ_SUBSCRIPTION, lSubscriptionInfo);
     }
 
 	// Subscribe to entire output matrix (default behaviour)
@@ -367,7 +367,7 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
 	CREATE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)
     
     lTaskDetails.inputMemHandle = pInputMemHandle;
-    lTaskDetails.outputMemType = OUTPUT_MEM_WRITE_ONLY;
+    lTaskDetails.outputMemType = WRITE_ONLY;
 
 	lTaskDetails.taskConf = (void*)(pTaskConf);
 	lTaskDetails.taskConfLength = sizeof(pageRankTaskConf);

@@ -254,7 +254,7 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDev
     {
         lSubscriptionInfo.offset = lBlockOffset;
         lSubscriptionInfo.length = lTaskConf->blockSizeCols * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lInputMemIndex, (lTaskConf->inplace ? OUTPUT_MEM_READ_SUBSCRIPTION : INPUT_MEM_READ_SUBSCRIPTION), lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lInputMemIndex, (lTaskConf->inplace ? READ_SUBSCRIPTION : READ_SUBSCRIPTION), lSubscriptionInfo);
     
         lBlockOffset += lTaskConf->matrixDimCols * sizeof(MATRIX_DATA_TYPE);
     }
@@ -264,7 +264,7 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDev
     {
         lSubscriptionInfo.offset = lBlockOffset;
         lSubscriptionInfo.length = lTaskConf->blockSizeRows * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lOutputMemIndex, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lOutputMemIndex, WRITE_SUBSCRIPTION, lSubscriptionInfo);
     
         lBlockOffset += lTaskConf->matrixDimRows * sizeof(MATRIX_DATA_TYPE);
     }
@@ -432,7 +432,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
 	memcpy(lRawInputPtr, (lInplace ? gParallelOutput : gSampleInput), lMemSize);
 
-    double lTime = parallelMatrixTranspose(lPowRows, lPowCols, lMatrixDimRows, lMatrixDimCols, lInputMemHandle, lOutputMemHandle, pCallbackHandle[0], pSchedulingPolicy, INPUT_MEM_READ_ONLY, (lInplace ? OUTPUT_MEM_READ_WRITE : OUTPUT_MEM_WRITE_ONLY));
+    double lTime = parallelMatrixTranspose(lPowRows, lPowCols, lMatrixDimRows, lMatrixDimCols, lInputMemHandle, lOutputMemHandle, pCallbackHandle[0], pSchedulingPolicy, READ_ONLY, (lInplace ? READ_WRITE : WRITE_ONLY));
     
     if(lTime != -1.0 && pFetchBack)
     {

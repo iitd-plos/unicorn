@@ -51,8 +51,8 @@ pmStatus prefixSumDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputM
     lSubscriptionInfo.offset = pSubtaskId * ELEMS_PER_SUBTASK * sizeof(PREFIX_SUM_DATA_TYPE);
     lSubscriptionInfo.length = lSubtaskElems * sizeof(PREFIX_SUM_DATA_TYPE);
 
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, READ_SUBSCRIPTION, lSubscriptionInfo);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, WRITE_SUBSCRIPTION, lSubscriptionInfo);
     
 	return pmSuccess;
 }
@@ -72,14 +72,14 @@ pmStatus elemAddDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem
     lSubscriptionInfo.offset = pSubtaskId * sizeof(PREFIX_SUM_DATA_TYPE);
     lSubscriptionInfo.length = sizeof(PREFIX_SUM_DATA_TYPE);
 
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, INPUT_MEM_READ_SUBSCRIPTION, lSubscriptionInfo);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, READ_SUBSCRIPTION, lSubscriptionInfo);
 
     unsigned long lSubtaskElems = (lTaskConf->arrayLen < (pSubtaskId+2)*ELEMS_PER_SUBTASK) ? ((lTaskConf->arrayLen - ((pSubtaskId+1) * ELEMS_PER_SUBTASK)))  : (ELEMS_PER_SUBTASK);
     
     lSubscriptionInfo.offset = (pSubtaskId+1) * ELEMS_PER_SUBTASK * sizeof(PREFIX_SUM_DATA_TYPE);
     lSubscriptionInfo.length = lSubtaskElems * sizeof(PREFIX_SUM_DATA_TYPE);
 
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, OUTPUT_MEM_READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
 
 #ifdef BUILD_CUDA
 	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
@@ -188,8 +188,8 @@ bool ParallelAddAuxArray(pmMemHandle pSrcMemHandle, pmMemHandle pAuxMemHandle, u
 
 	lTaskDetails.inputMemHandle = pAuxMemHandle;
 	lTaskDetails.outputMemHandle = pSrcMemHandle;
-    lTaskDetails.inputMemType = INPUT_MEM_READ_ONLY;
-    lTaskDetails.outputMemType = OUTPUT_MEM_READ_WRITE;
+    lTaskDetails.inputMemType = READ_ONLY;
+    lTaskDetails.outputMemType = READ_WRITE;
     lTaskDetails.disjointReadWritesAcrossSubtasks = true;
 
 	prefixSumTaskConf lTaskConf;

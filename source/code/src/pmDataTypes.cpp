@@ -54,6 +54,19 @@ bool operator!=(const pmSubscriptionInfo& pSubscription1, const pmSubscriptionIn
 }
 
 
+/* Comparison opeartors for pmScatteredSubscriptionInfo */
+bool operator==(const pmScatteredSubscriptionInfo& pScatteredSubscription1, const pmScatteredSubscriptionInfo& pScatteredSubscription2)
+{
+    return (pScatteredSubscription1.offset == pScatteredSubscription2.offset && pScatteredSubscription1.size == pScatteredSubscription2.size
+            && pScatteredSubscription1.step == pScatteredSubscription2.step && pScatteredSubscription1.count == pScatteredSubscription2.count);
+}
+    
+bool operator!=(const pmScatteredSubscriptionInfo& pScatteredSubscription1, const pmScatteredSubscriptionInfo& pScatteredSubscription2)
+{
+    return !(pScatteredSubscription1 == pScatteredSubscription2);
+}
+
+    
 /* class pmJmpBufAutoPtr */
 pmJmpBufAutoPtr::pmJmpBufAutoPtr()
     : mStub(NULL)

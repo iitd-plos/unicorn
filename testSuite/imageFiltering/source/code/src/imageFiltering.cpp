@@ -178,20 +178,11 @@ pmStatus imageFilterDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceI
 	imageFilterTaskConf* lTaskConf = (imageFilterTaskConf*)(pTaskInfo.taskConf);
 
     int lSubscriptionStartCol, lSubscriptionEndCol, lSubscriptionStartRow, lSubscriptionEndRow;
-    if(!GetSubtaskSubscription(lTaskConf, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
-    {
-        lSubscriptionInfo.offset = lSubscriptionInfo.length = 0;
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
-    }
-    else
+    if(GetSubtaskSubscription(lTaskConf, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
     {
         size_t lRowSize = lTaskConf->imageWidth * PIXEL_COUNT;
-        lSubscriptionInfo.length = (lSubscriptionEndCol - lSubscriptionStartCol) * PIXEL_COUNT;
-        for(int i = lSubscriptionStartRow; i < lSubscriptionEndRow; ++i)
-        {
-            lSubscriptionInfo.offset = (i * lRowSize) + (lSubscriptionStartCol * PIXEL_COUNT);
-            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, OUTPUT_MEM_WRITE_SUBSCRIPTION, lSubscriptionInfo);
-        }
+
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo((lSubscriptionStartRow * lRowSize) + (lSubscriptionStartCol * PIXEL_COUNT), (lSubscriptionEndCol - lSubscriptionStartCol) * PIXEL_COUNT, lRowSize, lSubscriptionEndRow - lSubscriptionStartRow));
 
     #ifdef BUILD_CUDA
         // Reserve CUDA Global Mem
@@ -217,10 +208,8 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
     if(!GetSubtaskSubscription(lTaskConf, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
         return pmSuccess;
 
-    size_t lRowSize = lTaskConf->imageWidth * PIXEL_COUNT;
-    size_t lSubtaskOffset = (lSubscriptionStartRow * lRowSize) + (lSubscriptionStartCol * PIXEL_COUNT);
-
     int lDimMinX, lDimMaxX, lDimMinY, lDimMaxY;
+    size_t lWidth = ((pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->imageWidth : (lSubscriptionEndCol - lSubscriptionStartCol));
 
     for(int i = lSubscriptionStartRow; i < lSubscriptionEndRow; ++i)
     {
@@ -246,8 +235,7 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
                 }
             }
             
-            size_t lAbsoluteOffset = (i * lTaskConf->imageWidth + j) * PIXEL_COUNT;
-            size_t lOffset = lAbsoluteOffset - lSubtaskOffset;
+            size_t lOffset = ((i - lSubscriptionStartRow) * lWidth + (j - lSubscriptionStartCol)) * PIXEL_COUNT;
             lOutput[lOffset] = lRedVal;
             lOutput[lOffset + 1] = lGreenVal;
             lOutput[lOffset + 2] = lBlueVal;
@@ -316,6 +304,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	// Number of subtasks is equal to the number of tiles in the image
     unsigned int lSubtasks = (gImageWidth/TILE_DIM + (gImageWidth%TILE_DIM ? 1 : 0)) * (gImageHeight/TILE_DIM + (gImageHeight%TILE_DIM ? 1 : 0));
 	CREATE_SIMPLE_TASK(0, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
+    
+    lTaskMem[OUTPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_OPTIMAL;
 
 	imageFilterTaskConf lTaskConf;
     strcpy(lTaskConf.imagePath, lImagePath);
