@@ -124,7 +124,7 @@ bool pmSubtaskCB::HasBothCpuAndGpuCallbacks() const
     return false;
 }
 
-pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, void* pStreamPtr /* = NULL */) const
+pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, void* pStreamPtr /* = NULL */) const
 {    
     pmStatus lStatus = pmStatusUnavailable;
 
@@ -162,7 +162,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			if(!mCallback_GPU_CUDA && !mCallback_GPU_Custom)
 				return pmSuccess;
             
-			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskId, pSplitInfo);
+			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskInfo.subtaskId, pSplitInfo);
 
             // pTaskInfo is task info with CUDA pointers; pTask->GetTaskInfo() is with CPU pointers
             lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask, (pmStubCUDA*)pStub, pTask->GetTaskInfo(), pTaskInfo, pSubtaskInfo, lCudaLaunchConf, mCallback_GPU_CUDA, mCallback_GPU_Custom, *((pmCudaStreamAutoPtr*)pStreamPtr));
@@ -175,7 +175,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubta
 			PMTHROW(pmFatalErrorException());
 	}
     
-    pTask->GetSubscriptionManager().DropScratchBufferIfNotRequiredPostSubtaskExec(pStub, pSubtaskId, pSplitInfo);
+    pTask->GetSubscriptionManager().DropScratchBufferIfNotRequiredPostSubtaskExec(pStub, pSubtaskInfo.subtaskId, pSplitInfo);
 
 	return lStatus;
 }

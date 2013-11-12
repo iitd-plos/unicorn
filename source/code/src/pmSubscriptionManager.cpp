@@ -780,7 +780,7 @@ void pmSubscriptionManager::GetNonConsolidatedWriteSubscriptionsInternal(pmSubta
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 const pmSubscriptionInfo& pmSubscriptionManager::GetConsolidatedReadSubscriptionInternal(const pmExecutionStub* pStub, pmSubtask& pSubtask, uint pMemIndex)
 {
-    DEBUG_EXCEPTION_ASSERT(mTask->GetAddressSpaceSubscriptionVisibility(mTask->GetTaskMemVector()[pMemIndex], pStub) != SUBSCRIPTION_COMPACT);
+    DEBUG_EXCEPTION_ASSERT(mTask->GetAddressSpaceSubscriptionVisibility(mTask->GetAddressSpace(pMemIndex), pStub) != SUBSCRIPTION_COMPACT);
 
     return pSubtask.mAddressSpacesData[pMemIndex].mReadSubscriptionData.mConsolidatedSubscriptions;
 }
@@ -788,7 +788,7 @@ const pmSubscriptionInfo& pmSubscriptionManager::GetConsolidatedReadSubscription
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 const pmSubscriptionInfo& pmSubscriptionManager::GetConsolidatedWriteSubscriptionInternal(const pmExecutionStub* pStub, pmSubtask& pSubtask, uint pMemIndex)
 {
-    DEBUG_EXCEPTION_ASSERT(mTask->GetAddressSpaceSubscriptionVisibility(mTask->GetTaskMemVector()[pMemIndex], pStub) != SUBSCRIPTION_COMPACT);
+    DEBUG_EXCEPTION_ASSERT(mTask->GetAddressSpaceSubscriptionVisibility(mTask->GetAddressSpace(pMemIndex), pStub) != SUBSCRIPTION_COMPACT);
 
     return pSubtask.mAddressSpacesData[pMemIndex].mWriteSubscriptionData.mConsolidatedSubscriptions;
 }
@@ -796,7 +796,7 @@ const pmSubscriptionInfo& pmSubscriptionManager::GetConsolidatedWriteSubscriptio
 /* Must be called with mSubtaskMapVector stub's lock acquired */
 const pmSubscriptionInfo& pmSubscriptionManager::GetUnifiedReadWriteSubscriptionInternal(const pmExecutionStub* pStub, pmSubtask& pSubtask, uint pMemIndex)
 {
-    DEBUG_EXCEPTION_ASSERT(mTask->GetAddressSpaceSubscriptionVisibility(mTask->GetTaskMemVector()[pMemIndex], pStub) != SUBSCRIPTION_COMPACT);
+    DEBUG_EXCEPTION_ASSERT(mTask->GetAddressSpaceSubscriptionVisibility(mTask->GetAddressSpace(pMemIndex), pStub) != SUBSCRIPTION_COMPACT);
 
     pmSubtaskAddressSpaceData& lAddressSpaceData = pSubtask.mAddressSpacesData[pMemIndex];
     
@@ -1275,7 +1275,7 @@ const pmSubtaskInfo& pmSubscriptionManager::GetSubtaskInfo(pmExecutionStub* pStu
 
             lMemInfo.visibilityType = mTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, pStub);
 
-            if(lMemInfo.visibilityType == SUBSCRIPTION_NATURAL || pStub->GetType() != CPU)
+            if(lMemInfo.visibilityType == SUBSCRIPTION_NATURAL)
             {
                 if(mTask->IsReadOnly(pAddressSpace))
                 {
@@ -1325,20 +1325,23 @@ const pmSubtaskInfo& pmSubscriptionManager::GetSubtaskInfo(pmExecutionStub* pStu
             }
             else    // SUBSCRIPTION_COMPACT
             {
-                DEBUG_EXCEPTION_ASSERT(pStub->GetType() == CPU);
-
                 const pmCompactViewData& lCompactViewData = *lSubtask.mAddressSpacesData[lMemIndex].mCompactedSubscription.get_ptr();
 
                 lMemInfo.ptr = (lSubtask.mAddressSpacesData[lMemIndex].mShadowMem.get_ptr());
-                EXCEPTION_ASSERT(lMemInfo.ptr);
+                
+                // For GPU subtasks, shadow mem is not created unless absolutely required (as GPU mem is itself a shadow mem)
+                EXCEPTION_ASSERT(pStub->GetType() != CPU || lMemInfo.ptr);
                 
                 lMemInfo.length = lCompactViewData.subscriptionInfo.length;
-                
-                if(!lCompactViewData.nonConsolidatedReadSubscriptionOffsets.empty())
-                    lMemInfo.readPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lMemInfo.ptr) + lCompactViewData.nonConsolidatedReadSubscriptionOffsets[0]);
 
-                if(!lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.empty())
-                    lMemInfo.writePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lMemInfo.ptr) + lCompactViewData.nonConsolidatedWriteSubscriptionOffsets[0]);
+                if(lMemInfo.ptr)
+                {
+                    if(!lCompactViewData.nonConsolidatedReadSubscriptionOffsets.empty())
+                        lMemInfo.readPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lMemInfo.ptr) + lCompactViewData.nonConsolidatedReadSubscriptionOffsets[0]);
+
+                    if(!lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.empty())
+                        lMemInfo.writePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lMemInfo.ptr) + lCompactViewData.nonConsolidatedWriteSubscriptionOffsets[0]);
+                }
             }
             
             lSubtask.mMemInfo.push_back(lMemInfo);
@@ -1355,7 +1358,7 @@ const pmSubtaskInfo& pmSubscriptionManager::GetSubtaskInfo(pmExecutionStub* pStu
 	return *lSubtask.mSubtaskInfo.get_ptr();
 }
     
-const pmCompactViewData& pmSubscriptionManager::GetCompactedSubscription(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
+const pmCompactViewData& pmSubscriptionManager::GetCompactedSubscription(pmExecutionStub* pStub, ulong pSubtaskId, const pmSplitInfo* pSplitInfo, uint pMemIndex)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 

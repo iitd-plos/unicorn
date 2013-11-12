@@ -1746,7 +1746,7 @@ void pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ul
     
     const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo);
     
-	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pSplitInfo, pIsMultiAssign, pTask->GetTaskInfo(), lSubtaskInfo);
+	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, pTask->GetTaskInfo(), lSubtaskInfo);
 }
 
 void pmStubCPU::PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo)
@@ -2138,6 +2138,20 @@ void pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, u
     if(pPreftechSubtaskIdPtr)
         CommonPreExecuteOnCPU(pTask, *pPreftechSubtaskIdPtr, pIsMultiAssign, true, NULL);
 
+    // Unless required for an address space, no shadow memory is created. In case user has asked for Compact subscription view and task has redistribution, we need to create shadow mem
+    if(pTask->GetCallbackUnit()->GetDataRedistributionCB())
+    {
+        pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+        for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
+        {
+            if(pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this) == SUBSCRIPTION_COMPACT)
+            {
+                if(!lSubscriptionManager.GetSubtaskShadowMem(this, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex))
+                    lSubscriptionManager.CreateSubtaskShadowMem(this, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex);
+            }
+        });
+    }
+
     const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo);
 
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
@@ -2158,7 +2172,7 @@ void pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, u
     pmCudaStreamAutoPtr& lStreamPtr = ((pmCudaStreamAutoPtr*)mCudaStreams.get_ptr())[pSubtaskId - mStartSubtaskId];
     lStreamPtr.Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
 
-	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSubtaskId, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, &lStreamPtr);
+	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, &lStreamPtr);
 }
 
 void* pmStubCUDA::CreateTaskConf(const pmTaskInfo& pTaskInfo)
@@ -2263,6 +2277,12 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
 
                 if(lCompactViewData.subscriptionInfo.length)
                 {
+                    size_t lBaseAddr = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr);
+                    if(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr)    // Non-null only if there is an associated shadow mem
+                        lBaseAddr -= lCompactViewData.subscriptionInfo.offset;
+                    else
+                        lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+
                     auto lOffsetsIter = lCompactViewData.nonConsolidatedReadSubscriptionOffsets.begin();
                     DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedReadSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
 
@@ -2279,7 +2299,7 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
                         #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
                             void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
                         #else
-                            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+                            void* lSrcPtr = reinterpret_cast<void*>(lBaseAddr + lIter->first);
                         #endif
                             
                             void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
@@ -2361,6 +2381,12 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
 
                 if(lCompactViewData.subscriptionInfo.length)
                 {
+                    size_t lBaseAddr = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr);
+                    if(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr)    // Non-null only if there is an associated shadow mem
+                        lBaseAddr -= lCompactViewData.subscriptionInfo.offset;
+                    else
+                        lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+
                     auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
                     DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
 
@@ -2377,7 +2403,7 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
                         #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
                             void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
                         #else
-                            void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+                            void* lDestPtr = reinterpret_cast<void*>(lBaseAddr + lIter->first);
                         #endif
                             
                             void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
@@ -2501,16 +2527,22 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
             else    // SUBSCRIPTION_COMPACT
             {
                 const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-
+                
                 if(lCompactViewData.subscriptionInfo.length)
                 {
+                    size_t lBaseAddr = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr);
+                    if(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr)    // Non-null only if there is an associated shadow mem
+                        lBaseAddr -= lCompactViewData.subscriptionInfo.offset;
+                    else
+                        lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+
                     auto lOffsetsIter = lCompactViewData.nonConsolidatedReadSubscriptionOffsets.begin();
                     DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedReadSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
 
                     for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
                     {
                         void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
-                        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+                        void* lDataPtr = reinterpret_cast<void*>(lBaseAddr + lIter->first);
 
                         memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
                     }
@@ -2576,13 +2608,19 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
 
                 if(lCompactViewData.subscriptionInfo.length)
                 {
+                    size_t lBaseAddr = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr);
+                    if(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr)    // Non-null only if there is an associated shadow mem
+                        lBaseAddr -= lCompactViewData.subscriptionInfo.offset;
+                    else
+                        lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+
                     auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
                     DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
 
                     for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
                     {
                         void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
-                        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+                        void* lDataPtr = reinterpret_cast<void*>(lBaseAddr + lIter->first);
 
                         memcpy(lDataPtr, lPinnedPtr, lIter->second.first);
                     }

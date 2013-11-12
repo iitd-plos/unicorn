@@ -140,22 +140,39 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const 
     const std::vector<pmCudaSubtaskMemoryStruct>& lSubtaskPointers = pStub->GetSubtaskPointersMap().find(pSubtaskInfo.subtaskId)->second;
     const pmCudaSubtaskSecondaryBuffersStruct& lSubtaskSecondaryBuffers = pStub->GetSubtaskSecondaryBuffersMap().find(pSubtaskInfo.subtaskId)->second;
     
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+    
     for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        void* lCpuPtr = lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr;
-
+        void* lCpuPtr = pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr;
         lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr = lSubtaskPointers[pAddressSpaceIndex].cudaPtr;
 
-        if(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].readPtr)
+        if(lCpuPtr) // CPU Ptr is not available when subscription has compact view and there is no shadow memory
         {
-            size_t lOffset = reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].readPtr) - reinterpret_cast<size_t>(lCpuPtr);
-            lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].readPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr) + lOffset);
+            if(pSubtaskInfo.memInfo[pAddressSpaceIndex].readPtr)
+            {
+                size_t lOffset = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].readPtr) - reinterpret_cast<size_t>(lCpuPtr);
+                lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].readPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr) + lOffset);
+            }
+            
+            if(pSubtaskInfo.memInfo[pAddressSpaceIndex].writePtr)
+            {
+                size_t lOffset = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].writePtr) - reinterpret_cast<size_t>(lCpuPtr);
+                lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].writePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr) + lOffset);
+            }
         }
-        
-        if(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].writePtr)
+        else
         {
-            size_t lOffset = reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].writePtr) - reinterpret_cast<size_t>(lCpuPtr);
-            lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].writePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr) + lOffset);
+            EXCEPTION_ASSERT(pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, pStub) == SUBSCRIPTION_COMPACT);
+
+            const pmSplitInfo* lSplitInfo = ((pSubtaskInfo.splitInfo.splitCount == 0) ? NULL : &pSubtaskInfo.splitInfo);
+            const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(pStub, pSubtaskInfo.subtaskId, lSplitInfo, pAddressSpaceIndex);
+            
+            if(!lCompactViewData.nonConsolidatedReadSubscriptionOffsets.empty())
+                lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].readPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr) + lCompactViewData.nonConsolidatedReadSubscriptionOffsets[0]);
+
+            if(!lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.empty())
+                lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].writePtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfoCuda.memInfo[pAddressSpaceIndex].ptr) + lCompactViewData.nonConsolidatedWriteSubscriptionOffsets[0]);
         }
     });
 

@@ -23,7 +23,6 @@
 
 #include "pmDataTypes.h"
 #include "pmPublicUtilities.h"
-#include "pmErrorDefinitions.h"
 #include <assert.h>
 
 #include <string>

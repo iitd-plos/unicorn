@@ -23,6 +23,7 @@
 
 #include "pmPublicDefinitions.h"
 #include "pmInternalDefinitions.h"
+#include "pmErrorDefinitions.h"
 
 #include <cstdlib>
 #include <setjmp.h>
@@ -34,7 +35,7 @@
 
 namespace pm
 {
-    #define EXCEPTION_ASSERT(x) \
+#define EXCEPTION_ASSERT(x) \
     if(!(x)) \
         PMTHROW(pmFatalErrorException());
     
