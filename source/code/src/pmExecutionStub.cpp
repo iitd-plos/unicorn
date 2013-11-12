@@ -2277,36 +2277,44 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
 
                 if(lCompactViewData.subscriptionInfo.length)
                 {
-                    size_t lBaseAddr = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr);
-                    if(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr)    // Non-null only if there is an associated shadow mem
-                        lBaseAddr -= lCompactViewData.subscriptionInfo.offset;
-                    else
-                        lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
-
                     auto lOffsetsIter = lCompactViewData.nonConsolidatedReadSubscriptionOffsets.begin();
                     DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedReadSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
 
-                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP    // src data comes from pinned buffer
                     if(pTask->IsReadOnly(pAddressSpace))
                     {
                         mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lVector[pAddressSpaceIndex].pinnedPtr, lVector[pAddressSpaceIndex].cudaPtr, lCompactViewData.subscriptionInfo.length));
                     }
                     else
-                #endif
                     {
                         for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
                         {
-                        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
                             void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
-                        #else
-                            void* lSrcPtr = reinterpret_cast<void*>(lBaseAddr + lIter->first);
-                        #endif
-                            
-                            void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+                            void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + (*lOffsetsIter));
 
                             mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
                         }
                     }
+                #else   // src data comes from shadow memory (if any) or task mem
+                    void* lShadowMemAddr = pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr;
+                    
+                    if(lShadowMemAddr && pTask->IsReadOnly(pAddressSpace))
+                    {
+                        mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lShadowMemAddr, lVector[pAddressSpaceIndex].cudaPtr, lCompactViewData.subscriptionInfo.length));
+                    }
+                    else
+                    {
+                        size_t lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+
+                        for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                        {
+                            void* lSrcPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowMemAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
+                            void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + (*lOffsetsIter));
+
+                            mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
+                        }
+                    }
+                #endif
                 }
             }
         }
@@ -2390,27 +2398,41 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
                     auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
                     DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
 
-                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP    // dest data comes from pinned buffer
                     if(pTask->IsWriteOnly(pAddressSpace))
                     {
                         mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lVector[pAddressSpaceIndex].cudaPtr, lVector[pAddressSpaceIndex].pinnedPtr, lCompactViewData.subscriptionInfo.length));
                     }
                     else
-                #endif
                     {
                         for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
                         {
-                        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
                             void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
-                        #else
-                            void* lDestPtr = reinterpret_cast<void*>(lBaseAddr + lIter->first);
-                        #endif
-                            
-                            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + lIter->first - lCompactViewData.subscriptionInfo.offset);
+                            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + (*lOffsetsIter));
 
                             mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
                         }
                     }
+                #else   // dest data goes to shadow memory (if any) or task mem
+                    void* lShadowMemAddr = pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr;
+                    
+                    if(lShadowMemAddr && pTask->IsWriteOnly(pAddressSpace))
+                    {
+                        mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lVector[pAddressSpaceIndex].cudaPtr, lShadowMemAddr, lCompactViewData.subscriptionInfo.length));
+                    }
+                    else
+                    {
+                        size_t lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+
+                        for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                        {
+                            void* lDestPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowMemAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
+                            void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + (*lOffsetsIter));
+
+                            mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
+                        }
+                    }
+                #endif
                 }
             }
         }
@@ -2530,21 +2552,27 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
                 
                 if(lCompactViewData.subscriptionInfo.length)
                 {
-                    size_t lBaseAddr = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr);
-                    if(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr)    // Non-null only if there is an associated shadow mem
-                        lBaseAddr -= lCompactViewData.subscriptionInfo.offset;
-                    else
-                        lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
-
-                    auto lOffsetsIter = lCompactViewData.nonConsolidatedReadSubscriptionOffsets.begin();
-                    DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedReadSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
-
-                    for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                    void* lShadowMemAddr = pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr;
+                    
+                    if(lShadowMemAddr && pTask->IsReadOnly(pAddressSpace))
                     {
-                        void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
-                        void* lDataPtr = reinterpret_cast<void*>(lBaseAddr + lIter->first);
+                        memcpy(lVector[pAddressSpaceIndex].pinnedPtr, lShadowMemAddr, lCompactViewData.subscriptionInfo.length);
+                    }
+                    else
+                    {
+                        size_t lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+                        size_t lShadowAddr = reinterpret_cast<size_t>(lShadowMemAddr);
 
-                        memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
+                        auto lOffsetsIter = lCompactViewData.nonConsolidatedReadSubscriptionOffsets.begin();
+                        DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedReadSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
+
+                        for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                        {
+                            void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
+                            void* lDataPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
+
+                            memcpy(lPinnedPtr, lDataPtr, lIter->second.first);
+                        }
                     }
                 }
             }
@@ -2608,21 +2636,27 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
 
                 if(lCompactViewData.subscriptionInfo.length)
                 {
-                    size_t lBaseAddr = reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr);
-                    if(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr)    // Non-null only if there is an associated shadow mem
-                        lBaseAddr -= lCompactViewData.subscriptionInfo.offset;
-                    else
-                        lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
-
-                    auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
-                    DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
-
-                    for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                    void* lShadowMemAddr = pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr;
+                    
+                    if(lShadowMemAddr && pTask->IsWriteOnly(pAddressSpace))
                     {
-                        void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
-                        void* lDataPtr = reinterpret_cast<void*>(lBaseAddr + lIter->first);
+                        memcpy(lShadowMemAddr, lVector[pAddressSpaceIndex].pinnedPtr, lCompactViewData.subscriptionInfo.length);
+                    }
+                    else
+                    {
+                        size_t lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+                        size_t lShadowAddr = reinterpret_cast<size_t>(lShadowMemAddr);
 
-                        memcpy(lDataPtr, lPinnedPtr, lIter->second.first);
+                        auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
+                        DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
+
+                        for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                        {
+                            void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
+                            void* lDataPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
+
+                            memcpy(lDataPtr, lPinnedPtr, lIter->second.first);
+                        }
                     }
                 }
             }
