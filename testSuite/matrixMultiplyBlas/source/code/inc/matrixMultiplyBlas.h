@@ -27,7 +27,7 @@ namespace matrixMultiplyBlas
 
 #define SUBSCRIBE_BLOCK(blockRow, blockCol, blockOffset, blockHeight, blockDim, matrixDim, subtaskId, splitInfo, memIndex, subscriptionType) \
 { \
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, memIndex, subscriptionType, pmScatteredSubscriptionInfo(BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) * sizeof(MATRIX_DATA_TYPE), blockDim * sizeof(MATRIX_DATA_TYPE), matrixDim * sizeof(MATRIX_DATA_TYPE), (blockHeight))); \
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, memIndex, subscriptionType, pmScatteredSubscriptionInfo(((blockOffset * matrixDim) + BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim)) * sizeof(MATRIX_DATA_TYPE), blockDim * sizeof(MATRIX_DATA_TYPE), matrixDim * sizeof(MATRIX_DATA_TYPE), (blockHeight))); \
 }
 
 using namespace pm;
