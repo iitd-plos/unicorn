@@ -243,14 +243,13 @@ void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExe
     
     if(lCompleted)
     {
-        std::vector<std::pair<pmExecutionStub*, bool> >::iterator lInnerIter = lSplitRecord.assignedStubs.begin(), lInnerEndIter = lSplitRecord.assignedStubs.end();
-        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
+        for_each_with_index(lSplitRecord.assignedStubs, [&] (const std::pair<pmExecutionStub*, bool>& pPair, size_t pIndex)
         {
-            pmSplitInfo lSplitInfo(lSplitRecord.splitId, lSplitRecord.splitCount);
+            pmSplitInfo lSplitInfo(pIndex, lSplitRecord.splitCount);
 
-            (*lInnerIter).first->CommonPostNegotiationOnCPU(mSubtaskSplitter->mTask, pSubtaskId, false, &lSplitInfo);
-        }
-
+            pPair.first->CommonPostNegotiationOnCPU(mSubtaskSplitter->mTask, pSubtaskId, false, &lSplitInfo);
+        });
+        
         lSplitRecord.sourceStub->HandleSplitSubtaskExecutionCompletion(mSubtaskSplitter->mTask, lSplitRecord, pmSuccess);
     }
 }

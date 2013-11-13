@@ -1330,7 +1330,7 @@ const pmSubtaskInfo& pmSubscriptionManager::GetSubtaskInfo(pmExecutionStub* pStu
                 lMemInfo.ptr = (lSubtask.mAddressSpacesData[lMemIndex].mShadowMem.get_ptr());
                 
                 // For GPU subtasks, shadow mem is not created unless absolutely required (as GPU mem is itself a shadow mem)
-                EXCEPTION_ASSERT(pStub->GetType() != CPU || lMemInfo.ptr);
+                EXCEPTION_ASSERT(pStub->GetType() != CPU || !lMemInfo.length || lMemInfo.ptr);
                 
                 lMemInfo.length = lCompactViewData.subscriptionInfo.length;
 

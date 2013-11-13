@@ -245,7 +245,7 @@ void pmExecutionStub::PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange,
 {
     SwitchThread(std::shared_ptr<stubEvent>(new execCompletionEvent(POST_HANDLE_EXEC_COMPLETION, pRange, pExecStatus)), pRange.task->GetPriority() - 1);
 }
-    
+
 void pmExecutionStub::ProcessDeferredShadowMemCommits(pmTask* pTask)
 {
     bool lPendingCommits = false;
@@ -1562,25 +1562,18 @@ void pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId
 
     if(!lReduceCallback)
     {
-        const std::vector<pmAddressSpace*>& lAddressSpaceVector = pTask->GetAddressSpaces();
-
-        std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaceVector.begin(), lEndIter = lAddressSpaceVector.end();
-        for(uint lMemIndex = 0; lIter != lEndIter; ++lIter, ++lMemIndex)
+        pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+        
+        for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
         {
-            const pmAddressSpace* lAddressSpace = (*lIter);
-            
-            if(pTask->IsWritable(lAddressSpace))
+            if(pTask->IsWritable(pAddressSpace) && lSubscriptionManager.GetSubtaskShadowMem(this, pSubtaskId, pSplitInfo, (int)pAddressSpaceIndex))
             {
-                if(pTask->DoSubtasksNeedShadowMemory(lAddressSpace) || (pTask->IsMultiAssignEnabled() && pIsMultiAssign)
-                || (GetType() == CPU && pTask->GetAddressSpaceSubscriptionVisibility(lAddressSpace, this) == SUBSCRIPTION_COMPACT))
-                {
-                    if(pTask->IsReadWrite(lAddressSpace) && !pTask->HasDisjointReadWritesAcrossSubtasks(lAddressSpace))
-                        lDeferCommit = true;
-                    else
-                        pTask->GetSubscriptionManager().CommitSubtaskShadowMem(this, pSubtaskId, pSplitInfo, lMemIndex);
-                }
+                if(pTask->IsReadWrite(pAddressSpace) && !pTask->HasDisjointReadWritesAcrossSubtasks(pAddressSpace))
+                    lDeferCommit = true;
+                else
+                    pTask->GetSubscriptionManager().CommitSubtaskShadowMem(this, pSubtaskId, pSplitInfo, (int)pAddressSpaceIndex);
             }
-        }
+        });
     }
 
     if(lDeferCommit)
