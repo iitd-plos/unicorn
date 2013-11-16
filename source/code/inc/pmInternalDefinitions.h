@@ -97,6 +97,7 @@ const unsigned short DEFAULT_TASK_FLAGS_VAL = (TASK_MULTI_ASSIGN_FLAG_VAL | TASK
 const unsigned int CUDA_CHUNK_SIZE_MULTIPLIER_PER_GB = (64 * 1024 * 1024); // minimum 64 MB chunk per GB
 const unsigned int PINNED_CHUNK_SIZE_MULTIPLIER_PER_GB = CUDA_CHUNK_SIZE_MULTIPLIER_PER_GB; // minimum 64 MB chunk per GB
 const unsigned int SCRATCH_CHUNK_SIZE_MULTIPLIER_PER_GB = (32 * 1024 * 1024); // minimum 32 MB chunk per GB
+const unsigned int MIN_UNALLOCATED_CUDA_MEM_SIZE = (4 * 1024 * 1024);  // in bytes
 #endif
 
 #define DEFAULT_SCHEDULING_MODEL scheduler::PUSH

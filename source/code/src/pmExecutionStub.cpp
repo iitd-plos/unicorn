@@ -2093,6 +2093,29 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
     return lLoadStatus;
 }
     
+bool pmStubCUDA::InitializeCudaStream(std::shared_ptr<pmCudaStreamAutoPtr>& pSharedPtr)
+{
+    try
+    {
+        pSharedPtr->Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
+    }
+    catch(pmOutOfMemoryException&)
+    {
+        mCudaCache.Purge();
+
+        try
+        {
+            pSharedPtr->Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
+        }
+        catch(pmOutOfMemoryException&)
+        {
+            return false;
+        }
+    }
+    
+    return true;
+}
+
 ulong pmStubCUDA::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign)
 {
     DEBUG_EXCEPTION_ASSERT(!pSplitInfo || (pSubtaskRange.startSubtask == pSubtaskRange.endSubtask && !pMultiAssign));
@@ -2117,23 +2140,8 @@ ulong pmStubCUDA::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange
     {
         std::shared_ptr<pmCudaStreamAutoPtr> lSharedPtr(new pmCudaStreamAutoPtr());
         
-        try
-        {
-            lSharedPtr->Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
-        }
-        catch(pmOutOfMemoryException&)
-        {
-            mCudaCache.Purge();
-
-            try
-            {
-                lSharedPtr->Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
-            }
-            catch(pmOutOfMemoryException&)
-            {
-                break;
-            }
-        }
+        if(!InitializeCudaStream(lSharedPtr))
+            break;
 
         if(!CheckSubtaskMemoryRequirements(lTask, lSubtaskId, pSplitInfo, lPreventCachePurgeVector, lCudaAlignment))
             break;

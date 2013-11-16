@@ -515,6 +515,8 @@ class pmStubCUDA : public pmStubGPU
     
         std::unique_ptr<pmCudaCacheKey> MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType);
     
+        bool InitializeCudaStream(std::shared_ptr<pmCudaStreamAutoPtr>& pSharedPtr);
+    
         size_t mDeviceIndex;
 
         std::map<std::pair<const pmMachine*, ulong>, pmTaskInfo> mTaskInfoCudaMap; // pair of task originating host and sequence number

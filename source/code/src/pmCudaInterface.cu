@@ -81,10 +81,7 @@ std::map<int, CUcontext>& GetContextMap()
 }
 #endif
 
-#define THROW_OUT_OF_MEMORY_CUDA_ERROR(errorCUDA) \
-{ \
-    PMTHROW_NODUMP(pmOutOfMemoryException()); \
-}
+#define THROW_OUT_OF_MEMORY_CUDA_ERROR PMTHROW_NODUMP(pmOutOfMemoryException());
 
 #define THROW_CUDA_ERROR(errorCUDA) \
 { \
@@ -99,7 +96,7 @@ std::map<int, CUcontext>& GetContextMap()
     if(dErrorCUDA != cudaSuccess) \
     { \
         if(dErrorCUDA == cudaErrorMemoryAllocation) \
-            THROW_OUT_OF_MEMORY_CUDA_ERROR(dErrorCUDA); \
+            THROW_OUT_OF_MEMORY_CUDA_ERROR; \
         THROW_CUDA_ERROR(dErrorCUDA); \
     } \
 }
@@ -200,7 +197,14 @@ void* pmCudaInterface::AllocateCudaMem(size_t pSize)
     void* lAddr = NULL;
 
     if(pSize)
+    {
+        size_t lAvailableCudaMem = GetAvailableCudaMem();
+
+        if(lAvailableCudaMem < pSize + MIN_UNALLOCATED_CUDA_MEM_SIZE)
+            THROW_OUT_OF_MEMORY_CUDA_ERROR;
+            
         SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&lAddr, pSize );
+    }
     
     return lAddr;
 }
