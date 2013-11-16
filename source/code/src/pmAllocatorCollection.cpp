@@ -90,7 +90,7 @@ void* pmAllocatorCollection<__allocator_traits>::Allocate(size_t pSize, size_t p
         lPtr = CallAllocate<typename __allocator_traits::allocator, __allocator_traits::alignedAllocations>()(*lChunkIter, pSize, pAlignment);
         
         if(!lPtr)
-            PMTHROW_NODUMP(pmOutOfMemoryException());
+            PMTHROW(pmFatalErrorException());
         
         mAllocatedPtrs[lPtr] = lChunkIter;
     }

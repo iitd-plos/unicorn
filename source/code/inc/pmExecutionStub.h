@@ -528,7 +528,7 @@ class pmStubCUDA : public pmStubGPU
         std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct> mSubtaskSecondaryBuffersMap;
 
         ulong mStartSubtaskId;
-        finalize_ptr<pmCudaStreamAutoPtr, deleteArrayDeallocator<pmCudaStreamAutoPtr>> mCudaStreams;
+        std::vector<std::shared_ptr<pmCudaStreamAutoPtr>> mCudaStreams;
     
         std::vector<pmCudaMemcpyCommand> mDeviceToHostCommands;
         std::vector<pmCudaMemcpyCommand> mHostToDeviceCommands;

@@ -2115,8 +2115,30 @@ ulong pmStubCUDA::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange
 
     for(ulong lSubtaskId = lSubtaskRange.startSubtask; lSubtaskId <= lSubtaskRange.endSubtask; ++lSubtaskId, ++lSubtaskCount)
     {
+        std::shared_ptr<pmCudaStreamAutoPtr> lSharedPtr(new pmCudaStreamAutoPtr());
+        
+        try
+        {
+            lSharedPtr->Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
+        }
+        catch(pmOutOfMemoryException&)
+        {
+            mCudaCache.Purge();
+
+            try
+            {
+                lSharedPtr->Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
+            }
+            catch(pmOutOfMemoryException&)
+            {
+                break;
+            }
+        }
+
         if(!CheckSubtaskMemoryRequirements(lTask, lSubtaskId, pSplitInfo, lPreventCachePurgeVector, lCudaAlignment))
             break;
+        
+        mCudaStreams.push_back(std::move(lSharedPtr));
     }
     
     EXCEPTION_ASSERT(lSubtaskCount);    // not enough CUDA memory to run even one subtask
@@ -2162,10 +2184,7 @@ void pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, u
         lIter->second.taskConf = CreateTaskConf(pTask->GetTaskInfo());
     }
 
-    pmCudaStreamAutoPtr& lStreamPtr = ((pmCudaStreamAutoPtr*)mCudaStreams.get_ptr())[pSubtaskId - mStartSubtaskId];
-    lStreamPtr.Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
-
-	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, &lStreamPtr);
+	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, mCudaStreams[pSubtaskId - mStartSubtaskId].get());
 }
 
 void* pmStubCUDA::CreateTaskConf(const pmTaskInfo& pTaskInfo)
@@ -2688,7 +2707,8 @@ void pmStubCUDA::PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubt
 #endif
     
     mStartSubtaskId = pStartSubtaskId;
-    mCudaStreams.reset(new pmCudaStreamAutoPtr[pEndSubtaskId - pStartSubtaskId + 1]);
+
+    DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pStartSubtaskId - pEndSubtaskId + 1));
 }
 
 void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAssign, ulong pStartSubtaskId, ulong pEndSubtaskId, bool pSuccess, pmSplitInfo* pSplitInfo)
@@ -2697,14 +2717,18 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAs
 
     if(pSuccess)
     {
-        for(ulong i = pStartSubtaskId; i <= pEndSubtaskId; ++i)
+        DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pStartSubtaskId - pEndSubtaskId + 1));
+
+        for_each_with_index(mCudaStreams, [&] (const std::shared_ptr<pmCudaStreamAutoPtr>& pSharedPtr, size_t pIndex)
         {
-            pmCudaInterface::WaitForStreamCompletion(((pmCudaStreamAutoPtr*)(mCudaStreams.get_ptr()))[i - pStartSubtaskId]);
+            ulong lIndex = pStartSubtaskId + (ulong)pIndex;
+
+            pmCudaInterface::WaitForStreamCompletion(*pSharedPtr.get());
             
         #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-            CopyDataFromPinnedBuffers(pTask, i, pSplitInfo, pTask->GetSubscriptionManager().GetSubtaskInfo(this, i, pSplitInfo));
+            CopyDataFromPinnedBuffers(pTask, lIndex, pSplitInfo, pTask->GetSubscriptionManager().GetSubtaskInfo(this, lIndex, pSplitInfo));
         #endif
-        }
+        });
     }
 
     uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
@@ -2745,7 +2769,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAs
     mSubtaskPointersMap.clear();
     mSubtaskSecondaryBuffersMap.clear();
     
-    mCudaStreams.release();
+    mCudaStreams.clear();
 }
     
 void pmStubCUDA::TerminateUserModeExecution()
