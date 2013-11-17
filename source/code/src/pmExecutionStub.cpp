@@ -74,6 +74,7 @@ pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
     , mExecutingLibraryCode(1)
     , mCurrentSubtaskRangeLock __LOCK_NAME__("pmExecutionStub::mCurrentSubtaskRangeLock")
     , mCurrentSubtaskRangeStats(NULL)
+    , mSecondaryAllotteeLock __LOCK_NAME__("pmExecutionStub::mSecondaryAllotteeLock")
     , mDeferredShadowMemCommitsLock __LOCK_NAME__("pmExecutionStub::mDeferredShadowMemCommitsLock")
 {
 }
@@ -668,7 +669,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                         else
                     #endif
                         {
-                            lAllotteeIter->second.push_back(pRequestingDevice);
+                            lSecondaryAllotteeMap[lPair].push_back(pRequestingDevice);
                         }
 
                         pmSubtaskRange lStolenRange(pTask, lLocalDevice, mCurrentSubtaskRangeStats->startSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId);
@@ -2728,7 +2729,7 @@ void pmStubCUDA::PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubt
     
     mStartSubtaskId = pStartSubtaskId;
 
-    DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pStartSubtaskId - pEndSubtaskId + 1));
+    DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pEndSubtaskId - pStartSubtaskId + 1));
 }
 
 void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAssign, ulong pStartSubtaskId, ulong pEndSubtaskId, bool pSuccess, pmSplitInfo* pSplitInfo)
@@ -2737,7 +2738,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, bool pIsMultiAs
 
     if(pSuccess)
     {
-        DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pStartSubtaskId - pEndSubtaskId + 1));
+        DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pEndSubtaskId - pStartSubtaskId + 1));
 
         for_each_with_index(mCudaStreams, [&] (const std::shared_ptr<pmCudaStreamAutoPtr>& pSharedPtr, size_t pIndex)
         {
