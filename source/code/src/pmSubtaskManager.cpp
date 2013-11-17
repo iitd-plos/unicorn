@@ -870,7 +870,7 @@ pmStatus pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(const pm
     
     if(HasTaskFinished_Internal())
         PMTHROW(pmFatalErrorException());
-    
+
     pmUnfinishedPartitionPtr lTargetPartitionPtr;
     std::set<pmUnfinishedPartitionPtr>::iterator lIter = mUnacknowledgedPartitions.begin(), lEndIter = mUnacknowledgedPartitions.end();
     for(; lIter != lEndIter; ++lIter)

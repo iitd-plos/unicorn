@@ -381,8 +381,11 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		uint mDeviceIndexOnMachine;
 
         volatile sig_atomic_t mExecutingLibraryCode;
+    
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCurrentSubtaskRangeLock;
         currentSubtaskRangeStats* mCurrentSubtaskRangeStats;  // Subtasks currently being executed
+    
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mSecondaryAllotteeLock;
         std::map<std::pair<pmTask*, ulong>, std::vector<const pmProcessingElement*> > mSecondaryAllotteeMap;  // PULL model: secondary allottees of a subtask range
     
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeferredShadowMemCommitsLock;
