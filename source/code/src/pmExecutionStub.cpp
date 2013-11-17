@@ -627,7 +627,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
         {
             if(!(pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() == GetType()))
             {
-                pmExecutionStub* lSecondaryAllotteMapStub = this;
+                pmExecutionStub* lSecondaryAllotteeMapStub = this;
                 
             #ifdef SUPPORT_SPLIT_SUBTASKS
                 if(mCurrentSubtaskRangeStats->splitData.valid)
@@ -635,15 +635,15 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->splitSubtaskSourceStub);
                     DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->startSubtaskId == mCurrentSubtaskRangeStats->endSubtaskId);
                     
-                    lSecondaryAllotteMapStub = mCurrentSubtaskRangeStats->splitSubtaskSourceStub;
+                    lSecondaryAllotteeMapStub = mCurrentSubtaskRangeStats->splitSubtaskSourceStub;
                 }
             #endif
 
                 std::pair<pmTask*, ulong> lPair(pTask, mCurrentSubtaskRangeStats->endSubtaskId);
 
-                FINALIZE_RESOURCE_PTR(dSecondaryAllotteeLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lSecondaryAllotteMapStub->mSecondaryAllotteeLock, Lock(), Unlock());
+                FINALIZE_RESOURCE_PTR(dSecondaryAllotteeLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lSecondaryAllotteeMapStub->mSecondaryAllotteeLock, Lock(), Unlock());
 
-                auto& lSecondaryAllotteeMap = lSecondaryAllotteMapStub->mSecondaryAllotteeMap;
+                auto& lSecondaryAllotteeMap = lSecondaryAllotteeMapStub->mSecondaryAllotteeMap;
                 
                 auto lAllotteeIter = lSecondaryAllotteeMap.find(lPair);
                 if((lAllotteeIter == lSecondaryAllotteeMap.end()) || (lAllotteeIter->second.size() < MAX_SUBTASK_MULTI_ASSIGN_COUNT - 1))
@@ -660,7 +660,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     #ifdef SUPPORT_SPLIT_SUBTASKS
                         if(mCurrentSubtaskRangeStats->splitData.valid)
                         {
-                            lLocalDevice = lSecondaryAllotteMapStub->GetProcessingElement();
+                            lLocalDevice = lSecondaryAllotteeMapStub->GetProcessingElement();
 
                             if(!lSecondaryAllotteeMapStub->UpdateSecondaryAllotteeMapInternal(lPair, pRequestingDevice))
                                 return;
