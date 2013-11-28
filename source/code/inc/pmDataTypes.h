@@ -240,13 +240,11 @@ namespace pm
         const pmAddressSpace* addressSpace;
         pmSubscriptionVisibilityType visibility;
         pmSubscriptionFormat format;
-        
-        union
-        {
-            pmSubscriptionInfo subscriptionInfo;
-            pmScatteredSubscriptionInfo scatteredSubscriptionInfo;
-            std::vector<pmSubscriptionInfo> subscriptionVector;
-        };
+
+        // Only one of these is meaningful
+        pmSubscriptionInfo subscriptionInfo;    // Used for SUBSCRIPTION_CONTIGUOUS
+        pmScatteredSubscriptionInfo scatteredSubscriptionInfo;  // Used for SUBSCRIPTION_SCATTERED
+        std::vector<pmSubscriptionInfo> subscriptionVector; // Used for SUBSCRIPTION_GENERAL
 
         pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const pmSubscriptionInfo& pSubscriptionInfo)
         : addressSpace(pAddressSpace)
@@ -273,13 +271,12 @@ namespace pm
         : addressSpace(pKey.addressSpace)
         , visibility(pKey.visibility)
         , format(pKey.format)
+        , subscriptionVector(pKey.subscriptionVector)
         {
             if(format == SUBSCRIPTION_CONTIGUOUS)
                 subscriptionInfo = pKey.subscriptionInfo;
             else if(format == SUBSCRIPTION_SCATTERED)
                 scatteredSubscriptionInfo = pKey.scatteredSubscriptionInfo;
-            else if(format == SUBSCRIPTION_GENERAL)
-                subscriptionVector = pKey.subscriptionVector;
         }
         
         ~pmCudaCacheKey()
