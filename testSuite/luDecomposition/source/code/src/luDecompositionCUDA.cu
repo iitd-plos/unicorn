@@ -37,7 +37,7 @@ pmStatus luDecomposition_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
 	luTaskConf* lTaskConf = (luTaskConf*)(pTaskInfo.taskConf);
     MATRIX_DATA_TYPE* lMatrix = ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
     
-    size_t lColStepSize = ((pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->matrixDim : BLOCK_DIM);
+    size_t lColStepElems = ((pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->matrixDim : BLOCK_DIM);
 
     CUBLAS_ERROR_CHECK("cublasSetStream", cublasSetStream(lCublasHandle, (cudaStream_t)pCudaStream));
 
@@ -45,7 +45,7 @@ pmStatus luDecomposition_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
     
     for(size_t i = 0; i < BLOCK_DIM - 1; ++i)
     {
-        findDiagonalElemReciprocal<<<1, 1, 0, (cudaStream_t)pCudaStream>>>(lDiagonalElemPtr, lMatrix, lTaskConf->matrixDim, i);
+        findDiagonalElemReciprocal<<<1, 1, 0, (cudaStream_t)pCudaStream>>>(lDiagonalElemPtr, lMatrix, lColStepElems, i);
         
         cudaError_t lCudaError = cudaGetLastError();
         if(lCudaError != cudaSuccess)
@@ -55,10 +55,10 @@ pmStatus luDecomposition_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
         }
         
         CUBLAS_ERROR_CHECK("cublasSetPointerMode", cublasSetPointerMode(lCublasHandle, CUBLAS_POINTER_MODE_DEVICE));
-        CUBLAS_ERROR_CHECK("cublas_scal", CUBLAS_SCAL(lCublasHandle, (int)(BLOCK_DIM - i - 1), lDiagonalElemPtr, lMatrix + i + (i + 1) * lTaskConf->matrixDim, (int)lTaskConf->matrixDim));
+        CUBLAS_ERROR_CHECK("cublas_scal", CUBLAS_SCAL(lCublasHandle, (int)(BLOCK_DIM - i - 1), lDiagonalElemPtr, lMatrix + i + (i + 1) * lColStepElems, (int)lColStepElems));
 
         CUBLAS_ERROR_CHECK("cublasSetPointerMode", cublasSetPointerMode(lCublasHandle, CUBLAS_POINTER_MODE_HOST));
-        CUBLAS_ERROR_CHECK("cublas_ger", CUBLAS_GER(lCublasHandle, (int)(BLOCK_DIM - i - 1), (int)(BLOCK_DIM - i - 1), &gMinusOne, lMatrix + (i + 1) + i * lColStepSize, 1, lMatrix + i + (i + 1) * lColStepSize, (int)lColStepSize, lMatrix + (i + 1) + (i + 1) * lColStepSize, (int)lColStepSize));
+        CUBLAS_ERROR_CHECK("cublas_ger", CUBLAS_GER(lCublasHandle, (int)(BLOCK_DIM - i - 1), (int)(BLOCK_DIM - i - 1), &gMinusOne, lMatrix + (i + 1) + i * lColStepElems, 1, lMatrix + i + (i + 1) * lColStepElems, (int)lColStepElems, lMatrix + (i + 1) + (i + 1) * lColStepElems, (int)lColStepElems));
     }
     
     return pmSuccess;
