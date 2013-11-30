@@ -1231,7 +1231,7 @@ void pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutio
 
         subscriptionRecordType::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
         for(; lIter != lEndIter; ++lIter)
-            lTempVector.push_back(lIter->second.second.receiveCommandVector);
+            lTempVector.insert(lTempVector.end(), lIter->second.second.receiveCommandVector.begin(), lIter->second.second.receiveCommandVector.end());
         
         pStub->WaitForNetworkFetch(lTempVector);
 
