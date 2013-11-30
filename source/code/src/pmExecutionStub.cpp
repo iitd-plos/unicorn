@@ -1650,6 +1650,9 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommunicatorComman
 
     guarded_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, pmCommandPtr> lGuardedPtr(&mCurrentSubtaskRangeLock, &(mCurrentSubtaskRangeStats->accumulatorCommandPtr), &lAccumulatorCommand);
 
+    if(RequiresPrematureExit())
+        PMTHROW_NODUMP(pmPrematureExitException(false));
+
     pmStatus lStatus = lAccumulatorCommand->WaitForFinish();
     
     if(RequiresPrematureExit())

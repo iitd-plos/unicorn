@@ -1227,9 +1227,13 @@ void pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutio
         const pmSubtaskAddressSpaceData& lAddressSpaceData = (*lAddressSpaceDataIter);
         const subscriptionRecordType& lMap = lAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords;
 
+        std::vector<pmCommunicatorCommandPtr> lTempVector;
+
         subscriptionRecordType::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
         for(; lIter != lEndIter; ++lIter)
-            pStub->WaitForNetworkFetch(lIter->second.second.receiveCommandVector);
+            lTempVector.push_back(lIter->second.second.receiveCommandVector);
+        
+        pStub->WaitForNetworkFetch(lTempVector);
 
     #ifdef SUPPORT_CUDA
         #ifdef SUPPORT_LAZY_MEMORY
