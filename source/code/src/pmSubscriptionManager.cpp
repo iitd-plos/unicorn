@@ -1187,6 +1187,8 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
 
     ushort lPriority = (mTask->GetPriority() + (pPrefetch ? 1 : 0));    // Prefetch at slightly low priority
 
+    std::vector<pmCommunicatorCommandPtr> lCommandVector;
+
     std::vector<pmAddressSpace*>& lAddressSpaces = mTask->GetAddressSpaces();
     std::vector<pmAddressSpace*>::const_iterator lAddressSpaceIter = lAddressSpaces.begin();
     
@@ -1207,40 +1209,30 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
 
                 lAddressSpace->GetPageAlignedAddresses(lOffset, lLength);
                 MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lAddressSpace, lPriority, lOffset, lLength, lIter->second.second.receiveCommandVector);
+
+                if(!pPrefetch)
+                    lCommandVector.insert(lCommandVector.end(), lIter->second.second.receiveCommandVector.begin(), lIter->second.second.receiveCommandVector.end());
             }
         }
     }
 
     if(!pPrefetch)
-        WaitForSubscriptions(lSubtask, pStub, pDeviceType);
+        WaitForSubscriptions(lSubtask, pStub, pDeviceType, lCommandVector);
 }
     
 /* Must be called with mSubtaskMapVector stub's lock acquired */
-void pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutionStub* pStub, pmDeviceType pDeviceType)
+void pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutionStub* pStub, pmDeviceType pDeviceType, const std::vector<pmCommunicatorCommandPtr>& pCommandVector)
 {
-    std::vector<pmAddressSpace*>& lAddressSpaces = mTask->GetAddressSpaces();
-    std::vector<pmAddressSpace*>::const_iterator lAddressSpaceIter = lAddressSpaces.begin();
+    pStub->WaitForNetworkFetch(pCommandVector);
 
-    std::vector<pmSubtaskAddressSpaceData>::const_iterator lAddressSpaceDataIter = pSubtask.mAddressSpacesData.begin(), lAddressSpaceDataEndIter = pSubtask.mAddressSpacesData.end();
-    for(uint lAddressSpaceIndex = 0; lAddressSpaceDataIter != lAddressSpaceDataEndIter; ++lAddressSpaceDataIter, ++lAddressSpaceIter, ++lAddressSpaceIndex)
-    {
-        const pmSubtaskAddressSpaceData& lAddressSpaceData = (*lAddressSpaceDataIter);
-        const subscriptionRecordType& lMap = lAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords;
-
-        std::vector<pmCommunicatorCommandPtr> lTempVector;
-
-        subscriptionRecordType::const_iterator lIter = lMap.begin(), lEndIter = lMap.end();
-        for(; lIter != lEndIter; ++lIter)
-            lTempVector.insert(lTempVector.end(), lIter->second.second.receiveCommandVector.begin(), lIter->second.second.receiveCommandVector.end());
-        
-        pStub->WaitForNetworkFetch(lTempVector);
-
-    #ifdef SUPPORT_CUDA
-        #ifdef SUPPORT_LAZY_MEMORY
-            ClearInputMemLazyProtectionForCuda(pSubtask, *lAddressSpaceIter, lAddressSpaceIndex, pDeviceType);
-        #endif
+#ifdef SUPPORT_CUDA
+    #ifdef SUPPORT_LAZY_MEMORY
+        for_each_with_index(mTask->GetAddressSpaces(), [&pSubtask, pDeviceType, this] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
+        {
+            ClearInputMemLazyProtectionForCuda(pSubtask, pAddressSpace, (uint)pAddressSpaceIndex, pDeviceType);
+        });
     #endif
-	}
+#endif
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
