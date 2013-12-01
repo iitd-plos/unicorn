@@ -20,6 +20,11 @@ else
 	LIBRARIES +=-L$(PMLIB_RELEASE_LIB_PATH) -lpmlib
 endif
 
+ifeq ($(PLATFORM), MACOS)
+	FLAGS += -fno-inline
+	CUDAFLAGS += -fno-inline
+endif
+
 OUTDIR= $(BUILD)
 
 ifeq ($(DEBUG), 1)

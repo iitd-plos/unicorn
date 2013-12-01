@@ -57,8 +57,7 @@ void RegisterLibraryCallback(int pParallelMode, std::string pCallbackKey, pmCall
 
     static const char* lArray[6] = {"1", "2", "3", "4", "5", "6"};
 
-    std::string lTempKey;
-    lTempKey = pCallbackKey + lArray[pParallelMode - 1];
+    std::string lTempKey(pCallbackKey + lArray[pParallelMode - 1]);
 
     SAFE_PM_EXEC( pmRegisterCallbacks((char*)lTempKey.c_str(), pCallbacks, pCallbackHandle) );
 }
