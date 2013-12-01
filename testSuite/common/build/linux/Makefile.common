@@ -9,6 +9,11 @@ FLAGS += -Wall -DUNIX -DLINUX -DSAMPLE_NAME=$(SAMPLE_NAME) -std=c++11 -MMD
 CUDAFLAGS += -DUNIX -DSAMPLE_NAME=$(SAMPLE_NAME) --machine 64
 CUDAFLAGS += --compiler-options
 
+ifeq ($(PLATFORM), MACOS)
+	FLAGS += -fno-inline
+	CUDAFLAGS += -fno-inline
+endif
+
 ifeq ($(DEBUG), 1)
 	FLAGS += -DDEBUG -D_DEBUG -g
 	CUDAFLAGS += -DDEBUG -D_DEBUG -g -G
@@ -18,11 +23,6 @@ else
 	FLAGS += -O3 -DNDEBUG
 	BUILD=release
 	LIBRARIES +=-L$(PMLIB_RELEASE_LIB_PATH) -lpmlib
-endif
-
-ifeq ($(PLATFORM), MACOS)
-	FLAGS += -fno-inline
-	CUDAFLAGS += -fno-inline
 endif
 
 OUTDIR= $(BUILD)
