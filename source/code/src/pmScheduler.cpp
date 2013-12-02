@@ -76,10 +76,7 @@ void __dump_mem_ack_transfer(const pmAddressSpace* addressSpace, memoryIdentifie
 {
     char lStr[512];
     
-    if(addressSpace->IsReadOnly())
-        sprintf(lStr, "Acknowledging input address space %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
-    else
-        sprintf(lStr, "Acknowledging out address space %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
+    sprintf(lStr, "Acknowledging address space %p (Remote mem (%d, %ld)) from offset %ld for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, length, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }

@@ -70,6 +70,8 @@ class pmMemoryManager : public pmBase
 
         virtual void* CreateCheckOutMemory(size_t pLength) = 0;
     
+        virtual void CancelUnreferencedRequests(pmAddressSpace* pAddressSpace) = 0;
+    
 #ifdef SUPPORT_LAZY_MEMORY
         virtual void* CreateReadOnlyMemoryMapping(pmAddressSpace* pAddressSpace) = 0;
         virtual void DeleteReadOnlyMemoryMapping(void* pReadOnlyMemoryMapping, size_t pLength) = 0;
@@ -138,6 +140,8 @@ class pmLinuxMemoryManager : public pmMemoryManager
     
         void InstallSegFaultHandler();
 		void UninstallSegFaultHandler();
+    
+        virtual void CancelUnreferencedRequests(pmAddressSpace* pAddressSpace);
 
     private:
 		pmLinuxMemoryManager();

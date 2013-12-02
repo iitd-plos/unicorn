@@ -48,10 +48,7 @@ void __dump_mem_req(const pmAddressSpace* addressSpace, const void* addr, size_t
 {
     char lStr[512];
    
-    if(addressSpace->IsReadOnly())
-        sprintf(lStr, "Requesting input memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
-    else
-        sprintf(lStr, "Requesting output memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
+    sprintf(lStr, "Requesting memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
@@ -328,6 +325,26 @@ size_t pmLinuxMemoryManager::GetVirtualMemoryPageSize() const
 	return mPageSize;
 }
 
+void pmLinuxMemoryManager::CancelUnreferencedRequests(pmAddressSpace* pAddressSpace)
+{
+    using namespace linuxMemManager;
+
+    addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
+    pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
+
+    FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
+    
+    auto lIter = lMap.begin(), lEnd = lMap.end();
+    while(lIter != lEnd)
+    {
+        if(lIter->second.second.receiveCommand.unique())
+            lMap.erase(lIter++);
+        else
+            ++lIter;
+    }
+}
+    
 // This function must be called after acquiring lock on pInFlightMap
 void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector)
 {
@@ -346,7 +363,7 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
     // Both start and end of new range fall prior to all ranges in flight or there is no range in flight
     if(!lStartIterAddr && !lEndIterAddr)
     {
-        pRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, (ulong)lLastFetchAddress));
+        pRegionsToBeFetched.emplace_back((ulong)lFetchAddress, (ulong)lLastFetchAddress);
     }
     else
     {
@@ -354,7 +371,7 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
         if(!lStartIterAddr)
         {
             char* lFirstAddr = (char*)(pInFlightMap.begin()->first);
-            pRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, ((ulong)lFirstAddr)-1));
+            pRegionsToBeFetched.emplace_back((ulong)lFetchAddress, ((ulong)lFirstAddr)-1);
             lFetchAddress = lFirstAddr;
             lStartIter = pInFlightMap.begin();
         }
@@ -371,20 +388,20 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
             // If both start and end lie within the same in flight range, then the new range is already being fetched
             if(lStartInside && lEndInside)
             {
-                pCommandVector.push_back(lStartIter->second.second.receiveCommand);
+                pCommandVector.emplace_back(lStartIter->second.second.receiveCommand);
                 return;
             }
             else if(lStartInside && !lEndInside)
             {
                 // If start of new range is within an in flight range and that range is just prior to the end of new range
-                pCommandVector.push_back(lStartIter->second.second.receiveCommand);
+                pCommandVector.emplace_back(lStartIter->second.second.receiveCommand);
                 
-                pRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lStartIter->first) + lStartIter->second.first), (ulong)lLastFetchAddress));
+                pRegionsToBeFetched.emplace_back((ulong)((char*)(lStartIter->first) + lStartIter->second.first), (ulong)lLastFetchAddress);
             }
             else
             {
                 // If both start and end of new range have the same in flight range just prior to them and they don't fall within that range
-                pRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, (ulong)lLastFetchAddress));
+                pRegionsToBeFetched.emplace_back((ulong)lFetchAddress, (ulong)lLastFetchAddress);
             }
         }
         else
@@ -395,27 +412,27 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
             if(!lStartInside)
             {
                 ++lStartIter;
-                pRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)lFetchAddress, ((ulong)(lStartIter->first))-1));
+                pRegionsToBeFetched.emplace_back((ulong)lFetchAddress, ((ulong)(lStartIter->first))-1);
             }
             
             // If end of new range does not fall within the in flight range
             if(!lEndInside)
             {
-                pRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lEndIter->first) + lEndIter->second.first), (ulong)lLastFetchAddress));
+                pRegionsToBeFetched.emplace_back((ulong)((char*)(lEndIter->first) + lEndIter->second.first), (ulong)lLastFetchAddress);
             }
             
-            pCommandVector.push_back(lEndIter->second.second.receiveCommand);
+            pCommandVector.emplace_back(lEndIter->second.second.receiveCommand);
             
             // Fetch all non in flight data between in flight ranges
             if(lStartIter != lEndIter)
             {
                 for(pmInFlightRegions::iterator lTempIter = lStartIter; lTempIter != lEndIter; ++lTempIter)
                 {
-                    pCommandVector.push_back(lTempIter->second.second.receiveCommand);
+                    pCommandVector.emplace_back(lTempIter->second.second.receiveCommand);
                     
                     pmInFlightRegions::iterator lNextIter = lTempIter;
                     ++lNextIter;
-                    pRegionsToBeFetched.push_back(std::pair<ulong, ulong>((ulong)((char*)(lTempIter->first) + lTempIter->second.first), ((ulong)(lNextIter->first))-1));
+                    pRegionsToBeFetched.emplace_back((ulong)((char*)(lTempIter->first) + lTempIter->second.first), ((ulong)(lNextIter->first))-1);
                 }
             }
         }
@@ -454,17 +471,15 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, usho
             pmAddressSpace::pmMemOwnership::iterator lIter = lOwnerships.begin(), lEndIter = lOwnerships.end();            
             for(; lIter != lEndIter; ++lIter)
             {
-                ulong lInternalOffset = lIter->first;
-                ulong lInternalLength = lIter->second.first;
                 pmAddressSpace::vmRangeOwner& lRangeOwner = lIter->second.second;
 
                 if(lRangeOwner.host != PM_LOCAL_MACHINE)
                 {
                     pmCommunicatorCommandPtr lCommand;
-                    FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, lInternalOffset, lInternalLength, lRangeOwner, lMap, lCommand);
+                    FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, lIter->first,  lIter->second.first, lRangeOwner, lMap, lCommand);
 
                     if(lCommand.get())
-                        pCommandVector.push_back(lCommand);
+                        pCommandVector.emplace_back(lCommand);
                 }
             }
         }
@@ -515,7 +530,7 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
     pmTask* lLockingTask = pAddressSpace->GetLockingTask();
     if(lLockingTask != pRequestingTask)
         return;
-    
+
     addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
     pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;

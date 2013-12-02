@@ -362,6 +362,8 @@ void pmAddressSpace::Unlock(pmTask* pTask)
         mLockingTask = NULL;
     }
 
+    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CancelUnreferencedRequests(this);
+    
     bool lUserDelete = false;
     // Auto lock/unlock scope
     {

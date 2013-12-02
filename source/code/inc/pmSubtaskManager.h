@@ -62,20 +62,20 @@ class pmSubtaskManager : public pmBase
 		virtual pmStatus GetTaskExecutionStatus();
 
 		virtual bool HasTaskFinished() = 0;
-		virtual pmStatus AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee) = 0;
-		virtual pmStatus RegisterSubtaskCompletion(const pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus) = 0;
+		virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee) = 0;
+		virtual void RegisterSubtaskCompletion(const pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus) = 0;
 
 	protected:
 		pmSubtaskManager(pmLocalTask* pLocalTask);
 
-        pmStatus UpdateExecutionProfile(const pmProcessingElement* pDevice, ulong pSubtaskCount);
+        void UpdateExecutionProfile(const pmProcessingElement* pDevice, ulong pSubtaskCount);
     
     #ifdef SUPPORT_SPLIT_SUBTASKS
         void MakeDeviceGroups(std::vector<const pmProcessingElement*>& pDevices, std::vector<std::vector<const pmProcessingElement*> >& pDeviceGroups, std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>* >& pQueryMap, ulong& pUnsplittedDevices) const;
     #endif
     
     #ifdef DUMP_SUBTASK_EXECUTION_PROFILE
-        pmStatus PrintExecutionProfile();
+        void PrintExecutionProfile();
     #endif
     
 		pmLocalTask* mLocalTask;
@@ -107,18 +107,18 @@ class pmPushSchedulingManager : public pmSubtaskManager
 		virtual ~pmPushSchedulingManager();
 
 		virtual bool HasTaskFinished();
-		virtual pmStatus AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
-		virtual pmStatus RegisterSubtaskCompletion(const pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
+		virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
+		virtual void RegisterSubtaskCompletion(const pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
     
 	private:
-		pmStatus FreezeAllocationSize(const pmProcessingElement* pDevice, ulong pFreezedSize);
-		pmStatus UnfreezeAllocationSize(const pmProcessingElement* pDevice);
+		void FreezeAllocationSize(const pmProcessingElement* pDevice, ulong pFreezedSize);
+		void UnfreezeAllocationSize(const pmProcessingElement* pDevice);
 		bool IsAllocationSizeFreezed(const pmProcessingElement* pDevice);
 		ulong GetFreezedAllocationSize(const pmProcessingElement* pDevice);
-		pmStatus SetLastAllocationExecTimeInSecs(const pmProcessingElement* pDevice, double pTimeInSecs);
+		void SetLastAllocationExecTimeInSecs(const pmProcessingElement* pDevice, double pTimeInSecs);
 		double GetLastAllocationExecTimeInSecs(const pmProcessingElement* pDevice);
 		ulong GetNextAssignmentSize(const pmProcessingElement* pDevice);
-		pmStatus AssignPartition(const pmProcessingElement* pDevice, pmUnfinishedPartitionPtr pUnfinishedPartitionPtr, ulong pSubtaskCount);
+		void AssignPartition(const pmProcessingElement* pDevice, pmUnfinishedPartitionPtr pUnfinishedPartitionPtr, ulong pSubtaskCount);
 		pmUnfinishedPartitionPtr FetchNewSubPartition(const pmProcessingElement* pDevice, ulong pSubtaskCount);
         bool IsUsefulAllottee(const pmProcessingElement* pPotentialAllottee, const pmProcessingElement* pOriginalAllottee, std::vector<const pmProcessingElement*>& pExistingAllottees);
         const pmProcessingElement* SelectMultiAssignAllottee(const pmProcessingElement* pDevice);
@@ -141,9 +141,9 @@ public:
     virtual ~pmSingleAssignmentSchedulingManager();	
     
     virtual bool HasTaskFinished();
-    virtual pmStatus AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee) = 0;
+    virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee) = 0;
 
-    virtual pmStatus RegisterSubtaskCompletion(const pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
+    virtual void RegisterSubtaskCompletion(const pmProcessingElement* pDevice, ulong pSubtaskCount, ulong pStartingSubtask, pmStatus pExecStatus);
     
 #ifdef _DEBUG
     void DumpUnacknowledgedPartitions();
@@ -163,7 +163,7 @@ class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager
 		pmPullSchedulingManager(pmLocalTask* pLocalTask);
 		virtual ~pmPullSchedulingManager();	
 
-		virtual pmStatus AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
+		virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
 
 	private:
     #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -185,7 +185,7 @@ public:
     pmProportionalSchedulingManager(pmLocalTask* pLocalTask);
     virtual ~pmProportionalSchedulingManager();	
     
-    virtual pmStatus AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
+    virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
     
 private:
     pmStatus ReadConfigurationFile(std::vector<const pmProcessingElement*>& pDevices);

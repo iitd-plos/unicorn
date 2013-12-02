@@ -48,10 +48,7 @@ void __dump_mem_forward(const pmAddressSpace* addressSpace, memoryIdentifierStru
 {
     char lStr[512];
     
-    if(addressSpace->IsReadOnly())
-        sprintf(lStr, "Forwarding input address space %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", addressSpace, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, newHost, host);
-    else
-        sprintf(lStr, "Forwarding out address space %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", addressSpace, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, newHost, host);
+    sprintf(lStr, "Forwarding address space %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", addressSpace, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, newHost, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
@@ -60,10 +57,7 @@ void __dump_mem_transfer(const pmAddressSpace* addressSpace, memoryIdentifierStr
 {
     char lStr[512];
     
-    if(addressSpace->IsReadOnly())
-        sprintf(lStr, "Transferring input address space %p (Remote mem (%d, %ld)) from offset %ld (Remote offset %ld) for length %ld to host %d", addressSpace,identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, host);
-    else
-        sprintf(lStr, "Transferring out address space %p (Remote mem (%d, %ld)) from offset %ld (Remote Offset %ld) for length %ld to host %d", addressSpace, identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, host);
+    sprintf(lStr, "Transferring address space %p (Remote mem (%d, %ld)) from offset %ld (Remote offset %ld) for length %ld to host %d", addressSpace,identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
@@ -243,8 +237,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         {
             memTransferEvent& lEventDetails = static_cast<memTransferEvent&>(pEvent);
 
-            if(lEventDetails.machine == PM_LOCAL_MACHINE && !lEventDetails.isForwarded)
-                PMTHROW(pmFatalErrorException());   // Cyclic reference
+            EXCEPTION_ASSERT(lEventDetails.machine != PM_LOCAL_MACHINE || lEventDetails.isForwarded);   // Cyclic reference
 
             pmAddressSpace* lSrcAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.srcMemIdentifier.memOwnerHost), lEventDetails.srcMemIdentifier.generationNumber);
             if(!lSrcAddressSpace)
@@ -257,15 +250,13 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lEventDetails.taskSequenceNumber);
                 
 //                if(lOriginatingHost == PM_LOCAL_MACHINE && !lRequestingTask)
-//                    return pmSuccess;
+//                    return;
             }
             
             // Check if the memory is residing locally or forward the request to the owner machine
             pmAddressSpace::pmMemOwnership lOwnerships;
             lSrcAddressSpace->GetOwners(lEventDetails.offset, lEventDetails.length, lOwnerships);
             
-            pmAddressSpace* lDestAddressSpace = NULL;
-
             pmAddressSpace::pmMemOwnership::iterator lStartIter = lOwnerships.begin(), lEndIter = lOwnerships.end(), lIter;
             for(lIter = lStartIter; lIter != lEndIter; ++lIter)
             {
@@ -277,8 +268,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 {
                     pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
                 
-                    if(!lOwnerAddressSpace)
-                        PMTHROW(pmFatalErrorException());
+                    EXCEPTION_ASSERT(lOwnerAddressSpace);
                 
                 #ifdef ENABLE_MEM_PROFILING
                     lSrcAddressSpace->RecordMemTransfer(lInternalLength);
@@ -286,10 +276,9 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 
                     if(lEventDetails.machine == PM_LOCAL_MACHINE)
                     {
-                        lDestAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.destMemIdentifier.memOwnerHost), lEventDetails.destMemIdentifier.generationNumber);
+                        pmAddressSpace* lDestAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.destMemIdentifier.memOwnerHost), lEventDetails.destMemIdentifier.generationNumber);
                     
-                        if(!lDestAddressSpace)
-                            PMTHROW(pmFatalErrorException());
+                        EXCEPTION_ASSERT(lDestAddressSpace);
 
                         if(!lEventDetails.isTaskOriginated || lRequestingTask)
                             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestAddressSpace, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), lRequestingTask);
@@ -307,8 +296,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 }
                 else
                 {
-                    if(lEventDetails.isForwarded)
-                        PMTHROW(pmFatalErrorException());
+                    EXCEPTION_ASSERT(!lEventDetails.isForwarded);
                     
                     finalize_ptr<memoryTransferRequest> lData(new memoryTransferRequest(memoryIdentifierStruct(lRangeOwner.memIdentifier.memOwnerHost, lRangeOwner.memIdentifier.generationNumber), memoryIdentifierStruct(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber), lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lRangeOwner.hostOffset, lInternalLength, *lEventDetails.machine, 1, lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber, lEventDetails.priority));
                     
