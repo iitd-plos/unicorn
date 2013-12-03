@@ -46,6 +46,7 @@ class pmTaskManager : public pmBase
 {
     typedef std::set<pmLocalTask*> localTasksSetType;
     typedef std::set<pmRemoteTask*> remoteTasksSetType;
+    typedef std::set<std::pair<uint, ulong>> finishedTasksSetType;  // pair of originating host and sequence numbers
     typedef std::map<std::pair<const pmMachine*, ulong>, std::vector<std::pair<pmSubtaskRange, const pmProcessingElement*> > > enqueuedRemoteSubtasksMapType;
 
     public:
@@ -72,6 +73,9 @@ class pmTaskManager : public pmBase
     
         bool DoesTaskHavePendingSubtasks(pmTask* pTask);
         bool DoesTaskHavePendingSubtasks(const pmMachine* pOriginatingHost, ulong pSequenceNumber);
+
+        void RegisterTaskFinish(uint pOriginatingHost, ulong pSequenceNumber);
+        bool IsRemoteTaskFinished(uint pOriginatingHost, ulong pSequenceNumber); // A remote task may be unknown to this machine (this information is sometimes required as the remote task may use memory which is partially owned on this host)
     
 	private:
 		pmTaskManager();
@@ -85,10 +89,12 @@ class pmTaskManager : public pmBase
 
 		static localTasksSetType& GetLocalTasks();		/* Tasks that originated on this machine */
 		static remoteTasksSetType& GetRemoteTasks();	/* Tasks that originated on remote machines */
+        static finishedTasksSetType& GetFinishedRemoteTasks();
         static enqueuedRemoteSubtasksMapType& GetEnqueuedRemoteSubtasksMap();
-
+    
 		static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetLocalTaskResourceLock();
-		static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetRemoteTaskResourceLock();
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetRemoteTaskResourceLock();
+        static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetFinishedRemoteTasksResourceLock();
 
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mTaskFinishSignalWait;
 };

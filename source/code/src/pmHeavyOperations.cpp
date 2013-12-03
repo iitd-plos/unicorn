@@ -171,7 +171,7 @@ void pmHeavyOperationsThreadPool::SubmitToThreadPool(const std::shared_ptr<heavy
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     mThreadVector[mCurrentThread]->SwitchThread(pEvent, pPriority);
-    
+
     ++mCurrentThread;
     if(mCurrentThread == mThreadVector.size())
         mCurrentThread = 0;
@@ -249,8 +249,17 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.taskOriginatingHost);
                 lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lEventDetails.taskSequenceNumber);
                 
-//                if(lOriginatingHost == PM_LOCAL_MACHINE && !lRequestingTask)
-//                    return;
+                // Turn down all requests for tasks that have already finished
+                if(lOriginatingHost == PM_LOCAL_MACHINE)
+                {
+                    if(!lRequestingTask)
+                        return;
+                }
+                else
+                {
+                    if(pmTaskManager::GetTaskManager()->IsRemoteTaskFinished(*lOriginatingHost, lEventDetails.taskSequenceNumber))
+                        return;
+                }
             }
             
             // Check if the memory is residing locally or forward the request to the owner machine

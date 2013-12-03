@@ -32,10 +32,12 @@ namespace pm
 
 STATIC_ACCESSOR(pmTaskManager::localTasksSetType, pmTaskManager, GetLocalTasks)
 STATIC_ACCESSOR(pmTaskManager::remoteTasksSetType, pmTaskManager, GetRemoteTasks)
+STATIC_ACCESSOR(pmTaskManager::finishedTasksSetType, pmTaskManager, GetFinishedRemoteTasks)
 STATIC_ACCESSOR(pmTaskManager::enqueuedRemoteSubtasksMapType, pmTaskManager, GetEnqueuedRemoteSubtasksMap)
 
 STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmTaskManager::mLocalTaskResourceLock"), pmTaskManager, GetLocalTaskResourceLock)
 STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmTaskManager::mRemoteTaskResourceLock"), pmTaskManager, GetRemoteTaskResourceLock)
+STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmTaskManager::mFinishedRemoteTasksResourceLock"), pmTaskManager, GetFinishedRemoteTasksResourceLock)
 
 
 pmTaskManager::pmTaskManager()
@@ -97,7 +99,7 @@ void pmTaskManager::SubmitTask(pmRemoteTask* pRemoteTask)
     ScheduleEnqueuedRemoteSubtasksForExecution(pRemoteTask);
 }
 
-// Do not derefernce pLocalTask in this method. It is already deleted from memory.
+// Do not dereference pLocalTask in this method. It is already deleted from memory.
 void pmTaskManager::DeleteTask(pmLocalTask* pLocalTask)
 {
     FINALIZE_RESOURCE(dResourceLock, GetLocalTaskResourceLock().Lock(), GetLocalTaskResourceLock().Unlock());
@@ -110,7 +112,7 @@ void pmTaskManager::DeleteTask(pmLocalTask* pLocalTask)
     mTaskFinishSignalWait.Signal();
 }
 
-// Do not derefernce pRemoteTask in this method. It is already deleted from memory.
+// Do not dereference pRemoteTask in this method. It is already deleted from memory.
 void pmTaskManager::DeleteTask(pmRemoteTask* pRemoteTask)
 {
     FINALIZE_RESOURCE(dResourceLock, GetRemoteTaskResourceLock().Lock(), GetRemoteTaskResourceLock().Unlock());
@@ -330,6 +332,23 @@ pmRemoteTask* pmTaskManager::FindRemoteTask_Internal(const pmMachine* pOriginati
 	}
 
     return NULL;
+}
+    
+void pmTaskManager::RegisterTaskFinish(uint pOriginatingHost, ulong pSequenceNumber)
+{
+    if(pOriginatingHost == (uint)(*PM_LOCAL_MACHINE))
+        return;
+    
+    FINALIZE_RESOURCE(dResourceLock, GetFinishedRemoteTasksResourceLock().Lock(), GetFinishedRemoteTasksResourceLock().Unlock());
+    
+    GetFinishedRemoteTasks().emplace(pOriginatingHost, pSequenceNumber);
+}
+    
+bool pmTaskManager::IsRemoteTaskFinished(uint pOriginatingHost, ulong pSequenceNumber)
+{
+    FINALIZE_RESOURCE(dResourceLock, GetFinishedRemoteTasksResourceLock().Lock(), GetFinishedRemoteTasksResourceLock().Unlock());
+
+    return (GetFinishedRemoteTasks().find(std::make_pair(pOriginatingHost, pSequenceNumber)) != GetFinishedRemoteTasks().end());
 }
 
 } // end namespace pm

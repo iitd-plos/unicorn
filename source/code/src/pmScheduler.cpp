@@ -634,6 +634,8 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             lTask->MarkAllStubsScannedForShadowMemCommitMessages();
 
             lTask->MarkSubtaskExecutionFinished();
+            pmTaskManager::GetTaskManager()->RegisterTaskFinish(*lTask->GetOriginatingHost(), lTask->GetSequenceNumber());
+
             ClearPendingTaskCommands(lTask);
             
             if(lTask->IsMultiAssignEnabled())
