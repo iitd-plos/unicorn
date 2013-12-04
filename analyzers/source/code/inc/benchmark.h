@@ -307,6 +307,7 @@ private:
     void BuildInnerTaskVector();
     
     void ExecuteShellCommand(const std::string& pCmd, const std::string& pDisplayName, const std::string& pOutputFile);
+    void RecordFailure(const std::string& pCmd);
     int RunCommand(const std::string& pCmd, const std::string& pDisplayName);
     bool CheckIfException(const std::string& pFilePath);
     const std::string& GetTempOutputFileName();
