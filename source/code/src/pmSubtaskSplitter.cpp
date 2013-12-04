@@ -226,11 +226,11 @@ void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExe
             
         lIter->assignedStubs[pSplitId].second = true;
         
+        if(pPrematureTermination)
+            lIter->reassigned = true;
+
         if(lIter->pendingCompletions == 0)
         {
-            if(pPrematureTermination)
-                lIter->reassigned = true;
-            
             if(!lIter->reassigned)
             {
                 lSplitRecord = *lIter;
@@ -315,7 +315,7 @@ void pmSplitGroup::FreezeDummyEvents()
 bool pmSplitGroup::Negotiate(ulong pSubtaskId)
 {
     bool lRetVal = false;
-    std::vector<std::pair<pmExecutionStub*, bool> > lStubVector;
+    std::vector<std::pair<pmExecutionStub*, bool>> lStubVector;
 
     // Auto lock/unlock scope
     {
@@ -328,7 +328,7 @@ bool pmSplitGroup::Negotiate(ulong pSubtaskId)
                 break;
         }
         
-        if(lIter != lEndIter)
+        if(lIter != lEndIter && !lIter->reassigned)
         {
             lStubVector = lIter->assignedStubs;
             lIter->reassigned = true;
