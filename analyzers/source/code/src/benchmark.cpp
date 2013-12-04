@@ -61,10 +61,10 @@
 #define SINGLE_GPU_FILE_NAME "singleGpu"
 
 #define SAMPLE_COUNT 3
-#define TIMEOUT_IN_SECS 600
-#define NON_PMLIB_TASK_TIMEOUT_FACTOR 10
+#define TIMEOUT_IN_SECS 1200
+#define NON_PMLIB_TASK_TIMEOUT_FACTOR 2
 
-#define RE_EXECUTE_FAILURES
+//#define RE_EXECUTE_FAILURES
 #define GENERATE_ESSENTIALS_ONLY
 
 Benchmark::keyValuePairs mGlobalConfiguration;
@@ -2252,6 +2252,10 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     }
 }
 
+void Benchmark::RecordFailure(const std::string& pCmd)
+{
+}
+
 int Benchmark::RunCommand(const std::string& pCmd, const std::string& pDisplayName)
 {
     std::cout << "      " << pDisplayName << "..." << std::endl;
@@ -2337,6 +2341,10 @@ void Benchmark::ExecuteShellCommand(const std::string& pCmd, const std::string& 
         std::stringstream lKillStream;
         lKillStream << "ps -ef | grep '" << mExecPath << "' | awk '{print $2}' | xargs -n1 kill -9 ";
         system(lKillStream.str().c_str());
+        
+        std::stringstream lCoreStream;
+        lCoreStream << "ls core.*";
+        system(lCoreStream.str().c_str()); // Give time to write core file
     }
 
     while(1)
