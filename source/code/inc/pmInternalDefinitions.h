@@ -100,6 +100,9 @@ const unsigned int SCRATCH_CHUNK_SIZE_MULTIPLIER_PER_GB = (32 * 1024 * 1024); //
 const unsigned int MIN_UNALLOCATED_CUDA_MEM_SIZE = (4 * 1024 * 1024);  // in bytes
 #endif
 
+const double STEAL_WAIT_FACTOR = 1.2; // If local stub's exec rate is zero, do not allow steal till it has executed the subtask for 20% more time than requestor
+const double MA_WAIT_FACTOR = 1.2;  // If local stub's exec rate is zero, do not allow multi-assign till it has executed the subtask for 20% more time than requestor
+
 #define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
 
 #define SLOW_START_SCHEDULING_INITIAL_SUBTASK_COUNT 1	 // must be a power of 2

@@ -313,6 +313,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
             pmTask* task;
             ulong startSubtaskId;
             ulong endSubtaskId;
+            ulong currentSubtaskId;
             ulong parentRangeStartSubtask;
             bool originalAllottee;
             double startTime;
@@ -345,7 +346,9 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
                 pmExecutionStub* mStub;
         } currentSubtaskRangeTerminus;
     
-		void ProcessEvent(execStub::stubEvent& pEvent);
+        ulong GetStealCount(pmTask* pTask, ulong pAvailableSubtasks, double pLocalExecutionRate, double pRequestingDeviceExecutionRate);
+    
+        void ProcessEvent(execStub::stubEvent& pEvent);
         virtual void Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pSplitInfo = NULL) = 0;
 
     #ifdef DUMP_EVENT_TIMELINE

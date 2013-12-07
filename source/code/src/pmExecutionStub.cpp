@@ -359,18 +359,13 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
         
         if(pRange.task->GetSchedulingModel() == scheduler::PULL)
         {
-        #ifdef _DEBUG
-            if(pRange.startSubtask != pRange.endSubtask && dynamic_cast<pmStubCPU*>(this))
-                PMTHROW(pmFatalErrorException());
-        #endif
+            EXCEPTION_ASSERT(pRange.startSubtask == pRange.endSubtask);
         
             FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
             
             if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pRange.task)
             {
-                THROW_IF_PARTIAL_RANGE_OVERLAP(mCurrentSubtaskRangeStats->startSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId, pRange.startSubtask, pRange.endSubtask);
-                
-                if(mCurrentSubtaskRangeStats->startSubtaskId == pRange.startSubtask && mCurrentSubtaskRangeStats->endSubtaskId == pRange.endSubtask && !mCurrentSubtaskRangeStats->reassigned)
+                if(mCurrentSubtaskRangeStats->endSubtaskId == pRange.endSubtask && !mCurrentSubtaskRangeStats->reassigned)
                 {
                     DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->originalAllottee);
 
@@ -398,22 +393,20 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
                     mCurrentSubtaskRangeStats->reassigned = true;
                     CancelCurrentlyExecutingSubtaskRange(false);
                             
-                    if(mCurrentSubtaskRangeStats->parentRangeStartSubtask != mCurrentSubtaskRangeStats->startSubtaskId)
+                    if(mCurrentSubtaskRangeStats->parentRangeStartSubtask != mCurrentSubtaskRangeStats->endSubtaskId)
                     {
-                        pmSubtaskRange lCompletedRange(pRange.task, NULL, mCurrentSubtaskRangeStats->parentRangeStartSubtask, mCurrentSubtaskRangeStats->startSubtaskId - 1);
+                        pmSubtaskRange lCompletedRange(pRange.task, NULL, mCurrentSubtaskRangeStats->parentRangeStartSubtask, mCurrentSubtaskRangeStats->endSubtaskId - 1);
 
                         PostHandleRangeExecutionCompletion(lCompletedRange, pmSuccess);
                     }
                 
                     pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(pRange.originalAllottee, pRange);
-                    std::vector<const pmProcessingElement*>::iterator lBegin = lSecondaryAllottees.begin();
-                    std::vector<const pmProcessingElement*>::iterator lEnd = lSecondaryAllottees.end();
-                
-                    for(; lBegin < lEnd; ++lBegin)
+                    
+                    for_each(lSecondaryAllottees, [&] (const pmProcessingElement* pElement)
                     {
-                        if(*lBegin != pRequestingDevice)
-                            pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(*lBegin, pRange);
-                    }
+                        if(pElement != pRequestingDevice)
+                            pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(pElement, pRange);
+                    });
                 }
             }
         }
@@ -534,12 +527,51 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
     }
 #endif
 }
+
+// This method must be called with mCurrentSubtaskRangeLock acquired
+ulong pmExecutionStub::GetStealCount(pmTask* pTask, ulong pAvailableSubtasks, double pLocalExecutionRate, double pRequestingDeviceExecutionRate)
+{
+    ulong lStealCount = 0;
+
+    if(pAvailableSubtasks)
+    {
+        double lOverheadTime = 0;	// Add network and other overheads here
+        double lTotalExecRate = pLocalExecutionRate + pRequestingDeviceExecutionRate;
+    
+        if(pLocalExecutionRate == (double)0.0)
+        {
+            if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
+            {
+                double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
+                if(lElapsedTime < pRequestingDeviceExecutionRate * STEAL_WAIT_FACTOR)
+                    lStealCount = 1;
+                else
+                    lStealCount = pAvailableSubtasks;
+            }
+            else
+            {
+                lStealCount = pAvailableSubtasks;
+            }
+        }
+        else
+        {
+            double lTotalExecutionTimeRequired = pAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
+            double lLocalExecutionTimeForAllSubtasks = pAvailableSubtasks / pLocalExecutionRate;	// if all subtasks are executed locally, how much time it will take
+            double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired + lOverheadTime;
+            
+            if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
+            {
+                double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
+                lStealCount = (ulong)(lTimeDiff * pLocalExecutionRate);
+            }
+        }
+    }
+    
+    return lStealCount;
+}
     
 void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate)
 {
-    const double lWaitFactor = 1.2;
-    const double lSecondWaitFactor = 1.4;
-
     bool lStealSuccess = false;
     ushort lPriority = pTask->GetPriority();
     const pmProcessingElement* lLocalDevice = GetProcessingElement();
@@ -555,44 +587,9 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
         subtaskExecEvent& lExecEvent = static_cast<subtaskExecEvent&>(*lTaskEvent.get());
         if(!pTask->IsMultiAssignEnabled() || lExecEvent.range.originalAllottee == NULL)
         {
-            ulong lStealCount = 0;
             ulong lAvailableSubtasks = ((lExecEvent.rangeExecutedOnce) ? (lExecEvent.range.endSubtask - lExecEvent.lastExecutedSubtaskId) : (lExecEvent.range.endSubtask - lExecEvent.range.startSubtask + 1));
 
-            if(lAvailableSubtasks)
-            {
-                double lOverheadTime = 0;	// Add network and other overheads here
-                double lTotalExecRate = lLocalRate + pRequestingDeviceExecutionRate;
-            
-                if(lLocalRate == (double)0.0)
-                {
-                    if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
-                    {
-                        double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
-                        if(lElapsedTime < pRequestingDeviceExecutionRate * lWaitFactor)
-                            lStealCount = 0;
-                        else if(lElapsedTime < pRequestingDeviceExecutionRate * lSecondWaitFactor)
-                            lStealCount = 1;
-                        else
-                            lStealCount = lAvailableSubtasks;
-                    }
-                    else
-                    {
-                        lStealCount = lAvailableSubtasks;
-                    }
-                }
-                else
-                {
-                    double lTotalExecutionTimeRequired = lAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
-                    double lLocalExecutionTimeForAllSubtasks = lAvailableSubtasks / lLocalRate;	// if all subtasks are executed locally, how much time it will take
-                    double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired + lOverheadTime;
-                    
-                    if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
-                    {
-                        double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
-                        lStealCount = (ulong)(lTimeDiff * lLocalRate);
-                    }
-                }
-            }
+            ulong lStealCount = GetStealCount(pTask, lAvailableSubtasks, lLocalRate, pRequestingDeviceExecutionRate);
             
             if(lStealCount)
             {                        
@@ -666,49 +663,57 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 if((lAllotteeIter == lSecondaryAllotteeMap.end()) || (lAllotteeIter->second.size() < MAX_SUBTASK_MULTI_ASSIGN_COUNT - 1))
                 {
                     ulong lMultiAssignSubtaskCount = mCurrentSubtaskRangeStats->endSubtaskId - mCurrentSubtaskRangeStats->startSubtaskId + 1;
+                    ulong lPendingExecutions = ((lMultiAssignSubtaskCount == 1) ? 0 : (mCurrentSubtaskRangeStats->endSubtaskId - mCurrentSubtaskRangeStats->currentSubtaskId));
 
-                    bool lLocalRateZero = (lLocalRate == (double)0.0);
-                    double lTransferOverheadTime = 0;   // add network and other overheads here
-                    double lExpectedRemoteTimeToExecute = (lMultiAssignSubtaskCount/pRequestingDeviceExecutionRate);
-                    double lExpectedLocalTimeToFinish = (lLocalRateZero ? 0.0 : ((lMultiAssignSubtaskCount/lLocalRate) - (pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime)));
-                
-                    bool lShouldMultiAssign = false;
-                    if(lLocalRateZero)
+                    if(lPendingExecutions)
                     {
-                        double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
-                        if(lElapsedTime >= pRequestingDeviceExecutionRate * lWaitFactor)
-                            lShouldMultiAssign = true;
+                        ulong lStealCount = GetStealCount(pTask, lPendingExecutions, lLocalRate, pRequestingDeviceExecutionRate);
+                        
+                        if(lStealCount)
+                        {
+                            pmSubtaskRange lStolenRange(pTask, NULL, (mCurrentSubtaskRangeStats->endSubtaskId - lStealCount) + 1, mCurrentSubtaskRangeStats->endSubtaskId);
+                        
+                            mCurrentSubtaskRangeStats->endSubtaskId -= lStealCount;
+
+                            lStealSuccess = true;
+                            pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
+                        }
                     }
                     else
                     {
-                         if(lExpectedRemoteTimeToExecute + lTransferOverheadTime < lExpectedLocalTimeToFinish)
-                             lShouldMultiAssign = true;
-                    }
-                        
-                    if(lShouldMultiAssign)
-                    {
-                    #ifdef SUPPORT_SPLIT_SUBTASKS
-                        if(mCurrentSubtaskRangeStats->splitData.valid)
+                        bool lLocalRateZero = (lLocalRate == (double)0.0);
+                        double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
+                        double lTransferOverheadTime = 0;   // add network and other overheads here
+                        double lExpectedRemoteTimeToExecute = (lMultiAssignSubtaskCount/pRequestingDeviceExecutionRate);
+                        double lExpectedLocalTimeToFinish = (lLocalRateZero ? 0.0 : ((lMultiAssignSubtaskCount/lLocalRate) - lElapsedTime));
+                    
+                        bool lShouldMultiAssign = (lLocalRateZero ? (lElapsedTime >= pRequestingDeviceExecutionRate * MA_WAIT_FACTOR) : (lExpectedRemoteTimeToExecute + lTransferOverheadTime < lExpectedLocalTimeToFinish));
+                            
+                        if(lShouldMultiAssign)
                         {
-                            lLocalDevice = lSecondaryAllotteeMapStub->GetProcessingElement();
+                        #ifdef SUPPORT_SPLIT_SUBTASKS
+                            if(mCurrentSubtaskRangeStats->splitData.valid)
+                            {
+                                lLocalDevice = lSecondaryAllotteeMapStub->GetProcessingElement();
 
-                            if(!lSecondaryAllotteeMapStub->UpdateSecondaryAllotteeMapInternal(lPair, pRequestingDevice))
-                                return;
+                                if(!lSecondaryAllotteeMapStub->UpdateSecondaryAllotteeMapInternal(lPair, pRequestingDevice))
+                                    return;
+                            }
+                            else
+                        #endif
+                            {
+                                lSecondaryAllotteeMap[lPair].push_back(pRequestingDevice);
+                            }
+
+                            pmSubtaskRange lMultiAssignRange(pTask, lLocalDevice, mCurrentSubtaskRangeStats->endSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId);
+
+                        #ifdef TRACK_MULTI_ASSIGN
+                            std::cout << "Multiassign of subtask range [" << mCurrentSubtaskRangeStats->endSubtaskId << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "] from range [" << mCurrentSubtaskRangeStats->parentRangeStartSubtask << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "+] - Device " << pRequestingDevice->GetGlobalDeviceIndex() << ", Original Allottee - Device " << lLocalDevice->GetGlobalDeviceIndex() << ", Secondary allottment count - " << lSecondaryAllotteeMap[lPair].size() << std::endl;
+                        #endif
+
+                            lStealSuccess = true;
+                            pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lMultiAssignRange);
                         }
-                        else
-                    #endif
-                        {
-                            lSecondaryAllotteeMap[lPair].push_back(pRequestingDevice);
-                        }
-
-                        pmSubtaskRange lStolenRange(pTask, lLocalDevice, mCurrentSubtaskRangeStats->startSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId);
-
-                    #ifdef TRACK_MULTI_ASSIGN
-                        std::cout << "Multiassign of subtask range [" << mCurrentSubtaskRangeStats->startSubtaskId << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "] from range [" << mCurrentSubtaskRangeStats->parentRangeStartSubtask << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "+] - Device " << pRequestingDevice->GetGlobalDeviceIndex() << ", Original Allottee - Device " << lLocalDevice->GetGlobalDeviceIndex() << ", Secondary allottment count - " << lSecondaryAllotteeMap[lPair].size() << std::endl;
-                    #endif
-
-                        lStealSuccess = true;
-                        pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
                     }
                 }
             }
@@ -1324,7 +1329,7 @@ void pmExecutionStub::DeferShadowMemCommit(pmTask* pTask, ulong pSubtaskId, pmSp
 void pmExecutionStub::CancelCurrentlyExecutingSubtaskRange(bool pTaskListeningOnCancellation)
 {
     DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats);
-    
+
     if(!mCurrentSubtaskRangeStats->taskListeningOnCancellation && pTaskListeningOnCancellation)
         mCurrentSubtaskRangeStats->task->RecordStubWillSendCancellationMessage();
 
@@ -1498,13 +1503,30 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         
         lCommonTimer.Stop();
 
-        ulong lCommonTimePerSubtask = (lCommonTimer.GetElapsedTimeInSecs() / (lEndSubtask - lStartSubtask + 1));
+        ulong lSubtaskCount = (lEndSubtask - lStartSubtask + 1);
+        ulong lCommonTimePerSubtask = (lCommonTimer.GetElapsedTimeInSecs() / lSubtaskCount);
         
         std::vector<TIMER_IMPLEMENTATION_CLASS> lSubtaskTimerVector;
-        lSubtaskTimerVector.resize(lEndSubtask - lStartSubtask + 1);
+        lSubtaskTimerVector.resize(lSubtaskCount);
         
         for(ulong lSubtaskId = lStartSubtask; lSubtaskId <= lEndSubtask; ++lSubtaskId)
         {
+            // Auto lock/unlock scope
+            {
+                FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
+
+                if(mCurrentSubtaskRangeStats->endSubtaskId != lEndSubtask)  // A steal can happen from the end
+                {
+                    DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->endSubtaskId >= lSubtaskId - 1);
+                    lEndSubtask = mCurrentSubtaskRangeStats->endSubtaskId;
+                    
+                    if(lEndSubtask < lSubtaskId)
+                        break;
+                }
+                
+                mCurrentSubtaskRangeStats->currentSubtaskId = lSubtaskId;
+            }
+            
             TIMER_IMPLEMENTATION_CLASS& lTimer = lSubtaskTimerVector[lSubtaskId - lStartSubtask];
             lTimer.Start();
             
@@ -1692,6 +1714,7 @@ pmExecutionStub::currentSubtaskRangeStats::currentSubtaskRangeStats(pmTask* pTas
     : task(pTask)
     , startSubtaskId(pStartSubtaskId)
     , endSubtaskId(pEndSubtaskId)
+    , currentSubtaskId(std::numeric_limits<ulong>::infinity())
     , parentRangeStartSubtask(pParentRangeStartSubtask)
     , originalAllottee(pOriginalAllottee)
     , startTime(pStartTime)
@@ -2770,39 +2793,41 @@ void pmStubCUDA::WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pRangeStar
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     CopyDataFromPinnedBuffers(pTask, pSubtaskId, pSplitInfo, pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo));
 #endif
-
-    uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
-    
-    std::vector<pmCudaSubtaskMemoryStruct>& lCudaSubtaskMemoryVector = mSubtaskPointersMap[pSubtaskId];
-    
-#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    filtered_for_each(lCudaSubtaskMemoryVector, [] (pmCudaSubtaskMemoryStruct& pStruct) {return pStruct.requiresLoad;}, [&] (pmCudaSubtaskMemoryStruct& pStruct)
-    {
-        mPinnedChunkCollection.Deallocate(pStruct.pinnedPtr);
-    });
-#endif
-    
-    // Deallocate scratch buffer from device
-    if(lCudaSubtaskMemoryVector.size() > lAddressSpaceCount)
-        mScratchChunkCollection.Deallocate(lCudaSubtaskMemoryVector.back().cudaPtr);
-
-    pmCudaSubtaskSecondaryBuffersStruct& lSecondaryBuffersStruct = mSubtaskSecondaryBuffersMap[pSubtaskId];
-
-    if(lSecondaryBuffersStruct.reservedMemCudaPtr)   // Reserved mem and status are allocated as a single entity
-        mScratchChunkCollection.Deallocate(lSecondaryBuffersStruct.reservedMemCudaPtr);
-    else
-        mScratchChunkCollection.Deallocate(lSecondaryBuffersStruct.statusCudaPtr);
-
-#ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    mPinnedChunkCollection.Deallocate(lSecondaryBuffersStruct.statusPinnedPtr);
-#endif
 }
 
 void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo)
 {
     DEBUG_EXCEPTION_ASSERT(!pSplitInfo || pStartSubtaskId == pEndSubtaskId);
-
     DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pEndSubtaskId - pStartSubtaskId + 1));
+
+    uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
+    
+    for(ulong subtaskId = pStartSubtaskId; subtaskId < pEndSubtaskId; ++subtaskId)
+    {
+        std::vector<pmCudaSubtaskMemoryStruct>& lCudaSubtaskMemoryVector = mSubtaskPointersMap[subtaskId];
+        
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+        filtered_for_each(lCudaSubtaskMemoryVector, [] (pmCudaSubtaskMemoryStruct& pStruct) {return pStruct.requiresLoad;}, [&] (pmCudaSubtaskMemoryStruct& pStruct)
+        {
+            mPinnedChunkCollection.Deallocate(pStruct.pinnedPtr);
+        });
+    #endif
+        
+        // Deallocate scratch buffer from device
+        if(lCudaSubtaskMemoryVector.size() > lAddressSpaceCount)
+            mScratchChunkCollection.Deallocate(lCudaSubtaskMemoryVector.back().cudaPtr);
+
+        pmCudaSubtaskSecondaryBuffersStruct& lSecondaryBuffersStruct = mSubtaskSecondaryBuffersMap[subtaskId];
+
+        if(lSecondaryBuffersStruct.reservedMemCudaPtr)   // Reserved mem and status are allocated as a single entity
+            mScratchChunkCollection.Deallocate(lSecondaryBuffersStruct.reservedMemCudaPtr);
+        else
+            mScratchChunkCollection.Deallocate(lSecondaryBuffersStruct.statusCudaPtr);
+
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+        mPinnedChunkCollection.Deallocate(lSecondaryBuffersStruct.statusPinnedPtr);
+    #endif
+    }
 
     mSubtaskPointersMap.clear();
     mSubtaskSecondaryBuffersMap.clear();

@@ -339,8 +339,7 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
             lFirstSubtask = lLastSubtask + 1;
         }
         
-        if(lSplittedGroupSubtasks || lUnsplittedGroupSubtasks)
-            PMTHROW(pmFatalErrorException());
+        EXCEPTION_ASSERT(!lSplittedGroupSubtasks && !lUnsplittedGroupSubtasks);
     }
     else
 #endif
@@ -803,14 +802,6 @@ pmSingleAssignmentSchedulingManager::pmSingleAssignmentSchedulingManager(pmLocal
     
 	pmUnfinishedPartitionPtr lUnacknowledgedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(0, lSubtaskCount-1));
 	mUnacknowledgedPartitions.insert(lUnacknowledgedPartitionPtr);
-
-#if 0
-    std::vector<const pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
-	std::vector<const pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
-    
-    for(; lIter != lEndIter; ++lIter)
-        UpdateExecutionProfile((*lIter), 0);
-#endif
 }
 
 pmSingleAssignmentSchedulingManager::~pmSingleAssignmentSchedulingManager()

@@ -281,10 +281,10 @@ std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(const pmP
         std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
 
         std::srand((uint)reinterpret_cast<size_t>(pDevice));
-        lIter = mStealListForDevice.insert(std::make_pair(pDevice, lDevices)).first;
+        lIter = mStealListForDevice.emplace(pDevice, lDevices).first;
         RandomizeDevices(lIter->second);
     }
-    
+
     return lIter->second;
 }
 
