@@ -256,10 +256,6 @@ void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExe
 
 void pmSplitGroup::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
 {
-    FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
-    
-    mStubsWithDummyEvent.erase(pStub);
-    
     bool lPendingSplits = false;
 
     // Auto lock/unlock scope
@@ -269,6 +265,10 @@ void pmSplitGroup::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
         lPendingSplits = !mSplitRecordList.empty();
     }
 
+    FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
+    
+    mStubsWithDummyEvent.erase(pStub);
+    
     if(lPendingSplits && !mDummyEventsFreezed)
         AddDummyEventToStub(pStub);
 }
