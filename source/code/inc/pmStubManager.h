@@ -48,6 +48,10 @@ class pmStubManager : public pmBase
     
         pmExecutionStub* GetCpuStub(uint pIndex) const;
         pmExecutionStub* GetGpuStub(uint pIndex) const;
+    
+    #ifdef SUPPORT_CUDA
+        size_t GetMaxCpuDevicesPerHostForCpuPlusGpuTasks();
+    #endif
 
         void WaitForAllStubsToFinish();
 

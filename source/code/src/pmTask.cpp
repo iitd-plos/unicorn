@@ -693,7 +693,7 @@ bool pmTask::IsLazyReadWrite(const pmAddressSpace* pAddressSpace) const
 
 
 /* class pmLocalTask */
-    pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* DEFAULT_TASK_FLAGS_VAL */)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* DEFAULT_TASK_FLAGS_VAL */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
@@ -881,6 +881,36 @@ pmStatus pmLocalTask::GetStatus()
 	return mTaskCommand->GetStatus();
 }
 
+// This method is stable i.e. it does not change the order of devices in pDevicesVector
+std::vector<const pmProcessingElement*> pmLocalTask::SelectMaxCpuDevicesPerHost(const std::vector<const pmProcessingElement*>& pDevicesVector, size_t pMaxCpuDevicesPerHost)
+{
+    std::vector<const pmProcessingElement*> lVector;
+    
+    std::map<const pmMachine*, size_t> lMap;
+    for_each(pDevicesVector, [this, &lMap, &lVector, pMaxCpuDevicesPerHost] (const pmProcessingElement* pDevice)
+    {
+        if(pDevice->GetType() == CPU)
+        {
+            const pmMachine* lMachine = pDevice->GetMachine();
+            
+            auto lIter = lMap.find(lMachine);
+            if(lIter == lMap.end())
+                lIter = lMap.emplace(lMachine, 0).first;
+
+            if(lIter->second < pMaxCpuDevicesPerHost)
+                lVector.push_back(pDevice);
+            
+            ++lIter->second;
+        }
+        else
+        {
+            lVector.push_back(pDevice);
+        }
+    });
+    
+    return lVector;
+}
+
 const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcessingElements(std::set<const pmMachine*>& pMachines)
 {
 	pmDevicePool* lDevicePool;
@@ -896,6 +926,15 @@ const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcess
 			if(lSubtaskCB->IsCallbackDefinedForDevice(lType))
 				lDevicePool->GetAllDevicesOfTypeInCluster(lType, GetCluster(), lAvailableDevices);
 		}
+
+    #ifdef SUPPORT_CUDA
+        if(lSubtaskCB->IsCallbackDefinedForDevice(CPU) && lSubtaskCB->IsCallbackDefinedForDevice(GPU_CUDA))
+        {
+            size_t lMaxCpuDevicesPerHost = pmStubManager::GetStubManager()->GetMaxCpuDevicesPerHostForCpuPlusGpuTasks();
+            if(lMaxCpuDevicesPerHost < pmStubManager::GetStubManager()->GetProcessingElementsCPU())
+                lAvailableDevices = SelectMaxCpuDevicesPerHost(lAvailableDevices, lMaxCpuDevicesPerHost);
+        }
+    #endif
 	}
 
     const pmDeviceSelectionCB* lDeviceSelectionCB = GetCallbackUnit()->GetDeviceSelectionCB();
@@ -906,7 +945,7 @@ const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcess
     }
     else
     {
-        mDevices = lAvailableDevices;
+        mDevices = std::move(lAvailableDevices);
     }
 
 	mAssignedDeviceCount = (uint)(mDevices.size());

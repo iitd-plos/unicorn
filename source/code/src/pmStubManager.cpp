@@ -88,7 +88,23 @@ pmExecutionStub* pmStubManager::GetGpuStub(uint pIndex) const
 {
     return GetStub((uint)mProcessingElementsCPU + pIndex);
 }
+    
+#ifdef SUPPORT_CUDA
+size_t pmStubManager::GetMaxCpuDevicesPerHostForCpuPlusGpuTasks()
+{
+    const char* lVal = getenv("PMLIB_MAX_CPU_PER_HOST_FOR_CPU_PLUS_GPU_TASKS");
+    if(lVal)
+    {
+        size_t lValue = (size_t)atoi(lVal);
 
+        if(lValue != 0 && lValue < mProcessingElementsCPU)
+            return lValue;
+    }
+    
+    return mProcessingElementsCPU;
+}
+#endif
+    
 void pmStubManager::GetCpuIdInfo(uint pRegA, uint pRegC, uint& pEAX, uint& pEBX, uint& pECX, uint& pEDX)
 {
     asm volatile ("cpuid" : "=a" (pEAX), "=b" (pEBX), "=c" (pECX), "=d" (pEDX) : "a" (pRegA), "c" (pRegC));
@@ -142,6 +158,15 @@ void pmStubManager::CreateExecutionStubs()
 #else
 	mProcessingElementsCPU = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
+    
+    const char* lVal = getenv("PMLIB_MAX_CPU_PER_HOST");
+    if(lVal)
+    {
+        size_t lValue = (size_t)atoi(lVal);
+
+        if(lValue != 0 && lValue < mProcessingElementsCPU)
+            mProcessingElementsCPU = lValue;
+    }
 
 #if defined(MACOS)
     size_t lPhysicalMemory = 0;

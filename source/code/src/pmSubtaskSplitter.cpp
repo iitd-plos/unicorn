@@ -43,7 +43,13 @@ pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
 
     if(mTask->CanSplitCpuSubtasks())
     {
-        mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsCPU() / mSplitGroups;
+        size_t lMaxCpuDevicesPerHost = pmStubManager::GetStubManager()->GetMaxCpuDevicesPerHostForCpuPlusGpuTasks();
+
+        if(lMaxCpuDevicesPerHost < pmStubManager::GetStubManager()->GetProcessingElementsCPU())
+                mSplitFactor = (uint)lMaxCpuDevicesPerHost / mSplitGroups;
+        else
+            mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsCPU() / mSplitGroups;
+
         lDeviceType = CPU;
     }
     else if(mTask->CanSplitGpuSubtasks())
@@ -94,7 +100,12 @@ void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
     {
         case CPU:
         {
+            size_t lMaxCpuDevicesPerHost = pmStubManager::GetStubManager()->GetMaxCpuDevicesPerHostForCpuPlusGpuTasks();
             size_t lCount = lStubManager->GetProcessingElementsCPU();
+            
+            if(lMaxCpuDevicesPerHost < lCount)
+                lCount = lMaxCpuDevicesPerHost;
+            
             for(uint i = 0; i < lCount; ++i)
             {
                 pmExecutionStub* lStub = lStubManager->GetCpuStub(i);

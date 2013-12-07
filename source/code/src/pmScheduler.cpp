@@ -1100,7 +1100,8 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 	   2. Find current load on each of these machines from tasks of current or higher priority - Use latest value in the local device pool
 	   3. Decide upon the initial set of processing elements where execution may start. Heavily loaded processing elements may be omitted initially and may participate later when load moderates
 	   4. Depending upon the scheduling policy (push or pull), execute the task
-	// For now, omit steps 2 and 3 - These are anyway not required for PULL scheduling policy
+	   
+       For now, omit steps 2 and 3 - These are anyway not required for PULL scheduling policy
 	 */
 
     ulong lTriggerTime = pLocalTask->GetTaskTimeOutTriggerTime();

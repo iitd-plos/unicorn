@@ -227,6 +227,7 @@ class pmLocalTask : public pmTask
         virtual ~pmLocalTask();
 
         const std::vector<const pmProcessingElement*>& FindCandidateProcessingElements(std::set<const pmMachine*>& pMachines);
+        std::vector<const pmProcessingElement*> SelectMaxCpuDevicesPerHost(const std::vector<const pmProcessingElement*>& pDevicesVector, size_t pMaxCpuDevicesPerHost);
 
 		void WaitForCompletion();
 		double GetExecutionTimeInSecs();
