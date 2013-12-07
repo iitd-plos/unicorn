@@ -537,6 +537,9 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
     
 void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate)
 {
+    const double lWaitFactor = 1.2;
+    const double lSecondWaitFactor = 1.4;
+
     bool lStealSuccess = false;
     ushort lPriority = pTask->GetPriority();
     const pmProcessingElement* lLocalDevice = GetProcessingElement();
@@ -562,7 +565,20 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
             
                 if(lLocalRate == (double)0.0)
                 {
-                    lStealCount = lAvailableSubtasks;
+                    if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
+                    {
+                        double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
+                        if(lElapsedTime < pRequestingDeviceExecutionRate * lWaitFactor)
+                            lStealCount = 0;
+                        else if(lElapsedTime < pRequestingDeviceExecutionRate * lSecondWaitFactor)
+                            lStealCount = 1;
+                        else
+                            lStealCount = lAvailableSubtasks;
+                    }
+                    else
+                    {
+                        lStealCount = lAvailableSubtasks;
+                    }
                 }
                 else
                 {
@@ -656,7 +672,20 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     double lExpectedRemoteTimeToExecute = (lMultiAssignSubtaskCount/pRequestingDeviceExecutionRate);
                     double lExpectedLocalTimeToFinish = (lLocalRateZero ? 0.0 : ((lMultiAssignSubtaskCount/lLocalRate) - (pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime)));
                 
-                    if(lLocalRateZero || (lExpectedRemoteTimeToExecute + lTransferOverheadTime < lExpectedLocalTimeToFinish))
+                    bool lShouldMultiAssign = false;
+                    if(lLocalRateZero)
+                    {
+                        double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
+                        if(lElapsedTime >= pRequestingDeviceExecutionRate * lWaitFactor)
+                            lShouldMultiAssign = true;
+                    }
+                    else
+                    {
+                         if(lExpectedRemoteTimeToExecute + lTransferOverheadTime < lExpectedLocalTimeToFinish)
+                             lShouldMultiAssign = true;
+                    }
+                        
+                    if(lShouldMultiAssign)
                     {
                     #ifdef SUPPORT_SPLIT_SUBTASKS
                         if(mCurrentSubtaskRangeStats->splitData.valid)
