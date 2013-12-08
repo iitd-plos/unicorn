@@ -2842,6 +2842,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSub
 
     mSubtaskPointersMap.clear();
     mSubtaskSecondaryBuffersMap.clear();
+    mCacheKeys.clear();
     
     mCudaStreams.clear();
 }
