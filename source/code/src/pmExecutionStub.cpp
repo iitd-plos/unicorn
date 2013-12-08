@@ -674,6 +674,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                             pmSubtaskRange lStolenRange(pTask, NULL, (mCurrentSubtaskRangeStats->endSubtaskId - lStealCount) + 1, mCurrentSubtaskRangeStats->endSubtaskId);
                         
                             mCurrentSubtaskRangeStats->endSubtaskId -= lStealCount;
+                            mCurrentSubtaskRangeStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask range finishes
 
                             lStealSuccess = true;
                             pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
@@ -1309,11 +1310,11 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>&
     }
     catch(...)
     {
-        CleanupPostSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, &lSplitInfo);
+        CleanupPostSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, lSubtaskId, &lSplitInfo);
         throw;
     }
 
-    CleanupPostSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, &lSplitInfo);
+    CleanupPostSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, lSubtaskId, &lSplitInfo);
 }
 #endif
 
@@ -1453,6 +1454,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 {
     ulong lStartSubtask = pCurrentRange.startSubtask;
     ulong lEndSubtask = std::numeric_limits<ulong>::infinity();
+    ulong lCleanupEndSubtask = lEndSubtask;
 
     const pmSubtaskRange& lParentRange = pEvent.range;
 
@@ -1469,7 +1471,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         TIMER_IMPLEMENTATION_CLASS lCommonTimer;
         lCommonTimer.Start();
 
-        lEndSubtask = FindCollectivelyExecutableSubtaskRangeEnd(pCurrentRange, NULL, pIsMultiAssign);
+        lCleanupEndSubtask = lEndSubtask = FindCollectivelyExecutableSubtaskRangeEnd(pCurrentRange, NULL, pIsMultiAssign);
 
         EXCEPTION_ASSERT(lEndSubtask >= pCurrentRange.startSubtask && lEndSubtask <= pCurrentRange.endSubtask);
         
@@ -1567,11 +1569,11 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
     }
     catch(...)
     {
-        CleanupPostSubtaskRangeExecution(pCurrentRange.task, lStartSubtask, lEndSubtask, NULL);
+        CleanupPostSubtaskRangeExecution(pCurrentRange.task, lStartSubtask, lEndSubtask, lCleanupEndSubtask, NULL);
         throw;
     }
 
-    CleanupPostSubtaskRangeExecution(pCurrentRange.task, lStartSubtask, lEndSubtask, NULL);
+    CleanupPostSubtaskRangeExecution(pCurrentRange.task, lStartSubtask, lEndSubtask, lCleanupEndSubtask, NULL);
 
     return lEndSubtask;
 }
@@ -1814,7 +1816,7 @@ void pmStubCPU::WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pRangeStart
 {
 }
     
-void pmStubCPU::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo)
+void pmStubCPU::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, ulong pCleanupEndSubtaskId, pmSplitInfo* pSplitInfo)
 {
 }
     
@@ -2133,6 +2135,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
         
         for_each(lPendingCacheInsertions, [&] (decltype(lPendingCacheInsertions)::value_type& pPair)
         {
+            mCacheKeys[pSubtaskId].push_back(*pPair.first.get());
             mCudaCache.Insert(*pPair.first.get(), pPair.second);
             pPreventCachePurgeVector.push_back(pPair.second);   // increase ref count to prevent purging
         });
@@ -2795,14 +2798,22 @@ void pmStubCUDA::WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pRangeStar
 #endif
 }
 
-void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo)
+void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, ulong pCleanupEndSubtaskId, pmSplitInfo* pSplitInfo)
 {
     DEBUG_EXCEPTION_ASSERT(!pSplitInfo || pStartSubtaskId == pEndSubtaskId);
     DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pEndSubtaskId - pStartSubtaskId + 1));
 
+    for(ulong subtaskId = pEndSubtaskId + 1; subtaskId <= pCleanupEndSubtaskId; ++subtaskId)
+    {
+        for_each(mCacheKeys[subtaskId], [&] (const pmCudaCacheKey& pKey)
+        {
+            mCudaCache.RemoveKey(pKey);
+        });
+    }
+
     uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
     
-    for(ulong subtaskId = pStartSubtaskId; subtaskId < pEndSubtaskId; ++subtaskId)
+    for(ulong subtaskId = pStartSubtaskId; subtaskId <= pEndSubtaskId; ++subtaskId)
     {
         std::vector<pmCudaSubtaskMemoryStruct>& lCudaSubtaskMemoryVector = mSubtaskPointersMap[subtaskId];
         

@@ -47,6 +47,20 @@ inline std::shared_ptr<__value>& pmCache<__key, __value, __hasher, __evictor>::G
 }
 
 template<typename __key, typename __value, typename __hasher, typename __evictor>
+inline void pmCache<__key, __value, __hasher, __evictor>::RemoveKey(const __key& pKey)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    typename decltype(mCacheHash)::iterator lIter = mCacheHash.find(pKey);
+    EXCEPTION_ASSERT(lIter != mCacheHash.end());
+    
+    EXCEPTION_ASSERT(lIter->second->second.unique());
+
+    mCacheHash.erase(lIter);
+    mCacheList.erase(lIter->second);
+}
+    
+template<typename __key, typename __value, typename __hasher, typename __evictor>
 inline bool pmCache<__key, __value, __hasher, __evictor>::Purge()
 {
     std::shared_ptr<__value> lValue;

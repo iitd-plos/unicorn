@@ -302,7 +302,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign) = 0;
         virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
         virtual void WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pRangeStartSubtaskId, ulong pSubtaskId, pmSplitInfo* pSplitInfo) = 0;
-        virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
+        virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, ulong pCleanupEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
         virtual void TerminateUserModeExecution() = 0;
 
 	private:
@@ -427,7 +427,7 @@ class pmStubGPU : public pmExecutionStub
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign) = 0;
         virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
         virtual void WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pRangeStartSubtaskId, ulong pSubtaskId, pmSplitInfo* pSplitInfo) = 0;
-        virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
+        virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, ulong pCleanupEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
         virtual void TerminateUserModeExecution() = 0;
 
 	private:
@@ -453,7 +453,7 @@ class pmStubCPU : public pmExecutionStub
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign);
         virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo);
         virtual void WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pRangeStartSubtaskId, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
-        virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo);
+        virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, ulong pCleanupEndSubtaskId, pmSplitInfo* pSplitInfo);
         virtual void TerminateUserModeExecution();
     
 	private:
@@ -501,7 +501,7 @@ class pmStubCUDA : public pmStubGPU
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign);
         virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo);
         virtual void WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pRangeStartSubtaskId, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
-        virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo);
+        virtual void CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, ulong pCleanupEndSubtaskId, pmSplitInfo* pSplitInfo);
         virtual void TerminateUserModeExecution();
 
         void PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo);
@@ -538,6 +538,7 @@ class pmStubCUDA : public pmStubGPU
 
         std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>> mSubtaskPointersMap;  // subtask id versus CUDA and pinned pointers
         std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct> mSubtaskSecondaryBuffersMap;
+        std::map<ulong, std::vector<pmCudaCacheKey>> mCacheKeys;
 
         ulong mStartSubtaskId;
         std::vector<std::shared_ptr<pmCudaStreamAutoPtr>> mCudaStreams;

@@ -45,6 +45,7 @@ public:
 
     void Insert(const __key& pKey, std::shared_ptr<__value>& pValue);
     std::shared_ptr<__value>& Get(const __key& pKey);
+    void RemoveKey(const __key& pKey);
 
     bool Purge();
     
