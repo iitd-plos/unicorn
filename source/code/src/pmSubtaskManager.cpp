@@ -251,6 +251,8 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 
     MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
 
+    // Initially, make partitions of maximum one subtask per split group. In case, split groups finish there one subtask,
+    // they are assigned more subtasks from other partitions as per PUSH scheduling policy
     if(!lDeviceGroups.empty())
     {
         ulong lUnsplittedGroups = lUnsplittedDevices;
@@ -893,16 +895,16 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 	std::vector<const pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
     MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
 
+    // Make partitions of max one subtask per split group
     if(!lDeviceGroups.empty())
     {
         mUseSplits = true;
 
-        std::vector<std::vector<const pmProcessingElement*> >::iterator lIter = lDeviceGroups.begin(), lEndIter = lDeviceGroups.end();
-        for(; lIter != lEndIter; ++lIter)
+        filtered_for_each(lDeviceGroups, [] (const std::vector<const pmProcessingElement*>& pVector) { return (pVector.size() > 1); },
+        [&] (const std::vector<const pmProcessingElement*>& pVector)
         {
-            if((*lIter).size() > 1)
-                mSplitGroupLeaders.insert((*lIter)[0]);
-        }
+            mSplitGroupLeaders.insert(pVector[0]);
+        });
         
         ulong lUnsplittedGroups = lUnsplittedDevices;
         ulong lSplittedGroups = lDeviceGroups.size() - lUnsplittedGroups;
