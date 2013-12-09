@@ -141,6 +141,13 @@ bool pmTask::IsMultiAssignEnabled()
     return (mTaskFlags & TASK_MULTI_ASSIGN_FLAG_VAL);
 }
     
+#ifdef SUPPORT_CUDA
+bool pmTask::IsCudaCacheEnabled()
+{
+    return (mTaskFlags & TASK_HAS_CUDA_CACHE_ENABLED_FLAG_VAL);
+}
+#endif
+    
 bool pmTask::CanForciblyCancelSubtasks()
 {
     return (mTaskFlags & TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL);

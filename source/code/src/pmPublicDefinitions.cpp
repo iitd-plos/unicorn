@@ -472,6 +472,9 @@ pmTaskDetails::pmTaskDetails()
     , overlapComputeCommunication(true)
     , canSplitCpuSubtasks(false)
     , canSplitGpuSubtasks(false)
+#ifdef SUPPORT_CUDA
+    , cudaCacheEnabled(true)
+#endif
 	, cluster(NULL)
 {}
 

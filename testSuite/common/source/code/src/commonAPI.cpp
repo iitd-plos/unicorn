@@ -286,6 +286,17 @@ bool isComputeCommunicationOverlapEnabled()
     return true;
 }
 
+#ifdef BUILD_CUDA
+bool isCudaCacheEnabled()
+{
+    const char* lVal = getenv("PMLIB_DISABLE_CUDA_CACHE");
+    if(lVal && atoi(lVal) != 0)
+        return false;
+
+    return true;
+}
+#endif
+
 double getCurrentTimeInSecs()
 {
 	struct timeval lTimeVal;

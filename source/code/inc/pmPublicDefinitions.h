@@ -400,6 +400,9 @@ namespace pm
         bool overlapComputeCommunication;       /* By default, this is true */
         bool canSplitCpuSubtasks;               /* By default, this is false */
         bool canSplitGpuSubtasks;               /* By default, this is false */
+    #ifdef SUPPORT_CUDA
+        bool cudaCacheEnabled;                  /* By default, this is true */
+    #endif
 		pmClusterHandle cluster;                /* Unused */
 
 		pmTaskDetails();

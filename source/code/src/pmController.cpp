@@ -254,6 +254,11 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
     if(pTaskDetails.canSplitGpuSubtasks)
         lTaskFlags |= TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL;
     
+#ifdef SUPPORT_CUDA
+    if(pTaskDetails.cudaCacheEnabled)
+        lTaskFlags |= TASK_HAS_CUDA_CACHE_ENABLED_FLAG_VAL;
+#endif
+    
     lTaskFlags |= TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL;
 
     std::vector<pmTaskMemory> lTaskMemVector;

@@ -129,6 +129,10 @@ class pmTask : public pmBase
         void FlushMemoryOwnerships();
         bool IsMultiAssignEnabled();
     
+    #ifdef SUPPORT_CUDA
+        bool IsCudaCacheEnabled();
+    #endif
+    
         void MarkRedistributionFinished(uint pOriginalAddressSpaceIndex, pmAddressSpace* pRedistributedAddressSpace = NULL);
 
         bool ShouldOverlapComputeCommunication() const;

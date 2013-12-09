@@ -489,7 +489,6 @@ class pmStubCUDA : public pmStubGPU
 
         void ReserveMemory(size_t pPhysicalMemory, size_t pTotalStubCount);
     
-        pmCudaCacheType& GetCudaCache();
         pmAllocatorCollection<pmCudaMemChunkTraits>* GetCudaChunkCollection();
     
         const std::map<ulong, std::vector<pmCudaSubtaskMemoryStruct>>& GetSubtaskPointersMap() const;

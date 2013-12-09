@@ -70,7 +70,25 @@ bool isMultiAssignEnabled();    /* by default, it's enabled */
 bool isComputeCommunicationOverlapEnabled();    /* by default, it's enabled */
 bool isLazyMemEnabled();    /* by default, it's diabled */
 
+#ifdef BUILD_CUDA
+bool isCudaCacheEnabled();   /* by default, it's enabled */
+#endif
+
 #define CREATE_MEM(memSize, memHandle) SAFE_PM_EXEC( pmCreateMemory(memSize, &memHandle) )
+
+#ifdef BUILD_CUDA
+
+#define CREATE_TASK(totalSubtasks, cbHandle, schedPolicy) \
+	pmTaskHandle lTaskHandle = NULL; \
+    pmTaskDetails lTaskDetails; \
+	lTaskDetails.callbackHandle = cbHandle; \
+	lTaskDetails.subtaskCount = totalSubtasks; \
+	lTaskDetails.policy = schedPolicy; \
+	lTaskDetails.multiAssignEnabled = isMultiAssignEnabled(); \
+    lTaskDetails.overlapComputeCommunication = isComputeCommunicationOverlapEnabled(); \
+    lTaskDetails.cudaCacheEnabled = isCudaCacheEnabled();
+
+#else
 
 #define CREATE_TASK(totalSubtasks, cbHandle, schedPolicy) \
 	pmTaskHandle lTaskHandle = NULL; \
@@ -80,6 +98,8 @@ bool isLazyMemEnabled();    /* by default, it's diabled */
 	lTaskDetails.policy = schedPolicy; \
 	lTaskDetails.multiAssignEnabled = isMultiAssignEnabled(); \
     lTaskDetails.overlapComputeCommunication = isComputeCommunicationOverlapEnabled();
+
+#endif
 
 #define CREATE_SIMPLE_TASK(inputMemSize, outputMemSize, totalSubtasks, cbHandle, schedPolicy) \
     CREATE_TASK(totalSubtasks, cbHandle, schedPolicy) \

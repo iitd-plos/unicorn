@@ -127,6 +127,11 @@ remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTask* pLocalTask)
     if(pLocalTask->CanSplitGpuSubtasks())
         flags |= TASK_CAN_SPLIT_GPU_SUBTASKS_FLAG_VAL;
 
+#ifdef SUPPORT_CUDA
+    if(pLocalTask->IsCudaCacheEnabled())
+        flags |= TASK_HAS_CUDA_CACHE_ENABLED_FLAG_VAL;
+#endif
+
 	strncpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN-1);
 	callbackKey[MAX_CB_KEY_LEN-1] = '\0';
 }
