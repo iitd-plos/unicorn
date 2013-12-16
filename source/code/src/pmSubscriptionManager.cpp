@@ -295,11 +295,8 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
     
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-    if(lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat == SUBSCRIPTION_FORMAT_MAX)
-        lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat = SUBSCRIPTION_CONTIGUOUS;
-    else
-        lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat = SUBSCRIPTION_GENERAL;
-    
+    lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionInfoVector.emplace_back(pSubscriptionInfo);
+
     if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
     {
         RegisterSubscriptionInternal(lSubtask, pMemIndex, READ_SUBSCRIPTION, pSubscriptionInfo);
@@ -318,13 +315,7 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
 
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-    if(lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat == SUBSCRIPTION_FORMAT_MAX)
-        lSubtask.mAddressSpacesData[pMemIndex].mScatteredSubscriptionInfo = pScatteredSubscriptionInfo;
-        
-    if(lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat == SUBSCRIPTION_FORMAT_MAX)
-        lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat = SUBSCRIPTION_SCATTERED;
-    else
-        lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat = SUBSCRIPTION_GENERAL;
+    lSubtask.mAddressSpacesData[pMemIndex].mScatteredSubscriptionInfoVector.emplace_back(pScatteredSubscriptionInfo);
 
     if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
     {
@@ -414,16 +405,28 @@ pmSubscriptionFormat pmSubscriptionManager::GetSubscriptionFormat(pmExecutionStu
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     
-    return lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionFormat;
+    pmSubtaskAddressSpaceData& lData = lSubtask.mAddressSpacesData[pMemIndex];
+    
+    size_t lScatteredSize = lData.mScatteredSubscriptionInfoVector.size();
+    size_t lNonScatteredSize = lData.mSubscriptionInfoVector.size();
+    
+    if(lScatteredSize && lNonScatteredSize)
+        return SUBSCRIPTION_GENERAL;
+    else if(lNonScatteredSize == 1)
+        return SUBSCRIPTION_CONTIGUOUS;
+    else if(lScatteredSize)
+        return SUBSCRIPTION_SCATTERED;
+
+    return SUBSCRIPTION_GENERAL;
 }
 
-const pmScatteredSubscriptionInfo& pmSubscriptionManager::GetScatteredSubscriptionInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
+const std::vector<pmScatteredSubscriptionInfo>& pmSubscriptionManager::GetScatteredSubscriptionInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
 {
     DEBUG_EXCEPTION_ASSERT(GetSubscriptionFormat(pStub, pSubtaskId, pSplitInfo, pMemIndex) == SUBSCRIPTION_SCATTERED);
 
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-    return lSubtask.mAddressSpacesData[pMemIndex].mScatteredSubscriptionInfo;
+    return lSubtask.mAddressSpacesData[pMemIndex].mScatteredSubscriptionInfoVector;
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
@@ -1189,32 +1192,38 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
 
     std::vector<pmCommunicatorCommandPtr> lCommandVector;
 
-    std::vector<pmAddressSpace*>& lAddressSpaces = mTask->GetAddressSpaces();
-    std::vector<pmAddressSpace*>::const_iterator lAddressSpaceIter = lAddressSpaces.begin();
-    
-    std::vector<pmSubtaskAddressSpaceData>::iterator lAddressSpaceDataIter = lSubtask.mAddressSpacesData.begin(), lAddressSpaceDataEndIter = lSubtask.mAddressSpacesData.end();
-    for(; lAddressSpaceDataIter != lAddressSpaceDataEndIter; ++lAddressSpaceDataIter, ++lAddressSpaceIter)
+    multi_for_each(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
     {
-        pmAddressSpace* lAddressSpace = (*lAddressSpaceIter);
-        if(!mTask->IsLazy(lAddressSpace) || pDeviceType != CPU)
+        if(!mTask->IsLazy(pAddressSpace) || pDeviceType != CPU)
         {
-            pmSubtaskAddressSpaceData& lAddressSpaceData = (*lAddressSpaceDataIter);
-            subscriptionRecordType& lMap = lAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords;
-            
-            subscriptionRecordType::iterator lIter = lMap.begin(), lEndIter = lMap.end();
-            for(; lIter != lEndIter; ++lIter)
+        #if 0
+            for_each(pAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords, [&] (subscriptionRecordType::value_type& pPair)
             {
-                size_t lOffset = lIter->first;
-                size_t lLength = lIter->second.first;
+                size_t lOffset = pPair.first;
+                size_t lLength = pPair.second.first;
 
-                lAddressSpace->GetPageAlignedAddresses(lOffset, lLength);
-                MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(lAddressSpace, lPriority, lOffset, lLength, lIter->second.second.receiveCommandVector);
+                pAddressSpace->GetPageAlignedAddresses(lOffset, lLength);
+                MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(pAddressSpace, lPriority, lOffset, lLength, lCommandVector);
+            });
+        #else
+            // Fetch exact scattered subscriptions (these subscriptions are packed at the sender side before transfer and then unpacked by the receiver)
+            for_each(pAddressSpaceData.mScatteredSubscriptionInfoVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+            {
+                MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchScatteredMemoryRegion(pAddressSpace, lPriority, pScatteredSubscriptionInfo, lCommandVector);
+            });
+            
+            // For non-scattered subscriptions, we fetch entire memory pages (no packing/unpacking happens here)
+            for_each(pAddressSpaceData.mSubscriptionInfoVector, [&] (const pmSubscriptionInfo& pSubscriptionInfo)
+            {
+                size_t lOffset = pSubscriptionInfo.offset;
+                size_t lLength = pSubscriptionInfo.length;
 
-                if(!pPrefetch)
-                    lCommandVector.insert(lCommandVector.end(), lIter->second.second.receiveCommandVector.begin(), lIter->second.second.receiveCommandVector.end());
-            }
+                pAddressSpace->GetPageAlignedAddresses(lOffset, lLength);
+                MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(pAddressSpace, lPriority, lOffset, lLength, lCommandVector);
+            });
+        #endif
         }
-    }
+    });
 
     if(!pPrefetch)
         WaitForSubscriptions(lSubtask, pStub, pDeviceType, lCommandVector);

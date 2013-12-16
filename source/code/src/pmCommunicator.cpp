@@ -328,6 +328,12 @@ memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNu
     mem.reset(static_cast<char*>(pMemPtr), false);
 }
 
+memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, finalize_ptr<char, deleteArrayDeallocator<char>>& pMem, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
+    : receiveStruct(pMemOwnerHost, pGenerationNumber, pOffset, pLength, pStep, pCount, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber)
+    , mem(std::move(pMem))
+{
+}
+
     
 /* struct sendAcknowledgementPacked */
 sendAcknowledgementPacked::sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)

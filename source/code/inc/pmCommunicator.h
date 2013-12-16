@@ -471,14 +471,23 @@ struct ownershipTransferPacked
     
     ownershipTransferPacked(pmAddressSpace* pAddressSpace, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData);
 };
+    
+enum memoryTransferType
+{
+    TRANSFER_SCATTERED,
+    TRANSFER_GENERAL
+};
 
 struct memoryTransferRequest
 {
     memoryIdentifierStruct sourceMemIdentifier;
     memoryIdentifierStruct destMemIdentifier;
+    ushort transferType;    // enum memoryTransferType
     ulong receiverOffset;
     ulong offset;
     ulong length;
+    ulong step;             // used for scattered transfer
+    ulong count;            // Used for scattered transfer
     uint destHost;			// Host that will receive the memory (generally same as the requesting host)
     ushort isForwarded;     // Signifies a forwarded memory request. Transfer is made directly from owner host to requesting host.
     ushort isTaskOriginated;    // Tells whether a task has demanded this memory or user has explicitly requested it
@@ -488,15 +497,18 @@ struct memoryTransferRequest
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 11
+        FIELD_COUNT_VALUE = 14
     } fieldCount;
 
     memoryTransferRequest()
     : sourceMemIdentifier()
     , destMemIdentifier()
+    , transferType(TRANSFER_GENERAL)
     , receiverOffset(std::numeric_limits<ulong>::max())
     , offset(std::numeric_limits<ulong>::max())
     , length(std::numeric_limits<ulong>::max())
+    , step(std::numeric_limits<ulong>::max())
+    , count(std::numeric_limits<ulong>::max())
     , destHost(std::numeric_limits<uint>::max())
     , isForwarded(std::numeric_limits<ushort>::max())
     , isTaskOriginated(std::numeric_limits<ushort>::max())
@@ -505,19 +517,24 @@ struct memoryTransferRequest
     , priority(std::numeric_limits<ushort>::max())
     {}
     
-    memoryTransferRequest(const memoryIdentifierStruct& pSourceStruct, const memoryIdentifierStruct& pDestStruct, ulong pReceiverOffset, ulong pOffset, ulong pLength, uint pDestHost, ushort pIsForwarded, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber, ushort pPriority)
+    memoryTransferRequest(const memoryIdentifierStruct& pSourceStruct, const memoryIdentifierStruct& pDestStruct, memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, uint pDestHost, ushort pIsForwarded, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber, ushort pPriority)
     : sourceMemIdentifier(pSourceStruct)
     , destMemIdentifier(pDestStruct)
+    , transferType(pTransferType)
     , receiverOffset(pReceiverOffset)
     , offset(pOffset)
     , length(pLength)
+    , step(pStep)
+    , count(pCount)
     , destHost(pDestHost)
     , isForwarded(pIsForwarded)
     , isTaskOriginated(pIsTaskOriginated)
     , originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
     , priority(pPriority)
-    {}
+    {
+        DEBUG_EXCEPTION_ASSERT(transferType == TRANSFER_GENERAL || (length != 0 && step != 0 && count != 0));
+    }
 };
     
 struct shadowMemTransferStruct
@@ -599,22 +616,28 @@ struct memoryReceiveStruct
 {
     uint memOwnerHost;
     ulong generationNumber;
+    ushort transferType;        // enum memoryTransferType
     ulong offset;
     ulong length;
+    ulong step;
+    ulong count;
     ushort isTaskOriginated;    // Tells whether a task has demanded this memory or user has explicitly requested it
     uint originatingHost;       // Valid only if isTaskOriginated is true
     ulong sequenceNumber;       // Valid only if isTaskOriginated is true; sequence number of local task object (on originating host)            
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 7
+        FIELD_COUNT_VALUE = 10
     } fieldCount;
     
     memoryReceiveStruct()
     : memOwnerHost(std::numeric_limits<uint>::max())
     , generationNumber(0)
+    , transferType(TRANSFER_GENERAL)
     , offset(0)
     , length(0)
+    , step(std::numeric_limits<ulong>::max())
+    , count(std::numeric_limits<ulong>::max())
     , isTaskOriginated(true)
     , originatingHost(std::numeric_limits<uint>::max())
     , sequenceNumber(0)
@@ -623,8 +646,24 @@ struct memoryReceiveStruct
     memoryReceiveStruct(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber)
     : memOwnerHost(pMemOwnerHost)
     , generationNumber(pGenerationNumber)
+    , transferType(TRANSFER_GENERAL)
     , offset(pOffset)
     , length(pLength)
+    , step(std::numeric_limits<ulong>::max())
+    , count(std::numeric_limits<ulong>::max())
+    , isTaskOriginated(pIsTaskOriginated)
+    , originatingHost(pOriginatingHost)
+    , sequenceNumber(pSequenceNumber)
+    {}
+
+    memoryReceiveStruct(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber)
+    : memOwnerHost(pMemOwnerHost)
+    , generationNumber(pGenerationNumber)
+    , transferType(TRANSFER_SCATTERED)
+    , offset(pOffset)
+    , length(pLength)
+    , step(pStep)
+    , count(pCount)
     , isTaskOriginated(pIsTaskOriginated)
     , originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
@@ -634,13 +673,14 @@ struct memoryReceiveStruct
 struct memoryReceivePacked
 {
     memoryReceiveStruct receiveStruct;
-    finalize_ptr<char, deleteArrayDeallocator<char> > mem;
+    finalize_ptr<char, deleteArrayDeallocator<char>> mem;
 
     memoryReceivePacked()
     : receiveStruct()
     {}
     
     memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
+    memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, finalize_ptr<char, deleteArrayDeallocator<char>>& pMem, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
 };
 
 struct hostFinalizationStruct

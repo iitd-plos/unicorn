@@ -40,7 +40,6 @@ namespace subscription
 {
 	struct subscriptionData
 	{
-		std::vector<pmCommunicatorCommandPtr> receiveCommandVector;
 	};
 
     typedef std::map<size_t, std::pair<size_t, subscriptionData> > subscriptionRecordType;
@@ -111,8 +110,8 @@ namespace subscription
 
     struct pmSubtaskAddressSpaceData
     {
-        pmSubscriptionFormat mSubscriptionFormat;
-        pmScatteredSubscriptionInfo mScatteredSubscriptionInfo; // Only valid if mSubscriptionFormat is SUBSCRIPTION_SCATTERED
+        std::vector<pmScatteredSubscriptionInfo> mScatteredSubscriptionInfoVector; // Scattered Subscriptions
+        std::vector<pmSubscriptionInfo> mSubscriptionInfoVector;    // Non Scattered Subscriptions
 
         pmSubtaskSubscriptionData mReadSubscriptionData;
         pmSubtaskSubscriptionData mWriteSubscriptionData;
@@ -129,9 +128,8 @@ namespace subscription
     #endif
         
         pmSubtaskAddressSpaceData()
-        : mSubscriptionFormat(SUBSCRIPTION_FORMAT_MAX)
     #ifdef SUPPORT_LAZY_MEMORY
-        , mWriteOnlyLazyUnprotectedPageCount(0)
+        : mWriteOnlyLazyUnprotectedPageCount(0)
     #endif
         {}
     };
@@ -206,7 +204,7 @@ class pmSubscriptionManager : public pmBase
         void ReserveCudaGlobalMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize);
     
         pmSubscriptionFormat GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
-        const pmScatteredSubscriptionInfo& GetScatteredSubscriptionInfo(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
+        const std::vector<pmScatteredSubscriptionInfo>& GetScatteredSubscriptionInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
 
     #ifdef SUPPORT_LAZY_MEMORY
         void SetWriteOnlyLazyDefaultValue(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, char* pVal, size_t pLength);

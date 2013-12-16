@@ -1565,7 +1565,23 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                         }
 
                         if(!lData->receiveStruct.isTaskOriginated || lRequestingTask)
-                            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lAddressSpace, lData->receiveStruct.offset, lData->receiveStruct.length, lData->mem.get_ptr(), lRequestingTask);
+                        {
+                            pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
+
+                            if(lData->receiveStruct.transferType == TRANSFER_GENERAL)
+                            {
+                                lMemoryManager->CopyReceivedMemory(lAddressSpace, lData->receiveStruct.offset, lData->receiveStruct.length, lData->mem.get_ptr(), lRequestingTask);
+                            }
+                            else    // TRANSFER_SCATTERED
+                            {
+                                DEBUG_EXCEPTION_ASSERT(lData->receiveStruct.transferType == TRANSFER_SCATTERED);
+                                
+                                for(ulong i = 0; i < lData->receiveStruct.count; ++i)
+                                {
+                                    lMemoryManager->CopyReceivedMemory(lAddressSpace, lData->receiveStruct.offset + i * lData->receiveStruct.step, lData->receiveStruct.length, lData->mem.get_ptr() + i * lData->receiveStruct.step, lRequestingTask);
+                                }
+                            }
+                        }
                     }
 
 					break;
@@ -1660,7 +1676,7 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 
 					if(lAddressSpace)
                     {
-                        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, lData->offset, lData->length, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, lData->priority, lData->isTaskOriginated, lData->originatingHost, lData->sequenceNumber);
+                        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, (communicator::memoryTransferType)lData->transferType, lData->offset, lData->length, lData->step, lData->count, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, lData->priority, lData->isTaskOriginated, lData->originatingHost, lData->sequenceNumber);
                     }
 
 					SetupNewMemTransferRequestReception();

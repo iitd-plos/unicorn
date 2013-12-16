@@ -19,7 +19,6 @@
  */
 
 #include "pmHeavyOperations.h"
-#include "pmAddressSpace.h"
 #include "pmDevicePool.h"
 #include "pmHardware.h"
 #include "pmCommunicator.h"
@@ -139,9 +138,9 @@ void pmHeavyOperationsThreadPool::UnpackDataEvent(finalize_ptr<char, deleteArray
     SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new unpackEvent(UNPACK_DATA, std::move(pPackedData), pPackedLength)), pPriority);
 }
     
-void pmHeavyOperationsThreadPool::MemTransferEvent(memoryIdentifierStruct& pSrcMemIdentifier, memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
+void pmHeavyOperationsThreadPool::MemTransferEvent(memoryIdentifierStruct& pSrcMemIdentifier, memoryIdentifierStruct& pDestMemIdentifier, memoryTransferType pTransferType, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
 {
-    SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new memTransferEvent(MEM_TRANSFER, pSrcMemIdentifier, pDestMemIdentifier, pOffset, pLength, pDestMachine, pReceiverOffset, pPriority, pIsForwarded, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber)), pPriority);
+    SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new memTransferEvent(MEM_TRANSFER, pSrcMemIdentifier, pDestMemIdentifier, pTransferType, pOffset, pLength, pStep, pCount, pDestMachine, pReceiverOffset, pPriority, pIsForwarded, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber)), pPriority);
 }
 
 void pmHeavyOperationsThreadPool::CommandCompletionEvent(pmCommandPtr pCommand)
@@ -262,60 +261,10 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 }
             }
             
-            // Check if the memory is residing locally or forward the request to the owner machine
-            pmAddressSpace::pmMemOwnership lOwnerships;
-            lSrcAddressSpace->GetOwners(lEventDetails.offset, lEventDetails.length, lOwnerships);
-            
-            pmAddressSpace::pmMemOwnership::iterator lStartIter = lOwnerships.begin(), lEndIter = lOwnerships.end(), lIter;
-            for(lIter = lStartIter; lIter != lEndIter; ++lIter)
-            {
-                ulong lInternalOffset = lIter->first;
-                ulong lInternalLength = lIter->second.first;
-                pmAddressSpace::vmRangeOwner& lRangeOwner = lIter->second.second;
-                
-                if(lRangeOwner.host == PM_LOCAL_MACHINE)
-                {
-                    pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
-                
-                    EXCEPTION_ASSERT(lOwnerAddressSpace);
-                
-                #ifdef ENABLE_MEM_PROFILING
-                    lSrcAddressSpace->RecordMemTransfer(lInternalLength);
-                #endif
-                
-                    if(lEventDetails.machine == PM_LOCAL_MACHINE)
-                    {
-                        pmAddressSpace* lDestAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.destMemIdentifier.memOwnerHost), lEventDetails.destMemIdentifier.generationNumber);
-                    
-                        EXCEPTION_ASSERT(lDestAddressSpace);
-
-                        if(!lEventDetails.isTaskOriginated || lRequestingTask)
-                            MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestAddressSpace, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), lRequestingTask);
-                    }
-                    else
-                    {
-                        finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber));
-                    
-                        MEM_TRANSFER_DUMP(lSrcAddressSpace, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)))
-
-                        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(lEventDetails.priority, SEND, MEMORY_RECEIVE_TAG, lEventDetails.machine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
-
-                        pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
-                    }
-                }
-                else
-                {
-                    EXCEPTION_ASSERT(!lEventDetails.isForwarded);
-                    
-                    finalize_ptr<memoryTransferRequest> lData(new memoryTransferRequest(memoryIdentifierStruct(lRangeOwner.memIdentifier.memOwnerHost, lRangeOwner.memIdentifier.generationNumber), memoryIdentifierStruct(lEventDetails.destMemIdentifier.memOwnerHost, lEventDetails.destMemIdentifier.generationNumber), lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lRangeOwner.hostOffset, lInternalLength, *lEventDetails.machine, 1, lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber, lEventDetails.priority));
-                    
-                    MEM_FORWARD_DUMP(lSrcAddressSpace, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset + lInternalOffset - lEventDetails.offset, lInternalOffset, lInternalLength, (uint)(*(lEventDetails.machine)), *lRangeOwner.host, lRangeOwner.memIdentifier, lRangeOwner.hostOffset)
-
-                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryTransferRequest>::CreateSharedPtr(MAX_CONTROL_PRIORITY, SEND, MEMORY_TRANSFER_REQUEST_TAG, lRangeOwner.host, MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
-                    
-                    pmCommunicator::GetCommunicator()->Send(lCommand);
-                }
-            }
+            if(lEventDetails.transferType == TRANSFER_GENERAL)
+                ServeGeneralMemoryRequest(lSrcAddressSpace, lRequestingTask, lEventDetails.machine, lEventDetails.offset, lEventDetails.length, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset, lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber, lEventDetails.priority, lEventDetails.isForwarded);
+            else
+                ServeScatteredMemoryRequest(lSrcAddressSpace, lRequestingTask, lEventDetails.machine, lEventDetails.offset, lEventDetails.length, lEventDetails.step, lEventDetails.count, lEventDetails.destMemIdentifier, lEventDetails.receiverOffset, lEventDetails.isTaskOriginated, lEventDetails.taskOriginatingHost, lEventDetails.taskSequenceNumber, lEventDetails.priority, lEventDetails.isForwarded);
 
             break;
         }
@@ -355,6 +304,138 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         default:
             PMTHROW(pmFatalErrorException());
     }
+}
+    
+void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded)
+{
+    DEBUG_EXCEPTION_ASSERT(pEventDetails.transferType == communicator::TRASFER_GENERAL);
+
+    // Check if the memory is residing locally or forward the request to the owner machine
+    pmAddressSpace::pmMemOwnership lOwnerships;
+    pSrcAddressSpace->GetOwners(pOffset, pLength, lOwnerships);
+    
+    for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
+    {
+        ulong lInternalOffset = pPair.first;
+        ulong lInternalLength = pPair.second.first;
+        const pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+        
+        if(lRangeOwner.host == PM_LOCAL_MACHINE)
+        {
+            pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
+        
+            EXCEPTION_ASSERT(lOwnerAddressSpace);
+        
+        #ifdef ENABLE_MEM_PROFILING
+            pSrcAddressSpace->RecordMemTransfer(lInternalLength);
+        #endif
+        
+            if(pRequestingMachine == PM_LOCAL_MACHINE)
+            {
+                pmAddressSpace* lDestAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(pDestMemIdentifier.memOwnerHost), pDestMemIdentifier.generationNumber);
+            
+                EXCEPTION_ASSERT(lDestAddressSpace);
+
+                if(!pIsTaskOriginated || pRequestingTask)
+                    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestAddressSpace, pReceiverOffset + lInternalOffset - pOffset, pLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), pRequestingTask);
+            }
+            else
+            {
+                finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset + lInternalOffset - pOffset, lInternalLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+            
+                MEM_TRANSFER_DUMP(lSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lInternalLength, (uint)(*pRequestingMachine))
+
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+
+                pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
+            }
+        }
+        else
+        {
+            DEBUG_EXCEPTION_ASSERT(!pIsForwarded);
+
+            ForwardMemoryRequest(pSrcAddressSpace, lRangeOwner, memoryIdentifierStruct(lRangeOwner.memIdentifier.memOwnerHost, lRangeOwner.memIdentifier.generationNumber), pDestMemIdentifier, TRANSFER_GENERAL, pReceiverOffset + lInternalOffset - pOffset, lRangeOwner.hostOffset, lInternalLength, std::numeric_limits<ulong>::max(), std::numeric_limits<ulong>::max(), pRequestingMachine, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority);
+        }
+    });
+}
+
+void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded)
+{
+    DEBUG_EXCEPTION_ASSERT(pEventDetails.transferType == communicator::TRASFER_SCATTERED);
+    
+    pmAddressSpace::pmMemOwnership lOwnerships;
+    
+    for(ulong i = 0 ; i < pCount; ++i)
+        pSrcAddressSpace->GetOwners(pOffset + i * pStep, pLength, lOwnerships);
+
+    EXCEPTION_ASSERT(!lOwnerships.empty());
+    
+    // Check if entire memory (asked for) lives on one host - local or remote. If not convert, the scattered request to multiple general requests
+    bool lCanBeServedScattered = (lOwnerships.size() == pCount);
+    const pmMachine* lServingHost = lOwnerships.begin()->second.second.host;
+
+    if(lCanBeServedScattered)
+    {
+        for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
+        {
+            DEBUG_EXCEPTION_ASSERT(pPair.second.first == pLength);
+            
+            DEBUG_EXCEPTION_ASSERT((pPair.second.second.hostOffset - pOffset) % pStep == 0);
+            
+            lCanBeServedScattered &= (lServingHost == pPair.second.second.host);
+        });
+    }
+    
+    if(lCanBeServedScattered)
+    {
+        if(lServingHost == PM_LOCAL_MACHINE)
+        {
+            size_t lDataSize = pLength * pCount;
+
+            finalize_ptr<char, deleteArrayDeallocator<char>> lMem(new char[lDataSize]);
+            char* lAddr = lMem.get_ptr();
+            char* lSrcBaseAddr = (char*)(pSrcAddressSpace->GetMem());
+
+            for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
+            {
+                memcpy(lAddr, lSrcBaseAddr + pPair.first, pLength);
+                lAddr += pStep;
+            });
+
+            finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset, pLength, pStep, pCount, lMem, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+        
+            MEM_TRANSFER_DUMP(lSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, lDataSize, (uint)(*pRequestingMachine))
+
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+
+            pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
+        }
+        else
+        {
+            DEBUG_EXCEPTION_ASSERT(!pIsForwarded);
+
+            ForwardMemoryRequest(pSrcAddressSpace, lOwnerships.begin()->second.second, lOwnerships.begin()->second.second.memIdentifier, pDestMemIdentifier, TRANSFER_SCATTERED, pReceiverOffset, pOffset, pLength, pStep, pCount, pRequestingMachine, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority);
+        }
+    }
+    else
+    {
+        // break scattered request into ServeGeneralRequest calls
+        for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
+        {
+            ServeGeneralMemoryRequest(pSrcAddressSpace, pRequestingTask, pRequestingMachine, pPair.first, pPair.second.first, pDestMemIdentifier, pReceiverOffset + pPair.first - pOffset, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority, pIsForwarded);
+        });
+    }
+}
+    
+void pmHeavyOperationsThread::ForwardMemoryRequest(pmAddressSpace* pSrcAddressSpace, const pmAddressSpace::vmRangeOwner& pRangeOwner, const memoryIdentifierStruct& pSrcMemIdentifier, const memoryIdentifierStruct& pDestMemIdentifier, memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pRequestingMachine, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority)
+{
+    finalize_ptr<memoryTransferRequest> lData(new memoryTransferRequest(pSrcMemIdentifier, pDestMemIdentifier, TRANSFER_GENERAL, pReceiverOffset, pOffset, pLength, pStep, pCount, *pRequestingMachine, 1, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority));
+    
+    MEM_FORWARD_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength, (uint)(*pRequestingMachine), *pRangeOwner.host, pRangeOwner.memIdentifier, pRangeOwner.hostOffset)
+
+    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryTransferRequest>::CreateSharedPtr(MAX_CONTROL_PRIORITY, SEND, MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+    
+    pmCommunicator::GetCommunicator()->Send(lCommand);
 }
     
 void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)

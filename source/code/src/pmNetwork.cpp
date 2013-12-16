@@ -1506,15 +1506,18 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(memoryTransferRequest, lData, lDataMPI);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sourceMemIdentifier, lSourceMemIdentifierMPI, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), 0, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destMemIdentifier, lDestMemIdentifierMPI, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receiverOffset, lReceiverOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 4, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 5, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isForwarded, lIsForwardedMPI, MPI_UNSIGNED_SHORT, 6, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isTaskOriginated, lIsTaskOriginatedMPI, MPI_UNSIGNED_SHORT, 7, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 8, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 9, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.priority, lPriorityMPI, MPI_UNSIGNED_SHORT, 10, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.transferType, lTransferTypeMPI, MPI_UNSIGNED_SHORT, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receiverOffset, lReceiverOffsetMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 5, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.step, lStepMPI, MPI_UNSIGNED_LONG, 6, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.count, lCountMPI, MPI_UNSIGNED_LONG, 7, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.destHost, lDestHostMPI, MPI_UNSIGNED_LONG, 8, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isForwarded, lIsForwardedMPI, MPI_UNSIGNED_SHORT, 9, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isTaskOriginated, lIsTaskOriginatedMPI, MPI_UNSIGNED_SHORT, 10, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 11, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 12, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.priority, lPriorityMPI, MPI_UNSIGNED_SHORT, 13, 1);
 
 			break;
 		}
@@ -1544,11 +1547,14 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(memoryReceiveStruct, lData, lDataMPI);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memOwnerHost, lMemOwnerHostMPI, MPI_UNSIGNED, 0, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.generationNumber, lGenerationNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 2, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 3, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isTaskOriginated, lIsTaskOriginatedMPI, MPI_UNSIGNED_SHORT, 4, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 5, 1);
-			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 6, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.transferType, lTransferTypeMPI, MPI_UNSIGNED_SHORT, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.step, lStepMPI, MPI_UNSIGNED_LONG, 5, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.count, lCountMPI, MPI_UNSIGNED_LONG, 6, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.isTaskOriginated, lIsTaskOriginatedMPI, MPI_UNSIGNED_SHORT, 7, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 8, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 9, 1);
 
 			break;
 		}

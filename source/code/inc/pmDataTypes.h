@@ -243,7 +243,7 @@ namespace pm
 
         // Only one of these is meaningful
         pmSubscriptionInfo subscriptionInfo;    // Used for SUBSCRIPTION_CONTIGUOUS
-        pmScatteredSubscriptionInfo scatteredSubscriptionInfo;  // Used for SUBSCRIPTION_SCATTERED
+        std::vector<pmScatteredSubscriptionInfo> scatteredSubscriptionVector;  // Used for SUBSCRIPTION_SCATTERED
         std::vector<pmSubscriptionInfo> subscriptionVector; // Used for SUBSCRIPTION_GENERAL
 
         pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const pmSubscriptionInfo& pSubscriptionInfo)
@@ -253,11 +253,11 @@ namespace pm
         , subscriptionInfo(pSubscriptionInfo)
         {}
 
-        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const std::vector<pmScatteredSubscriptionInfo>& pScatteredSubscriptionVector)
         : addressSpace(pAddressSpace)
         , visibility(pVisibility)
         , format(SUBSCRIPTION_SCATTERED)
-        , scatteredSubscriptionInfo(pScatteredSubscriptionInfo)
+        , scatteredSubscriptionVector(pScatteredSubscriptionVector)
         {}
 
         pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const std::vector<pmSubscriptionInfo>& pSubscriptionVector)
@@ -271,13 +271,10 @@ namespace pm
         : addressSpace(pKey.addressSpace)
         , visibility(pKey.visibility)
         , format(pKey.format)
+        , subscriptionInfo(pKey.subscriptionInfo)
+        , scatteredSubscriptionVector(pKey.scatteredSubscriptionVector)
         , subscriptionVector(pKey.subscriptionVector)
-        {
-            if(format == SUBSCRIPTION_CONTIGUOUS)
-                subscriptionInfo = pKey.subscriptionInfo;
-            else if(format == SUBSCRIPTION_SCATTERED)
-                scatteredSubscriptionInfo = pKey.scatteredSubscriptionInfo;
-        }
+        {}
         
         ~pmCudaCacheKey()
         {}
@@ -290,7 +287,7 @@ namespace pm
             if(format == SUBSCRIPTION_CONTIGUOUS && subscriptionInfo == pKey.subscriptionInfo)
                 return true;
             
-            if(format == SUBSCRIPTION_SCATTERED && scatteredSubscriptionInfo == pKey.scatteredSubscriptionInfo)
+            if(format == SUBSCRIPTION_SCATTERED && scatteredSubscriptionVector == pKey.scatteredSubscriptionVector)
                 return true;
 
             if(format == SUBSCRIPTION_GENERAL && subscriptionVector == pKey.subscriptionVector)
@@ -314,7 +311,10 @@ namespace pm
             
             if(pKey.format == SUBSCRIPTION_SCATTERED)
             {
-                lHash2 = (std::hash<size_t>()(pKey.scatteredSubscriptionInfo.offset) ^ std::hash<size_t>()(pKey.scatteredSubscriptionInfo.size) ^ std::hash<size_t>()(pKey.scatteredSubscriptionInfo.step) ^ std::hash<size_t>()(pKey.scatteredSubscriptionInfo.count));
+                std::for_each(pKey.scatteredSubscriptionVector.begin(), pKey.scatteredSubscriptionVector.end(), [&lHash2] (const pmScatteredSubscriptionInfo& pInfo)
+                {
+                    lHash2 ^= (std::hash<size_t>()(pInfo.offset) ^ std::hash<size_t>()(pInfo.size) ^ std::hash<size_t>()(pInfo.step) ^ std::hash<size_t>()(pInfo.count));
+                });
             }
 
             if(pKey.format == SUBSCRIPTION_GENERAL)
@@ -1026,7 +1026,7 @@ namespace pm
     template<typename _InputIterator, typename _Filter_Function, typename _Command_Function>
     _Command_Function filtered_for_each(_InputIterator __first, _InputIterator __last, _Filter_Function __f1, _Command_Function __f2)
     {
-        for (; __first != __last; ++__first)
+        for(; __first != __last; ++__first)
         {
             if(__f1(*__first))
                 __f2(*__first);
@@ -1038,7 +1038,7 @@ namespace pm
     template<typename _InputIterator, typename _Filter_Function, typename _Command_Function>
     _Command_Function filtered_for_each_with_index(_InputIterator __first, _InputIterator __last, _Filter_Function __f1, _Command_Function __f2)
     {
-        for (size_t index = 0, filteredIndex = 0; __first != __last; ++__first, ++index)
+        for(size_t index = 0, filteredIndex = 0; __first != __last; ++__first, ++index)
         {
             if(__f1(*__first))
             {
@@ -1053,7 +1053,7 @@ namespace pm
     template<typename _InputIterator, typename _Command_Function>
     _Command_Function for_each_with_index(_InputIterator __first, _InputIterator __last, _Command_Function __f)
     {
-        for (size_t index = 0; __first != __last; ++__first, ++index)
+        for(size_t index = 0; __first != __last; ++__first, ++index)
             __f(*__first, index);
         
         return std::move(__f);
@@ -1094,7 +1094,7 @@ namespace pm
     template<typename _InputIterator, typename _Command_Function, typename _Arg_Type>
     _Command_Function for_each_with_arg(_InputIterator __first, _InputIterator __last, _Command_Function __f, _Arg_Type& __arg)
     {
-        for (; __first != __last; ++__first)
+        for(; __first != __last; ++__first)
             __f(*__first, __arg);
         
         return std::move(__f);
@@ -1105,10 +1105,16 @@ namespace pm
     {
         DEBUG_EXCEPTION_ASSERT(std::distance(__first1 , __last1) <= std::distance(__first2, __last2));
 
-        for (; __first1 != __last1; ++__first1, ++__first2)
+        for(; __first1 != __last1; ++__first1, ++__first2)
             __f(*__first1, *__first2);
         
         return std::move(__f);
+    }
+
+    template<typename _Container1, typename _Container2, typename _Command_Function>
+    _Command_Function multi_for_each(_Container1& __container1, _Container2& __container2, _Command_Function __f)
+    {
+        return multi_for_each(__container1.begin(), __container1.end(), __container2.begin(), __container2.end(), __f);
     }
 
 } // end namespace pm

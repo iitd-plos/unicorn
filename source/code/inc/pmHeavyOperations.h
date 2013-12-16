@@ -27,6 +27,7 @@
 #include "pmSignalWait.h"
 #include "pmHardware.h"
 #include "pmCommunicator.h"
+#include "pmAddressSpace.h"
 
 #include <vector>
 
@@ -84,8 +85,11 @@ struct memTransferEvent : public heavyOperationsEvent
 {
 	communicator::memoryIdentifierStruct srcMemIdentifier;
     communicator::memoryIdentifierStruct destMemIdentifier;
+    communicator::memoryTransferType transferType;
 	ulong offset;
 	ulong length;
+    ulong step;
+    ulong count;
 	const pmMachine* machine;
     ulong receiverOffset;
 	ushort priority;
@@ -95,14 +99,17 @@ struct memTransferEvent : public heavyOperationsEvent
     ulong taskSequenceNumber;
     
     memTransferEvent(eventIdentifier pEventId, communicator::memoryIdentifierStruct& pSrcMemIdentifier,
-                     communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength,
-                     const pmMachine* pMachine, ulong pReceiverOffset, ushort pPriority, bool pIsForwarded, bool pIsTaskOriginated,
-                     uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
+                     communicator::memoryIdentifierStruct& pDestMemIdentifier, communicator::memoryTransferType pTransferType,
+                     ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pMachine, ulong pReceiverOffset,
+                     ushort pPriority, bool pIsForwarded, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
     : heavyOperationsEvent(pEventId)
     , srcMemIdentifier(pSrcMemIdentifier)
     , destMemIdentifier(pDestMemIdentifier)
+    , transferType(pTransferType)
     , offset(pOffset)
     , length(pLength)
+    , step(pStep)
+    , count(pCount)
     , machine(pMachine)
     , receiverOffset(pReceiverOffset)
     , priority(pPriority)
@@ -157,6 +164,12 @@ private:
     virtual void ThreadSwitchCallback(std::shared_ptr<heavyOperations::heavyOperationsEvent>& pEvent);
     void ProcessEvent(heavyOperations::heavyOperationsEvent& pEvent);
 
+    void ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded);
+    
+    void ServeScatteredMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded);
+    
+    void ForwardMemoryRequest(pmAddressSpace* pSrcAddressSpace, const pmAddressSpace::vmRangeOwner& pRangeOwner, const communicator::memoryIdentifierStruct& pSrcMemIdentifier, const communicator::memoryIdentifierStruct& pDestMemIdentifier, communicator::memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pRequestingMachine, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority);
+
     void HandleCommandCompletion(pmCommandPtr& pCommand);
     
     size_t mThreadIndex;
@@ -172,7 +185,7 @@ public:
 
     void PackAndSendData(const pmCommunicatorCommandPtr& pCommand);
     void UnpackDataEvent(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pPackedLength, ushort pPriority);
-    void MemTransferEvent(communicator::memoryIdentifierStruct& pSrcMemIdentifier, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
+    void MemTransferEvent(communicator::memoryIdentifierStruct& pSrcMemIdentifier, communicator::memoryIdentifierStruct& pDestMemIdentifier, communicator::memoryTransferType pTransferType, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
     void CancelMemoryTransferEvents(pmAddressSpace* pAddressSpace);
     void CancelTaskSpecificMemoryTransferEvents(pmTask* pTask);
     

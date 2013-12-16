@@ -439,15 +439,95 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
     }
 }
 
+void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommunicatorCommandPtr>& pCommandVector)
+{
+    EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
+
+    // Check if entire scattered range is in flight or entire scattered range is on one machine (local or remote). Otherwise, split scattered fetch into general fetch.
+    
+    using namespace linuxMemManager;
+    void* lMem = pAddressSpace->GetMem();
+    
+	std::vector<std::pair<ulong, ulong>> lRegionsToBeFetched;	// Start address and last address of sub ranges to be fetched
+    std::vector<pmCommunicatorCommandPtr> lTempCommandVector;
+    addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
+    pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
+
+    bool lPartiallyInFlight = false;
+    bool lRangeLiesOnOneMachine = true;
+    
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
+
+        for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
+        {
+            FindRegionsNotInFlight(lMap, lMem, pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lRegionsToBeFetched, lTempCommandVector);
+            lPartiallyInFlight |= (lTempCommandVector.size() > 1);
+        }
+
+        if(!lPartiallyInFlight)
+        {
+            if(lTempCommandVector.size() == 0)  // Nothing is in flight
+            {
+                pmAddressSpace::pmMemOwnership lOwnerships;
+                for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
+                    pAddressSpace->GetOwners(pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lOwnerships);
+
+                if(lOwnerships.size() == pScatteredSubscriptionInfo.count)
+                {
+                    const pmMachine* lServingHost = lOwnerships.begin()->second.second.host;
+
+                    for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+                    {
+                        DEBUG_EXCEPTION_ASSERT(pPair.second.first == pLength);
+                        
+                        DEBUG_EXCEPTION_ASSERT((pPair.second.second.hostOffset - pOffset) % pStep == 0);
+                        
+                        lRangeLiesOnOneMachine &= (lServingHost == pPair.second.second.host);
+                    });
+                    
+                    if(lRangeLiesOnOneMachine && lServingHost != PM_LOCAL_MACHINE)
+                    {
+                        pmCommunicatorCommandPtr lCommand;
+                        FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, communicator::TRANSFER_SCATTERED, pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.size, pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.count, lOwnerships.begin()->second.second, lMap, lCommand);
+
+                        if(lCommand.get())
+                            pCommandVector.emplace_back(std::move(lCommand));
+                    }
+                }
+                else
+                {
+                    lRangeLiesOnOneMachine = false;
+                }
+            }
+            else if(lTempCommandVector.size() == pScatteredSubscriptionInfo.count)  // Everything is in flight
+            {
+                pCommandVector.insert(pCommandVector.end(), lTempCommandVector.begin(), lTempCommandVector.end());
+            }
+            else    // Partially in flight
+            {
+                lPartiallyInFlight = true;
+            }
+        }
+    }
+    
+    if(lPartiallyInFlight || !lRangeLiesOnOneMachine)
+    {
+        for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
+            FetchMemoryRegion(pAddressSpace, pPriority, pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, pCommandVector);
+    }
+}
+
 void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector)
 {
-    if(!pLength)
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(pLength);
 
     using namespace linuxMemManager;
     void* lMem = pAddressSpace->GetMem();
     
-	std::vector<std::pair<ulong, ulong> > lRegionsToBeFetched;	// Start address and last address of sub ranges to be fetched
+	std::vector<std::pair<ulong, ulong>> lRegionsToBeFetched;	// Start address and last address of sub ranges to be fetched
     addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
     pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
@@ -468,52 +548,63 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, usho
             pmAddressSpace::pmMemOwnership lOwnerships;
             pAddressSpace->GetOwners(lOffset, lLength, lOwnerships);
 
-            pmAddressSpace::pmMemOwnership::iterator lIter = lOwnerships.begin(), lEndIter = lOwnerships.end();            
-            for(; lIter != lEndIter; ++lIter)
+            for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
             {
-                pmAddressSpace::vmRangeOwner& lRangeOwner = lIter->second.second;
+                pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
 
                 if(lRangeOwner.host != PM_LOCAL_MACHINE)
                 {
                     pmCommunicatorCommandPtr lCommand;
-                    FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, lIter->first,  lIter->second.first, lRangeOwner, lMap, lCommand);
+                    FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, communicator::TRANSFER_GENERAL, pPair.first,  pPair.second.first, 0, 0, lRangeOwner, lMap, lCommand);
 
                     if(lCommand.get())
-                        pCommandVector.emplace_back(lCommand);
+                        pCommandVector.emplace_back(std::move(lCommand));
                 }
-            }
+            });
         }
 	}
 }
 
-void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, size_t pOffset, size_t pLength, pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand)
+void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand)
 {
     using namespace linuxMemManager;
     
-	regionFetchData lFetchData;
-
     pmTask* lLockingTask = pAddressSpace->GetLockingTask();
     
     uint lOriginatingHost = lLockingTask ? (uint)(*(lLockingTask->GetOriginatingHost())) : std::numeric_limits<uint>::max();
     ulong lSequenceNumber = lLockingTask ? lLockingTask->GetSequenceNumber() : std::numeric_limits<ulong>::max();
 
-	finalize_ptr<communicator::memoryTransferRequest> lData(new communicator::memoryTransferRequest(communicator::memoryIdentifierStruct(pRangeOwner.memIdentifier.memOwnerHost, pRangeOwner.memIdentifier.generationNumber), communicator::memoryIdentifierStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber()), pOffset, pRangeOwner.hostOffset, pLength, *PM_LOCAL_MACHINE, 0, (ushort)(lLockingTask != NULL), lOriginatingHost, lSequenceNumber, pPriority));
+	finalize_ptr<communicator::memoryTransferRequest> lData(new communicator::memoryTransferRequest(communicator::memoryIdentifierStruct(pRangeOwner.memIdentifier.memOwnerHost, pRangeOwner.memIdentifier.generationNumber), communicator::memoryIdentifierStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber()), pTransferType, pOffset, pRangeOwner.hostOffset, pLength, pStep, pCount, *PM_LOCAL_MACHINE, 0, (ushort)(lLockingTask != NULL), lOriginatingHost, lSequenceNumber, pPriority));
     
 	pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand<communicator::memoryTransferRequest>::CreateSharedPtr(pPriority, communicator::SEND, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
     
     finalize_ptr<char> lDummyAutoPtr;
-	pCommand = lFetchData.receiveCommand = pmCommunicatorCommand<char>::CreateSharedPtr(pPriority, communicator::RECEIVE, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::BYTE, lDummyAutoPtr, 0);	// Dummy command just to allow threads to wait on it
-    
+	pCommand = pmCommunicatorCommand<char>::CreateSharedPtr(pPriority, communicator::RECEIVE, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::BYTE, lDummyAutoPtr, 0);	// Dummy command just to allow threads to wait on it
+
     communicator::memoryTransferRequest* lRequestData = (communicator::memoryTransferRequest*)(lSendCommand->GetData());
-	char* lAddr = (char*)pMem + lRequestData->receiverOffset;
-    pInFlightMap.emplace(std::piecewise_construct, std::forward_as_tuple(lAddr), std::forward_as_tuple(lRequestData->length, lFetchData));
+
+    if(pTransferType == communicator::TRANSFER_GENERAL)
+    {
+        char* lAddr = (char*)pMem + lRequestData->receiverOffset;
+        pInFlightMap.emplace(std::piecewise_construct, std::forward_as_tuple(lAddr), std::forward_as_tuple(lRequestData->length, regionFetchData(pCommand)));
+    }
+    else
+    {
+        DEBUG_EXCEPTION_ASSERT(pTransferType == communicator::TRANSFER_SCATTERED);
+        
+        for(size_t i = 0; i < pCount; ++i)
+        {
+            char* lAddr = (char*)pMem + lRequestData->receiverOffset + i * pStep;
+            pInFlightMap.emplace(std::piecewise_construct, std::forward_as_tuple(lAddr), std::forward_as_tuple(pLength, regionFetchData(pCommand)));
+        }
+    }
 
 #ifdef ENABLE_TASK_PROFILING
     if(lLockingTask)
         pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, true);
 #endif
     
-	lFetchData.receiveCommand->MarkExecutionStart();
+	pCommand->MarkExecutionStart();
 
     MEM_REQ_DUMP(pAddressSpace, pMem, pOffset, pRangeOwner.hostOffset, pLength, (uint)(*pRangeOwner.host));
 
