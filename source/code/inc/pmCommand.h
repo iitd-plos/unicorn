@@ -78,7 +78,7 @@ class pmCommand : public pmBase
 		/** The following functions must be called by clients for command
          execution time measurement, status reporting and callback calling. */
 		void MarkExecutionStart();
-        void MarkExecutionEnd(pmStatus pStatus, pmCommandPtr& pSharedPtr);
+        virtual void MarkExecutionEnd(pmStatus pStatus, pmCommandPtr& pSharedPtr);
 
 		double GetExecutionTimeInSecs() const;
 
@@ -117,6 +117,27 @@ class pmCommand : public pmBase
     
         std::vector<pmCommandPtr> mDependentCommands;
 		TIMER_IMPLEMENTATION_CLASS mTimer;
+};
+    
+class pmCountDownCommand : public pmCommand
+{
+	public:
+        static pmCommandPtr CreateSharedPtr(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback);
+
+        virtual void MarkExecutionEnd(pmStatus pStatus, pmCommandPtr& pSharedPtr);
+
+    protected:
+        pmCountDownCommand(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback)
+        : pmCommand(pPriority, pType, pCallback)
+        , mCount(pCount)
+        , mCountLock __LOCK_NAME__("pmCountDownCommand::mCountLock")
+        {
+            EXCEPTION_ASSERT(mCount);
+        }
+
+    private:
+        size_t mCount;
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCountLock;
 };
     
 class pmCommunicatorCommandBase : public pmCommand
@@ -195,7 +216,7 @@ class pmCommunicatorCommand : public pmCommunicatorCommandBase
 class pmAccumulatorCommand : public pmCommand
 {
     public:
-		static pmCommandPtr CreateSharedPtr(const std::vector<pmCommunicatorCommandPtr>& pVector);
+		static pmCommandPtr CreateSharedPtr(const std::vector<pmCommandPtr>& pVector);
 
         void FinishCommand(pmCommandPtr& pSharedPtr);
         void ForceComplete(pmCommandPtr& pSharedPtr);

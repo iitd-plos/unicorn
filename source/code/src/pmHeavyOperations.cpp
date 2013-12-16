@@ -394,12 +394,16 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
 
             finalize_ptr<char, deleteArrayDeallocator<char>> lMem(new char[lDataSize]);
             char* lAddr = lMem.get_ptr();
-            char* lSrcBaseAddr = (char*)(pSrcAddressSpace->GetMem());
 
             for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
             {
-                memcpy(lAddr, lSrcBaseAddr + pPair.first, pLength);
-                lAddr += pStep;
+                const pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+                pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
+                
+                EXCEPTION_ASSERT(lOwnerAddressSpace);
+
+                memcpy(lAddr, (char*)(lOwnerAddressSpace->GetMem()) + pPair.first, pLength);
+                lAddr += pLength;
             });
 
             finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset, pLength, pStep, pCount, lMem, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));

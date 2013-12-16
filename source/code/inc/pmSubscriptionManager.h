@@ -262,7 +262,7 @@ class pmSubscriptionManager : public pmBase
         void InitializeSubtaskShadowMemCompactView(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, void* pShadowMem, void* pMem, size_t pMemLength, size_t pWriteOnlyUnprotectedRanges, uint* pUnprotectedRanges);
 
         void AddSubscriptionRecordToMap(const pmSubscriptionInfo& pSubscriptionInfo, subscription::subscriptionRecordType& pMap);
-        void WaitForSubscriptions(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub, pmDeviceType pDeviceType, const std::vector<pmCommunicatorCommandPtr>& pCommandVector);
+        void WaitForSubscriptions(subscription::pmSubtask& pSubtask, pmExecutionStub* pStub, pmDeviceType pDeviceType, const std::vector<pmCommandPtr>& pCommandVector);
 
         void CheckAppropriateSubscription(pmAddressSpace* pAddressSpace, pmSubscriptionType pSubscriptionType) const;
         bool IsReadSubscription(pmSubscriptionType pSubscriptionType) const;

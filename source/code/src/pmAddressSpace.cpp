@@ -697,10 +697,10 @@ void pmAddressSpace::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)
     lTimer.Start();
 #endif
 
-    std::vector<pmCommunicatorCommandPtr> lVector;
+    std::vector<pmCommandPtr> lVector;
     MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(this, pPriority, pOffset, pLength, lVector);
     
-    std::vector<pmCommunicatorCommandPtr>::const_iterator lIter = lVector.begin(), lEndIter = lVector.end();
+    std::vector<pmCommandPtr>::const_iterator lIter = lVector.begin(), lEndIter = lVector.end();
     for(; lIter != lEndIter; ++lIter)
         (*lIter)->WaitForFinish();
 

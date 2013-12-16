@@ -285,7 +285,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void SetupJmpBuf(sigjmp_buf* pJmpBuf);
         void UnsetupJmpBuf(bool pHasJumped);
     
-        void WaitForNetworkFetch(const std::vector<pmCommunicatorCommandPtr>& pNetworkCommands);
+        void WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetworkCommands);
 
         void CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus);
 

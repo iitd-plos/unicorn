@@ -346,7 +346,7 @@ void pmLinuxMemoryManager::CancelUnreferencedRequests(pmAddressSpace* pAddressSp
 }
     
 // This function must be called after acquiring lock on pInFlightMap
-void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector)
+void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommandPtr>& pCommandVector)
 {
     using namespace linuxMemManager;
     
@@ -439,7 +439,7 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
     }
 }
 
-void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommunicatorCommandPtr>& pCommandVector)
+void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector)
 {
     EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
 
@@ -449,7 +449,7 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
     void* lMem = pAddressSpace->GetMem();
     
 	std::vector<std::pair<ulong, ulong>> lRegionsToBeFetched;	// Start address and last address of sub ranges to be fetched
-    std::vector<pmCommunicatorCommandPtr> lTempCommandVector;
+    std::vector<pmCommandPtr> lTempCommandVector;
     addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
     pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
@@ -490,7 +490,7 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
                     
                     if(lRangeLiesOnOneMachine && lServingHost != PM_LOCAL_MACHINE)
                     {
-                        pmCommunicatorCommandPtr lCommand;
+                        pmCommandPtr lCommand;
                         FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, communicator::TRANSFER_SCATTERED, pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.size, pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.count, lOwnerships.begin()->second.second, lMap, lCommand);
 
                         if(lCommand.get())
@@ -520,7 +520,7 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
     }
 }
 
-void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector)
+void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector)
 {
     EXCEPTION_ASSERT(pLength);
 
@@ -554,7 +554,7 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, usho
 
                 if(lRangeOwner.host != PM_LOCAL_MACHINE)
                 {
-                    pmCommunicatorCommandPtr lCommand;
+                    pmCommandPtr lCommand;
                     FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, communicator::TRANSFER_GENERAL, pPair.first,  pPair.second.first, 0, 0, lRangeOwner, lMap, lCommand);
 
                     if(lCommand.get())
@@ -565,7 +565,7 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, usho
 	}
 }
 
-void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand)
+void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommandPtr& pCommand)
 {
     using namespace linuxMemManager;
     
@@ -577,32 +577,38 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmA
 	finalize_ptr<communicator::memoryTransferRequest> lData(new communicator::memoryTransferRequest(communicator::memoryIdentifierStruct(pRangeOwner.memIdentifier.memOwnerHost, pRangeOwner.memIdentifier.generationNumber), communicator::memoryIdentifierStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber()), pTransferType, pOffset, pRangeOwner.hostOffset, pLength, pStep, pCount, *PM_LOCAL_MACHINE, 0, (ushort)(lLockingTask != NULL), lOriginatingHost, lSequenceNumber, pPriority));
     
 	pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand<communicator::memoryTransferRequest>::CreateSharedPtr(pPriority, communicator::SEND, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
-    
-    finalize_ptr<char> lDummyAutoPtr;
-	pCommand = pmCommunicatorCommand<char>::CreateSharedPtr(pPriority, communicator::RECEIVE, communicator::MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, communicator::BYTE, lDummyAutoPtr, 0);	// Dummy command just to allow threads to wait on it
 
     communicator::memoryTransferRequest* lRequestData = (communicator::memoryTransferRequest*)(lSendCommand->GetData());
 
     if(pTransferType == communicator::TRANSFER_GENERAL)
     {
+        pCommand = pmCommand::CreateSharedPtr(pPriority, communicator::RECEIVE, 0);	// Dummy command just to allow threads to wait on it
+
         char* lAddr = (char*)pMem + lRequestData->receiverOffset;
         pInFlightMap.emplace(std::piecewise_construct, std::forward_as_tuple(lAddr), std::forward_as_tuple(lRequestData->length, regionFetchData(pCommand)));
+    
+    #ifdef ENABLE_TASK_PROFILING
+        if(lLockingTask)
+            pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, true);
+    #endif
     }
     else
     {
         DEBUG_EXCEPTION_ASSERT(pTransferType == communicator::TRANSFER_SCATTERED);
         
+        pCommand = pmCountDownCommand::CreateSharedPtr(pCount, pPriority, communicator::RECEIVE, 0);	// Dummy command just to allow threads to wait on it
+
         for(size_t i = 0; i < pCount; ++i)
         {
             char* lAddr = (char*)pMem + lRequestData->receiverOffset + i * pStep;
             pInFlightMap.emplace(std::piecewise_construct, std::forward_as_tuple(lAddr), std::forward_as_tuple(pLength, regionFetchData(pCommand)));
+
+        #ifdef ENABLE_TASK_PROFILING
+            if(lLockingTask)
+                pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, true);
+        #endif
         }
     }
-
-#ifdef ENABLE_TASK_PROFILING
-    if(lLockingTask)
-        pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, true);
-#endif
     
 	pCommand->MarkExecutionStart();
 
@@ -646,8 +652,7 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
     #endif
 
     #ifdef ENABLE_MEM_PROFILING
-        if(pLength)
-            pAddressSpace->RecordMemReceive(pLength);
+        pAddressSpace->RecordMemReceive(pLength);
     #endif
 
         pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
@@ -701,8 +706,7 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
         #endif
 
         #ifdef ENABLE_MEM_PROFILING
-            if(pLength)
-                pAddressSpace->RecordMemReceive(pLength);
+            pAddressSpace->RecordMemReceive(pLength);
         #endif
 
             pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
@@ -768,7 +772,7 @@ void pmLinuxMemoryManager::LoadLazyMemoryPage(pmExecutionStub* pStub, pmAddressS
         // lazy memory page is fetched without waiting for prefetch pages to come. To do this, we make two FetchMemory requests - first with
         // lazy memory page and prefetch pages and second with lazy memory page only. The in-flight memory system will piggy back second
         // request onto the first one. The current thread only waits on commands returned by second FetchMemory statement.
-        std::vector<pmCommunicatorCommandPtr> lCommandVector;
+        std::vector<pmCommandPtr> lCommandVector;
         if(pForwardPrefetchPageCount)
             FetchMemoryRegion(pAddressSpace, lPriority, lOffset, lLeftoverLength, lCommandVector);
 

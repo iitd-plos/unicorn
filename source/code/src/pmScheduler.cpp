@@ -1578,7 +1578,7 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                                 
                                 for(ulong i = 0; i < lData->receiveStruct.count; ++i)
                                 {
-                                    lMemoryManager->CopyReceivedMemory(lAddressSpace, lData->receiveStruct.offset + i * lData->receiveStruct.step, lData->receiveStruct.length, lData->mem.get_ptr() + i * lData->receiveStruct.step, lRequestingTask);
+                                    lMemoryManager->CopyReceivedMemory(lAddressSpace, lData->receiveStruct.offset + i * lData->receiveStruct.step, lData->receiveStruct.length, lData->mem.get_ptr() + i * lData->receiveStruct.length, lRequestingTask);
                                 }
                             }
                         }

@@ -1190,7 +1190,7 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
 
     ushort lPriority = (mTask->GetPriority() + (pPrefetch ? 1 : 0));    // Prefetch at slightly low priority
 
-    std::vector<pmCommunicatorCommandPtr> lCommandVector;
+    std::vector<pmCommandPtr> lCommandVector;
 
     multi_for_each(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
     {
@@ -1230,7 +1230,7 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
 }
     
 /* Must be called with mSubtaskMapVector stub's lock acquired */
-void pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutionStub* pStub, pmDeviceType pDeviceType, const std::vector<pmCommunicatorCommandPtr>& pCommandVector)
+void pmSubscriptionManager::WaitForSubscriptions(pmSubtask& pSubtask, pmExecutionStub* pStub, pmDeviceType pDeviceType, const std::vector<pmCommandPtr>& pCommandVector)
 {
     pStub->WaitForNetworkFetch(pCommandVector);
 

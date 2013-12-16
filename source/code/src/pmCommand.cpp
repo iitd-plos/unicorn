@@ -154,16 +154,34 @@ double pmCommand::GetExecutionTimeInSecs() const
 	return mTimer.GetElapsedTimeInSecs();
 }
 
+    
+/* class pmCountDownCommand */
+pmCommandPtr pmCountDownCommand::CreateSharedPtr(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback)
+{
+    return pmCommandPtr(new pmCountDownCommand(pCount, pPriority, pType, pCallback));
+}
+
+void pmCountDownCommand::MarkExecutionEnd(pmStatus pStatus, pmCommandPtr& pSharedPtr)
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCountLock, Lock(), Unlock());
+    
+    DEBUG_EXCEPTION_ASSERT(mCount);
+    --mCount;
+    
+    if(!mCount)
+        pmCommand::MarkExecutionEnd(pStatus, pSharedPtr);
+}
+
 
 /* class pmAccumulatorCommand */
-pmCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<pmCommunicatorCommandPtr>& pVector)
+pmCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<pmCommandPtr>& pVector)
 {
     pmCommandPtr lSharedPtr(new pmAccumulatorCommand());
     pmAccumulatorCommand* lCommand = (pmAccumulatorCommand*)lSharedPtr.get();
 
     FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lCommand->mAccumulatorResourceLock, Lock(), Unlock());
 
-    std::vector<pmCommunicatorCommandPtr>::const_iterator lIter = pVector.begin(), lEndIter = pVector.end();
+    std::vector<pmCommandPtr>::const_iterator lIter = pVector.begin(), lEndIter = pVector.end();
     for(; lIter != lEndIter; ++lIter)
     {
         if(((*lIter).get())->AddDependentIfPending(lSharedPtr))

@@ -62,8 +62,8 @@ class pmMemoryManager : public pmBase
         virtual void DeallocateMemory(pmAddressSpace* pAddressSpace) = 0;
         virtual void DeallocateMemory(void* pMem) = 0;
 
-        virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector) = 0;
-        virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommunicatorCommandPtr>& pCommandVector) = 0;
+        virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector) = 0;
+        virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector) = 0;
         virtual void CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask) = 0;
     
         virtual size_t GetVirtualMemoryPageSize() const = 0;
@@ -88,7 +88,7 @@ namespace linuxMemManager
 {
     typedef struct regionFetchData
     {
-        pmCommunicatorCommandPtr receiveCommand;
+        pmCommandPtr receiveCommand;
         
         std::map<size_t, size_t> partialReceiveRecordMap;
         size_t accumulatedPartialReceivesLength;
@@ -97,7 +97,7 @@ namespace linuxMemManager
         : accumulatedPartialReceivesLength(0)
         {}
         
-        regionFetchData(pmCommunicatorCommandPtr& pCommand)
+        regionFetchData(pmCommandPtr& pCommand)
         : receiveCommand(pCommand)
         , accumulatedPartialReceivesLength(0)
         {}
@@ -137,8 +137,8 @@ class pmLinuxMemoryManager : public pmMemoryManager
         virtual void DeallocateMemory(pmAddressSpace* pAddressSpace);
         virtual void DeallocateMemory(void* pMem);
 
-        virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
-        virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
+        virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector);
+        virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector);
         virtual void CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask);
 
         virtual size_t GetVirtualMemoryPageSize() const;
@@ -159,9 +159,9 @@ class pmLinuxMemoryManager : public pmMemoryManager
     
         void* AllocatePageAlignedMemoryInternal(pmAddressSpace* pAddressSpace, size_t& pLength, size_t& pPageCount, int& pSharedMemDescriptor);
 
-        void FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommunicatorCommandPtr& pCommand);
+        void FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommandPtr& pCommand);
 
-        void FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommunicatorCommandPtr>& pCommandVector);
+        void FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, std::vector<std::pair<ulong, ulong> >& pRegionsToBeFetched, std::vector<pmCommandPtr>& pCommandVector);
 
         virtual void* CreateCheckOutMemory(size_t pLength);
 

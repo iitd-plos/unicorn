@@ -1669,7 +1669,7 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
         pTask->GetReducer()->AddSubtask(this, pSubtaskId1, pSplitInfo1);
 }
 
-void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommunicatorCommandPtr>& pNetworkCommands)
+void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetworkCommands)
 {
     if(pNetworkCommands.empty())
         return;
