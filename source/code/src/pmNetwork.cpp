@@ -402,7 +402,8 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 				PMTHROW(pmFatalErrorException());
 
 			memoryReceiveStruct& lStruct = lData->receiveStruct;
-			lLength += sizeof(lStruct) + lData->receiveStruct.length;
+            ulong lDataLength = lData->receiveStruct.length * ((lData->receiveStruct.transferType == TRANSFER_GENERAL) ? 1 : lData->receiveStruct.count);
+			lLength += sizeof(lStruct) + lDataLength;
 
 			if(lLength > __MAX_SIGNED(int))
 				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
@@ -416,9 +417,9 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(MEMORY_RECEIVE_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 
-			if(lData->receiveStruct.length != 0)
+			if(lDataLength != 0)
 			{
-				if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->mem.get_ptr(), (int)lStruct.length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->mem.get_ptr(), (int)lDataLength, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 					PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 			}
 
@@ -702,11 +703,13 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(void* pPackedData, int pDataLength)
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, &(lPackedData->receiveStruct), 1, GetDataTypeMPI(MEMORY_RECEIVE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-			if(lPackedData->receiveStruct.length != 0)
+            ulong lDataLength = lPackedData->receiveStruct.length * ((lPackedData->receiveStruct.transferType == TRANSFER_GENERAL) ? 1 : lPackedData->receiveStruct.count);
+
+			if(lDataLength != 0)
             {
-				lPackedData->mem.reset(new char[lPackedData->receiveStruct.length]);
+				lPackedData->mem.reset(new char[lDataLength]);
 				
-				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, lPackedData->mem.get_ptr(), (int)lPackedData->receiveStruct.length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+				if( MPI_CALL("MPI_Unpack", (MPI_Unpack(pPackedData, pDataLength, &lPos, lPackedData->mem.get_ptr(), (int)lDataLength, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
 					PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 			}
 
