@@ -946,6 +946,11 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
     lCurrentRange.endSubtask = pmExecutionStub::ExecuteWrapper(lCurrentRange, pEvent, lIsMultiAssignRange, lReassigned, lForceAckFlag, lPrematureTermination, lExecStatus);
 #endif
 
+    DEBUG_EXCEPTION_ASSERT(lCurrentRange.startSubtask <= lCurrentRange.endSubtask);
+
+    if(lReassigned) // A secondary allottee has finished and negotiated this subtask range and added a POST_HANDLE_EXEC_COMPLETION for the rest of the range
+        return;
+
     if(lPrematureTermination)
     {
     #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
@@ -962,9 +967,6 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
     }
     else
     {
-        if(lReassigned) // A secondary allottee has finished and negotiated this subtask range and added a POST_HANDLE_EXEC_COMPLETION for the rest of the range
-            return;
-        
     #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
         std::cout << "[Host " << pmGetHostId() << "]: Executed subtask range [" << lCurrentRange.startSubtask << " - " << lCurrentRange.endSubtask << "] - " << lRange.endSubtask << std::endl;
     #endif
