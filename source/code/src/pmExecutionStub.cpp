@@ -664,8 +664,8 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 auto lAllotteeIter = lSecondaryAllotteeMap.find(lPair);
                 if((lAllotteeIter == lSecondaryAllotteeMap.end()) || (lAllotteeIter->second.size() < MAX_SUBTASK_MULTI_ASSIGN_COUNT - 1))
                 {
-                    ulong lMultiAssignSubtaskCount = mCurrentSubtaskRangeStats->endSubtaskId - mCurrentSubtaskRangeStats->startSubtaskId + 1;
-                    ulong lPendingExecutions = ((lMultiAssignSubtaskCount == 1) ? 0 : (mCurrentSubtaskRangeStats->endSubtaskId - mCurrentSubtaskRangeStats->currentSubtaskId));
+                    ulong lSubtaskCount = mCurrentSubtaskRangeStats->endSubtaskId - mCurrentSubtaskRangeStats->startSubtaskId + 1;
+                    ulong lPendingExecutions = (mCurrentSubtaskRangeStats->currentSubtaskIdValid ? (mCurrentSubtaskRangeStats->endSubtaskId - mCurrentSubtaskRangeStats->currentSubtaskId) : (lSubtaskCount - 1));  // Using lSubtaskCount - 1 as lSubtaskCount may result in stealing all subtasks which will leave 0 subtasks with current device. This is not implemented gracefully yet.
 
                     if(lPendingExecutions)
                     {
@@ -673,10 +673,14 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                         
                         if(lStealCount)
                         {
+                            DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->currentSubtaskIdValid || lStealCount != lSubtaskCount);  // All can't be stolen
+
                             pmSubtaskRange lStolenRange(pTask, NULL, (mCurrentSubtaskRangeStats->endSubtaskId - lStealCount) + 1, mCurrentSubtaskRangeStats->endSubtaskId);
                         
                             mCurrentSubtaskRangeStats->endSubtaskId -= lStealCount;
                             mCurrentSubtaskRangeStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask range finishes
+                            
+                            DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->endSubtaskId >= mCurrentSubtaskRangeStats->startSubtaskId);
 
                             lStealSuccess = true;
                             pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
@@ -684,6 +688,8 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     }
                     else
                     {
+                        ulong lMultiAssignSubtaskCount = 1;
+
                         bool lLocalRateZero = (lLocalRate == (double)0.0);
                         double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
                         double lTransferOverheadTime = 0;   // add network and other overheads here
@@ -1457,7 +1463,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 #endif
 {
     ulong lStartSubtask = pCurrentRange.startSubtask;
-    ulong lEndSubtask = std::numeric_limits<ulong>::infinity();
+    ulong lEndSubtask = std::numeric_limits<ulong>::max();
     ulong lCleanupEndSubtask = lEndSubtask;
 
     const pmSubtaskRange& lParentRange = pEvent.range;
@@ -1495,7 +1501,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         ulong* lPrefetchSubtaskIdPtr = NULL;
 
     #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
-        ulong lPrefetchSubtaskId = std::numeric_limits<ulong>::infinity();
+        ulong lPrefetchSubtaskId = std::numeric_limits<ulong>::max();
         if(pCurrentRange.task->ShouldOverlapComputeCommunication() && lEndSubtask != lParentRange.endSubtask)
         {
             lPrefetchSubtaskIdPtr = &lPrefetchSubtaskId;
@@ -1525,12 +1531,14 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 {
                     DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->endSubtaskId >= lSubtaskId - 1);
                     lEndSubtask = mCurrentSubtaskRangeStats->endSubtaskId;
-                    
+
+                    DEBUG_EXCEPTION_ASSERT(lEndSubtask >= lStartSubtask);
                     if(lEndSubtask < lSubtaskId)
                         break;
                 }
                 
                 mCurrentSubtaskRangeStats->currentSubtaskId = lSubtaskId;
+                mCurrentSubtaskRangeStats->currentSubtaskIdValid = true;
             }
             
             TIMER_IMPLEMENTATION_CLASS& lTimer = lSubtaskTimerVector[lSubtaskId - lStartSubtask];
@@ -1720,8 +1728,9 @@ pmExecutionStub::currentSubtaskRangeStats::currentSubtaskRangeStats(pmTask* pTas
     : task(pTask)
     , startSubtaskId(pStartSubtaskId)
     , endSubtaskId(pEndSubtaskId)
-    , currentSubtaskId(std::numeric_limits<ulong>::infinity())
+    , currentSubtaskId(std::numeric_limits<ulong>::max())
     , parentRangeStartSubtask(pParentRangeStartSubtask)
+    , currentSubtaskIdValid(false)
     , originalAllottee(pOriginalAllottee)
     , startTime(pStartTime)
     , reassigned(false)
