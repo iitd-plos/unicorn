@@ -63,8 +63,10 @@ class pmMemoryManager : public pmBase
         virtual void DeallocateMemory(void* pMem) = 0;
 
         virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector) = 0;
-        virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector) = 0;
         virtual void CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask) = 0;
+
+        virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector) = 0;
+        virtual void CopyReceivedScatteredMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, void* pSrcMem, pmTask* pRequestingTask) = 0;
     
         virtual size_t GetVirtualMemoryPageSize() const = 0;
         virtual size_t FindAllocationSize(size_t pLength, size_t& pPageCount) = 0;
@@ -138,8 +140,10 @@ class pmLinuxMemoryManager : public pmMemoryManager
         virtual void DeallocateMemory(void* pMem);
 
         virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector);
-        virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector);
         virtual void CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, void* pSrcMem, pmTask* pRequestingTask);
+
+        virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector);
+        virtual void CopyReceivedScatteredMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, void* pSrcMem, pmTask* pRequestingTask);
 
         virtual size_t GetVirtualMemoryPageSize() const;
 
@@ -154,6 +158,8 @@ class pmLinuxMemoryManager : public pmMemoryManager
 		pmLinuxMemoryManager();
 		virtual ~pmLinuxMemoryManager();
 
+        void CopyReceivedMemoryInternal(pmAddressSpace* pAddressSpace, linuxMemManager::pmInFlightRegions& pInFlightMap, pmTask* pLockingTask, ulong pOffset, ulong pLength, void* pSrcMem);
+    
         void CreateAddressSpaceSpecifics(pmAddressSpace* pAddressSpace, int pSharedMemDescriptor);
         linuxMemManager::addressSpaceSpecifics& GetAddressSpaceSpecifics(pmAddressSpace* pAddressSpace);
     
