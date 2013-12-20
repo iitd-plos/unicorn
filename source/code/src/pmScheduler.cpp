@@ -1575,11 +1575,8 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                             else    // TRANSFER_SCATTERED
                             {
                                 DEBUG_EXCEPTION_ASSERT(lData->receiveStruct.transferType == TRANSFER_SCATTERED);
-                                
-                                for(ulong i = 0; i < lData->receiveStruct.count; ++i)
-                                {
-                                    lMemoryManager->CopyReceivedMemory(lAddressSpace, lData->receiveStruct.offset + i * lData->receiveStruct.step, lData->receiveStruct.length, lData->mem.get_ptr() + i * lData->receiveStruct.length, lRequestingTask);
-                                }
+
+                                lMemoryManager->CopyReceivedScatteredMemory(lAddressSpace, lData->receiveStruct.offset, lData->receiveStruct.length, lData->receiveStruct.step, lData->receiveStruct.count, lData->mem.get_ptr(), lRequestingTask);                                
                             }
                         }
                     }

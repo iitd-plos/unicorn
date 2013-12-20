@@ -524,6 +524,9 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
                         DEBUG_EXCEPTION_ASSERT((pPair.second.second.hostOffset - pOffset) % pStep == 0);
                         
                         lRangeLiesOnOneMachine &= (lServingHost == pPair.second.second.host);
+                        
+                        if(!lRangeLiesOnOneMachine)
+                            return; // return from functor
                     });
                     
                     if(lRangeLiesOnOneMachine && lServingHost != PM_LOCAL_MACHINE)
@@ -659,8 +662,7 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
 {
     using namespace linuxMemManager;
 
-    if(!pLength)
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(pLength);
     
     pmTask* lLockingTask = pAddressSpace->GetLockingTask();
     if(lLockingTask != pRequestingTask)
@@ -672,11 +674,39 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
 
     FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
     
+    CopyReceivedMemoryInternal(pAddressSpace, lMap, lLockingTask, pOffset, pLength, pSrcMem);
+}
+
+void pmLinuxMemoryManager::CopyReceivedScatteredMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, void* pSrcMem, pmTask* pRequestingTask)
+{
+    using namespace linuxMemManager;
+
+    EXCEPTION_ASSERT(pLength && pStep && pCount);
+    
+    pmTask* lLockingTask = pAddressSpace->GetLockingTask();
+    if(lLockingTask != pRequestingTask)
+        return;
+
+    addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
+    pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
+
+    FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
+    
+    for(ulong i = 0; i < pCount; ++i)
+        CopyReceivedMemoryInternal(pAddressSpace, lMap, lLockingTask, pOffset + i * pStep, pLength, static_cast<void*>(static_cast<char*>(pSrcMem) + i * pLength));
+}
+
+// This method must be called with mInFlightLock on mInFlightMap of the address space acuired
+void pmLinuxMemoryManager::CopyReceivedMemoryInternal(pmAddressSpace* pAddressSpace, linuxMemManager::pmInFlightRegions& pInFlightMap, pmTask* pLockingTask, ulong pOffset, ulong pLength, void* pSrcMem)
+{
+    using namespace linuxMemManager;
+
     void* lDestMem = pAddressSpace->GetMem();
     char* lAddr = (char*)lDestMem + pOffset;
     
-    pmInFlightRegions::iterator lIter = lMap.find(lAddr);
-    if((lIter != lMap.end()) && (lIter->second.first == pLength))
+    pmInFlightRegions::iterator lIter = pInFlightMap.find(lAddr);
+    if((lIter != pInFlightMap.end()) && (lIter->second.first == pLength))
     {
         std::pair<size_t, regionFetchData>& lPair = lIter->second;
         memcpy((void*)lAddr, pSrcMem, pLength);
@@ -685,8 +715,8 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
         pAddressSpace->AcquireOwnershipImmediate(pOffset, lPair.first);
 
     #ifdef ENABLE_TASK_PROFILING
-        if(lLockingTask)
-            lLockingTask->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+        if(pLockingTask)
+            pLockingTask->GetTaskProfiler()->RecordProfileEvent(pLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
     #endif
 
     #ifdef ENABLE_MEM_PROFILING
@@ -696,13 +726,13 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
         pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
         lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
 
-        lMap.erase(lIter);
+        pInFlightMap.erase(lIter);
     }
     else
     {
         pmInFlightRegions::iterator lBaseIter;
         pmInFlightRegions::iterator* lBaseIterAddr = &lBaseIter;
-        FIND_FLOOR_ELEM(pmInFlightRegions, lSpecifics.mInFlightMemoryMap, lAddr, lBaseIterAddr);
+        FIND_FLOOR_ELEM(pmInFlightRegions, pInFlightMap, lAddr, lBaseIterAddr);
         
         if(!lBaseIterAddr)
             PMTHROW(pmFatalErrorException());
@@ -739,8 +769,8 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
             pAddressSpace->AcquireOwnershipImmediate(lOffset, lPair.first);
             
         #ifdef ENABLE_TASK_PROFILING
-            if(lLockingTask)
-                pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(lLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+            if(pLockingTask)
+                pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
         #endif
 
         #ifdef ENABLE_MEM_PROFILING
@@ -750,7 +780,7 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
             pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
             lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
 
-            lSpecifics.mInFlightMemoryMap.erase(lBaseIter);
+            pInFlightMap.erase(lBaseIter);
         }
         else
         {            
