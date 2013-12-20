@@ -333,16 +333,42 @@ void pmLinuxMemoryManager::CancelUnreferencedRequests(pmAddressSpace* pAddressSp
     pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
 
+    // During scattered transfers, a single command is replicated for as general fetch commands and multiple entries are
+    // made into the inFlightMap. This increases the use_count of the shared ptr. Here, it is important to find out
+    // the use_count that is external to inFlightMap. To compute the external use_count, we use the following map.
+    std::map<pmCommandPtr, std::vector<pmInFlightRegions::iterator>> lInFlightUseCountMap;
+    
     FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
     
     auto lIter = lMap.begin(), lEnd = lMap.end();
     while(lIter != lEnd)
     {
         if(lIter->second.second.receiveCommand.unique())
+        {
             lMap.erase(lIter++);
+        }
         else
+        {
+            decltype(lInFlightUseCountMap)::iterator lUseCountIter = lInFlightUseCountMap.find(lIter->second.second.receiveCommand);
+            if(lUseCountIter == lInFlightUseCountMap.end())
+                lUseCountIter = lInFlightUseCountMap.emplace(std::piecewise_construct, std::forward_as_tuple(lIter->second.second.receiveCommand), std::forward_as_tuple()).first;
+            
+            lUseCountIter->second.push_back(lIter);
+            
             ++lIter;
+        }
     }
+    
+    for_each(lInFlightUseCountMap, [&lMap] (const decltype(lInFlightUseCountMap)::value_type& pPair)
+    {
+        if((ulong)pPair.first.use_count() == (ulong)pPair.second.size() + 1) // Plus 1 for lInFlightUseCountMap
+        {
+            for_each(pPair.second, [&lMap] (const pmInFlightRegions::iterator& pIter)
+            {
+                lMap.erase(pIter);
+            });
+        }
+    });
 }
     
 // This function must be called after acquiring lock on pInFlightMap
@@ -449,7 +475,8 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
     void* lMem = pAddressSpace->GetMem();
     
 	std::vector<std::pair<ulong, ulong>> lRegionsToBeFetched;	// Start address and last address of sub ranges to be fetched
-    std::vector<pmCommandPtr> lTempCommandVector;
+    std::set<pmCommandPtr> lTempCommandSet;
+    size_t lTempCommandCount = 0;
     addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
     pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
@@ -463,13 +490,24 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
 
         for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
         {
-            FindRegionsNotInFlight(lMap, lMem, pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lRegionsToBeFetched, lTempCommandVector);
-            lPartiallyInFlight |= (lTempCommandVector.size() > 1);
+            std::vector<pmCommandPtr> lInnerCommandVector;
+            
+            FindRegionsNotInFlight(lMap, lMem, pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lRegionsToBeFetched, lInnerCommandVector);
+            lPartiallyInFlight |= (lInnerCommandVector.size() > 1);
+
+            if(lPartiallyInFlight)
+                break;
+
+            lTempCommandCount += lInnerCommandVector.size();
+
+            // If the range is already in one or more scattered flights, tehn multiple general entries are put into inFlightMap
+            // Having a set ensures that a command is inserted and subsequently waited upon only once
+            std::move(lInnerCommandVector.begin(), lInnerCommandVector.end(), std::inserter(lTempCommandSet, lTempCommandSet.begin()));
         }
 
         if(!lPartiallyInFlight)
         {
-            if(lTempCommandVector.size() == 0)  // Nothing is in flight
+            if(lTempCommandCount == 0)  // Nothing is in flight
             {
                 pmAddressSpace::pmMemOwnership lOwnerships;
                 for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
@@ -502,9 +540,9 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
                     lRangeLiesOnOneMachine = false;
                 }
             }
-            else if(lTempCommandVector.size() == pScatteredSubscriptionInfo.count)  // Everything is in flight
+            else if(lTempCommandCount == pScatteredSubscriptionInfo.count)  // Everything is in flight (either scattered or general)
             {
-                pCommandVector.insert(pCommandVector.end(), lTempCommandVector.begin(), lTempCommandVector.end());
+                pCommandVector.insert(pCommandVector.end(), lTempCommandSet.begin(), lTempCommandSet.end());
             }
             else    // Partially in flight
             {

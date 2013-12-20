@@ -26,6 +26,7 @@
 #include "pmTimer.h"
 #include "pmSignalWait.h"
 
+#include <set>
 #include <memory>
 
 namespace pm
@@ -78,7 +79,7 @@ class pmCommand : public pmBase
 		/** The following functions must be called by clients for command
          execution time measurement, status reporting and callback calling. */
 		void MarkExecutionStart();
-        virtual void MarkExecutionEnd(pmStatus pStatus, pmCommandPtr& pSharedPtr);
+        virtual void MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& pSharedPtr);
 
 		double GetExecutionTimeInSecs() const;
 
@@ -115,7 +116,7 @@ class pmCommand : public pmBase
 		finalize_ptr<pmSignalWait> mSignalWait;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
     
-        std::vector<pmCommandPtr> mDependentCommands;
+        std::set<pmCommandPtr> mDependentCommands;
 		TIMER_IMPLEMENTATION_CLASS mTimer;
 };
     
@@ -124,7 +125,7 @@ class pmCountDownCommand : public pmCommand
 	public:
         static pmCommandPtr CreateSharedPtr(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback);
 
-        virtual void MarkExecutionEnd(pmStatus pStatus, pmCommandPtr& pSharedPtr);
+        virtual void MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& pSharedPtr);
 
     protected:
         pmCountDownCommand(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback)
@@ -218,8 +219,8 @@ class pmAccumulatorCommand : public pmCommand
     public:
 		static pmCommandPtr CreateSharedPtr(const std::vector<pmCommandPtr>& pVector);
 
-        void FinishCommand(pmCommandPtr& pSharedPtr);
-        void ForceComplete(pmCommandPtr& pSharedPtr);
+        void FinishCommand(const pmCommandPtr& pSharedPtr);
+        void ForceComplete(const pmCommandPtr& pSharedPtr);
 
 	protected:
 		pmAccumulatorCommand()
@@ -230,7 +231,7 @@ class pmAccumulatorCommand : public pmCommand
         {}
 
 	private:
-        void CheckFinish(pmCommandPtr& pSharedPtr);
+        void CheckFinish(const pmCommandPtr& pSharedPtr);
     
         uint mCommandCount;
         bool mForceCompleted;

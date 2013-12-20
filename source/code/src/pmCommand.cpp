@@ -105,10 +105,7 @@ bool pmCommand::AddDependentIfPending(pmCommandPtr& pSharedPtr)
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     if(mStatus == pmStatusUnavailable)
-    {
-        mDependentCommands.push_back(pSharedPtr);
-        return true;
-    }
+        return mDependentCommands.insert(pSharedPtr).second;
     
     return false;
 }
@@ -120,14 +117,15 @@ void pmCommand::MarkExecutionStart()
     
 void pmCommand::SignalDependentCommands()
 {
-    std::vector<pmCommandPtr>::iterator lIter = mDependentCommands.begin(), lEndIter = mDependentCommands.end();
-    for(; lIter != lEndIter; ++lIter)
-        static_cast<pmAccumulatorCommand*>((*lIter).get())->FinishCommand((*lIter));
-    
+    for_each(mDependentCommands, [] (const pmCommandPtr& pCommandPtr)
+    {
+        static_cast<pmAccumulatorCommand*>(pCommandPtr.get())->FinishCommand(pCommandPtr);
+    });
+
     mDependentCommands.clear();
 }
 
-void pmCommand::MarkExecutionEnd(pmStatus pStatus, pmCommandPtr& pSharedPtr)
+void pmCommand::MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& pSharedPtr)
 {
 	DEBUG_EXCEPTION_ASSERT(pSharedPtr.get() == this);
 
@@ -161,7 +159,7 @@ pmCommandPtr pmCountDownCommand::CreateSharedPtr(size_t pCount, ushort pPriority
     return pmCommandPtr(new pmCountDownCommand(pCount, pPriority, pType, pCallback));
 }
 
-void pmCountDownCommand::MarkExecutionEnd(pmStatus pStatus, pmCommandPtr& pSharedPtr)
+void pmCountDownCommand::MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& pSharedPtr)
 {
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCountLock, Lock(), Unlock());
     
@@ -181,12 +179,11 @@ pmCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<pmCommandPt
 
     FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lCommand->mAccumulatorResourceLock, Lock(), Unlock());
 
-    std::vector<pmCommandPtr>::const_iterator lIter = pVector.begin(), lEndIter = pVector.end();
-    for(; lIter != lEndIter; ++lIter)
+    for_each(pVector, [&lCommand, &lSharedPtr] (const pmCommandPtr& pCommandPtr)
     {
-        if(((*lIter).get())->AddDependentIfPending(lSharedPtr))
+        if(pCommandPtr->AddDependentIfPending(lSharedPtr))
             ++lCommand->mCommandCount;
-    }
+    });
 
     lCommand->MarkExecutionStart();
     lCommand->CheckFinish(lSharedPtr);
@@ -194,7 +191,7 @@ pmCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<pmCommandPt
     return lSharedPtr;
 }
 
-void pmAccumulatorCommand::FinishCommand(pmCommandPtr& pSharedPtr)
+void pmAccumulatorCommand::FinishCommand(const pmCommandPtr& pSharedPtr)
 {
 	FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAccumulatorResourceLock, Lock(), Unlock());
 
@@ -202,7 +199,7 @@ void pmAccumulatorCommand::FinishCommand(pmCommandPtr& pSharedPtr)
     CheckFinish(pSharedPtr);
 }
 
-void pmAccumulatorCommand::ForceComplete(pmCommandPtr& pSharedPtr)
+void pmAccumulatorCommand::ForceComplete(const pmCommandPtr& pSharedPtr)
 {
 	FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAccumulatorResourceLock, Lock(), Unlock());
 
@@ -214,7 +211,7 @@ void pmAccumulatorCommand::ForceComplete(pmCommandPtr& pSharedPtr)
 }
 
 /* This method must be called with mAccumulatorResourceLock acquired */
-void pmAccumulatorCommand::CheckFinish(pmCommandPtr& pSharedPtr)
+void pmAccumulatorCommand::CheckFinish(const pmCommandPtr& pSharedPtr)
 {
     if(!mCommandCount && !mForceCompleted)
         this->MarkExecutionEnd(pmSuccess, pSharedPtr);
