@@ -1952,7 +1952,7 @@ std::unique_ptr<pmCudaCacheKey> pmStubCUDA::MakeCudaCacheKey(pmTask* pTask, ulon
             break;
             
         case SUBSCRIPTION_SCATTERED:
-            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetScatteredSubscriptionInfoVector(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex)));
+            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedScatteredSubscriptionInfoVector(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex)));
             break;
             
         case SUBSCRIPTION_GENERAL:

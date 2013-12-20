@@ -295,8 +295,6 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
     
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-    lSubtask.mAddressSpacesData[pMemIndex].mSubscriptionInfoVector.emplace_back(pSubscriptionInfo);
-
     if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
     {
         RegisterSubscriptionInternal(lSubtask, pMemIndex, READ_SUBSCRIPTION, pSubscriptionInfo);
@@ -314,8 +312,6 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
         return;
 
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
-
-    lSubtask.mAddressSpacesData[pMemIndex].mScatteredSubscriptionInfoVector.emplace_back(pScatteredSubscriptionInfo);
 
     if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
     {
@@ -336,6 +332,11 @@ void pmSubscriptionManager::RegisterSubscriptionInternal(pmSubtask& pSubtask, ui
 
     pmSubtaskAddressSpaceData& lAddressSpaceData = pSubtask.mAddressSpacesData[pMemIndex];
     pmSubtaskSubscriptionData& lSubscriptionData = (IsReadSubscription(pSubscriptionType) ? lAddressSpaceData.mReadSubscriptionData : lAddressSpaceData.mWriteSubscriptionData);
+
+    if(IsReadSubscription(pSubscriptionType))
+        lAddressSpaceData.mReadSubscriptionInfoVector.emplace_back(pSubscriptionInfo);
+    else
+        lAddressSpaceData.mWriteSubscriptionInfoVector.emplace_back(pSubscriptionInfo);
 
     subscriptionRecordType& lMap = lSubscriptionData.mSubscriptionRecords;
     pmSubscriptionInfo& lConsolidatedSubscription = lSubscriptionData.mConsolidatedSubscriptions;
@@ -373,6 +374,11 @@ void pmSubscriptionManager::RegisterSubscriptionInternal(pmSubtask& pSubtask, ui
     pmSubtaskAddressSpaceData& lAddressSpaceData = pSubtask.mAddressSpacesData[pMemIndex];
     pmSubtaskSubscriptionData& lSubscriptionData = (IsReadSubscription(pSubscriptionType) ? lAddressSpaceData.mReadSubscriptionData : lAddressSpaceData.mWriteSubscriptionData);
 
+    if(IsReadSubscription(pSubscriptionType))
+        lAddressSpaceData.mScatteredReadSubscriptionInfoVector.emplace_back(pScatteredSubscriptionInfo);
+    else
+        lAddressSpaceData.mScatteredWriteSubscriptionInfoVector.emplace_back(pScatteredSubscriptionInfo);
+
     subscriptionRecordType& lMap = lSubscriptionData.mSubscriptionRecords;
     pmSubscriptionInfo& lConsolidatedSubscription = lSubscriptionData.mConsolidatedSubscriptions;
     
@@ -407,8 +413,8 @@ pmSubscriptionFormat pmSubscriptionManager::GetSubscriptionFormat(pmExecutionStu
     
     pmSubtaskAddressSpaceData& lData = lSubtask.mAddressSpacesData[pMemIndex];
     
-    size_t lScatteredSize = lData.mScatteredSubscriptionInfoVector.size();
-    size_t lNonScatteredSize = lData.mSubscriptionInfoVector.size();
+    size_t lScatteredSize = lData.mScatteredReadSubscriptionInfoVector.size() + lData.mScatteredWriteSubscriptionInfoVector.size();
+    size_t lNonScatteredSize = lData.mReadSubscriptionInfoVector.size() + lData.mWriteSubscriptionInfoVector.size();
     
     if(lScatteredSize && lNonScatteredSize)
         return SUBSCRIPTION_GENERAL;
@@ -420,13 +426,20 @@ pmSubscriptionFormat pmSubscriptionManager::GetSubscriptionFormat(pmExecutionStu
     return SUBSCRIPTION_GENERAL;
 }
 
-const std::vector<pmScatteredSubscriptionInfo>& pmSubscriptionManager::GetScatteredSubscriptionInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
+std::vector<pmScatteredSubscriptionInfo> pmSubscriptionManager::GetUnifiedScatteredSubscriptionInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
 {
     DEBUG_EXCEPTION_ASSERT(GetSubscriptionFormat(pStub, pSubtaskId, pSplitInfo, pMemIndex) == SUBSCRIPTION_SCATTERED);
 
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
-    return lSubtask.mAddressSpacesData[pMemIndex].mScatteredSubscriptionInfoVector;
+    pmSubtaskAddressSpaceData& lAddressSpaceData = lSubtask.mAddressSpacesData[pMemIndex];
+    std::vector<pmScatteredSubscriptionInfo>& lReadVector = lAddressSpaceData.mScatteredReadSubscriptionInfoVector;
+    std::vector<pmScatteredSubscriptionInfo>& lWriteVector = lAddressSpaceData.mScatteredWriteSubscriptionInfoVector;
+
+    std::vector<pmScatteredSubscriptionInfo> lVector(lReadVector.begin(), lReadVector.end());
+    std::copy(lWriteVector.begin(), lWriteVector.end(), std::back_inserter(lVector));
+    
+    return lVector;
 }
 
 /* Must be called with mSubtaskMapVector stub's lock acquired */
@@ -1207,13 +1220,13 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
             });
         #else
             // Fetch exact scattered subscriptions (these subscriptions are packed at the sender side before transfer and then unpacked by the receiver)
-            for_each(pAddressSpaceData.mScatteredSubscriptionInfoVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+            for_each(pAddressSpaceData.mScatteredReadSubscriptionInfoVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
             {
                 MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchScatteredMemoryRegion(pAddressSpace, lPriority, pScatteredSubscriptionInfo, lCommandVector);
             });
             
             // For non-scattered subscriptions, we fetch entire memory pages (no packing/unpacking happens here)
-            for_each(pAddressSpaceData.mSubscriptionInfoVector, [&] (const pmSubscriptionInfo& pSubscriptionInfo)
+            for_each(pAddressSpaceData.mReadSubscriptionInfoVector, [&] (const pmSubscriptionInfo& pSubscriptionInfo)
             {
                 size_t lOffset = pSubscriptionInfo.offset;
                 size_t lLength = pSubscriptionInfo.length;

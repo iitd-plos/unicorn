@@ -606,6 +606,7 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, usho
 	}
 }
 
+// This method must be called with mInFlightLock on mInFlightMap of the address space acquired
 void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommandPtr& pCommand)
 {
     using namespace linuxMemManager;
@@ -697,7 +698,7 @@ void pmLinuxMemoryManager::CopyReceivedScatteredMemory(pmAddressSpace* pAddressS
         CopyReceivedMemoryInternal(pAddressSpace, lMap, lLockingTask, pOffset + i * pStep, pLength, static_cast<void*>(static_cast<char*>(pSrcMem) + i * pLength));
 }
 
-// This method must be called with mInFlightLock on mInFlightMap of the address space acuired
+// This method must be called with mInFlightLock on mInFlightMap of the address space acquired
 void pmLinuxMemoryManager::CopyReceivedMemoryInternal(pmAddressSpace* pAddressSpace, linuxMemManager::pmInFlightRegions& pInFlightMap, pmTask* pLockingTask, ulong pOffset, ulong pLength, void* pSrcMem)
 {
     using namespace linuxMemManager;

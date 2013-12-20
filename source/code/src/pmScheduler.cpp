@@ -1322,8 +1322,7 @@ void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const 
 		pmStubManager* lManager = pmStubManager::GetStubManager();
 		pmExecutionStub* lStub = lManager->GetStub(pDevice);
 
-		if(!lStub)
-			PMTHROW(pmFatalErrorException());
+        EXCEPTION_ASSERT(lStub);
 
 		pmTaskExecStats& lTaskExecStats = pRange.task->GetTaskExecStats();
 		return StealRequestEvent(pDevice, pRange.task, lTaskExecStats.GetStubExecutionRate(lStub));
