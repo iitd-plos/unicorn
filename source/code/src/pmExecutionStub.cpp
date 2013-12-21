@@ -1105,6 +1105,8 @@ void pmExecutionStub::HandleSplitSubtaskExecutionCompletion(pmTask* pTask, const
     
 void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter::splitRecord& pSplitRecord, pmStatus pExecStatus)
 {
+    EXCEPTION_ASSERT(pRange.startSubtask == pRange.endSubtask && pRange.endSubtask == pSplitRecord.subtaskId);
+
     // PUSH expects one consolidated acknowledgement for the entire assigned range
     if(pRange.task->GetSchedulingModel() == scheduler::PUSH && !pRange.originalAllottee && pRange.task->GetSubtaskSplitter().IsSplitting(GetType()))
     {
@@ -1117,9 +1119,11 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
 
         DEBUG_EXCEPTION_ASSERT(lIter->second.second.find(pSplitRecord.subtaskId) == lIter->second.second.end());
         
-        lIter->second.second[pSplitRecord.subtaskId].reserve(pSplitRecord.splitCount);
+        std::map<ulong, std::vector<pmExecutionStub*> >::iterator lMapIter = lIter->second.second.emplace(std::piecewise_construct, std::forward_as_tuple(pSplitRecord.subtaskId), std::forward_as_tuple()).first;
+        lMapIter->second.reserve(pSplitRecord.splitCount);
+
         for(uint i = 0; i < pSplitRecord.splitCount; ++i)
-            lIter->second.second[pSplitRecord.subtaskId][i] = pSplitRecord.assignedStubs[i].first;
+            lMapIter->second.push_back(pSplitRecord.assignedStubs[i].first);
 
         ulong lSubtasks = lIter->second.first.second - lIter->second.first.first + 1;
         
@@ -1137,7 +1141,7 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
     {
         std::map<ulong, std::vector<pmExecutionStub*> > lMap;
 
-        std::map<ulong, std::vector<pmExecutionStub*> >::iterator lMapIter = lMap.insert(std::make_pair(pRange.startSubtask, std::vector<pmExecutionStub*>())).first;
+        std::map<ulong, std::vector<pmExecutionStub*> >::iterator lMapIter = lMap.emplace(std::piecewise_construct, std::forward_as_tuple(pSplitRecord.subtaskId), std::forward_as_tuple()).first;
         lMapIter->second.reserve(pSplitRecord.splitCount);
     
         for(uint i = 0; i < pSplitRecord.splitCount; ++i)
@@ -1163,12 +1167,12 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
         {
             lAddressSpaceIndexVector.push_back((uint)lOwnershipVector.size());
 
-            for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId < pRange.endSubtask; ++lSubtaskId)
+            for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
             {
                 const std::vector<pmExecutionStub*>& lVector = pMap.find(lSubtaskId)->second;
                 uint lSplitCount = (uint)lVector.size();
 
-                for_each_with_index(lVector.begin(), lVector.end(), [&] (const pmExecutionStub* pStub, size_t pSplitIndex)
+                for_each_with_index(lVector, [&] (const pmExecutionStub* pStub, size_t pSplitIndex)
                 {
                     pmSplitInfo lSplitInfo((uint)pSplitIndex, lSplitCount);
                     lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, lSubtaskId, &lSplitInfo, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
