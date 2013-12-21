@@ -279,7 +279,7 @@ class pmLocalTask : public pmTask
 class pmRemoteTask : public pmTask
 {
 	public:
-        pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char> >& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, ulong pSequenceNumber, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
+        pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, ulong pSequenceNumber, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
 
         virtual ~pmRemoteTask();
 
@@ -296,7 +296,7 @@ class pmRemoteTask : public pmTask
         void MarkReductionFinished();
 
 	private:
-        finalize_ptr<char, deleteArrayDeallocator<char> > mTaskConfAutoPtr;
+        finalize_ptr<char, deleteArrayDeallocator<char>> mTaskConfAutoPtr;
         bool mUserSideTaskCompleted;
         bool mLocalStubsFreeOfCancellations, mLocalStubsFreeOfShadowMemCommits;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;

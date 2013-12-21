@@ -322,15 +322,15 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
  
     
 /* struct memoryReceivePacked */
-memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
+memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, std::function<char* (ulong)>& pDataProducer, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
     : receiveStruct(pMemOwnerHost, pGenerationNumber, pOffset, pLength, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber)
+    , mDataProducer(pDataProducer)
 {
-    mem.reset(static_cast<char*>(pMemPtr), false);
 }
 
-memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, finalize_ptr<char, deleteArrayDeallocator<char>>& pMem, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
+memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, std::function<char* (ulong)>& pDataProducer, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
     : receiveStruct(pMemOwnerHost, pGenerationNumber, pOffset, pLength, pStep, pCount, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber)
-    , mem(std::move(pMem))
+    , mDataProducer(pDataProducer)
 {
 }
 

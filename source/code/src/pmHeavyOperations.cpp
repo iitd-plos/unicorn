@@ -224,7 +224,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         {
             unpackEvent& lEventDetails = static_cast<unpackEvent&>(pEvent);
         
-            pmCommunicatorCommandPtr lCommand = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnpackData(lEventDetails.packedData.get_ptr(), lEventDetails.packedLength);
+            pmCommunicatorCommandPtr lCommand = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnpackData(std::move(lEventDetails.packedData), lEventDetails.packedLength);
 
             lCommand->MarkExecutionStart();
             NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->ReceiveComplete(lCommand, pmSuccess);
@@ -335,13 +335,24 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
                 pmAddressSpace* lDestAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(pDestMemIdentifier.memOwnerHost), pDestMemIdentifier.generationNumber);
             
                 EXCEPTION_ASSERT(lDestAddressSpace);
+                
+                std::function<void (char*, ulong)> lFunc([&] (char* pMem, ulong pCopyLength)
+                {
+                    DEBUG_EXCEPTION_ASSERT(pCopyLength == pLength);
+                    memcpy(pMem, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), pCopyLength);
+                });
 
                 if(!pIsTaskOriginated || pRequestingTask)
-                    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestAddressSpace, pReceiverOffset + lInternalOffset - pOffset, pLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), pRequestingTask);
+                    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestAddressSpace, pReceiverOffset + lInternalOffset - pOffset, pLength, lFunc, pRequestingTask);
             }
             else
             {
-                finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset + lInternalOffset - pOffset, lInternalLength, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+                std::function<char* (ulong)> lFunc([&] (ulong pIndex) -> char*
+                {
+                    return static_cast<char*>(lOwnerAddressSpace->GetMem()) + lInternalOffset;
+                });
+                
+                finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset + lInternalOffset - pOffset, lInternalLength, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
             
                 MEM_TRANSFER_DUMP(lSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lInternalLength, (uint)(*pRequestingMachine))
 
@@ -390,25 +401,27 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
     {
         if(lServingHost == PM_LOCAL_MACHINE)
         {
-            size_t lDataSize = pLength * pCount;
-
-            finalize_ptr<char, deleteArrayDeallocator<char>> lMem(new char[lDataSize]);
-            char* lAddr = lMem.get_ptr();
-
-            for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
+            // This function returns pointer to scattered memory for step pScatteredIndex
+            std::function<char* (ulong)> lFunc([&] (ulong pScatteredIndex) -> char*
             {
-                const pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+                DEBUG_EXCEPTION_ASSERT(pScatteredIndex < pCount);
+
+                size_t lOffset = pOffset + pStep * pScatteredIndex;
+
+                auto lIter = lOwnerships.find(lOffset);
+                DEBUG_EXCEPTION_ASSERT(lIter != lOwnerships.end());
+                
+                const pmAddressSpace::vmRangeOwner& lRangeOwner = lIter->second.second;
                 pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
                 
-                EXCEPTION_ASSERT(lOwnerAddressSpace);
+                DEBUG_EXCEPTION_ASSERT(lOwnerAddressSpace);
 
-                memcpy(lAddr, (char*)(lOwnerAddressSpace->GetMem()) + pPair.first, pLength);
-                lAddr += pLength;
+                return (char*)(lOwnerAddressSpace->GetMem()) + lIter->first;
             });
-
-            finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset, pLength, pStep, pCount, lMem, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+            
+            finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset, pLength, pStep, pCount, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
         
-            MEM_TRANSFER_DUMP(lSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, lDataSize, (uint)(*pRequestingMachine))
+            MEM_TRANSFER_DUMP(lSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength * pCount, (uint)(*pRequestingMachine))
 
             pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 

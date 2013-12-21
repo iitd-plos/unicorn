@@ -79,7 +79,7 @@ class pmNetwork : public pmBase
 		virtual void UnregisterTransferDataType(communicator::communicatorDataTypes pDataType) = 0;
 	
 		virtual pmCommunicatorCommandPtr PackData(pmCommunicatorCommandPtr& pCommand) = 0;
-		virtual pmCommunicatorCommandPtr UnpackData(void* pPackedData, int pDataLength) = 0;
+		virtual pmCommunicatorCommandPtr UnpackData(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pDataLength) = 0;
 
 		virtual void InitializePersistentCommand(pmCommunicatorCommandPtr& pCommand) = 0;
 		virtual void TerminatePersistentCommand(pmCommunicatorCommandPtr& pCommand) = 0;
@@ -159,7 +159,7 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
         virtual void FreezeReceptionAndFinishCommands();
 
 		virtual pmCommunicatorCommandPtr PackData(pmCommunicatorCommandPtr& pCommand);
-		virtual pmCommunicatorCommandPtr UnpackData(void* pPackedData, int pDataLength);
+		virtual pmCommunicatorCommandPtr UnpackData(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pDataLength);
 
 		virtual uint GetTotalHostCount() {return mTotalHosts;}
 		virtual uint GetHostId() {return mHostId;}

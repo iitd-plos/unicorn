@@ -198,7 +198,7 @@ struct remoteTaskAssignStruct
 struct remoteTaskAssignPacked
 {
     remoteTaskAssignStruct taskStruct;
-    finalize_ptr<char, deleteArrayDeallocator<char> > taskConf;
+    finalize_ptr<char, deleteArrayDeallocator<char>> taskConf;
     std::vector<taskMemoryStruct> taskMem;
     finalize_ptr<uint, deleteArrayDeallocator<uint> > devices;
 
@@ -669,18 +669,20 @@ struct memoryReceiveStruct
     , sequenceNumber(pSequenceNumber)
     {}
 };
-
+    
 struct memoryReceivePacked
 {
     memoryReceiveStruct receiveStruct;
-    finalize_ptr<char, deleteArrayDeallocator<char>> mem;
 
+    std::function<char* (ulong)> mDataProducer;  // Takes an index and returns a pointer to scattered data for that index (for non-scattered transfers, index is 0)
+    std::function<void (char*, ulong)> mDataReceiver;   // Takes a mem and scattered index and unpacks data at that index into the provided mem.
+    
     memoryReceivePacked()
     : receiveStruct()
     {}
     
-    memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, void* pMemPtr, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
-    memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, finalize_ptr<char, deleteArrayDeallocator<char>>& pMem, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
+    memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, std::function<char* (ulong)>& pDataProducer, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
+    memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, std::function<char* (ulong)>& pDataProducer, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
 };
 
 struct hostFinalizationStruct
