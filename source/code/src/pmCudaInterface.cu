@@ -33,6 +33,17 @@
 namespace pm
 {
     
+struct pmCudaDeviceData
+{
+    int mHardwareId;
+    cudaDeviceProp mDeviceProp;
+    
+    pmCudaDeviceData(int pHardwareId, const cudaDeviceProp& pDeviceProp)
+    : mHardwareId(pHardwareId)
+    , mDeviceProp(pDeviceProp)
+    {}
+};
+    
 extern void* GetExportedSymbol(void* pLibHandle, char* pSymbol);
 
 cudaError_t (*gFuncPtr_cudaGetLastError)(void);
@@ -67,9 +78,9 @@ void* GetCudaSymbol(void* pLibPtr, char* pSymbol)
     return lSymbolPtr;
 }
 
-std::vector<std::pair<int, cudaDeviceProp> >& GetDeviceVector()
+std::vector<pmCudaDeviceData>& GetDeviceVector()
 {
-    static std::vector<std::pair<int, cudaDeviceProp> > gDeviceVector;
+    static std::vector<pmCudaDeviceData> gDeviceVector;
     return gDeviceVector;
 }
 
@@ -234,14 +245,14 @@ void pmCudaInterface::CountAndProbeProcessingElements()
         if(lDeviceProp.computeMode != cudaComputeModeProhibited)
         {
             if(!(lDeviceProp.major == 9999 && lDeviceProp.minor == 9999))
-                GetDeviceVector().push_back(std::pair<int, cudaDeviceProp>(i, lDeviceProp));
+                GetDeviceVector().push_back(pmCudaDeviceData(i, lDeviceProp));
         }
 	}
 }
 
 void pmCudaInterface::BindToDevice(size_t pDeviceIndex)
 {
-	int lHardwareId = GetDeviceVector()[pDeviceIndex].first;
+	int lHardwareId = GetDeviceVector()[pDeviceIndex].mHardwareId;
 
 #ifdef CREATE_EXPLICIT_CUDA_CONTEXTS
     CUcontext& lContext = GetContextMap()[pDeviceIndex];
@@ -264,13 +275,13 @@ void pmCudaInterface::UnbindFromDevice(size_t pDeviceIndex)
 
 std::string pmCudaInterface::GetDeviceName(size_t pDeviceIndex)
 {
-	const cudaDeviceProp& lProp = GetDeviceVector()[pDeviceIndex].second;
+	const cudaDeviceProp& lProp = GetDeviceVector()[pDeviceIndex].mDeviceProp;
 	return lProp.name;
 }
 
 std::string pmCudaInterface::GetDeviceDescription(size_t pDeviceIndex)
 {
-	const cudaDeviceProp& lProp = GetDeviceVector()[pDeviceIndex].second;
+	const cudaDeviceProp& lProp = GetDeviceVector()[pDeviceIndex].mDeviceProp;
 
 	std::stringstream lStream;
     lStream << "Clock Rate=" << lProp.clockRate << ";sharedMemPerBlock=" << lProp.sharedMemPerBlock << ";computeCapability=" << lProp.major << "." << lProp.minor;
@@ -280,7 +291,7 @@ std::string pmCudaInterface::GetDeviceDescription(size_t pDeviceIndex)
 
 size_t pmCudaInterface::GetCudaAlignment(size_t pDeviceIndex)
 {
-	const cudaDeviceProp& lProp = GetDeviceVector()[pDeviceIndex].second;
+	const cudaDeviceProp& lProp = GetDeviceVector()[pDeviceIndex].mDeviceProp;
     
     return lProp.textureAlignment;
 }
