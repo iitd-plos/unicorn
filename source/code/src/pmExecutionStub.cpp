@@ -688,40 +688,54 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     }
                     else
                     {
-                        ulong lMultiAssignSubtaskCount = 1;
+                        bool lShouldMultiAssign = true;
 
-                        bool lLocalRateZero = (lLocalRate == (double)0.0);
-                        double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
-                        double lTransferOverheadTime = 0;   // add network and other overheads here
-                        double lExpectedRemoteTimeToExecute = (lMultiAssignSubtaskCount/pRequestingDeviceExecutionRate);
-                        double lExpectedLocalTimeToFinish = (lLocalRateZero ? 0.0 : ((lMultiAssignSubtaskCount/lLocalRate) - lElapsedTime));
-                    
-                        bool lShouldMultiAssign = (lLocalRateZero ? (lElapsedTime >= (1.0 / pRequestingDeviceExecutionRate) * MA_WAIT_FACTOR) : (lExpectedRemoteTimeToExecute + lTransferOverheadTime < lExpectedLocalTimeToFinish));
-                            
+                    #ifdef SUPPORT_CUDA
+                        // If both the requesting and target devices are GPU and the target has actually started executing the subtask, then
+                        // there is no need to multi assign because even if the source device finishes early after multi-assign, the target
+                        // one can't actually cancel the subtask execution.
+                        
+                        if(GetType() == GPU_CUDA && pRequestingDevice->GetType() == GPU_CUDA && mCurrentSubtaskRangeStats->currentSubtaskInPostDataFetchStage)
+                            lShouldMultiAssign = false;
+                    #endif
+                        
                         if(lShouldMultiAssign)
                         {
-                        #ifdef SUPPORT_SPLIT_SUBTASKS
-                            if(mCurrentSubtaskRangeStats->splitData.valid)
+                            ulong lMultiAssignSubtaskCount = 1;
+
+                            bool lLocalRateZero = (lLocalRate == (double)0.0);
+                            double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
+                            double lTransferOverheadTime = 0;   // add network and other overheads here
+                            double lExpectedRemoteTimeToExecute = (lMultiAssignSubtaskCount/pRequestingDeviceExecutionRate);
+                            double lExpectedLocalTimeToFinish = (lLocalRateZero ? 0.0 : ((lMultiAssignSubtaskCount/lLocalRate) - lElapsedTime));
+                        
+                            lShouldMultiAssign = (lLocalRateZero ? (lElapsedTime >= (1.0 / pRequestingDeviceExecutionRate) * MA_WAIT_FACTOR) : (lExpectedRemoteTimeToExecute + lTransferOverheadTime < lExpectedLocalTimeToFinish));
+                                
+                            if(lShouldMultiAssign)
                             {
-                                lLocalDevice = lSecondaryAllotteeMapStub->GetProcessingElement();
+                            #ifdef SUPPORT_SPLIT_SUBTASKS
+                                if(mCurrentSubtaskRangeStats->splitData.valid)
+                                {
+                                    lLocalDevice = lSecondaryAllotteeMapStub->GetProcessingElement();
 
-                                if(!lSecondaryAllotteeMapStub->UpdateSecondaryAllotteeMapInternal(lPair, pRequestingDevice))
-                                    return;
+                                    if(!lSecondaryAllotteeMapStub->UpdateSecondaryAllotteeMapInternal(lPair, pRequestingDevice))
+                                        return;
+                                }
+                                else
+                            #endif
+                                {
+                                    lSecondaryAllotteeMap[lPair].push_back(pRequestingDevice);
+                                }
+
+                                pmSubtaskRange lMultiAssignRange(pTask, lLocalDevice, mCurrentSubtaskRangeStats->endSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId);
+
+                            #ifdef TRACK_MULTI_ASSIGN
+                                std::cout << "Multiassign of subtask range [" << mCurrentSubtaskRangeStats->endSubtaskId << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "] from range [" << mCurrentSubtaskRangeStats->parentRangeStartSubtask << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "+] - Device " << pRequestingDevice->GetGlobalDeviceIndex() << ", Original Allottee - Device " << lLocalDevice->GetGlobalDeviceIndex() << ", Secondary allottment count - " << lSecondaryAllotteeMap[lPair].size() << std::endl;
+                            #endif
+
+                                lStealSuccess = true;
+                                pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lMultiAssignRange);
                             }
-                            else
-                        #endif
-                            {
-                                lSecondaryAllotteeMap[lPair].push_back(pRequestingDevice);
-                            }
-
-                            pmSubtaskRange lMultiAssignRange(pTask, lLocalDevice, mCurrentSubtaskRangeStats->endSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId);
-
-                        #ifdef TRACK_MULTI_ASSIGN
-                            std::cout << "Multiassign of subtask range [" << mCurrentSubtaskRangeStats->endSubtaskId << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "] from range [" << mCurrentSubtaskRangeStats->parentRangeStartSubtask << " - " << mCurrentSubtaskRangeStats->endSubtaskId << "+] - Device " << pRequestingDevice->GetGlobalDeviceIndex() << ", Original Allottee - Device " << lLocalDevice->GetGlobalDeviceIndex() << ", Secondary allottment count - " << lSecondaryAllotteeMap[lPair].size() << std::endl;
-                        #endif
-
-                            lStealSuccess = true;
-                            pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lMultiAssignRange);
                         }
                     }
                 }
@@ -1295,6 +1309,14 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>&
 
         PrepareForSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, &lSplitInfo);
 
+        {
+            FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
+            
+            mCurrentSubtaskRangeStats->currentSubtaskId = lEndSubtask;
+            mCurrentSubtaskRangeStats->currentSubtaskIdValid = true;
+            mCurrentSubtaskRangeStats->currentSubtaskInPostDataFetchStage = false;
+        }
+
         TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &lSubtaskId);
 
     #ifdef SUPPORT_LAZY_MEMORY
@@ -1543,6 +1565,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 
                 mCurrentSubtaskRangeStats->currentSubtaskId = lSubtaskId;
                 mCurrentSubtaskRangeStats->currentSubtaskIdValid = true;
+                mCurrentSubtaskRangeStats->currentSubtaskInPostDataFetchStage = false;
             }
             
             TIMER_IMPLEMENTATION_CLASS& lTimer = lSubtaskTimerVector[lSubtaskId - lStartSubtask];
@@ -1623,6 +1646,9 @@ void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, boo
             }
         });
     }
+    
+    FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
+    mCurrentSubtaskRangeStats->currentSubtaskInPostDataFetchStage = true;
 }
 
 void pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, pmSplitInfo* pSplitInfo)
@@ -1735,6 +1761,7 @@ pmExecutionStub::currentSubtaskRangeStats::currentSubtaskRangeStats(pmTask* pTas
     , currentSubtaskId(std::numeric_limits<ulong>::max())
     , parentRangeStartSubtask(pParentRangeStartSubtask)
     , currentSubtaskIdValid(false)
+    , currentSubtaskInPostDataFetchStage(false)
     , originalAllottee(pOriginalAllottee)
     , startTime(pStartTime)
     , reassigned(false)

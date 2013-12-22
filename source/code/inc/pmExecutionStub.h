@@ -316,6 +316,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
             ulong currentSubtaskId;
             ulong parentRangeStartSubtask;
             bool currentSubtaskIdValid; // there is a duration when this data is populated and when first subtask starts execution. In between, this is false.
+            bool currentSubtaskInPostDataFetchStage;
             bool originalAllottee;
             double startTime;
             bool reassigned;    // the current subtask range has been negotiated
