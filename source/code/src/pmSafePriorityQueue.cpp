@@ -81,7 +81,11 @@ void pmSafePQ<T, P>::MarkProcessingFinished()
         mSecondaryOperationsBlocked = false;
     }
 
-    mCommandSignalWait.Signal();
+    if(mCurrentSignalWait.get())
+    {
+        mCurrentSignalWait->Signal();
+        mCurrentSignalWait.reset();
+    }
 }
 
 template<typename T, typename P>
@@ -89,8 +93,7 @@ void pmSafePQ<T, P>::UnblockSecondaryOperations()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
     
-    if(!mSecondaryOperationsBlocked)
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(mSecondaryOperationsBlocked);
     
     mSecondaryOperationsBlocked = false;
     mSecondaryOperationsWait.Signal();
@@ -130,28 +133,53 @@ void pmSafePQ<T, P>::WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, v
 {
     while(1)
     {
+        std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> lSignalWaitPtr;
+
         // Auto lock/unlock scope
         {
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-            if(!mCurrentItem.get() || !pMatchFunc(*mCurrentItem, pMatchCriterion))
+            
+            if(mCurrentItem.get() && pMatchFunc(*mCurrentItem, pMatchCriterion))
+            {
+                if(!mCurrentSignalWait.get())
+                    mCurrentSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+                
+                lSignalWaitPtr = mCurrentSignalWait;
+            }
+            else
+            {
                 return;
+            }
         }
     
-        mCommandSignalWait.Wait();
+        if(lSignalWaitPtr.get())
+            lSignalWaitPtr->Wait();
     }
 }
 
 template<typename T, typename P>
 void pmSafePQ<T, P>::WaitForCurrentItem()
 {
+    std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> lSignalWaitPtr;
+
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-        if(!mCurrentItem.get())
+        if(mCurrentItem.get())
+        {
+            if(!mCurrentSignalWait.get())
+                mCurrentSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+            
+            lSignalWaitPtr = mCurrentSignalWait;
+        }
+        else
+        {
             return;
+        }
     }
 
-    mCommandSignalWait.Wait();
+    if(lSignalWaitPtr.get())
+        lSignalWaitPtr->Wait();
 }
 
 template<typename T, typename P>
@@ -200,8 +228,7 @@ pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr
         {
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
         
-            if(pTemporarilyUnblockSecondaryOperations && !mSecondaryOperationsBlocked)
-                PMTHROW(pmFatalErrorException());
+            EXCEPTION_ASSERT(!pTemporarilyUnblockSecondaryOperations || mSecondaryOperationsBlocked);
 
             if(!mSecondaryOperationsBlocked || pTemporarilyUnblockSecondaryOperations)
             {

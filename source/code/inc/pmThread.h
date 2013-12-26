@@ -147,6 +147,7 @@ class pmPThread : public pmThread<T, P>
 		virtual void ThreadCommandLoop();
 		virtual void TerminateThread();
 
+        std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> mThreadStartSignalWaitPtr;
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mSignalWait;
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mReverseSignalWait;
 

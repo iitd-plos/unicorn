@@ -68,10 +68,10 @@ class pmSafePQ : public pmBase
 
         priorityQueueType mQueue;
         std::shared_ptr<T> mCurrentItem;
+        std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> mCurrentSignalWait;
         bool mSecondaryOperationsBlocked;
     
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
-        SIGNAL_WAIT_IMPLEMENTATION_CLASS mCommandSignalWait;
         SIGNAL_WAIT_IMPLEMENTATION_CLASS mSecondaryOperationsWait;
 };
 
