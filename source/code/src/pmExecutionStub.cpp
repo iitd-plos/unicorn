@@ -2847,6 +2847,7 @@ void pmStubCUDA::WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pRangeStar
 
 void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, ulong pCleanupEndSubtaskId, pmSplitInfo* pSplitInfo)
 {
+    DEBUG_EXCEPTION_ASSERT(pCleanupEndSubtaskId >= pEndSubtaskId);
     DEBUG_EXCEPTION_ASSERT(!pSplitInfo || pStartSubtaskId == pEndSubtaskId);
     DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pEndSubtaskId - pStartSubtaskId + 1));
 
@@ -2864,7 +2865,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSub
     }
     else
     {
-        for(ulong subtaskId = pStartSubtaskId; subtaskId <= pEndSubtaskId; ++subtaskId)
+        for(ulong subtaskId = pStartSubtaskId; subtaskId <= pCleanupEndSubtaskId; ++subtaskId)
         {
             std::vector<pmCudaSubtaskMemoryStruct>& lCudaSubtaskMemoryVector = mSubtaskPointersMap[subtaskId];
             
@@ -2879,7 +2880,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSub
 
     uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
     
-    for(ulong subtaskId = pStartSubtaskId; subtaskId <= pEndSubtaskId; ++subtaskId)
+    for(ulong subtaskId = pStartSubtaskId; subtaskId <= pCleanupEndSubtaskId; ++subtaskId)
     {
         std::vector<pmCudaSubtaskMemoryStruct>& lCudaSubtaskMemoryVector = mSubtaskPointersMap[subtaskId];
         
