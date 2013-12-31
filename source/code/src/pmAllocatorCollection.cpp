@@ -89,8 +89,7 @@ void* pmAllocatorCollection<__allocator_traits>::Allocate(size_t pSize, size_t p
         
         lPtr = CallAllocate<typename __allocator_traits::allocator, __allocator_traits::alignedAllocations>()(*lChunkIter, pSize, pAlignment);
         
-        if(!lPtr)
-            PMTHROW(pmFatalErrorException());
+        EXCEPTION_ASSERT(lPtr);
         
         mAllocatedPtrs[lPtr] = lChunkIter;
     }
@@ -137,8 +136,7 @@ inline void pmAllocatorCollection<__allocator_traits>::Deallocate(void* pPtr)
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     typename decltype(mAllocatedPtrs)::iterator lIter = mAllocatedPtrs.find(pPtr);
-    if(lIter == mAllocatedPtrs.end())
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(lIter != mAllocatedPtrs.end());
 
     typename decltype(mMemChunksList)::iterator lChunkIter = lIter->second;
     mAllocatedPtrs.erase(lIter);

@@ -93,8 +93,7 @@ void pmMemChunk::Deallocate(void* pPtr)
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     std::map<void*, size_t>::iterator lIter = mAllocations.find(pPtr);
-    if(lIter == mAllocations.end())
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(lIter != mAllocations.end());
     
     size_t lSize = lIter->second;
     mAllocations.erase(lIter);
@@ -111,8 +110,7 @@ void pmMemChunk::Deallocate(void* pPtr)
         std::multimap<size_t, size_t>::iterator lFreeIter = mFree.find(lNextSize), lFreeEndIter = mFree.end();
         for(; lFreeIter != lFreeEndIter; ++lFreeIter)
         {
-            if(lFreeIter->first != lNextSize)
-                PMTHROW(pmFatalErrorException());
+            DEBUG_EXCEPTION_ASSERT(lFreeIter->first == lNextSize);
             
             if(lFreeIter->second == (lEndAddr - reinterpret_cast<size_t>(mChunk)))
             {
@@ -127,8 +125,8 @@ void pmMemChunk::Deallocate(void* pPtr)
     
     if(lAddr != reinterpret_cast<size_t>(mChunk))
     {
-        size_t lPrevAddr = lAddr - 1;
-        std::map<void*, size_t>::iterator lUpperIter = mFreeBlocks.upper_bound(reinterpret_cast<void*>(lPrevAddr));
+        size_t lFormerAddr = lAddr - 1;
+        std::map<void*, size_t>::iterator lUpperIter = mFreeBlocks.upper_bound(reinterpret_cast<void*>(lFormerAddr));
         if(lUpperIter != mFreeBlocks.begin())
         {
             --lUpperIter;
@@ -142,8 +140,7 @@ void pmMemChunk::Deallocate(void* pPtr)
                 std::multimap<size_t, size_t>::iterator lFreeIter = mFree.find(lPrevSize), lFreeEndIter = mFree.end();
                 for(; lFreeIter != lFreeEndIter; ++lFreeIter)
                 {
-                    if(lFreeIter->first != lPrevSize)
-                        PMTHROW(pmFatalErrorException());
+                    DEBUG_EXCEPTION_ASSERT(lFreeIter->first == lPrevSize);
                     
                     if(lFreeIter->second == (lPrevAddr - reinterpret_cast<size_t>(mChunk)))
                     {

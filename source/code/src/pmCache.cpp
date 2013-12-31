@@ -56,6 +56,9 @@ inline void pmCache<__key, __value, __hasher, __evictor>::RemoveKey(const __key&
     
     EXCEPTION_ASSERT(lIter->second->second.unique());
 
+    if(!lIter->second->second.get())
+        mEvictor(lIter->second->second);
+    
     mCacheHash.erase(lIter);
     mCacheList.erase(lIter->second);
 }

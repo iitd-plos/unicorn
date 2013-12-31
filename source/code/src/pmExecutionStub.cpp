@@ -2216,21 +2216,17 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
     
 bool pmStubCUDA::InitializeCudaStream(std::shared_ptr<pmCudaStreamAutoPtr>& pSharedPtr)
 {
-    try
+    while(1)
     {
-        pSharedPtr->Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
-    }
-    catch(pmOutOfMemoryException&)
-    {
-        mCudaCache.Purge();
-
         try
         {
             pSharedPtr->Initialize(pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->GetRuntimeHandle());
+            return true;
         }
         catch(pmOutOfMemoryException&)
         {
-            return false;
+            if(!mCudaCache.Purge())
+                return false;
         }
     }
     
