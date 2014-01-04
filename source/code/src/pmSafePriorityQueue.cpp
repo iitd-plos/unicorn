@@ -26,6 +26,7 @@ template<typename T, typename P>
 pmSafePQ<T, P>::pmSafePQ()
     : mSecondaryOperationsBlocked(false)
     , mResourceLock __LOCK_NAME__("pmSafePQ::mResourceLock")
+    , mSecondaryOperationsWait(false)
 {
 }
 
@@ -142,7 +143,7 @@ void pmSafePQ<T, P>::WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, v
             if(mCurrentItem.get() && pMatchFunc(*mCurrentItem, pMatchCriterion))
             {
                 if(!mCurrentSignalWait.get())
-                    mCurrentSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+                    mCurrentSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
                 
                 lSignalWaitPtr = mCurrentSignalWait;
             }
@@ -168,7 +169,7 @@ void pmSafePQ<T, P>::WaitForCurrentItem()
         if(mCurrentItem.get())
         {
             if(!mCurrentSignalWait.get())
-                mCurrentSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+                mCurrentSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
             
             lSignalWaitPtr = mCurrentSignalWait;
         }

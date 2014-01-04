@@ -53,8 +53,9 @@ void __dump_thread_state(bool pWait)
 
     
 /* class pmPThreadSignalWait */
-pmPThreadSignalWait::pmPThreadSignalWait()
-	: mExiting(false)
+pmPThreadSignalWait::pmPThreadSignalWait(bool pOnceUse)
+	: pmSignalWait(pOnceUse)
+    , mExiting(false)
     , mCondEnforcer(false)
 	, mWaitingThreadCount(0)
     , mResourceLock __LOCK_NAME__("pmPThreadSignalWait::mResourceLock")
@@ -91,7 +92,7 @@ pmStatus pmPThreadSignalWait::Wait()
 
 	--mWaitingThreadCount;
 
-	if(mWaitingThreadCount == 0)
+	if(!mOnceUse && mWaitingThreadCount == 0)
 		mCondEnforcer = false;
 
 	return pmSuccess;
@@ -131,7 +132,7 @@ bool pmPThreadSignalWait::WaitWithTimeOut(ulong pTriggerTime)
     
 	--mWaitingThreadCount;
     
-	if(mWaitingThreadCount == 0)
+	if(!mOnceUse && mWaitingThreadCount == 0)
 		mCondEnforcer = false;
     
 	return lRetVal;
@@ -140,6 +141,9 @@ bool pmPThreadSignalWait::WaitWithTimeOut(ulong pTriggerTime)
 pmStatus pmPThreadSignalWait::Signal()
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    EXCEPTION_ASSERT(!mOnceUse || !mCondEnforcer);
+
 	mCondEnforcer = true;
 
 	THROW_ON_NON_ZERO_RET_VAL( pthread_cond_broadcast(&mCondVariable), pmThreadFailureException, pmThreadFailureException::COND_VAR_SIGNAL_FAILURE );

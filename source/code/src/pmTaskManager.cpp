@@ -41,6 +41,7 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
 
 
 pmTaskManager::pmTaskManager()
+    : mTaskFinishSignalWait(false)
 {
 }
 

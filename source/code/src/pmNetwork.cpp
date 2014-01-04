@@ -1718,7 +1718,7 @@ void pmMPI::StopThreadExecution()
             return;   // Already stopped
     }
     
-    mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+    mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
 
 	// Auto lock/unlock scope
     {
@@ -1879,7 +1879,7 @@ void pmMPI::pmUnknownLengthReceiveThread::StopThreadExecution()
             return;   // Already stopped
     }
         
-    mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+    mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
 
 	// Auto lock/unlock scope
 	{

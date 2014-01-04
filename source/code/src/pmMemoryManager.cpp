@@ -500,7 +500,7 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
 
             lTempCommandCount += lInnerCommandVector.size();
 
-            // If the range is already in one or more scattered flights, tehn multiple general entries are put into inFlightMap
+            // If the range is already in one or more scattered flights, then multiple general entries are put into inFlightMap
             // Having a set ensures that a command is inserted and subsequently waited upon only once
             std::move(lInnerCommandVector.begin(), lInnerCommandVector.end(), std::inserter(lTempCommandSet, lTempCommandSet.begin()));
         }
@@ -519,9 +519,9 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
 
                     for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
                     {
-                        DEBUG_EXCEPTION_ASSERT(pPair.second.first == pLength);
+                        DEBUG_EXCEPTION_ASSERT(pPair.second.first == pScatteredSubscriptionInfo.size);
                         
-                        DEBUG_EXCEPTION_ASSERT((pPair.second.second.hostOffset - pOffset) % pStep == 0);
+                        DEBUG_EXCEPTION_ASSERT((pPair.second.second.hostOffset - pScatteredSubscriptionInfo.offset) % pScatteredSubscriptionInfo.step == 0);
                         
                         lRangeLiesOnOneMachine &= (lServingHost == pPair.second.second.host);
                         

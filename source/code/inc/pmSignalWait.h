@@ -40,12 +40,19 @@ class pmSignalWait : public pmBase
 
 	private:
 		virtual pmStatus WaitTillAllBlockedThreadsWakeup() = 0;
+    
+    protected:
+        pmSignalWait(bool pOnceUse)
+        : mOnceUse(pOnceUse)
+        {}
+    
+        const bool mOnceUse;
 };
 
 class pmPThreadSignalWait : public pmSignalWait
 {
 	public:
-		pmPThreadSignalWait();
+		pmPThreadSignalWait(bool pOnceUse);
 		virtual ~pmPThreadSignalWait();
 
 		virtual pmStatus Wait();

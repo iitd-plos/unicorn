@@ -33,6 +33,7 @@ pmTimedEventManager* pmTimedEventManager::GetTimedEventManager()
 }
 
 pmTimedEventManager::pmTimedEventManager()
+    : mSignalWait(false)
 {
 }
     
@@ -52,7 +53,7 @@ void pmTimedEventManager::AddTaskTimeOutEvent(pmLocalTask* pLocalTask, ulong pTa
     
 void pmTimedEventManager::ClearTaskTimeOutEvent(pmLocalTask* pLocalTask, ulong pTaskTimeOutTriggerTime)
 {
-    SIGNAL_WAIT_IMPLEMENTATION_CLASS lSignalWait;
+    SIGNAL_WAIT_IMPLEMENTATION_CLASS lSignalWait(true);
 
     ulong lTriggerTime = GetIntegralCurrentTimeInSecs();
     SwitchThread(std::shared_ptr<timedEvent>(new clearTaskTimeOutEvent(CLEAR_TASK_TIME_OUT, lTriggerTime, pLocalTask, pTaskTimeOutTriggerTime, &lSignalWait)), lTriggerTime);

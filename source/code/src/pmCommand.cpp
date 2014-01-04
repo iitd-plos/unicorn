@@ -58,7 +58,7 @@ pmStatus pmCommand::WaitForFinish()
         if((lStatus = mStatus) == pmStatusUnavailable)
         {
             if(!mSignalWait.get_ptr())
-                mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+                mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
             
             lSignalWait = mSignalWait.get_ptr();
         }
@@ -86,7 +86,7 @@ bool pmCommand::WaitWithTimeOut(ulong pTriggerTime)
         if(mStatus == pmStatusUnavailable)
         {
             if(!mSignalWait.get_ptr())
-                mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+                mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
             
             lSignalWait = mSignalWait.get_ptr();
         }

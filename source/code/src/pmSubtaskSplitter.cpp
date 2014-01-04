@@ -276,12 +276,18 @@ void pmSplitGroup::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
         lPendingSplits = !mSplitRecordList.empty();
     }
 
-    FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dDummyEventLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDummyEventLock, Lock(), Unlock());
+        
+        if(!lPendingSplits || mDummyEventsFreezed)
+        {
+            mStubsWithDummyEvent.erase(pStub);
+            return;
+        }
+    }
     
-    mStubsWithDummyEvent.erase(pStub);
-    
-    if(lPendingSplits && !mDummyEventsFreezed)
-        AddDummyEventToStub(pStub);
+    pStub->SplitSubtaskCheckEvent(mSubtaskSplitter->mTask);
 }
     
 void pmSplitGroup::AddDummyEventToRequiredStubs()

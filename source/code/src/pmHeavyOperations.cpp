@@ -152,12 +152,11 @@ void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmAddressSpace* pAd
 {
     size_t lPoolSize = mThreadVector.size();
 
-	FINALIZE_PTR_ARRAY(dSignalWaitArray, SIGNAL_WAIT_IMPLEMENTATION_CLASS, new SIGNAL_WAIT_IMPLEMENTATION_CLASS[lPoolSize]);
-    
-	SubmitToAllThreadsInPool(std::shared_ptr<heavyOperationsEvent>(new memTransferCancelEvent(MEM_TRANSFER_CANCEL, pAddressSpace, dSignalWaitArray)), MAX_CONTROL_PRIORITY);
+    std::vector<SIGNAL_WAIT_IMPLEMENTATION_CLASS> lSignalWaitArray(lPoolSize, SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
+	SubmitToAllThreadsInPool(std::shared_ptr<heavyOperationsEvent>(new memTransferCancelEvent(MEM_TRANSFER_CANCEL, pAddressSpace, &lSignalWaitArray[0])), MAX_CONTROL_PRIORITY);
     
     for(size_t i = 0; i < lPoolSize; ++i)
-        dSignalWaitArray[i].Wait();
+        lSignalWaitArray[i].Wait();
 }
     
 void pmHeavyOperationsThreadPool::CancelTaskSpecificMemoryTransferEvents(pmTask* pTask)
@@ -308,8 +307,6 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
     
 void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded)
 {
-    DEBUG_EXCEPTION_ASSERT(pEventDetails.transferType == communicator::TRASFER_GENERAL);
-
     // Check if the memory is residing locally or forward the request to the owner machine
     pmAddressSpace::pmMemOwnership lOwnerships;
     pSrcAddressSpace->GetOwners(pOffset, pLength, lOwnerships);
@@ -372,8 +369,6 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
 
 void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded)
 {
-    DEBUG_EXCEPTION_ASSERT(pEventDetails.transferType == communicator::TRASFER_SCATTERED);
-    
     pmAddressSpace::pmMemOwnership lOwnerships;
     
     for(ulong i = 0 ; i < pCount; ++i)

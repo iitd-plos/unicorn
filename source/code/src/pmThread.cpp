@@ -28,8 +28,10 @@ namespace pm
 /* pmPThread Class */
 template<typename T, typename P>
 pmPThread<T, P>::pmPThread()
+    : mSignalWait(false)
+    , mReverseSignalWait(false)
 {
-    mThreadStartSignalWaitPtr.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+    mThreadStartSignalWaitPtr.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
 
 	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop<T, P>, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
     

@@ -55,7 +55,7 @@ void pmUtility::MapFileOnAllMachines(const char* pPath)
         if(lPendingResponses.find(lStr) != lPendingResponses.end())
             PMTHROW(pmFatalErrorException());
         
-        lSignalWaitSharedPtr.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+        lSignalWaitSharedPtr.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
         lPendingResponses[lStr] = std::make_pair(lCount, lSignalWaitSharedPtr);
     }
 
@@ -96,7 +96,7 @@ void pmUtility::UnmapFileOnAllMachines(const char* pPath)
         if(lPendingResponses.find(lStr) != lPendingResponses.end())
             PMTHROW(pmFatalErrorException());
         
-        lSignalWaitSharedPtr.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+        lSignalWaitSharedPtr.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
         lPendingResponses[lStr] = std::make_pair(lCount, lSignalWaitSharedPtr);
     }
     

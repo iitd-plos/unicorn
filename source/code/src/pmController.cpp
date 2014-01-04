@@ -110,7 +110,7 @@ void pmController::FinalizeController()
         if(mSignalWait.get_ptr())
             PMTHROW(pmFatalErrorException());
 
-        mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS());
+        mSignalWait.reset(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
 
         pmScheduler::GetScheduler()->SendFinalizationSignal();
         

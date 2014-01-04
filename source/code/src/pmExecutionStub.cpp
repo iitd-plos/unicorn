@@ -2244,7 +2244,6 @@ ulong pmStubCUDA::FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange
         lSubtaskRange.endSubtask = lSubtaskRange.startSubtask;
 #else
     lSubtaskRange.endSubtask = lSubtaskRange.startSubtask;
-    
 #endif
 
     ulong lSubtaskCount = 0;
