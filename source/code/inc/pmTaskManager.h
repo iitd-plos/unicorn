@@ -52,7 +52,11 @@ class pmTaskManager : public pmBase
     public:
 		static pmTaskManager* GetTaskManager();
 
-		void SubmitTask(pmLocalTask* pLocalTask);
+        void SubmitTask(pmLocalTask* pLocalTask);
+
+		void StartTask(pmLocalTask* pLocalTask);
+        void StartTask(pmRemoteTask* pRemoteTask);
+
 		pmRemoteTask* CreateRemoteTask(communicator::remoteTaskAssignPacked* pRemoteTaskData);
 
 		void DeleteTask(pmLocalTask* pLocalTask);
@@ -82,10 +86,10 @@ class pmTaskManager : public pmBase
 
         void ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask* pRemoteTask);
         
+        void SubmitTask(pmRemoteTask* pRemoteTask);
+
         pmLocalTask* FindLocalTask_Internal(ulong pSequenceNumber);
         pmRemoteTask* FindRemoteTask_Internal(const pmMachine* pOriginatingHost, ulong pSequenceNumber);
-		
-        void SubmitTask(pmRemoteTask* pLocalTask);
 
 		static localTasksSetType& GetLocalTasks();		/* Tasks that originated on this machine */
 		static remoteTasksSetType& GetRemoteTasks();	/* Tasks that originated on remote machines */

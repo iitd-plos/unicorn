@@ -880,8 +880,7 @@ void pmScheduler::SendRangeNegotiationSuccess(const pmProcessingElement* pReques
     
 void pmScheduler::SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData)
 {
-    if(pReceiverHost == PM_LOCAL_MACHINE)
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(pReceiverHost != PM_LOCAL_MACHINE);
     
     finalize_ptr<ownershipTransferPacked> lPackedData(new ownershipTransferPacked(pAddressSpace, pChangeData));
 
@@ -1256,8 +1255,7 @@ void pmScheduler::ReceiveFailedStealResponse(const pmProcessingElement* pStealin
 	pmStubManager* lManager = pmStubManager::GetStubManager();
 	pmExecutionStub* lStub = lManager->GetStub(pStealingDevice);
 
-	if(!lStub)
-		PMTHROW(pmFatalErrorException());
+    DEBUG_EXCEPTION_ASSERT(lStub);
 
 	pmTaskExecStats& lTaskExecStats = pTask->GetTaskExecStats();
 	lTaskExecStats.RecordFailedStealAttempt(pmStubManager::GetStubManager()->GetStub(pStealingDevice));
@@ -1273,6 +1271,8 @@ void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessin
     filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
     [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
     {
+        memoryIdentifierStruct lMemoryStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber());
+        
         std::vector<ownershipDataStruct>::const_iterator lDataIter = pOwnershipVector.begin() + pAddressSpaceIndexVector[pOutputAddressSpaceIndex];
         std::vector<ownershipDataStruct>::const_iterator lDataEndIter = pOwnershipVector.end();
         
@@ -1286,7 +1286,7 @@ void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessin
 
         std::for_each(lDataIter, lDataEndIter, [&] (const ownershipDataStruct& pStruct)
         {
-            pAddressSpace->TransferOwnershipPostTaskCompletion(pmAddressSpace::vmRangeOwner(lMachine, pStruct.offset, memoryIdentifierStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber())), pStruct.offset, pStruct.length);
+             pAddressSpace->TransferOwnershipPostTaskCompletion(pmAddressSpace::vmRangeOwner(lMachine, pStruct.offset, lMemoryStruct), pStruct.offset, pStruct.length);
         });
     });
 }
@@ -1322,7 +1322,7 @@ void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const 
 		pmStubManager* lManager = pmStubManager::GetStubManager();
 		pmExecutionStub* lStub = lManager->GetStub(pDevice);
 
-        EXCEPTION_ASSERT(lStub);
+        DEBUG_EXCEPTION_ASSERT(lStub);
 
 		pmTaskExecStats& lTaskExecStats = pRange.task->GetTaskExecStats();
 		return StealRequestEvent(pDevice, pRange.task, lTaskExecStats.GetStubExecutionRate(lStub));
@@ -1446,33 +1446,44 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 					taskEventStruct* lData = (taskEventStruct*)(lCommunicatorCommand->GetData());
 
 					const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
-					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lData->sequenceNumber);
 
-					switch((taskEvents)(lData->taskEvent))
-					{
-						case TASK_FINISH_EVENT:
-						{
-							TaskFinishEvent(lTask);
-							break;
-						}
+                    if(lTask)
+                    {
+                        switch((taskEvents)(lData->taskEvent))
+                        {
+                            case TASK_FINISH_EVENT:
+                            {
+                                TaskFinishEvent(lTask);
+                                break;
+                            }
 
-						case TASK_COMPLETE_EVENT:
-						{
-                            DEBUG_EXCEPTION_ASSERT(dynamic_cast<pmLocalTask*>(lTask));
+                            case TASK_COMPLETE_EVENT:
+                            {
+                                DEBUG_EXCEPTION_ASSERT(dynamic_cast<pmLocalTask*>(lTask));
+                            
+                                TaskCompleteEvent(static_cast<pmLocalTask*>(lTask));
+                                break;
+                            }
+
+                            case TASK_CANCEL_EVENT:
+                            {
+                                TaskCancelEvent(lTask);
+                                break;
+                            }
+                            
+                            default:
+                                PMTHROW(pmFatalErrorException());
+                        }
+                    }
+                    else
+                    {
+                        finalize_ptr<taskEventStruct> lTaskEventData(new taskEventStruct((taskEvents)lData->taskEvent, lData->originatingHost, lData->sequenceNumber));
                         
-							TaskCompleteEvent(static_cast<pmLocalTask*>(lTask));
-							break;
-						}
-
-						case TASK_CANCEL_EVENT:
-						{
-							TaskCancelEvent(lTask);
-							break;
-						}
+                        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<taskEventStruct>::CreateSharedPtr(lCommunicatorCommand->GetPriority(), SEND, TASK_EVENT_TAG, PM_LOCAL_MACHINE, TASK_EVENT_STRUCT, lTaskEventData, 1, SchedulerCommandCompletionCallback);
                         
-						default:
-							PMTHROW(pmFatalErrorException());
-					}
+                        pmCommunicator::GetCommunicator()->Send(lCommand, false);
+                    }
 
 					SetupNewTaskEventReception();
 
@@ -1652,14 +1663,10 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 				{
 					ownershipTransferPacked* lData = (ownershipTransferPacked*)(lCommunicatorCommand->GetData());
 					pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lData->memIdentifier.memOwnerHost), lData->memIdentifier.generationNumber);
+    
+                    EXCEPTION_ASSERT(lAddressSpace);
                 
-					if(!lAddressSpace)
-                        PMTHROW(pmFatalErrorException());
-                
-                    std::vector<ownershipChangeStruct>* lChangeVector = lData->transferData.get();
-                    std::vector<ownershipChangeStruct>::iterator lIter = lChangeVector->begin(), lEndIter = lChangeVector->end();
-                    for(; lIter != lEndIter; ++lIter)
-                        lAddressSpace->TransferOwnershipImmediate((*lIter).offset, (*lIter).length, pmMachinePool::GetMachinePool()->GetMachine((*lIter).newOwnerHost));
+                    lAddressSpace->ChangeOwnership(lData->transferData);
 
 					break;
 				}

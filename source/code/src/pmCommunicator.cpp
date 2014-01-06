@@ -153,8 +153,7 @@ remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTask* pLocalTask)
         });
     }
 
-	// Transfer device list if the task scehduling model is pull or if reduction callback is defined
-	if(taskStruct.assignedDeviceCount != 0 && (pLocalTask->GetSchedulingModel() == scheduler::PULL || pLocalTask->GetCallbackUnit()->GetDataReductionCB()))
+	if(taskStruct.assignedDeviceCount != 0)
 	{
 		devices.reset(new uint[taskStruct.assignedDeviceCount]);
 
@@ -314,7 +313,7 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
 
 
 /* struct ownershipTransferPacked */
-    ownershipTransferPacked::ownershipTransferPacked(pmAddressSpace* pAddressSpace, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData)
+ownershipTransferPacked::ownershipTransferPacked(pmAddressSpace* pAddressSpace, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData)
     : memIdentifier(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber())
     , transferDataElements((uint)(pChangeData->size()))
     , transferData(pChangeData)

@@ -1212,8 +1212,7 @@ bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)
         return false;
 
     bool lIsMultiAssignRange = (lRange.task->IsMultiAssignEnabled() && lRange.originalAllottee != NULL);
-    if(lIsMultiAssignRange)
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(!lIsMultiAssignRange);
 
     ulong lSubtaskId = ((pEvent.rangeExecutedOnce) ? (pEvent.lastExecutedSubtaskId + 1) : lRange.startSubtask);
 
@@ -1622,14 +1621,8 @@ void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, boo
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
-    // Prefetch entire unsplitted subtask
-    if(pSplitInfo && pSplitInfo->splitId == 0)
-    {
-        pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
-
-        lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, NULL);
-        lSubscriptionManager.FetchSubtaskSubscriptions(this, pSubtaskId, NULL, GetType(), true);
-    }
+    if(pSplitInfo)
+        pTask->GetSubtaskSplitter().PrefetchSubscriptionsForUnsplittedSubtask(this, pSubtaskId);
 #endif
 
     lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, pSplitInfo);
@@ -2848,7 +2841,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSub
 {
     DEBUG_EXCEPTION_ASSERT(pCleanupEndSubtaskId >= pEndSubtaskId);
     DEBUG_EXCEPTION_ASSERT(!pSplitInfo || pStartSubtaskId == pEndSubtaskId);
-    DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pEndSubtaskId - pStartSubtaskId + 1));
+    DEBUG_EXCEPTION_ASSERT(mCudaStreams.size() == (pCleanupEndSubtaskId - pStartSubtaskId + 1));
 
     if(pTask->IsCudaCacheEnabled())
     {

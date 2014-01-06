@@ -510,6 +510,12 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
     
+    if(lMatrixDim < BLOCK_DIM)
+    {
+        std::cout << "Error: Matrix dimension must be atleast " << BLOCK_DIM << std::endl;
+        exit(1);
+    }
+    
 	srand((unsigned int)time(NULL));
     
     size_t lMatrixElems = lMatrixDim * lMatrixDim;

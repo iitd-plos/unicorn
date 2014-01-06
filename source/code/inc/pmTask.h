@@ -56,8 +56,10 @@ extern pmCluster* PM_GLOBAL_CLUSTER;
 
 class pmTask : public pmBase
 {
+    friend void AddressSpacesLockCallback(const pmCommandPtr& pCountDownCommand);
+
 	protected:
-    pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags);
+        pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags);
 
 	public:
 		virtual ~pmTask();
@@ -119,6 +121,7 @@ class pmTask : public pmBase
         void* CheckOutSubtaskMemory(size_t pLength, uint pAddressSpaceIndex);
         void RepoolCheckedOutSubtaskMemory(uint pAddressSpaceIndex, void* pMem);
 
+        void LockAddressSpaces();
         void UnlockMemories();
     
         std::vector<const pmProcessingElement*>& GetStealListForDevice(const pmProcessingElement* pDevice);
@@ -132,6 +135,8 @@ class pmTask : public pmBase
     #ifdef SUPPORT_CUDA
         bool IsCudaCacheEnabled();
     #endif
+    
+        bool HasStarted();
     
         void MarkRedistributionFinished(uint pOriginalAddressSpaceIndex, pmAddressSpace* pRedistributedAddressSpace = NULL);
 
@@ -159,6 +164,8 @@ class pmTask : public pmBase
         void BuildPreSubscriptionSubtaskInfo();
         void RandomizeDevices(std::vector<const pmProcessingElement*>& pDevices);
     
+        void Start();
+    
         pmPoolAllocator& GetPoolAllocator(uint pAddressSpaceIndex, size_t pIndividualAllocationSize, size_t pMaxAllocations);
 
 		/* Constant properties -- no updates, locking not required */
@@ -177,6 +184,7 @@ class pmTask : public pmBase
 		pmTaskExecStats mTaskExecStats;
         ulong mSequenceNumber;  // Sequence Id of task on originating host (This along with originating machine is the global unique identifier for a task)
         ushort mTaskFlags;
+        bool mStarted;
 
     #ifdef SUPPORT_SPLIT_SUBTASKS
         pmSubtaskSplitter mSubtaskSplitter;

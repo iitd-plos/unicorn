@@ -275,7 +275,8 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
     
 	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags);
 
-	pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
+    pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
+	static_cast<pmLocalTask*>(*pTaskHandle)->LockAddressSpaces();
 }
 
 void pmController::WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle)
@@ -312,12 +313,6 @@ void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHa
 
 void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
 {
-    if(pScatteredSubscriptionInfo.count == 1)
-    {
-        SubscribeToMemory_Public(pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, pmSubscriptionInfo(pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.size));
-        return;
-    }
-    
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
     (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, pScatteredSubscriptionInfo);

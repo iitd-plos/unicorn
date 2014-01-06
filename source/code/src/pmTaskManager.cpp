@@ -51,16 +51,17 @@ pmTaskManager* pmTaskManager::GetTaskManager()
     return &lTaskManager;
 }
 
-void pmTaskManager::SubmitTask(pmLocalTask* pLocalTask)
+void pmTaskManager::StartTask(pmLocalTask* pLocalTask)
 {
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE(dResourceLock, GetLocalTaskResourceLock().Lock(), GetLocalTaskResourceLock().Unlock());
-        GetLocalTasks().insert(pLocalTask);
-    }
-
 	pLocalTask->MarkTaskStart();
 	pmScheduler::GetScheduler()->SubmitTaskEvent(pLocalTask);
+}
+
+void pmTaskManager::SubmitTask(pmLocalTask* pLocalTask)
+{
+    FINALIZE_RESOURCE(dResourceLock, GetLocalTaskResourceLock().Lock(), GetLocalTaskResourceLock().Unlock());
+
+    GetLocalTasks().insert(pLocalTask);
 }
 
 pmRemoteTask* pmTaskManager::CreateRemoteTask(communicator::remoteTaskAssignPacked* pRemoteTaskData)
@@ -81,23 +82,25 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(communicator::remoteTaskAssignPack
 
 	pmRemoteTask* lRemoteTask = new pmRemoteTask(pRemoteTaskData->taskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, std::move(lTaskMemVector), pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pRemoteTaskData->taskStruct.assignedDeviceCount, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), pRemoteTaskData->taskStruct.flags);
 
-	if(pRemoteTaskData->taskStruct.schedModel == scheduler::PULL || lRemoteTask->GetCallbackUnit()->GetDataReductionCB())
-	{
-		for(uint i = 0; i < pRemoteTaskData->taskStruct.assignedDeviceCount; ++i)
-			lRemoteTask->AddAssignedDevice(pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(((uint*)pRemoteTaskData->devices.get_ptr())[i]));
-	}
+    for(uint i = 0; i < pRemoteTaskData->taskStruct.assignedDeviceCount; ++i)
+        lRemoteTask->AddAssignedDevice(pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(((uint*)pRemoteTaskData->devices.get_ptr())[i]));
 
-	SubmitTask(lRemoteTask);
-
+    SubmitTask(lRemoteTask);
+    lRemoteTask->LockAddressSpaces();
+    
 	return lRemoteTask;
 }
 
+void pmTaskManager::StartTask(pmRemoteTask* pRemoteTask)
+{
+    ScheduleEnqueuedRemoteSubtasksForExecution(pRemoteTask);
+}
+    
 void pmTaskManager::SubmitTask(pmRemoteTask* pRemoteTask)
 {
 	FINALIZE_RESOURCE(dResourceLock, GetRemoteTaskResourceLock().Lock(), GetRemoteTaskResourceLock().Unlock());
 
 	GetRemoteTasks().insert(pRemoteTask);
-    ScheduleEnqueuedRemoteSubtasksForExecution(pRemoteTask);
 }
 
 // Do not dereference pLocalTask in this method. It is already deleted from memory.
@@ -174,6 +177,9 @@ bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, const
     
     if(lRemoteTask)
     {
+        if(!lRemoteTask->HasStarted())
+            return false;
+
         pRange.task = lRemoteTask;
         return true;
     }

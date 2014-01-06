@@ -48,6 +48,7 @@ struct splitRecord
     uint pendingCompletions;
     std::vector<std::pair<pmExecutionStub*, bool> > assignedStubs;
     bool reassigned;
+    bool prefetched;
     
     splitRecord()
     : sourceStub(NULL)
@@ -56,6 +57,7 @@ struct splitRecord
     , splitId(0)
     , pendingCompletions(0)
     , reassigned(false)
+    , prefetched(false)
     {}
     
     splitRecord(pmExecutionStub* pStub, ulong pSubtaskId, uint pSplitCount)
@@ -65,6 +67,7 @@ struct splitRecord
     , splitId(0)
     , pendingCompletions(pSplitCount)
     , reassigned(false)
+    , prefetched(false)
     {
         assignedStubs.reserve(splitCount);
     }
@@ -91,6 +94,7 @@ public:
     void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
 
     void FreezeDummyEvents();
+    void PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
 
 private:
     void AddDummyEventToRequiredStubs();
@@ -103,6 +107,7 @@ private:
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mDummyEventLock;
 
     std::list<splitter::splitRecord> mSplitRecordList;
+    std::map<ulong, typename std::list<splitter::splitRecord>::iterator> mSplitRecordMap;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mSplitRecordListLock;
     
     const pmSubtaskSplitter* mSubtaskSplitter;
@@ -128,6 +133,7 @@ public:
     void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
     
     void FreezeDummyEvents();
+    void PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
 
 private:
     void FindConcernedStubs(pmDeviceType pDeviceType);

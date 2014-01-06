@@ -124,7 +124,6 @@ class pmAddressSpace : public pmBase
     
         void DisposeMemory();
     
-        void TransferOwnershipImmediate(ulong pOffset, ulong pLength, const pmMachine* pNewOwnerHost);
         void AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
         void TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
 		void FlushOwnerships();
@@ -136,9 +135,11 @@ class pmAddressSpace : public pmBase
         void Fetch(ushort pPriority);
         void FetchRange(ushort pPriority, ulong pOffset, ulong pLength);
     
-        void Lock(pmTask* pTask, pmMemType pMemType);
+        void EnqueueForLock(pmTask* pTask, pmMemType pMemType, pmCommandPtr& pCountDownCommand);
         void Unlock(pmTask* pTask);
         pmTask* GetLockingTask();
+    
+        void ChangeOwnership(std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>& pOwnershipData);
     
         void UserDelete();
         void SetUserMemHandle(pmUserMemHandle* pUserMemHandle);
@@ -177,6 +178,11 @@ class pmAddressSpace : public pmBase
         void SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength, pmMemOwnership& pMap);
         void SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap);
     
+        void SetWaitingForOwnershipChange();
+        void TransferOwnershipImmediate(ulong pOffset, ulong pLength, const pmMachine* pNewOwnerHost);
+    
+        void Lock(pmTask* pTask, pmMemType pMemType);
+    
 #ifdef _DEBUG
         void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
         void SanitizeOwnerships();
@@ -193,6 +199,9 @@ class pmAddressSpace : public pmBase
         void* mMem;
         void* mReadOnlyLazyMapping;
         std::string mName;
+    
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingTasksLock;
+        std::vector<std::pair<std::pair<pmTask*, pmMemType>, pmCommandPtr>> mTasksWaitingForLock;
 
         static ulong& GetGenerationId();
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetGenerationLock();
@@ -206,6 +215,7 @@ class pmAddressSpace : public pmBase
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
         
         std::vector<pmMemTransferData> mOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
+        bool mWaitingForOwnershipChange;  // The address space owner may have sent ownership change message that must be processed before allowing any lock on address space
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipTransferLock;
 
         pmTask* mLockingTask;

@@ -47,8 +47,15 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
     
 #define SAFE_GET_DEVICE_POOL(x) { x = pmDevicePool::GetDevicePool(); if(!x) PMTHROW(pmFatalErrorException()); }
 
+void AddressSpacesLockCallback(const pmCommandPtr& pCountDownCommand)
+{
+    pmTask* lTask = const_cast<pmTask*>(static_cast<const pmTask*>(pCountDownCommand->GetUserIdentifier()));
+    
+    lTask->Start();
+}
+    
 /* class pmTask */
-    pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags)
 	: mTaskId(pTaskId)
 	, mCallbackUnit(pCallbackUnit)
 	, mSubtaskCount(pSubtaskCount)
@@ -61,6 +68,7 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
     , mSubscriptionManager(this)
     , mSequenceNumber(0)
     , mTaskFlags(pTaskFlags)
+    , mStarted(false)
 #ifdef SUPPORT_SPLIT_SUBTASKS
     , mSubtaskSplitter(this)
 #endif
@@ -102,8 +110,6 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
             mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo); // Output address spaces do not have a global lazy protection, rather have at subtask level
         }
         
-        lAddressSpace->Lock(this, pTaskMem.memType);
-        
         mTaskHasReadWriteAddressSpaceWithDisjointSubscriptions |= (IsReadWrite(lAddressSpace) && pTaskMem.disjointReadWritesAcrossSubtasks);
     });
 
@@ -115,6 +121,35 @@ STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pm
 
 pmTask::~pmTask()
 {
+}
+    
+void pmTask::LockAddressSpaces()
+{
+    pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(mTaskMemVector.size(), GetPriority(), 0, AddressSpacesLockCallback, this);
+    lCountDownCommand->MarkExecutionStart();
+
+    for_each(mTaskMemVector, [this, &lCountDownCommand] (const pmTaskMemory& pTaskMem)
+    {
+        pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
+        lAddressSpace->EnqueueForLock(this, pTaskMem.memType, lCountDownCommand);
+    });
+}
+    
+void pmTask::Start()
+{
+    EXCEPTION_ASSERT(!mStarted);
+
+    mStarted = true;
+
+    if(dynamic_cast<pmLocalTask*>(this))
+        pmTaskManager::GetTaskManager()->StartTask(static_cast<pmLocalTask*>(this));
+    else
+        pmTaskManager::GetTaskManager()->StartTask(static_cast<pmRemoteTask*>(this));
+}
+    
+bool pmTask::HasStarted()
+{
+    return mStarted;
 }
 
 void pmTask::FlushMemoryOwnerships()
@@ -1018,10 +1053,7 @@ void pmRemoteTask::TerminateTask()
 
 void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 {
-#ifdef _DEBUG
-    if(!IsMultiAssignEnabled())
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(IsMultiAssignEnabled());
 
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 

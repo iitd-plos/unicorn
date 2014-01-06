@@ -27,7 +27,7 @@ const size_t BLOCK_DIM = 1024;   // Must be a power of 2
 #define SUBSCRIBE_SPLIT_BLOCK(blockRow, blockCol, startCol, endCol, startRow, endRow, matrixDim, subtaskId, splitInfo, subscriptionType) \
 { \
     size_t dBlockOffset = (startRow + BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, matrixDim)) * sizeof(MATRIX_DATA_TYPE); \
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, OUTPUT_MEM_INDEX, subscriptionType, pmScatteredSubscriptionInfo(dBlockOffset + startCol * matrixDim, (endRow - startRow) * sizeof(MATRIX_DATA_TYPE), matrixDim * sizeof(MATRIX_DATA_TYPE), (endCol - startCol))); \
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, subtaskId, splitInfo, OUTPUT_MEM_INDEX, subscriptionType, pmScatteredSubscriptionInfo(dBlockOffset + startCol * matrixDim * sizeof(MATRIX_DATA_TYPE), (endRow - startRow) * sizeof(MATRIX_DATA_TYPE), matrixDim * sizeof(MATRIX_DATA_TYPE), (endCol - startCol))); \
 }
 
 #define SUBSCRIBE_BLOCK(blockRow, blockCol, matrixDim, subtaskId, splitInfo, subscriptionType) SUBSCRIBE_SPLIT_BLOCK(blockRow, blockCol, 0, BLOCK_DIM, 0, BLOCK_DIM, matrixDim, subtaskId, splitInfo, subscriptionType)

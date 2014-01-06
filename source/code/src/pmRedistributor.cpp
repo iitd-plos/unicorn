@@ -203,7 +203,12 @@ void pmRedistributor::CreateRedistributedAddressSpace(ulong pGenerationNumber /*
     else
         mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetLength(), lAddressSpace->GetMemOwnerHost(), pGenerationNumber);
 
-    mRedistributedAddressSpace->Lock(mTask, mTask->GetMemType(lAddressSpace));
+    pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(1, mTask->GetPriority(), 0, NULL);
+    lCountDownCommand->MarkExecutionStart();
+
+    mRedistributedAddressSpace->EnqueueForLock(mTask, mTask->GetMemType(lAddressSpace), lCountDownCommand);
+    
+    lCountDownCommand->WaitForFinish();
 }
     
 void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)

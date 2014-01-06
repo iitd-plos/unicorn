@@ -165,6 +165,11 @@ void pmSubtaskSplitter::FreezeDummyEvents()
     for(; lIter != lEndIter; ++lIter)
         (*lIter).FreezeDummyEvents();
 }
+    
+void pmSubtaskSplitter::PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    mSplitGroupVector[mSplitGroupMap[pStub]].PrefetchSubscriptionsForUnsplittedSubtask(pStub, pSubtaskId);
+}
 
     
 /* class pmSplitGroup */
@@ -192,8 +197,8 @@ std::unique_ptr<pmSplitSubtask> pmSplitGroup::GetPendingSplit(ulong* pSubtaskId,
             if(!pSubtaskId)
                 return std::unique_ptr<pmSplitSubtask>();
          
-            splitRecord lRecord(pSourceStub, *pSubtaskId, mSubtaskSplitter->mSplitFactor);
-            mSplitRecordList.push_back(lRecord);
+            mSplitRecordList.emplace_back(pSourceStub, *pSubtaskId, mSubtaskSplitter->mSplitFactor);
+            mSplitRecordMap.emplace(std::piecewise_construct, std::forward_as_tuple(*pSubtaskId), std::forward_as_tuple(--mSplitRecordList.end()));
             
             lModifiableSplitRecord = &mSplitRecordList.back();
         }
@@ -220,21 +225,16 @@ void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExe
     {
         FINALIZE_RESOURCE_PTR(dSplitRecordListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSplitRecordListLock, Lock(), Unlock());
         
-        std::list<splitRecord>::iterator lIter = mSplitRecordList.begin(), lEndIter = mSplitRecordList.end();
-        for(; lIter != lEndIter; ++lIter)
-        {
-            if(lIter->subtaskId == pSubtaskId)
-                break;
-        }
+        const auto lMapIter = mSplitRecordMap.find(pSubtaskId);
         
-        if(lIter == lEndIter || !lIter->pendingCompletions)
-            PMTHROW(pmFatalErrorException());
+        EXCEPTION_ASSERT(lMapIter != mSplitRecordMap.end());
+
+        const std::list<splitRecord>::iterator lIter = lMapIter->second;
+        
+        EXCEPTION_ASSERT(lIter != mSplitRecordList.end() && lIter->pendingCompletions);
+        EXCEPTION_ASSERT(lIter->assignedStubs[pSplitId].first == pStub);
 
         --lIter->pendingCompletions;
-        
-        if(lIter->assignedStubs[pSplitId].first != pStub)
-            PMTHROW(pmFatalErrorException());
-            
         lIter->assignedStubs[pSplitId].second = true;
         
         if(pPrematureTermination)
@@ -249,6 +249,7 @@ void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExe
             }
             
             mSplitRecordList.erase(lIter);
+            mSplitRecordMap.erase(lMapIter);
         }
     }
     
@@ -328,7 +329,7 @@ void pmSplitGroup::FreezeDummyEvents()
     for(; lIter != lEndIter; ++lIter)
         (*lIter)->RemoveSplitSubtaskCheckEvent(mSubtaskSplitter->mTask);
 }
-    
+
 bool pmSplitGroup::Negotiate(ulong pSubtaskId)
 {
     bool lRetVal = false;
@@ -338,18 +339,22 @@ bool pmSplitGroup::Negotiate(ulong pSubtaskId)
     {
         FINALIZE_RESOURCE_PTR(dSplitRecordListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSplitRecordListLock, Lock(), Unlock());
         
-        std::list<splitRecord>::iterator lIter = mSplitRecordList.begin(), lEndIter = mSplitRecordList.end();
-        for(; lIter != lEndIter; ++lIter)
-        {
-            if(lIter->subtaskId == pSubtaskId)
-                break;
-        }
+        const auto lMapIter = mSplitRecordMap.find(pSubtaskId);
         
-        if(lIter != lEndIter && !lIter->reassigned)
+        if(lMapIter != mSplitRecordMap.end())
         {
-            lStubVector = lIter->assignedStubs;
-            lIter->reassigned = true;
-            lRetVal = true;
+            const std::list<splitRecord>::iterator lIter = lMapIter->second;
+            
+            EXCEPTION_ASSERT(lIter != mSplitRecordList.end());
+            
+            DEBUG_EXCEPTION_ASSERT(lIter->subtaskId == pSubtaskId);
+
+            if(!lIter->reassigned)
+            {
+                lStubVector = lIter->assignedStubs;
+                lIter->reassigned = true;
+                lRetVal = true;
+            }
         }
     }
     
@@ -368,6 +373,31 @@ bool pmSplitGroup::Negotiate(ulong pSubtaskId)
     return lRetVal;
 }
     
+void pmSplitGroup::PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dSplitRecordListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSplitRecordListLock, Lock(), Unlock());
+
+    const auto lMapIter = mSplitRecordMap.find(pSubtaskId);
+    
+    EXCEPTION_ASSERT(lMapIter != mSplitRecordMap.end());
+    
+    const std::list<splitRecord>::iterator lIter = lMapIter->second;
+    
+    EXCEPTION_ASSERT(lIter != mSplitRecordList.end());
+
+    DEBUG_EXCEPTION_ASSERT(lIter->subtaskId == pSubtaskId);
+
+    if(!lIter->prefetched)
+    {
+        pmSubscriptionManager& lSubscriptionManager = mSubtaskSplitter->mTask->GetSubscriptionManager();
+        
+        lSubscriptionManager.FindSubtaskMemDependencies(pStub, pSubtaskId, NULL);
+        lSubscriptionManager.FetchSubtaskSubscriptions(pStub, pSubtaskId, NULL, pStub->GetType(), true);
+        
+        lIter->prefetched = true;
+    }
+}
+
 }
 
 #endif

@@ -27,9 +27,9 @@ namespace pm
 using namespace communicator;
     
 /* class pmCommand */
-pmCommandPtr pmCommand::CreateSharedPtr(ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback)
+pmCommandPtr pmCommand::CreateSharedPtr(ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier /* = NULL */)
 {
-    return pmCommandPtr(new pmCommand(pPriority, pType, pCallback));
+    return pmCommandPtr(new pmCommand(pPriority, pType, pCallback, pUserIdentifier));
 }
 
 pmStatus pmCommand::GetStatus()
@@ -154,9 +154,9 @@ double pmCommand::GetExecutionTimeInSecs() const
 
     
 /* class pmCountDownCommand */
-pmCommandPtr pmCountDownCommand::CreateSharedPtr(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback)
+pmCommandPtr pmCountDownCommand::CreateSharedPtr(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier /* = NULL */)
 {
-    return pmCommandPtr(new pmCountDownCommand(pCount, pPriority, pType, pCallback));
+    return pmCommandPtr(new pmCountDownCommand(pCount, pPriority, pType, pCallback, pUserIdentifier));
 }
 
 void pmCountDownCommand::MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& pSharedPtr)

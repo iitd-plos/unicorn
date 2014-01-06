@@ -66,11 +66,12 @@ typedef std::shared_ptr<pmCommunicatorCommandBase> pmCommunicatorCommandPtr;
 class pmCommand : public pmBase
 {
 	public:
-        static pmCommandPtr CreateSharedPtr(ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback);
+        static pmCommandPtr CreateSharedPtr(ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier = NULL);
     
         ushort GetPriority() const {return mPriority;}
         ushort GetType() const {return mType;}
         const pmCommandCompletionCallbackType GetCommandCompletionCallback() const {return mCallback;}
+        const void* GetUserIdentifier() const {return mUserIdentifier;}
 
         pmStatus GetStatus();
 
@@ -91,10 +92,11 @@ class pmCommand : public pmBase
         bool AddDependentIfPending(pmCommandPtr& pSharedPtr);
 
     protected:
-		pmCommand(ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback)
+		pmCommand(ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier = NULL)
         : mPriority(pPriority)
         , mType(pType)
         , mCallback(pCallback)
+        , mUserIdentifier(pUserIdentifier)
         , mStatus(pmStatusUnavailable)
         , mResourceLock __LOCK_NAME__("pmCommand::mResourceLock")
         {}
@@ -111,6 +113,7 @@ class pmCommand : public pmBase
         const ushort mPriority;
 		const ushort mType;
         const pmCommandCompletionCallbackType mCallback;
+        const void* mUserIdentifier;
 
 		pmStatus mStatus;
 		finalize_ptr<pmSignalWait> mSignalWait;
@@ -123,13 +126,13 @@ class pmCommand : public pmBase
 class pmCountDownCommand : public pmCommand
 {
 	public:
-        static pmCommandPtr CreateSharedPtr(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback);
+        static pmCommandPtr CreateSharedPtr(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier = NULL);
 
         virtual void MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& pSharedPtr);
 
     protected:
-        pmCountDownCommand(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback)
-        : pmCommand(pPriority, pType, pCallback)
+        pmCountDownCommand(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier = NULL)
+        : pmCommand(pPriority, pType, pCallback, pUserIdentifier)
         , mCount(pCount)
         , mCountLock __LOCK_NAME__("pmCountDownCommand::mCountLock")
         {
