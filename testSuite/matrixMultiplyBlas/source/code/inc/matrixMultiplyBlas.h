@@ -21,7 +21,7 @@ namespace matrixMultiplyBlas
 #error "MATRIX_DATA_TYPE not defined"
 #endif
 
-#define BLOCK_DIM 4096
+#define BLOCK_DIM 2048
 
 #define BLOCK_OFFSET_IN_ELEMS(blockRow, blockCol, blockDim, matrixDim) (((blockRow) * (matrixDim) + (blockCol)) * (blockDim))
 
