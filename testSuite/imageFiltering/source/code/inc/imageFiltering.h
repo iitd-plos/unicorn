@@ -4,8 +4,8 @@ namespace imageFiltering
 
 //#define DEFAULT_IMAGE_PATH (char*)"../../images/default.bmp"
 #define DEFAULT_IMAGE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/imageFiltering/images/default.bmp"
-#define PIXEL_COUNT 3    // assumes 24-bit RGB
-#define IMAGE_SIZE (gImageWidth * gImageHeight * PIXEL_COUNT)
+#define PIXEL_COUNT (size_t)3    // assumes 24-bit RGB
+#define IMAGE_SIZE ((size_t)gImageWidth * gImageHeight * PIXEL_COUNT)
     
 #define TILE_DIM 2048
 #define GPU_BLOCK_DIM 32
@@ -23,7 +23,7 @@ using namespace pm;
 #include <cuda.h>
 size_t computeSubtaskReservedMemRequirement(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId, int pSubscriptionStartCol, int pSubscriptionEndCol, int pSubscriptionStartRow, int pSubscriptionEndRow);
 pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
-int singleGpuImageFilter(void* pInvertedImageData, int pImageWidth, int pImageHeight, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, int pImageBytesPerLine, void* pOutputMem);
+int singleGpuImageFilter(void* pInvertedImageData, size_t pImageWidth, size_t pImageHeight, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], size_t pFilterRadius, size_t pImageBytesPerLine, void* pOutputMem);
 #endif
 
 enum memIndex
@@ -34,11 +34,11 @@ enum memIndex
 
 typedef struct imageFilterTaskConf
 {
-    int imageWidth;
-    int imageHeight;
-    int imageOffset;
-    int imageBytesPerLine;
-    int filterRadius;
+    size_t imageWidth;
+    size_t imageHeight;
+    size_t imageOffset;
+    size_t imageBytesPerLine;
+    size_t filterRadius;
     char imagePath[MAX_IMAGE_PATH_LENGTH];
     char filter[MAX_FILTER_DIM][MAX_FILTER_DIM];
 } imageFilterTaskConf;
@@ -50,7 +50,7 @@ bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubta
 typedef struct bitmapHeader
 {
     char identifier[2];
-    int filesize;
+    unsigned int filesize;
     short reserved[2];
     int headersize;
     int infoSize;
@@ -59,7 +59,7 @@ typedef struct bitmapHeader
     short bitPlanes;
     short bitCount;
     int compression;
-    int imageSize;
+    unsigned int imageSize;
     int pixelsPerMeterX;
     int pixelsPerMeterY;
     int colorsUsed;

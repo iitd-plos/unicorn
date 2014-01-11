@@ -14,7 +14,7 @@ void* gSerialOutput;
 void* gParallelOutput;
 char gFilter[MAX_FILTER_DIM][MAX_FILTER_DIM];
     
-int gImageWidth, gImageHeight, gImageOffset, gImageBytesPerLine;
+size_t gImageWidth, gImageHeight, gImageOffset, gImageBytesPerLine;
 
 void readImageMetaData(char* pImagePath)
 {
@@ -71,10 +71,10 @@ void readImage(char* pImagePath, void* pImageData, bool pInverted)
     char lColor[PIXEL_COUNT];
     unsigned int lSeekOffset = gImageBytesPerLine - (gImageWidth * PIXEL_COUNT);
 
-    for(int i = 0; i < gImageHeight; ++i)
+    for(size_t i = 0; i < gImageHeight; ++i)
     {
         char* lRow = ((char*)pImageData) + ((pInverted ? i : (gImageHeight - i - 1)) * gImageWidth * PIXEL_COUNT);
-        for(int j = 0; j < gImageWidth; ++j)
+        for(size_t j = 0; j < gImageWidth; ++j)
         {
             if(fread((void*)(&lColor), sizeof(lColor), 1, fp) != 1)
                 exit(1);
@@ -94,16 +94,16 @@ void readImage(char* pImagePath, void* pImageData, bool pInverted)
 	fclose(fp);
 }
     
-void serialImageFilter(void* pImageData, int pFilterRadius)
+void serialImageFilter(void* pImageData, size_t pFilterRadius)
 {
     char* lImageData = (char*)pImageData;
     char* lSerialOutput = (char*)gSerialOutput;
     
     int lDimMinX, lDimMaxX, lDimMinY, lDimMaxY;
 
-    for(int i = 0; i < gImageHeight; ++i)
+    for(size_t i = 0; i < gImageHeight; ++i)
     {
-        for(int j = 0; j < gImageWidth; ++j)
+        for(size_t j = 0; j < gImageWidth; ++j)
         {
             lDimMinX = j - pFilterRadius;
             lDimMaxX = j + pFilterRadius;
@@ -115,8 +115,8 @@ void serialImageFilter(void* pImageData, int pFilterRadius)
             {
                 for(int l = lDimMinX; l <= lDimMaxX; ++l)
                 {
-                    int m = ((k < 0) ? 0 : ((k >= gImageHeight) ? (gImageHeight - 1) : k));
-                    int n = ((l < 0) ? 0 : ((l >= gImageWidth) ? (gImageWidth - 1) : l));
+                    int m = ((k < 0) ? 0 : (((size_t)k >= gImageHeight) ? (gImageHeight - 1) : k));
+                    int n = ((l < 0) ? 0 : (((size_t)l >= gImageWidth) ? (gImageWidth - 1) : l));
                     
                     size_t lIndex = (m * gImageWidth + n) * PIXEL_COUNT;
                     lRedVal += lImageData[lIndex] * gFilter[k - lDimMinY][l - lDimMinX];
@@ -143,10 +143,10 @@ bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubta
     *pStartRow = (int)((pSubtaskId / lTilesPerRow) * TILE_DIM);
     *pEndRow = *pStartRow + TILE_DIM;
     
-    if(*pEndCol > pTaskConf->imageWidth)
+    if((size_t)*pEndCol > pTaskConf->imageWidth)
         *pEndCol = pTaskConf->imageWidth;
 
-    if(*pEndRow > pTaskConf->imageHeight)
+    if((size_t)*pEndRow > pTaskConf->imageHeight)
         *pEndRow = pTaskConf->imageHeight;
 
     // If it is a split subtask, then subscribe to a smaller number of rows within the tile
@@ -225,8 +225,8 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
             {
                 for(int l = lDimMinX; l <= lDimMaxX; ++l)
                 {
-                    int m = ((k < 0) ? 0 : ((k >= lTaskConf->imageHeight) ? (lTaskConf->imageHeight - 1) : k));
-                    int n = ((l < 0) ? 0 : ((l >= lTaskConf->imageWidth) ? (lTaskConf->imageWidth - 1) : l));
+                    int m = ((k < 0) ? 0 : (((size_t)k >= lTaskConf->imageHeight) ? (lTaskConf->imageHeight - 1) : k));
+                    int n = ((l < 0) ? 0 : (((size_t)l >= lTaskConf->imageWidth) ? (lTaskConf->imageWidth - 1) : l));
                     
                     size_t lInvertedIndex = (lTaskConf->imageHeight - 1 - m) * lTaskConf->imageBytesPerLine + n * PIXEL_COUNT;
                     lBlueVal += lInvertedImageData[lInvertedIndex] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
