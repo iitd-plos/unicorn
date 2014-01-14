@@ -40,14 +40,13 @@ __global__ void matrixCopy_cuda(matrixTransposeTaskConf pTaskConf, pmSubtaskInfo
 {
     int lIndexX = blockIdx.x * GPU_TILE_DIM + threadIdx.x;
     int lIndexY = blockIdx.y * GPU_TILE_DIM + threadIdx.y;
-    int lInputIndex = lIndexX + (lIndexY * pTaskConf.blockSizeRows);
-    int lOutputIndex = lIndexX + (lIndexY * pTaskConf.matrixDimRows);
+    int lIndex = lIndexX + (lIndexY * pTaskConf.blockSizeRows);
     
     unsigned int lOutputMemIndex = (pTaskConf.inplace ? (unsigned int)INPLACE_MEM_INDEX : (unsigned int)OUTPUT_MEM_INDEX);
 
     int i, lStride = (GPU_TILE_DIM/GPU_ELEMS_PER_THREAD);
     for(i = 0; i < GPU_TILE_DIM; i += lStride)
-        ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr)[lOutputIndex + i * pTaskConf.blockSizeRows] = ((MATRIX_DATA_TYPE*)pOutputBlock)[lInputIndex + i * pTaskConf.blockSizeRows];
+        ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr)[lIndex + i * pTaskConf.blockSizeRows] = ((MATRIX_DATA_TYPE*)pOutputBlock)[lIndex + i * pTaskConf.blockSizeRows];
 }
     
 __global__ void matrixTranspose_singleGpu(size_t pInputMemCols, size_t pSubtaskRows, void* pInputMem, void* pOutputBlock, size_t pMaxBlocksX, size_t pMaxBlocksY)
