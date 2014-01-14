@@ -217,14 +217,14 @@ class pmTask : public pmBase
         std::map<uint, pmPoolAllocator> mPoolAllocatorMap;  // address space index vs pool allocator
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mPoolAllocatorMapLock;
     
-        bool mTaskHasReadWriteAddressSpaceWithDisjointSubscriptions;
+        bool mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions;
 
         std::vector<pmTaskMemory> mTaskMemVector;
         std::vector<pmAddressSpace*> mAddressSpaces;
         std::map<const pmAddressSpace*, size_t> mAddressSpaceTaskMemIndexMap;
 
     protected:
-        bool DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() const;
+        bool DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() const;
         bool RegisterRedistributionCompletion();    // Returns true when all address spaces finish redistribution
         void ReplaceTaskAddressSpace(uint pAddressSpaceIndex, pmAddressSpace* pNewAddressSpace);
     

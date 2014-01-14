@@ -84,7 +84,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
     , mTaskCompletionLock __LOCK_NAME__("pmTask::mTaskCompletionLock")
     , mStealListLock __LOCK_NAME__("pmTask::mStealListLock")
     , mPoolAllocatorMapLock __LOCK_NAME__("pmTask::mPoolAllocatorMapLock")
-    , mTaskHasReadWriteAddressSpaceWithDisjointSubscriptions(false)
+    , mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions(false)
     , mTaskMemVector(std::move(pTaskMemVector))
 	, mAssignedDeviceCount(pAssignedDeviceCount)
 {
@@ -110,7 +110,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
             mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo); // Output address spaces do not have a global lazy protection, rather have at subtask level
         }
         
-        mTaskHasReadWriteAddressSpaceWithDisjointSubscriptions |= (IsReadWrite(lAddressSpace) && pTaskMem.disjointReadWritesAcrossSubtasks);
+        mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions |= (IsReadWrite(lAddressSpace) && !pTaskMem.disjointReadWritesAcrossSubtasks);
     });
 
     CreateReducerAndRedistributors();
@@ -206,9 +206,9 @@ bool pmTask::CanSplitGpuSubtasks()
 #endif
 }
     
-bool pmTask::DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() const
+bool pmTask::DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() const
 {
-    return mTaskHasReadWriteAddressSpaceWithDisjointSubscriptions;
+    return mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions;
 }
 
 void* pmTask::GetTaskConfiguration() const
@@ -801,7 +801,7 @@ void pmLocalTask::MarkLocalStubsFreeOfCancellations()
     
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted && (!DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
+    if(mUserSideTaskCompleted && (!DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
     
     mLocalStubsFreeOfCancellations = true;
@@ -825,7 +825,7 @@ void pmLocalTask::MarkUserSideTaskCompletion()
     {
         FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
+        if((!lIsMultiAssign || mLocalStubsFreeOfCancellations) && (!DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
             pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
             
         mUserSideTaskCompleted = true;
@@ -1057,7 +1057,7 @@ void pmRemoteTask::MarkLocalStubsFreeOfCancellations()
 
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if(mUserSideTaskCompleted && (!DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
+    if(mUserSideTaskCompleted && (!DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
     {
         DoPostInternalCompletion();
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
@@ -1089,7 +1089,7 @@ void pmRemoteTask::MarkUserSideTaskCompletion()
 {
     FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-    if((!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations) && (!DoesTaskHaveReadWriteAddressSpaceWithDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
+    if((!IsMultiAssignEnabled() || mLocalStubsFreeOfCancellations) && (!DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() || mLocalStubsFreeOfShadowMemCommits))
     {
         DoPostInternalCompletion();
         pmScheduler::GetScheduler()->SendTaskCompleteToTaskOwner(this);
