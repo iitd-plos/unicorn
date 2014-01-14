@@ -234,16 +234,15 @@ bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemType pInputMemType, pmMem
     
     if(lInplace)
     {
-        lTaskMem[INPLACE_MEM_INDEX] = {pOutputMemHandle, pOutputMemType};
+        lTaskMem[INPLACE_MEM_INDEX] = {pOutputMemHandle, pOutputMemType, SUBSCRIPTION_NATURAL, true};
 
-        lTaskDetails.disjointReadWritesAcrossSubtasks = true;
         lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
         lTaskDetails.taskMemCount = INPLACE_MAX_MEM_INDICES;
     }
     else
     {
-        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType};
-        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType};
+        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType, SUBSCRIPTION_NATURAL};
+        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType, SUBSCRIPTION_NATURAL};
 
         lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
         lTaskDetails.taskMemCount = MAX_MEM_INDICES;

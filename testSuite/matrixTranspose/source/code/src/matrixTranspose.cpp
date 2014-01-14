@@ -69,6 +69,12 @@ void transposeMatrixBlock(MATRIX_DATA_TYPE* pBlock, size_t pBlockDim)
     }
 }
 
+void transposeMatrixBlock(MATRIX_DATA_TYPE* pInputBlock, MATRIX_DATA_TYPE* pOutputBlock, size_t pBlockDim)
+{
+    for(size_t i = 0; i < pBlockDim; ++i)
+        for(size_t j = 0; j < pBlockDim; ++j)
+            pOutputBlock[j + i*pBlockDim] = pInputBlock[i + j*pBlockDim];
+}
 #else
 size_t getBitIndex(size_t pIndexInBlock, size_t pInputDimY, size_t pBlockSizeY)
 {
@@ -235,7 +241,6 @@ void serialMatrixTranspose(bool pInplace, MATRIX_DATA_TYPE* pInputMatrix, MATRIX
 
 pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
-    size_t i;
 	pmSubscriptionInfo lSubscriptionInfo;
 	matrixTransposeTaskConf* lTaskConf = (matrixTransposeTaskConf*)(pTaskInfo.taskConf);
     
@@ -244,37 +249,24 @@ pmStatus matrixTransposeDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDev
     size_t lBlockIdRow = (int)(pSubtaskInfo.subtaskId / lBlockCountCols);
     size_t lBlockIdCol = (int)(pSubtaskInfo.subtaskId % lBlockCountCols);
 
-    unsigned int lInputMemIndex = (lTaskConf->inplace ? INPLACE_MEM_INDEX : INPUT_MEM_INDEX);
-    unsigned int lOutputMemIndex = (lTaskConf->inplace ? INPLACE_MEM_INDEX : OUTPUT_MEM_INDEX);
+    unsigned int lInputMemIndex = (lTaskConf->inplace ? (unsigned int)INPLACE_MEM_INDEX : (unsigned int)INPUT_MEM_INDEX);
+    unsigned int lOutputMemIndex = (lTaskConf->inplace ? (unsigned int)INPLACE_MEM_INDEX : (unsigned int)OUTPUT_MEM_INDEX);
     
 	// Subscribe to one block of the output matrix for reading and it's transposed block for writing
     size_t lBlockElemCount = lTaskConf->blockSizeRows * lTaskConf->blockSizeCols;
+
     size_t lBlockOffset = ((lBlockIdCol * lTaskConf->blockSizeCols) + (lBlockIdRow * lBlockCountCols * lBlockElemCount)) * sizeof(MATRIX_DATA_TYPE);
-    for(i = 0; i < lTaskConf->blockSizeRows; ++i)
-    {
-        lSubscriptionInfo.offset = lBlockOffset;
-        lSubscriptionInfo.length = lTaskConf->blockSizeCols * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lInputMemIndex, (lTaskConf->inplace ? READ_SUBSCRIPTION : READ_SUBSCRIPTION), lSubscriptionInfo);
-    
-        lBlockOffset += lTaskConf->matrixDimCols * sizeof(MATRIX_DATA_TYPE);
-    }
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lInputMemIndex, READ_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lTaskConf->blockSizeCols * sizeof(MATRIX_DATA_TYPE), lTaskConf->matrixDimCols * sizeof(MATRIX_DATA_TYPE), lTaskConf->blockSizeRows));
 
     lBlockOffset = ((lBlockIdRow * lTaskConf->blockSizeRows) + (lBlockIdCol * lBlockCountRows * lBlockElemCount)) * sizeof(MATRIX_DATA_TYPE);
-    for(i = 0; i < lTaskConf->blockSizeCols; ++i)
-    {
-        lSubscriptionInfo.offset = lBlockOffset;
-        lSubscriptionInfo.length = lTaskConf->blockSizeRows * sizeof(MATRIX_DATA_TYPE);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lOutputMemIndex, WRITE_SUBSCRIPTION, lSubscriptionInfo);
-    
-        lBlockOffset += lTaskConf->matrixDimRows * sizeof(MATRIX_DATA_TYPE);
-    }
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lOutputMemIndex, WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lTaskConf->blockSizeRows * sizeof(MATRIX_DATA_TYPE), lTaskConf->matrixDimRows * sizeof(MATRIX_DATA_TYPE), lTaskConf->blockSizeCols));
     
 #ifdef BUILD_CUDA
 	// Reserve CUDA Global Mem
 	if(lTaskConf->inplace && pDeviceInfo.deviceType == pm::GPU_CUDA)
     {
         size_t lBlockSize = sizeof(MATRIX_DATA_TYPE) * lTaskConf->blockSizeRows * lTaskConf->blockSizeRows;
-		pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, lBlockSize);
+		pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lBlockSize);
     }
 #endif
 
@@ -286,25 +278,45 @@ pmStatus matrixTranspose_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 	matrixTransposeTaskConf* lTaskConf = (matrixTransposeTaskConf*)(pTaskInfo.taskConf);
 
     MATRIX_DATA_TYPE* lInputMem = lTaskConf->inplace ? (MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].readPtr : (MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr;
+    pmSubscriptionVisibilityType lInputMemVisibilityType = lTaskConf->inplace ? pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].visibilityType : pSubtaskInfo.memInfo[INPUT_MEM_INDEX].visibilityType;
+    pmSubscriptionVisibilityType lOutputMemVisibilityType = lTaskConf->inplace ? pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].visibilityType : pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType;
     
 #ifdef USE_SQUARE_BLOCKS
-    // For increased cache locality - copy the block into scratch buffer, transpose the scratch buffer and then write it to the transposed block
-    size_t lBlockDim = lTaskConf->blockSizeRows;
-    size_t lBlockDimSize = sizeof(MATRIX_DATA_TYPE) * lBlockDim;
-    size_t lBlockSize = lBlockDimSize * lBlockDim;
-    MATRIX_DATA_TYPE* lBlock = (MATRIX_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo,  PRE_SUBTASK_TO_SUBTASK, lBlockSize, NULL);
-    
-    size_t i;
-    for(i = 0; i < lBlockDim; ++i)
-        memcpy(lBlock + i*lBlockDim, lInputMem + i*lTaskConf->matrixDimCols, lBlockDimSize);
-    
-    transposeMatrixBlock(lBlock, lBlockDim);
-    
-    unsigned int lOutputMemIndex = (lTaskConf->inplace ? INPLACE_MEM_INDEX : OUTPUT_MEM_INDEX);
+    if(lTaskConf->inplace)
+    {
+        if(lInputMemVisibilityType != SUBSCRIPTION_NATURAL || lOutputMemVisibilityType != SUBSCRIPTION_NATURAL)
+            exit(1);
 
-    for(i = 0; i < lBlockDim; ++i)
-        memcpy(((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr) + i * lTaskConf->matrixDimRows, lBlock + i * lBlockDim, lBlockDimSize);
+        size_t lBlockDim = lTaskConf->blockSizeRows;
+        size_t lBlockDimSize = sizeof(MATRIX_DATA_TYPE) * lBlockDim;
+        size_t lBlockSize = lBlockDimSize * lBlockDim;
+        MATRIX_DATA_TYPE* lBlock = (MATRIX_DATA_TYPE*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo,  PRE_SUBTASK_TO_SUBTASK, lBlockSize, NULL);
+        
+        size_t i;
+        for(i = 0; i < lBlockDim; ++i)
+            memcpy(lBlock + i*lBlockDim, lInputMem + i*lTaskConf->matrixDimCols, lBlockDimSize);
+        
+        transposeMatrixBlock(lBlock, lBlockDim);
+        
+        unsigned int lOutputMemIndex = (lTaskConf->inplace ? (unsigned int)INPLACE_MEM_INDEX : (unsigned int)OUTPUT_MEM_INDEX);
+        
+        for(i = 0; i < lBlockDim; ++i)
+            memcpy(((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr) + i * lTaskConf->matrixDimRows, lBlock + i * lBlockDim, lBlockDimSize);
+    }
+    else
+    {
+        if(lInputMemVisibilityType != SUBSCRIPTION_COMPACT || lOutputMemVisibilityType != SUBSCRIPTION_COMPACT)
+            exit(1);
+
+        unsigned int lOutputMemIndex = (lTaskConf->inplace ? (unsigned int)INPLACE_MEM_INDEX : (unsigned int)OUTPUT_MEM_INDEX);
+
+        MATRIX_DATA_TYPE* lOutputMem = (MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr;
+        transposeMatrixBlock(lInputMem, lOutputMem, lTaskConf->blockSizeRows);
+    }
 #else
+    if(lInputMemVisibilityType != SUBSCRIPTION_NATURAL || lOutputMemVisibilityType != SUBSCRIPTION_NATURAL)
+        exit(1);
+
     transposeMatrixBlock(lInputMem, (MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr, lTaskConf->matrixDimRows, lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, lTaskConf->blockSizeCols, (pSubtaskInfo.subtaskId == 0), (pSubtaskInfo.subtaskId == pTaskInfo.subtaskCount - 1), pSubtaskInfo.subtaskId, lTaskConf->inplace);
 #endif
 
@@ -325,15 +337,15 @@ double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixD
 
     if(lInplace)
     {
-        lTaskMem[INPLACE_MEM_INDEX] = {pOutputMemHandle, pOutputMemType};
+        lTaskMem[INPLACE_MEM_INDEX] = {pOutputMemHandle, pOutputMemType, SUBSCRIPTION_OPTIMAL};
         
         lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
         lTaskDetails.taskMemCount = INPLACE_MAX_MEM_INDICES;
     }
     else
     {
-        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType};
-        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType};
+        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType, SUBSCRIPTION_COMPACT};
+        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType, SUBSCRIPTION_COMPACT};
         
         lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
         lTaskDetails.taskMemCount = MAX_MEM_INDICES;

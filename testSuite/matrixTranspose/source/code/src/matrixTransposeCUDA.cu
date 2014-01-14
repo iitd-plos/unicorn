@@ -43,11 +43,11 @@ __global__ void matrixCopy_cuda(matrixTransposeTaskConf pTaskConf, pmSubtaskInfo
     int lInputIndex = lIndexX + (lIndexY * pTaskConf.blockSizeRows);
     int lOutputIndex = lIndexX + (lIndexY * pTaskConf.matrixDimRows);
     
-    unsigned int lOutputMemIndex = (lTaskConf->inplace ? INPLACE_MEM_INDEX : OUTPUT_MEM_INDEX);
+    unsigned int lOutputMemIndex = (pTaskConf.inplace ? (unsigned int)INPLACE_MEM_INDEX : (unsigned int)OUTPUT_MEM_INDEX);
 
     int i, lStride = (GPU_TILE_DIM/GPU_ELEMS_PER_THREAD);
     for(i = 0; i < GPU_TILE_DIM; i += lStride)
-        ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr)[lOutputIndex + i * pTaskConf.matrixDimRows] = ((MATRIX_DATA_TYPE*)pOutputBlock)[lInputIndex + i * pTaskConf.blockSizeRows];
+        ((MATRIX_DATA_TYPE*)pSubtaskInfo.memInfo[lOutputMemIndex].writePtr)[lOutputIndex + i * pTaskConf.blockSizeRows] = ((MATRIX_DATA_TYPE*)pOutputBlock)[lInputIndex + i * pTaskConf.blockSizeRows];
 }
     
 __global__ void matrixTranspose_singleGpu(size_t pInputMemCols, size_t pSubtaskRows, void* pInputMem, void* pOutputBlock, size_t pMaxBlocksX, size_t pMaxBlocksY)
@@ -82,6 +82,12 @@ pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
 {
 	matrixTransposeTaskConf* lTaskConf = (matrixTransposeTaskConf*)(pTaskInfo.taskConf);
 
+    pmSubscriptionVisibilityType lInputMemVisibilityType = lTaskConf->inplace ? pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].visibilityType : pSubtaskInfo.memInfo[INPUT_MEM_INDEX].visibilityType;
+    pmSubscriptionVisibilityType lOutputMemVisibilityType = lTaskConf->inplace ? pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].visibilityType : pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType;
+
+    if(lInputMemVisibilityType != SUBSCRIPTION_COMPACT || lOutputMemVisibilityType != SUBSCRIPTION_COMPACT)
+        exit(1);
+
     dim3 gridConf(lTaskConf->blockSizeRows / GPU_TILE_DIM, lTaskConf->blockSizeRows / GPU_TILE_DIM, 1);
     dim3 blockConf(GPU_TILE_DIM, GPU_TILE_DIM / GPU_ELEMS_PER_THREAD, 1);
 
@@ -91,14 +97,14 @@ pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDevi
     {
         void* lBlockCudaPtr = pSubtaskInfo.gpuContext.reservedGlobalMem;
 
-        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->matrixDimCols, lTaskConf->blockSizeRows, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].readPtr, lBlockCudaPtr);
+        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->blockSizeRows, lTaskConf->blockSizeRows, pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].readPtr, lBlockCudaPtr);
         matrixCopy_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (*lTaskConf, pSubtaskInfo, lBlockCudaPtr);    // because transpose is inplace, this has to be a post step
     }
     else
     {
-        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->matrixDimCols, lTaskConf->matrixDimRows, pSubtaskInf.memInfo[INPUT_MEM_INDEX].ptr, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
+        matrixTranspose_cuda <<<gridConf, blockConf, 0, lCudaStream>>> (lTaskConf->blockSizeRows, lTaskConf->blockSizeRows, pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
     }
-    
+
     return pmSuccess;
 }
     
