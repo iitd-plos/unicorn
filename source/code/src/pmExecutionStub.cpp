@@ -2074,6 +2074,18 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
             
             if(lDeviceMemoryPtr.get())
             {
+                // For writeable address spaces, we can reuse existing CUDA memory but pinned mem is required to copy data out
+                if(pTask->IsWritable(pAddressSpace))
+                {
+                    lSubtaskMemoryVector[pAddressSpaceIndex].pinnedPtr = mPinnedChunkCollection.AllocateNoThrow(lSubscriptionInfo.length, pCudaAlignment);
+                    
+                    if(!lSubtaskMemoryVector[pAddressSpaceIndex].pinnedPtr)
+                    {
+                        lLoadStatus = false;
+                        return;     // return from lambda expression
+                    }
+                }
+
                 lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
                 pPreventCachePurgeVector.push_back(lDeviceMemoryPtr);   // increase ref count of cache value
                 lNeedsAllocation = false;
@@ -2085,7 +2097,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
             if(!AllocateMemoryForDeviceCopy(lSubscriptionInfo.length, pCudaAlignment, lSubtaskMemoryVector[pAddressSpaceIndex], mCudaChunkCollection))
             {
                 lLoadStatus = false;
-                return;     // Return from lambda expression
+                return;     // return from lambda expression
             }
 
             lSubtaskMemoryVector[pAddressSpaceIndex].requiresLoad = true;
