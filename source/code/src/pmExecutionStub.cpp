@@ -2046,45 +2046,37 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
             lCudaCacheKeyPtr = MakeCudaCacheKey(pTask, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex, pAddressSpace, lVisibilityType);
 
         pmSubscriptionInfo lSubscriptionInfo;
+        
+        /* If address space is read-only, we need to ensure that the GPU copy of data (if any) is latest - need to cross check memory directory - not done yet
+         * If address space is write-only without reduction, we need to reuse the GPU copy of data (if any)
+         * If address space is write-only with reduction, then GPU copy of data can not be reused and new data can not be cached
+         * If address space is read-write with disjoint reads and writes across subtasks, this can be treated as read-only case
+         * if address space is read-write without disjoint reads and writes across subtasks, this should be treated as write-only with reduction case.
+        */
 
         if(lVisibilityType == SUBSCRIPTION_NATURAL)
         {
-            if(pTask->IsReadOnly(pAddressSpace) || (pTask->IsReadWrite(pAddressSpace) && pTask->HasDisjointReadWritesAcrossSubtasks(pAddressSpace)))
-            {
+            if(pTask->IsReadOnly(pAddressSpace))
                 lSubscriptionInfo = lSubscriptionManager.GetConsolidatedReadSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-
-                if(lSubscriptionInfo.length && lCudaCacheEnabledForTask)
-                {
-                    std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(*lCudaCacheKeyPtr.get());
-
-                    if(lDeviceMemoryPtr.get())
-                    {
-                        lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
-                        pPreventCachePurgeVector.push_back(lDeviceMemoryPtr);   // increase ref count of cache value
-                        lNeedsAllocation = false;
-                    }
-                }
-            }
             else
-            {
                 lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-            }
         }
         else    // SUBSCRIPTION_COMPACT
         {
-            const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-            lSubscriptionInfo = lCompactViewData.subscriptionInfo;
-	
-            if((pTask->IsReadOnly(pAddressSpace) || (pTask->IsReadWrite(pAddressSpace) && pTask->HasDisjointReadWritesAcrossSubtasks(pAddressSpace))) && lCudaCacheEnabledForTask)
+            lSubscriptionInfo = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex).subscriptionInfo;
+        }
+        
+        bool lTemporaryAddressSpaceData = (pTask->GetCallbackUnit()->GetDataReductionCB() || (pTask->IsReadWrite(pAddressSpace) && !pTask->HasDisjointReadWritesAcrossSubtasks(pAddressSpace)));
+        
+        if(lSubscriptionInfo.length && lCudaCacheEnabledForTask && !lTemporaryAddressSpaceData)
+        {
+            std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(*lCudaCacheKeyPtr.get());
+            
+            if(lDeviceMemoryPtr.get())
             {
-                std::shared_ptr<pmCudaCacheValue>& lDeviceMemoryPtr = mCudaCache.Get(*lCudaCacheKeyPtr.get());
-
-                if(lDeviceMemoryPtr.get())
-                {
-                    lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
-                    pPreventCachePurgeVector.push_back(lDeviceMemoryPtr);   // increase ref count of cache value
-                    lNeedsAllocation = false;
-                }
+                lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
+                pPreventCachePurgeVector.push_back(lDeviceMemoryPtr);   // increase ref count of cache value
+                lNeedsAllocation = false;
             }
         }
 
@@ -2098,7 +2090,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
 
             lSubtaskMemoryVector[pAddressSpaceIndex].requiresLoad = true;
             
-            if(lCudaCacheEnabledForTask)
+            if(lCudaCacheEnabledForTask && !lTemporaryAddressSpaceData)
                 lPendingCacheInsertions.emplace_back(std::move(lCudaCacheKeyPtr), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr)));
         }
     });
