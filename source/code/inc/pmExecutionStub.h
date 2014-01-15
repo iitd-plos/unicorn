@@ -425,6 +425,8 @@ class pmStubGPU : public pmExecutionStub
 
 		virtual void Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL) = 0;
 
+        virtual void PurgeAddressSpaceEntriesFromGpuCache(const pmAddressSpace* pAddressSpace) = 0;
+
     protected:
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign) = 0;
         virtual void PrepareForSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, pmSplitInfo* pSplitInfo) = 0;
@@ -448,7 +450,7 @@ class pmStubCPU : public pmExecutionStub
 		virtual std::string GetDeviceDescription();
 
 		virtual pmDeviceType GetType() const;
-
+    
 		virtual void Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ulong* pPreftechSubtaskIdPtr, pmSplitInfo* pmSplitInfo = NULL);
 
     protected:
@@ -497,6 +499,8 @@ class pmStubCUDA : public pmStubGPU
         const std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct>& GetSubtaskSecondaryBuffersMap() const;
 
         size_t GetDeviceIndex();
+    
+        virtual void PurgeAddressSpaceEntriesFromGpuCache(const pmAddressSpace* pAddressSpace);
 
     protected:
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign);

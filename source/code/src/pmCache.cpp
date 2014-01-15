@@ -53,14 +53,36 @@ inline void pmCache<__key, __value, __hasher, __evictor>::RemoveKey(const __key&
 
     typename decltype(mCacheHash)::iterator lIter = mCacheHash.find(pKey);
     EXCEPTION_ASSERT(lIter != mCacheHash.end());
-    
-    EXCEPTION_ASSERT(lIter->second->second.unique());
 
-    if(lIter->second->second.get())
-        mEvictor(lIter->second->second);
+    RemoveKeyInternal(lIter);
+}
     
-    mCacheHash.erase(lIter);
-    mCacheList.erase(lIter->second);
+template<typename __key, typename __value, typename __hasher, typename __evictor>
+inline void pmCache<__key, __value, __hasher, __evictor>::RemoveKeys(const std::function<bool (const __key&)>& pFunction)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    auto lIter = mCacheHash.begin(), lEndIter = mCacheHash.end();
+
+    while(lIter != lEndIter)
+    {
+        if(pFunction(lIter->first))
+            lIter = RemoveKeyInternal(lIter);
+        else
+            ++lIter;
+    }
+}
+    
+template<typename __key, typename __value, typename __hasher, typename __evictor>
+inline typename pmCache<__key, __value, __hasher, __evictor>::hashType::iterator pmCache<__key, __value, __hasher, __evictor>::RemoveKeyInternal(typename pmCache<__key, __value, __hasher, __evictor>::hashType::iterator pIter)
+{
+    EXCEPTION_ASSERT(pIter->second->second.unique());
+    
+    if(pIter->second->second.get())
+        mEvictor(pIter->second->second);
+    
+    mCacheList.erase(pIter->second);
+    return mCacheHash.erase(pIter);
 }
     
 template<typename __key, typename __value, typename __hasher, typename __evictor>

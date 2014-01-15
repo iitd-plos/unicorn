@@ -208,6 +208,15 @@ void pmStubManager::FreeGpuResources()
             (static_cast<pmStubGPU*>(mStubVector[i]))->WaitForQueuedCommands();
 	}
 }
+    
+void pmStubManager::PurgeAddressSpaceEntriesFromGpuCaches(const pmAddressSpace* pAddressSpace)
+{
+    for(size_t i = 0; i < mStubCount; ++i)
+    {
+        if(dynamic_cast<pmStubGPU*>(mStubVector[i]))
+            (static_cast<pmStubGPU*>(mStubVector[i]))->PurgeAddressSpaceEntriesFromGpuCache(pAddressSpace);
+	}
+}
 #endif
 
 void pmStubManager::DestroyExecutionStubs()

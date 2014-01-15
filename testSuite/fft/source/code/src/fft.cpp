@@ -434,11 +434,11 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 	READ_NON_COMMON_ARGS
 
 #if 0
-	for(i = 0; i < lElemsY; ++i)
+	for(size_t i = 0; i < lElemsY; ++i)
     {
         for(size_t j = 0; j < lElemsX; ++j)
         {
-            std::cout << gSerialOutput[i * lMatrixDimRows + j] << "(" << gParallelOutput[i * lMatrixDimRows + j] << ") ";
+            std::cout << "[" << gSerialOutput[i * lElemsX + j].x << ", " << gSerialOutput[i * lElemsX + j].y << "] (" << gParallelOutput[i * lElemsX + j].x << " ," << gParallelOutput[i * lElemsX + j].y << ") ";
         }
 
         std::cout << std::endl;

@@ -1956,6 +1956,14 @@ pmDeviceType pmStubCUDA::GetType() const
 	return GPU_CUDA;
 }
     
+void pmStubCUDA::PurgeAddressSpaceEntriesFromGpuCache(const pmAddressSpace* pAddressSpace)
+{
+    mCudaCache.RemoveKeys([pAddressSpace] (const pmCudaCacheKey& pKey) -> bool
+                          {
+                              return (pAddressSpace == pKey.addressSpace);
+                          });
+}
+    
 std::unique_ptr<pmCudaCacheKey> pmStubCUDA::MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType)
 {
     DEBUG_EXCEPTION_ASSERT(pTask->IsCudaCacheEnabled());
@@ -2047,7 +2055,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
 
         pmSubscriptionInfo lSubscriptionInfo;
         
-        /* If address space is read-only, we need to ensure that the GPU copy of data (if any) is latest - need to cross check memory directory - not done yet
+        /* If address space is read-only, we need to ensure that the GPU copy of data (if any) is latest - need to cross check memory directory - partially done yet (PurgeAddressSpaceEntriesFromGpuCache)
          * If address space is write-only without reduction, we need to reuse the GPU copy of data (if any)
          * If address space is write-only with reduction, then GPU copy of data can not be reused and new data can not be cached
          * If address space is read-write with disjoint reads and writes across subtasks, this can be treated as read-only case
@@ -2077,6 +2085,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                 // For writeable address spaces, we can reuse existing CUDA memory but pinned mem is required to copy data out
                 if(pTask->IsWritable(pAddressSpace))
                 {
+                    lSubtaskMemoryVector[pAddressSpaceIndex].requiresLoad = true;
                     lSubtaskMemoryVector[pAddressSpaceIndex].pinnedPtr = mPinnedChunkCollection.AllocateNoThrow(lSubscriptionInfo.length, pCudaAlignment);
                     
                     if(!lSubtaskMemoryVector[pAddressSpaceIndex].pinnedPtr)

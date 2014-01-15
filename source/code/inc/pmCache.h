@@ -36,6 +36,7 @@ class pmCache : public pmBase, pmNonCopyable
 {
 public:
     typedef std::pair<const __key, std::shared_ptr<__value>> mappedType;
+    typedef std::unordered_map<const __key, typename std::list<mappedType>::iterator, __hasher> hashType;
 
     pmCache() = default;
     
@@ -46,15 +47,19 @@ public:
     void Insert(const __key& pKey, std::shared_ptr<__value>& pValue);
     std::shared_ptr<__value>& Get(const __key& pKey);
     void RemoveKey(const __key& pKey);
+    
+    void RemoveKeys(const std::function<bool (const __key&)>& pFunction);
 
     bool Purge();
     
 private:
+    typename hashType::iterator RemoveKeyInternal(typename hashType::iterator pIter);
+    
     std::shared_ptr<__value> mEmptyValue;
     __evictor mEvictor;
 
     std::list<mappedType> mCacheList;
-    std::unordered_map<const __key, typename std::list<mappedType>::iterator, __hasher> mCacheHash;
+    hashType mCacheHash;
 
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };

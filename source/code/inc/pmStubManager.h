@@ -29,6 +29,7 @@ namespace pm
 {
 
 class pmExecutionStub;
+class pmAddressSpace;
 
 class pmStubManager : public pmBase
 {
@@ -51,6 +52,7 @@ class pmStubManager : public pmBase
     
     #ifdef SUPPORT_CUDA
         size_t GetMaxCpuDevicesPerHostForCpuPlusGpuTasks();
+        void PurgeAddressSpaceEntriesFromGpuCaches(const pmAddressSpace* pAddressSpace);
     #endif
 
         void WaitForAllStubsToFinish();

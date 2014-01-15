@@ -26,6 +26,7 @@
 #include "pmCallbackUnit.h"
 #include "pmHeavyOperations.h"
 #include "pmDevicePool.h"
+#include "pmStubManager.h"
 
 #include <string.h>
 #include <sstream>
@@ -299,7 +300,7 @@ void pmAddressSpace::SetWaitingForOwnershipChange()
 void pmAddressSpace::ChangeOwnership(std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>& pOwnershipData)
 {
     EXCEPTION_ASSERT(!GetLockingTask());
-    
+
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
 
     EXCEPTION_ASSERT(mWaitingForOwnershipChange);
@@ -346,7 +347,7 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
         FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
 
         EXCEPTION_ASSERT(!mLockingTask && pMemType != MAX_MEM_TYPE);
-        
+
         mLockingTask = pTask;
 
     #ifdef SUPPORT_LAZY_MEMORY
@@ -387,6 +388,11 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(mReadOnlyLazyMapping, mAllocatedLength, true, true);
     }
 #endif
+
+#ifdef SUPPORT_CUDA
+    if(pTask->IsWritable(this))
+        pmStubManager::GetStubManager()->PurgeAddressSpaceEntriesFromGpuCaches(this);
+#endif
 }
     
 void pmAddressSpace::Unlock(pmTask* pTask)
@@ -396,8 +402,7 @@ void pmAddressSpace::Unlock(pmTask* pTask)
     {
         FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
         
-        if(!mOwnershipTransferVector.empty())
-            PMTHROW(pmFatalErrorException());
+        EXCEPTION_ASSERT(mOwnershipTransferVector.empty());
     }
 #endif
     
@@ -425,7 +430,7 @@ void pmAddressSpace::Unlock(pmTask* pTask)
     }
     else
     {
-        bool lOwnershipTransferRequired = ((mOwner != PM_LOCAL_MACHINE) && (!pTask->GetCallbackUnit()->GetDataReductionCB()) && (!pTask->GetCallbackUnit()->GetDataRedistributionCB()));
+        bool lOwnershipTransferRequired = (pTask->IsWritable(this) && (mOwner != PM_LOCAL_MACHINE) && (!pTask->GetCallbackUnit()->GetDataReductionCB()) && (!pTask->GetCallbackUnit()->GetDataRedistributionCB()));
         
         if(lOwnershipTransferRequired)
             SetWaitingForOwnershipChange();
