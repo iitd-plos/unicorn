@@ -796,7 +796,7 @@ void pmAddressSpace::FetchAsync(ushort pPriority, pmCommandPtr pCommand)
         pCommand->MarkExecutionEnd(pmSuccess, pCommand);
     }
 }
-    
+
 void pmAddressSpace::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)
 {
 #ifdef ENABLE_MEM_PROFILING
