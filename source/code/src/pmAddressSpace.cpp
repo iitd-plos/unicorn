@@ -41,6 +41,15 @@ STATIC_ACCESSOR(pmAddressSpace::addressSpaceMapType, pmAddressSpace, GetAddressS
 STATIC_ACCESSOR(pmAddressSpace::augmentaryAddressSpaceMapType, pmAddressSpace, GetAugmentaryAddressSpaceMap)
 STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmAddressSpace::mResourceLock"), pmAddressSpace, GetResourceLock)
 
+
+void FetchCallback(const pmCommandPtr& pCommand)
+{
+    pmAddressSpace* lAddressSpace = const_cast<pmAddressSpace*>(static_cast<const pmAddressSpace*>(pCommand->GetUserIdentifier()));
+    
+    lAddressSpace->FetchCompletionCallback(pCommand);
+}
+
+
 /* class pmAddressSpace */
 pmAddressSpace::pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner)
     : mOwner(pOwner?pOwner:PM_LOCAL_MACHINE)
@@ -757,6 +766,35 @@ void pmAddressSpace::FlushOwnerships()
 void pmAddressSpace::Fetch(ushort pPriority)
 {
     FetchRange(pPriority, 0, GetLength());
+}
+    
+void pmAddressSpace::FetchCompletionCallback(const pmCommandPtr& pCommand)
+{
+    FINALIZE_RESOURCE_PTR(dWaitingFetchLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mWaitingFetchLock, Lock(), Unlock());
+    
+    auto lIter = mCommandsWaitingForFetch.find(pCommand);
+    EXCEPTION_ASSERT(lIter != mCommandsWaitingForFetch.end());
+    
+    lIter->second->MarkExecutionEnd(pmSuccess, lIter->second);
+    mCommandsWaitingForFetch.erase(lIter);
+}
+    
+void pmAddressSpace::FetchAsync(ushort pPriority, pmCommandPtr pCommand)
+{
+    std::vector<pmCommandPtr> lVector;
+    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->FetchMemoryRegion(this, pPriority, 0, GetLength(), lVector);
+
+    if(lVector.size())
+    {
+        FINALIZE_RESOURCE_PTR(dWaitingFetchLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mWaitingFetchLock, Lock(), Unlock());
+
+        pmCommandPtr lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(lVector, FetchCallback, this);
+        mCommandsWaitingForFetch.emplace(lAccumulatorCommand, pCommand);
+    }
+    else
+    {
+        pCommand->MarkExecutionEnd(pmSuccess, pCommand);
+    }
 }
     
 void pmAddressSpace::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)

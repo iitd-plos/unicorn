@@ -220,14 +220,14 @@ class pmCommunicatorCommand : public pmCommunicatorCommandBase
 class pmAccumulatorCommand : public pmCommand
 {
     public:
-		static pmCommandPtr CreateSharedPtr(const std::vector<pmCommandPtr>& pVector);
+		static pmCommandPtr CreateSharedPtr(const std::vector<pmCommandPtr>& pVector, pmCommandCompletionCallbackType pCallback = NULL, const void* pUserIdentifier = NULL);
 
         void FinishCommand(const pmCommandPtr& pSharedPtr);
         void ForceComplete(const pmCommandPtr& pSharedPtr);
 
 	protected:
-		pmAccumulatorCommand()
-        : pmCommand(MAX_CONTROL_PRIORITY, 0, NULL)
+		pmAccumulatorCommand(pmCommandCompletionCallbackType pCallback = NULL, const void* pUserIdentifier = NULL)
+        : pmCommand(MAX_CONTROL_PRIORITY, 0, pCallback, pUserIdentifier)
         , mCommandCount(0)
         , mForceCompleted(false)
         , mAccumulatorResourceLock __LOCK_NAME__("pmAccumulatorCommand::mAccumulatorResourceLock")

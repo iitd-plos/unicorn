@@ -172,9 +172,9 @@ void pmCountDownCommand::MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& 
 
 
 /* class pmAccumulatorCommand */
-pmCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<pmCommandPtr>& pVector)
+pmCommandPtr pmAccumulatorCommand::CreateSharedPtr(const std::vector<pmCommandPtr>& pVector, pmCommandCompletionCallbackType pCallback /* = NULL */, const void* pUserIdentifier /* = NULL */)
 {
-    pmCommandPtr lSharedPtr(new pmAccumulatorCommand());
+    pmCommandPtr lSharedPtr(new pmAccumulatorCommand(pCallback, pUserIdentifier));
     pmAccumulatorCommand* lCommand = (pmAccumulatorCommand*)lSharedPtr.get();
 
     FINALIZE_RESOURCE_PTR(dAccumulatorResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lCommand->mAccumulatorResourceLock, Lock(), Unlock());

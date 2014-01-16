@@ -78,6 +78,8 @@ class pmAddressSpace : public pmBase
     typedef std::map<std::pair<const pmMachine*, ulong>, pmAddressSpace*> addressSpaceMapType;
     typedef std::map<void*, pmAddressSpace*> augmentaryAddressSpaceMapType;
     
+    friend void FetchCallback(const pmCommandPtr& pCommand);
+    
 	public:
 		typedef struct vmRangeOwner
 		{
@@ -133,6 +135,7 @@ class pmAddressSpace : public pmBase
         void GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
 
         void Fetch(ushort pPriority);
+        void FetchAsync(ushort pPriority, pmCommandPtr pCommand);
         void FetchRange(ushort pPriority, ulong pOffset, ulong pLength);
     
         void EnqueueForLock(pmTask* pTask, pmMemType pMemType, pmCommandPtr& pCountDownCommand);
@@ -182,6 +185,7 @@ class pmAddressSpace : public pmBase
         void TransferOwnershipImmediate(ulong pOffset, ulong pLength, const pmMachine* pNewOwnerHost);
     
         void Lock(pmTask* pTask, pmMemType pMemType);
+        void FetchCompletionCallback(const pmCommandPtr& pCommand);
     
 #ifdef _DEBUG
         void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
@@ -202,6 +206,9 @@ class pmAddressSpace : public pmBase
     
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingTasksLock;
         std::vector<std::pair<std::pair<pmTask*, pmMemType>, pmCommandPtr>> mTasksWaitingForLock;
+
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingFetchLock;
+        std::map<pmCommandPtr, pmCommandPtr> mCommandsWaitingForFetch;
 
         static ulong& GetGenerationId();
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetGenerationLock();
