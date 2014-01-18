@@ -9,23 +9,21 @@
 namespace pageRank
 {
     
-__global__ void pageRank_cuda(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, unsigned int* pSubtaskWebDump)
+__global__ void pageRank_cuda(pageRankTaskConf pTaskConf, pmSubtaskInfo pSubtaskInfo, unsigned int* pSubtaskWebDump)
 {
-	pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
-    
-    unsigned int lWebPages = (unsigned int)((lTaskConf->totalWebPages < ((pSubtaskInfo.subtaskId + 1) * lTaskConf->webPagesPerSubtask)) ? (lTaskConf->totalWebPages - (pSubtaskInfo.subtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
+    unsigned int lWebPages = (unsigned int)((pTaskConf.totalWebPages < ((pSubtaskInfo.subtaskId + 1) * pTaskConf.webPagesPerSubtask)) ? (pTaskConf.totalWebPages - (pSubtaskInfo.subtaskId * pTaskConf.webPagesPerSubtask)) : pTaskConf.webPagesPerSubtask);
 
 	int threadId = blockIdx.x * blockDim.x + threadIdx.x;
 
 	if(threadId >= lWebPages)
 		return;
 
-	PAGE_RANK_DATA_TYPE* lLocalArray = ((lTaskConf->iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
+	PAGE_RANK_DATA_TYPE* lLocalArray = ((pTaskConf.iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
     PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
 
-	unsigned int index = threadId * (1 + lTaskConf->maxOutlinksPerWebPage);
+	unsigned int index = threadId * (1 + pTaskConf.maxOutlinksPerWebPage);
     unsigned int outlinks = pSubtaskWebDump[index++];
-    PAGE_RANK_DATA_TYPE lIncr = (PAGE_RANK_DATA_TYPE)(DAMPENING_FACTOR * ((lTaskConf->iteration == 0) ? lTaskConf->initialPageRank : lLocalArray[threadId])/(float)outlinks);
+    PAGE_RANK_DATA_TYPE lIncr = (PAGE_RANK_DATA_TYPE)(DAMPENING_FACTOR * ((pTaskConf.iteration == 0) ? pTaskConf.initialPageRank : lLocalArray[threadId])/(float)outlinks);
 
     for(unsigned int k = 0; k < outlinks; ++k)
     {
@@ -87,7 +85,7 @@ pmStatus pageRank_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
 
     dim3 gridConf(lCudaLaunchConf.blocksX, 1, 1);
     dim3 blockConf(lCudaLaunchConf.threadsX, 1, 1);
-    pageRank_cuda<<<gridConf, blockConf, 0, (cudaStream_t)pCudaStream>>>(pTaskInfo, pSubtaskInfo, lWebDump);
+    pageRank_cuda<<<gridConf, blockConf, 0, (cudaStream_t)pCudaStream>>>(*lTaskConf, pSubtaskInfo, lWebDump);
     
     return pmSuccess;
 }
