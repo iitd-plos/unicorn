@@ -139,7 +139,9 @@ void pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo
 	{
 		mLastSubtask.stub = pStub;
         mLastSubtask.subtaskId = pSubtaskId;
-        mLastSubtask.splitInfo.reset(new pmSplitInfo(pSplitInfo->splitId, pSplitInfo->splitCount));
+        
+        if(pSplitInfo)
+            mLastSubtask.splitInfo.reset(new pmSplitInfo(pSplitInfo->splitId, pSplitInfo->splitCount));
 
 		mReduceState = true;
 

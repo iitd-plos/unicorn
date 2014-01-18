@@ -198,68 +198,43 @@ void serialPageRank(PAGE_RANK_DATA_TYPE* pWebDump)
 	delete[] lLocalPageRankArray;
 }
 
-#ifdef BUILD_CUDA
-pmCudaLaunchConf GetCudaLaunchConf(unsigned int pWebPages)
+pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
-	pmCudaLaunchConf lCudaLaunchConf;
-
-    if(pWebPages > 512)
-    {
-        lCudaLaunchConf.blocksX = pWebPages/512 + ((pWebPages%512) ? 1 : 0);
-        lCudaLaunchConf.threadsX = 512;
-    }
-    else
-    {
-        lCudaLaunchConf.blocksX = 1;
-        lCudaLaunchConf.threadsX = pWebPages;
-    }
-
-	return lCudaLaunchConf;
-}
-#endif
-
-pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmRawMemPtr pLazyInputMem, pmRawMemPtr pLazyOutputMem, pmDeviceInfo pDeviceInfo, unsigned long pSubtaskId)
-{
-	pmSubscriptionInfo lSubscriptionInfo;
 	pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
     
-    bool lPartialLastSubtask = (lTaskConf->totalWebPages < ((pSubtaskId + 1) * lTaskConf->webPagesPerSubtask));
-    unsigned int lStartPage = (unsigned int)(pSubtaskId * lTaskConf->webPagesPerSubtask);
-    unsigned int lWebPages = (unsigned int)(lPartialLastSubtask ? (lTaskConf->totalWebPages - (pSubtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
+    bool lPartialLastSubtask = (lTaskConf->totalWebPages < ((pSubtaskInfo.subtaskId + 1) * lTaskConf->webPagesPerSubtask));
+    unsigned int lStartPage = (unsigned int)(pSubtaskInfo.subtaskId * lTaskConf->webPagesPerSubtask);
+    unsigned int lWebPages = (unsigned int)(lPartialLastSubtask ? (lTaskConf->totalWebPages - (pSubtaskInfo.subtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
 
 	// Subscribe to an input memory partition (no data is required for first iteration)
     if(lTaskConf->iteration != 0)
     {
-        lSubscriptionInfo.offset = lStartPage * sizeof(PAGE_RANK_DATA_TYPE);
-        lSubscriptionInfo.length = sizeof(PAGE_RANK_DATA_TYPE) * lWebPages;
+        pmSubscriptionInfo lSubscriptionInfo(lStartPage * sizeof(PAGE_RANK_DATA_TYPE), sizeof(PAGE_RANK_DATA_TYPE) * lWebPages);
 
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, READ_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
     }
 
 	// Subscribe to entire output matrix (default behaviour)
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, pmSubscriptionInfo(0, lTaskConf->totalWebPages * sizeof(PAGE_RANK_DATA_TYPE)));
 
 #ifdef BUILD_CUDA
 	// Set CUDA Launch Configuration
 	if(pDeviceInfo.deviceType == pm::GPU_CUDA)
-		pmSetCudaLaunchConf(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskId, GetCudaLaunchConf(lWebPages));
+    {
+        size_t lReservedMem = lWebPages * (lTaskConf->maxOutlinksPerWebPage + 1) * sizeof(PAGE_RANK_DATA_TYPE);
+        pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lReservedMem);
+    }
 #endif
 
 	return pmSuccess;
 }
-
-pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
+    
+void** LoadMappedFiles(pageRankTaskConf* pTaskConf, ulong pSubtaskId)
 {
-	pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
-
-	PAGE_RANK_DATA_TYPE* lLocalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.inputMem;
-	PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.outputMem;
+    unsigned int lWebPages = (unsigned int)((pTaskConf->totalWebPages < ((pSubtaskId + 1) * pTaskConf->webPagesPerSubtask)) ? (pTaskConf->totalWebPages - (pSubtaskId * pTaskConf->webPagesPerSubtask)) : pTaskConf->webPagesPerSubtask);
     
-    memset(pSubtaskInfo.outputMem, 0, pSubtaskInfo.outputMemLength);
-    
-    unsigned int lWebPages = (unsigned int)((lTaskConf->totalWebPages < ((pSubtaskInfo.subtaskId + 1) * lTaskConf->webPagesPerSubtask)) ? (lTaskConf->totalWebPages - (pSubtaskInfo.subtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
-    
-    unsigned int lWebFiles = ((lWebPages / lTaskConf->webPagesPerFile) + ((lWebPages % lTaskConf->webPagesPerFile) ? 1 : 0));
-    unsigned int lFirstWebFile = (unsigned int)pSubtaskInfo.subtaskId * lWebFiles;
+    unsigned int lWebFiles = ((lWebPages / pTaskConf->webPagesPerFile) + ((lWebPages % pTaskConf->webPagesPerFile) ? 1 : 0));
+    unsigned int lFirstWebFile = (unsigned int)pSubtaskId * lWebFiles;
     unsigned int lLastWebFile = lFirstWebFile + lWebFiles;
     
     void** lWebFilePtrs = new void*[lWebFiles];
@@ -267,16 +242,35 @@ pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskI
     {
         char filePath[1024];
         char buf[12];
-
-        unsigned int lFileNum = 1 + fileIndex * lTaskConf->webPagesPerFile;
+        
+        unsigned int lFileNum = 1 + fileIndex * pTaskConf->webPagesPerFile;
         
         sprintf(buf, "%u", lFileNum);
-        strcpy(filePath, lTaskConf->basePath);
+        strcpy(filePath, pTaskConf->basePath);
         strcat(filePath, "/web/page_");
         strcat(filePath, buf);
-
+        
         lWebFilePtrs[fileIndex - lFirstWebFile] = pmGetMappedFile(filePath);
     }
+    
+    return lWebFilePtrs;
+}
+
+pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
+{
+	pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
+
+	PAGE_RANK_DATA_TYPE* lLocalArray = ((lTaskConf->iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
+	PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
+    
+    memset(lGlobalArray, 0, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].length);
+
+    ulong lSubtaskId = pSubtaskInfo.subtaskId;
+    void** lWebFilePtrs = LoadMappedFiles(lTaskConf, lSubtaskId);
+
+    unsigned int lWebPages = (unsigned int)((lTaskConf->totalWebPages < ((lSubtaskId + 1) * lTaskConf->webPagesPerSubtask)) ? (lTaskConf->totalWebPages - (lSubtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
+    unsigned int lWebFiles = ((lWebPages / lTaskConf->webPagesPerFile) + ((lWebPages % lTaskConf->webPagesPerFile) ? 1 : 0));
+    unsigned int lFirstWebFile = (unsigned int)pSubtaskInfo.subtaskId * lWebFiles;
 
     unsigned int lTotalFiles = (lTaskConf->totalWebPages / lTaskConf->webPagesPerFile) + ((lTaskConf->totalWebPages % lTaskConf->webPagesPerFile) ? 1 : 0);
     for(unsigned int i = 0; i < lWebFiles; ++i)
@@ -309,9 +303,9 @@ pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskI
 pmStatus pageRankDataReduction(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
 {
 #if PAGE_RANK_DATA_TYPE == float
-    return pmReduceFloats(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, REDUCE_ADD);
+    return pmReduceFloats(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
 #elif PAGE_RANK_DATA_TYPE == int
-    return pmReduceInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, REDUCE_ADD);
+    return pmReduceInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
 #else
 #error "Unsupported data type"
 #endif
@@ -364,11 +358,19 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
 	size_t lMemSize = gTotalWebPages * sizeof(PAGE_RANK_DATA_TYPE);
     unsigned long lSubtasks = (gTotalWebPages / gWebPagesPerSubtask) + ((gTotalWebPages % gWebPagesPerSubtask) ? 1 : 0);
 
-	CREATE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)
-    
-    lTaskDetails.inputMemHandle = pInputMemHandle;
-    lTaskDetails.outputMemType = WRITE_ONLY;
+	CREATE_SIMPLE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)
 
+    if(pInputMemHandle)
+    {
+        lTaskMem[INPUT_MEM_INDEX].memHandle = pInputMemHandle;
+        lTaskMem[INPUT_MEM_INDEX].memType = READ_ONLY;
+        lTaskMem[INPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_NATURAL;
+     
+        lTaskDetails.taskMemCount = 2;
+    }
+    
+    lTaskMem[OUTPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_NATURAL;
+    
 	lTaskDetails.taskConf = (void*)(pTaskConf);
 	lTaskDetails.taskConfLength = sizeof(pageRankTaskConf);
 
@@ -380,7 +382,7 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
         return (double)-1.0;
     }
 
-    *pOutputMemHandle = lTaskDetails.outputMemHandle;
+    *pOutputMemHandle = lTaskMem[OUTPUT_MEM_INDEX].memHandle;
 
     pmReleaseTask(lTaskHandle);
 
@@ -411,7 +413,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	double lStartTime = getCurrentTimeInSecs();
 
-    for(int i=0; i<PAGE_RANK_ITERATIONS; ++i)
+    for(int i = 0; i < PAGE_RANK_ITERATIONS; ++i)
     {
 		if(i != 0)
 		{
@@ -456,7 +458,7 @@ pmCallbacks DoSetDefaultCallbacks()
 	lCallbacks.subtask_cpu = pageRank_cpu;
 
 #ifdef BUILD_CUDA
-	lCallbacks.subtask_gpu_cuda = pageRank_cudaFunc;
+	lCallbacks.subtask_gpu_custom = pageRank_cudaLaunchFunc;
 #endif
 
     lCallbacks.dataReduction = pageRankDataReduction;
@@ -507,7 +509,7 @@ int DoDestroy()
 // Returns 0 if serial and parallel executions have produced same result; non-zero otherwise
 int DoCompare(int argc, char** argv, int pCommonArgs)
 {
-	for(unsigned int i=0; i<gTotalWebPages; ++i)
+	for(unsigned int i = 0; i < gTotalWebPages; ++i)
 	{
 		if((int)(fabs(gSerialOutput[i] - gParallelOutput[i])) > 0)
 		{

@@ -113,8 +113,6 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
         mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions |= (IsReadWrite(lAddressSpace) && !pTaskMem.disjointReadWritesAcrossSubtasks);
     });
 
-    CreateReducerAndRedistributors();
-
     BuildTaskInfo();
     BuildPreSubscriptionSubtaskInfo();
 }
@@ -140,6 +138,8 @@ void pmTask::Start()
     EXCEPTION_ASSERT(!mStarted);
 
     mStarted = true;
+
+    CreateReducerAndRedistributors();
 
     if(dynamic_cast<pmLocalTask*>(this))
         pmTaskManager::GetTaskManager()->StartTask(static_cast<pmLocalTask*>(this));

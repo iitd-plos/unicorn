@@ -9,7 +9,7 @@ using namespace pm;
 #define PAGE_RANK_ITERATIONS 1
 #define DAMPENING_FACTOR (float)0.85
 #define INITIAL_PAGE_RANK (float)1.0
-    
+
 #define WEB_PAGES_PER_SUBTASK 10000
 
 #define MAX_BASE_PATH_LENGTH 256
@@ -18,10 +18,9 @@ using namespace pm;
 
 #ifdef BUILD_CUDA
 #include <cuda.h>
-typedef void (*pageRank_cudaFuncPtr)(pmTaskInfo pTaskInfo, pmDeviceInfo* pDeviceInfo, pmSubtaskInfo pSubtaskInfo, pmStatus* pStatus);
-extern pageRank_cudaFuncPtr pageRank_cudaFunc;
+pmStatus pageRank_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
 #endif
-    
+
 typedef struct pageRankTaskConf
 {
 	unsigned int totalWebPages;
@@ -39,4 +38,13 @@ typedef struct keyValPair
     PAGE_RANK_DATA_TYPE pageRank;
 } keyValPair;
 
+enum memIndex
+{
+    OUTPUT_MEM_INDEX = 0,
+    INPUT_MEM_INDEX,
+    MAX_MEM_INDICES
+};
+    
+void** LoadMappedFiles(pageRankTaskConf* pTaskConf, ulong pSubtaskId);
+    
 }
