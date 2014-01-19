@@ -17,11 +17,12 @@ FFT_DATA_TYPE* gParallelOutput;
 
 struct fftwPlanner
 {
-    fftwPlanner()
-    : mPlan(NULL)
+    fftwPlanner(bool pRowPlanner)
+    : mRowPlanner(pRowPlanner)
+    , mPlan(NULL)
     {}
     
-    void CreateDummyPlan(bool inplace, int dir, size_t N)
+    void CreateDummyPlan(bool inplace, int dir, size_t N, size_t M, size_t pCount)
     {
         complex* lDummyInputData = new complex[N];
         complex* lDummyOutputData = (inplace ? NULL : (new complex[N]));
@@ -29,7 +30,20 @@ struct fftwPlanner
         fftwf_complex* inputData = (fftwf_complex*)lDummyInputData;
         fftwf_complex* outputData = (fftwf_complex*)lDummyOutputData;
 
-        mPlan = fftwf_plan_dft_1d((int)N, inputData, (inplace ? inputData : outputData), ((dir == FORWARD_TRANSFORM_DIRECTION) ? FFTW_FORWARD : FFTW_BACKWARD), FFTW_ESTIMATE | FFTW_UNALIGNED);
+        int lN[] = {(int)N};
+
+    #ifdef NO_MATRIX_TRANSPOSE
+        if(mRowPlanner)
+        {
+            mPlan = fftwf_plan_many_dft(1, lN, (int)pCount, inputData, lN, 1, (int)N, (inplace ? inputData : outputData), lN, 1, (int)N, ((dir == FORWARD_TRANSFORM_DIRECTION) ? FFTW_FORWARD : FFTW_BACKWARD), FFTW_ESTIMATE | FFTW_UNALIGNED);
+        }
+        else
+        {
+            mPlan = fftwf_plan_many_dft(1, lN, (int)pCount, inputData, lN, (int)M, 1, (inplace ? inputData : outputData), lN, (int)M, 1, ((dir == FORWARD_TRANSFORM_DIRECTION) ? FFTW_FORWARD : FFTW_BACKWARD), FFTW_ESTIMATE | FFTW_UNALIGNED);
+        }
+    #else
+        mPlan = fftwf_plan_many_dft(1, lN, (int)pCount, inputData, lN, 1, (int)N, (inplace ? inputData : outputData), lN, 1, (int)N, ((dir == FORWARD_TRANSFORM_DIRECTION) ? FFTW_FORWARD : FFTW_BACKWARD), FFTW_ESTIMATE | FFTW_UNALIGNED);
+    #endif
         
         delete[] lDummyInputData;
         delete[] lDummyOutputData;
@@ -41,42 +55,34 @@ struct fftwPlanner
             fftwf_destroy_plan(mPlan);
     }
     
+    bool mRowPlanner;
     fftwf_plan mPlan;
 };
 
-fftwPlanner gRowPlanner;
+fftwPlanner gRowPlanner(true);
 
 #ifdef FFT_2D
-    fftwPlanner gColPlanner;
+    fftwPlanner gColPlanner(false);
 #endif
-
-void fftSerial1D(int dir, size_t pown, size_t N, complex* input, complex* output, bool rowPlanner)
-{
-    fftwf_complex* inputData = (fftwf_complex*)input;
-    fftwf_complex* outputData = (fftwf_complex*)output;
-
-#ifdef FFT_2D
-    fftwf_execute_dft(rowPlanner ? gRowPlanner.mPlan : gColPlanner.mPlan, inputData, outputData);
-#else
-    fftwf_execute_dft(gRowPlanner.mPlan, inputData, outputData);
-#endif
-}
 
 void fftSerial(complex* input, complex* output, size_t powx, size_t nx, size_t powy, size_t ny, int dir)
 {
-#if 1
+#if 1   //ndef NO_MATRIX_TRANSPOSE
 
-    size_t i;
-    for(i = 0; i < nx; ++i)
-       fftSerial1D(dir, powy, ny, input + i * ny, output + i * ny, true);
+    bool lInplace = (input == output);
+
+    fftwPlanner lRowPlan(true);
+    lRowPlan.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, ny, nx, nx);
+    
+    fftwf_execute_dft(lRowPlan.mPlan, (fftwf_complex*)input, (fftwf_complex*)output);
 
     #ifdef FFT_2D
-        bool lInplace = (input == output);
-
         matrixTranspose::serialMatrixTranspose(lInplace, output, input, nx, ny);
         
-        for(i = 0; i < ny; ++i)
-           fftSerial1D(dir, powx, nx, input + i * nx, output + i * nx, false);
+        fftwPlanner lColPlan(true); // passed true here becuase matrix has been transposed; so we actually need a row plan
+        lColPlan.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, nx, ny, ny);
+    
+        fftwf_execute_dft(lColPlan.mPlan, (fftwf_complex*)input, (fftwf_complex*)output);
 
         matrixTranspose::serialMatrixTranspose(lInplace, output, input, ny, nx);
     #endif
@@ -92,9 +98,10 @@ void fftSerial(complex* input, complex* output, size_t powx, size_t nx, size_t p
         fftwf_execute(lPlan);
         fftwf_destroy_plan(lPlan);
     #else
-        size_t i;
-        for(i = 0; i < nx; ++i)
-           fftSerial1D(dir, powy, ny, input + i * ny, output + i * ny, true);
+        fftwPlanner lRowPlan(true);
+        lRowPlan.CreateDummyPlan((input == output), FORWARD_TRANSFORM_DIRECTION, ny, nx, nx);
+    
+        fftwf_execute_dft(lRowPlan.mPlan, (fftwf_complex*)input, (fftwf_complex*)output);
     #endif
     
 #endif
@@ -104,10 +111,9 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
-    size_t lOffset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
-
     if(lTaskConf->rowPlanner)   // Row FFT
     {
+        size_t lOffset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
         pmSubscriptionInfo lSubscriptionInfo(lOffset, ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE));
 
         if(lTaskConf->inplace)
@@ -122,7 +128,22 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
     }
     else    // Col FFT (for FFT_2D)
     {
+    #ifdef NO_MATRIX_TRANSPOSE
+        size_t lBlockDim = ROWS_PER_FFT_SUBTASK;
+        size_t lOffset = lBlockDim * pSubtaskInfo.subtaskId * sizeof(FFT_DATA_TYPE);
+        size_t lBlockSpacing = ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+        size_t lBlockCount = lTaskConf->elemsX / lBlockDim; // Vertical blocks
+        
+        for(size_t i = 0; i < lBlockCount; ++i)
+        {
+            pmScatteredSubscriptionInfo lScatteredSubscriptionInfo(lOffset + i * lBlockSpacing, lBlockDim * sizeof(FFT_DATA_TYPE), lTaskConf->elemsY * sizeof(FFT_DATA_TYPE), lBlockDim);
+
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lScatteredSubscriptionInfo);
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lScatteredSubscriptionInfo);
+        }
+    #else
         // Instead of subscribing as a contiguous region, subscribe multiple scattered blocks (as they have been created by previous transpose)
+        size_t lOffset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
         size_t lTransposeBlockDim = ROWS_PER_FFT_SUBTASK;  // For efficient execution, ROWS_PER_FFT_SUBTASK should be equal to block size for matrix transpose
         size_t lBlockCount = lTaskConf->elemsY / lTransposeBlockDim;
         
@@ -140,6 +161,7 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
                 pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lScatteredSubscriptionInfo);
             }
         }
+    #endif
     }
 
 	return pmSuccess;
@@ -149,22 +171,22 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
     
+#ifdef FFT_2D
+    fftwf_plan lPlanner = (lTaskConf->rowPlanner ? gRowPlanner.mPlan : gColPlanner.mPlan);
+#else
+    fftwf_plan lPlanner = gRowPlanner.mPlan;
+#endif
+
     if(lTaskConf->inplace)
     {
-        for(unsigned int i = 0; i < ROWS_PER_FFT_SUBTASK; ++i)
-        {
-            FFT_DATA_TYPE* lOutputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].ptr + (i * lTaskConf->elemsY);
-            fftSerial1D(FORWARD_TRANSFORM_DIRECTION, lTaskConf->powY, lTaskConf->elemsY, lOutputLoc, lOutputLoc, lTaskConf->rowPlanner);
-        }
+        fftwf_complex* lOutputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].ptr;
+        fftwf_execute_dft(lPlanner, lOutputLoc, lOutputLoc);
     }
     else
     {
-        for(unsigned int i = 0; i < ROWS_PER_FFT_SUBTASK; ++i)
-        {
-            FFT_DATA_TYPE* lInputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr + (i * lTaskConf->elemsY);
-            FFT_DATA_TYPE* lOutputLoc = (FFT_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr + (i * lTaskConf->elemsY);
-            fftSerial1D(FORWARD_TRANSFORM_DIRECTION, lTaskConf->powY, lTaskConf->elemsY, lInputLoc, lOutputLoc, lTaskConf->rowPlanner);
-        }
+        fftwf_complex* lInputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr;
+        fftwf_complex* lOutputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
+        fftwf_execute_dft(lPlanner, lInputLoc, lOutputLoc);
     }
 
 	return pmSuccess;
@@ -265,8 +287,15 @@ bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemType pInputMemType, pmMem
     }
     else
     {
-        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType, SUBSCRIPTION_NATURAL};
-        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType, SUBSCRIPTION_NATURAL};
+        bool lOptimal = false;
+        
+    #ifdef NO_MATRIX_TRANSPOSE
+        if(!pTaskConf->rowPlanner)
+            lOptimal = true;
+    #endif
+        
+        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType, lOptimal ? SUBSCRIPTION_OPTIMAL : SUBSCRIPTION_NATURAL};
+        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType, lOptimal ? SUBSCRIPTION_OPTIMAL : SUBSCRIPTION_NATURAL};
 
         lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
         lTaskDetails.taskMemCount = MAX_MEM_INDICES;
@@ -337,6 +366,16 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         return (double)-1.0;
 
 #ifdef FFT_2D
+
+#ifdef NO_MATRIX_TRANSPOSE
+    if(lInplace)
+        exit(1);    // In DoInit, this condition is checked
+    
+    lTaskConf.rowPlanner = false;
+    
+    if(!Parallel_FFT_1D(lOutputMemHandle, lInputMemType, lInputMemHandle, lOutputMemType, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
+        return (double)-1.0;
+#else
     if(!Parallel_Transpose(lOutputMemHandle, lInputMemType, lInputMemHandle, lOutputMemType, &lTaskConf, pCallbackHandle[1], pSchedulingPolicy))
         return (double)-1.0;
     
@@ -351,6 +390,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     if(!Parallel_Transpose(lOutputMemHandle, lInputMemType, lInputMemHandle, lOutputMemType, &lTaskConf, pCallbackHandle[1], pSchedulingPolicy))
         return (double)-1.0;
+#endif
     
     if(!lInplace)
     {
@@ -358,6 +398,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         lInputMemHandle = lOutputMemHandle;
         lOutputMemHandle = lTempMemHandle;
     }
+
 #endif
 
 	double lEndTime = getCurrentTimeInSecs();
@@ -420,7 +461,14 @@ int DoInit(int argc, char** argv, int pCommonArgs)
         std::cout << "[ERROR]: No. of cols should be more than " << ROWS_PER_FFT_SUBTASK << std::endl;
         exit(1);
     }
-        
+    
+#ifdef NO_MATRIX_TRANSPOSE
+#ifdef FFT_2D
+    if(lInplace)
+        std::cout << "[ERROR]: Inplace 2D FFT not implemented with NO_MATRIX_TRANSPOSE" << std::endl;
+#endif
+#endif
+    
 	srand((unsigned int)time(NULL));
 
     size_t lElems = lElemsX * lElemsY;
@@ -494,10 +542,10 @@ int DoPreSetupPostMpiInit(int argc, char** argv, int pCommonArgs)
 {
     READ_NON_COMMON_ARGS
     
-    gRowPlanner.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, lElemsY);
+    gRowPlanner.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, lElemsY, lElemsX, ROWS_PER_FFT_SUBTASK);
 
 #ifdef FFT_2D
-    gColPlanner.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, lElemsX);
+    gColPlanner.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, lElemsX, lElemsY, ROWS_PER_FFT_SUBTASK);
 #endif
     
     return 0;

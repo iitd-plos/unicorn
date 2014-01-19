@@ -29,7 +29,7 @@ struct cufftWrapper
     
     ~cufftWrapper()
     {
-        std::map<int, cufftHandle>::iterator lIter = cufftMap.begin(), lEndIter = cufftMap.end();
+        std::map<std::pair<int, size_t>, cufftHandle>::iterator lIter = cufftMap.begin(), lEndIter = cufftMap.end();
         
         for(; lIter != lEndIter; ++lIter)
             CUFFT_ERROR_CHECK("cufftDestroy", cufftDestroy(lIter->second));
@@ -37,10 +37,27 @@ struct cufftWrapper
         cufftMap.clear();
     }
 
-    std::map<int, cufftHandle> cufftMap;  // deviceId versus cufftPlan1d handle
+    std::map<std::pair<int, size_t>, cufftHandle> cufftMap;  // pair<deviceId, transformSize> versus cufftPlan1d handle
+};
+
+struct cufftManyWrapper
+{
+    cufftManyWrapper()
+    {}
+    
+    ~cufftManyWrapper()
+    {
+        std::map<std::pair<int, std::pair<size_t, size_t> >, cufftHandle>::iterator lIter = cufftMap.begin(), lEndIter = cufftMap.end();
+        
+        for(; lIter != lEndIter; ++lIter)
+            CUFFT_ERROR_CHECK("cufftDestroy", cufftDestroy(lIter->second));
+        
+        cufftMap.clear();
+    }
+
+    std::map<std::pair<int, std::pair<size_t, size_t> >, cufftHandle> cufftMap;  // pair<deviceId, pair<transformSize, rowStride>> versus cufftPlan1d handle
 };
     
-// Assumes same pElemsY value is passed for every invocation
 cufftHandle getCufftPlan1d(size_t pElemsY)
 {
     static cufftWrapper lWrapper;
@@ -48,7 +65,9 @@ cufftHandle getCufftPlan1d(size_t pElemsY)
     int lDeviceId;
     CUDA_ERROR_CHECK("cudaGetDevice", cudaGetDevice(&lDeviceId));
 
-    std::map<int, cufftHandle>::iterator lIter = lWrapper.cufftMap.find(lDeviceId);
+    std::pair<int, size_t> lPair(lDeviceId, pElemsY);
+    std::map<std::pair<int, size_t>, cufftHandle>::iterator lIter = lWrapper.cufftMap.find(lPair);
+
     if(lIter == lWrapper.cufftMap.end())
     {
         cufftHandle lPlan;
@@ -58,7 +77,36 @@ cufftHandle getCufftPlan1d(size_t pElemsY)
         cudaDeviceProp lDeviceProp;
         CUDA_ERROR_CHECK("cudaGetDeviceProperties", cudaGetDeviceProperties(&lDeviceProp, lDeviceId));
     
-        lWrapper.cufftMap[lDeviceId] = lPlan;
+        lWrapper.cufftMap[lPair] = lPlan;
+        
+        return lPlan;
+    }
+    
+    return lIter->second;
+}
+
+cufftHandle getCufftPlanMany(size_t pN, size_t pM)
+{
+    static cufftManyWrapper lWrapper;
+
+    int lDeviceId;
+    CUDA_ERROR_CHECK("cudaGetDevice", cudaGetDevice(&lDeviceId));
+
+    std::pair<int, std::pair<size_t, size_t> > lPair(lDeviceId, std::make_pair(pN, pM));
+    std::map<std::pair<int, std::pair<size_t, size_t> >, cufftHandle>::iterator lIter = lWrapper.cufftMap.find(lPair);
+
+    if(lIter == lWrapper.cufftMap.end())
+    {
+        cufftHandle lPlan;
+        
+        int lN[] = {pN};
+
+        CUFFT_ERROR_CHECK("cufftPlanMany", cufftPlanMany(&lPlan, 1, lN, lN, (int)pM, 1, lN, (int)pM, 1, CUFFT_C2C, ROWS_PER_FFT_SUBTASK));
+
+        cudaDeviceProp lDeviceProp;
+        CUDA_ERROR_CHECK("cudaGetDeviceProperties", cudaGetDeviceProperties(&lDeviceProp, lDeviceId));
+    
+        lWrapper.cufftMap[lPair] = lPlan;
         
         return lPlan;
     }
@@ -70,7 +118,12 @@ pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
+#ifdef NO_MATRIX_TRANSPOSE
+    cufftHandle lPlan = lTaskConf->rowPlanner ? getCufftPlan1d(lTaskConf->elemsY) : getCufftPlanMany(lTaskConf->elemsX, ROWS_PER_FFT_SUBTASK);
+#else
     cufftHandle lPlan = getCufftPlan1d(lTaskConf->elemsY);
+#endif
+
     CUFFT_ERROR_CHECK("cufftSetStream", cufftSetStream(lPlan, (cudaStream_t)pCudaStream));
     
     if(lTaskConf->inplace)

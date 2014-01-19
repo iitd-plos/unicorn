@@ -3,6 +3,7 @@ namespace fft
 {
 
 #define USE_SQUARE_MATRIX
+#define NO_MATRIX_TRANSPOSE
 
 #define DEFAULT_POW_X 12
     
