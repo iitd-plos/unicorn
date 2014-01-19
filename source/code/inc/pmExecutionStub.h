@@ -73,6 +73,7 @@ enum eventIdentifier
 #ifdef SUPPORT_SPLIT_SUBTASKS
     , SPLIT_SUBTASK_CHECK
 #endif
+    , REMOTE_SUBTASK_REDUCE
     , MAX_EXEC_STUB_EVENTS
 };
 
@@ -230,6 +231,18 @@ struct splitSubtaskCheckEvent : public stubEvent
     {}
 };
 #endif
+    
+struct remoteSubtaskReduceEvent : public stubEvent
+{
+    pmTask* task;
+    const pmCommunicatorCommandPtr commandPtr;
+    
+    remoteSubtaskReduceEvent(eventIdentifier pEventId, pmTask* pTask, const pmCommunicatorCommandPtr& pCommandPtr)
+    : stubEvent(pEventId)
+    , task(pTask)
+    , commandPtr(pCommandPtr)
+    {}
+};
 
 }
 
@@ -269,6 +282,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void ReductionFinishEvent(pmTask* pTask);
         void ProcessRedistributionBucket(pmTask* pTask, uint pAddressSpaceIndex, size_t pBucketIndex);
         void FreeTaskResources(pmTask* pTask);
+        void RemoteSubtaskReduce(pmTask* pTask, const pmCommunicatorCommandPtr& pCommandPtr);
 
     #ifdef SUPPORT_SPLIT_SUBTASKS
         void SplitSubtaskCheckEvent(pmTask* pTask);

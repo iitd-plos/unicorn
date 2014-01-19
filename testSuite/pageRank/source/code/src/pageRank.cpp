@@ -47,7 +47,7 @@ void readWebMetaData(char* pBasePath)
 	fclose(fp);
 }
 
-void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int pMaxOutlinksPerWebPage, unsigned int pWebPagesPerFile, unsigned int pStartPageNum, unsigned int pPageCount, PAGE_RANK_DATA_TYPE* pData)
+void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int pMaxOutlinksPerWebPage, unsigned int pWebPagesPerFile, unsigned int pStartPageNum, unsigned int pPageCount, unsigned int* pData)
 {
 	char filePath[1024];
 	char buf[12];
@@ -157,7 +157,7 @@ void initializePageRankArray(PAGE_RANK_DATA_TYPE* pPageRankArray, PAGE_RANK_DATA
 		pPageRankArray[i] = pVal;
 }
 
-void serialPageRank(PAGE_RANK_DATA_TYPE* pWebDump)
+void serialPageRank(unsigned int* pWebDump)
 {
 	PAGE_RANK_DATA_TYPE* lGlobalPageRankArray = NULL;
 	PAGE_RANK_DATA_TYPE* lLocalPageRankArray = NULL;
@@ -320,11 +320,11 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
 
-	PAGE_RANK_DATA_TYPE* lWebDump = new PAGE_RANK_DATA_TYPE[gTotalWebPages * (gMaxOutlinksPerWebPage + 1)];
+	unsigned int* lWebDump = new unsigned int[gTotalWebPages * (gMaxOutlinksPerWebPage + 1)];
 
     unsigned int lTotalFiles = (gTotalWebPages / gWebPagesPerFile);
     unsigned int i = 0;
-    for(; i<lTotalFiles; ++i)
+    for(; i < lTotalFiles; ++i)
         readWebPagesFile(lBasePath, gTotalWebPages, gMaxOutlinksPerWebPage, gWebPagesPerFile, i*gWebPagesPerFile, gWebPagesPerFile, lWebDump + (i * gWebPagesPerFile * (gMaxOutlinksPerWebPage + 1)));
     
     if((gTotalWebPages % gWebPagesPerFile) != 0)
@@ -347,7 +347,34 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 #ifdef BUILD_CUDA
 	READ_NON_COMMON_ARGS
 
-	return 0;
+	pageRankTaskConf lTaskConf;
+	lTaskConf.totalWebPages = gTotalWebPages;
+    lTaskConf.maxOutlinksPerWebPage = gMaxOutlinksPerWebPage;
+    lTaskConf.webPagesPerFile = gWebPagesPerFile;
+    lTaskConf.webPagesPerSubtask = gWebPagesPerSubtask;
+    lTaskConf.initialPageRank = INITIAL_PAGE_RANK;
+    strcpy(lTaskConf.basePath, lBasePath);
+
+	unsigned int* lWebDump = new unsigned int[gTotalWebPages * (gMaxOutlinksPerWebPage + 1)];
+    
+    unsigned int lTotalFiles = (gTotalWebPages / gWebPagesPerFile);
+    unsigned int i = 0;
+    for(; i < lTotalFiles; ++i)
+        readWebPagesFile(lBasePath, gTotalWebPages, gMaxOutlinksPerWebPage, gWebPagesPerFile, i*gWebPagesPerFile, gWebPagesPerFile, lWebDump + (i * gWebPagesPerFile * (gMaxOutlinksPerWebPage + 1)));
+    
+    if((gTotalWebPages % gWebPagesPerFile) != 0)
+        readWebPagesFile(lBasePath, gTotalWebPages, gMaxOutlinksPerWebPage, gWebPagesPerFile, i*gWebPagesPerFile, gTotalWebPages - i*gWebPagesPerFile, lWebDump + (i * gWebPagesPerFile * (gMaxOutlinksPerWebPage + 1)));
+    
+	double lStartTime = getCurrentTimeInSecs();
+
+	if(singleGpuPageRank(lTaskConf, lWebDump, gParallelOutput) != 0)
+        return 0;
+
+	double lEndTime = getCurrentTimeInSecs();
+
+    delete[] lWebDump;
+
+	return (lEndTime - lStartTime);
 #else
     return 0;
 #endif

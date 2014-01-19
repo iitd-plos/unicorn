@@ -666,7 +666,7 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
             finalize_ptr<subtaskReducePacked> lPackedData(new subtaskReducePacked(lEventDetails.reducingStub, lEventDetails.task, lEventDetails.subtaskId, lSplitInfoAutoPtr.get()));
         
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<subtaskReducePacked>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, SUBTASK_REDUCE_TAG, lEventDetails.machine, SUBTASK_REDUCE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<subtaskReducePacked>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, SUBTASK_REDUCE_TAG, lEventDetails.machine, SUBTASK_REDUCE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback(), lEventDetails.task);
 
             pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
 
@@ -1359,6 +1359,13 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 
 		case SEND:
 		{
+			if(lCommunicatorCommand->GetTag() == SUBTASK_REDUCE_TAG)
+            {
+                pmRemoteTask* lRemoteTask = const_cast<pmRemoteTask*>(static_cast<const pmRemoteTask*>(lCommunicatorCommand->GetUserIdentifier()));
+                
+                lRemoteTask->MarkReductionFinished();
+            }
+
 			break;
 		}
 
@@ -1497,37 +1504,8 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 					const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->reduceStruct.originatingHost);
 					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->reduceStruct.sequenceNumber);
                 
-                    pmReducer* lReducer = lTask->GetReducer();
-                    pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetStub((uint)0);
-                
-                    pmSubscriptionManager& lSubscriptionManager = lTask->GetSubscriptionManager();
-                    lSubscriptionManager.EraseSubtask(lStub, lData->reduceStruct.subtaskId, NULL);
-                    lSubscriptionManager.FindSubtaskMemDependencies(lStub, lData->reduceStruct.subtaskId, NULL);
-
-                    std::vector<shadowMemTransferPacked>::iterator lShadowMemsIter = lData->shadowMems.begin();
-
-                    filtered_for_each_with_index(lTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (lTask->IsWritable(pAddressSpace) && lTask->IsReducible(pAddressSpace));},
-                    [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
-                    {
-                    #ifdef SUPPORT_LAZY_MEMORY
-                        if(lTask->IsLazyWriteOnly(pAddressSpace))
-                        {
-                            uint lUnprotectedRanges = lShadowMemsIter->shadowMemData.writeOnlyUnprotectedPageRangesCount;
-                            uint lUnprotectedLength = lUnprotectedRanges * 2 * sizeof(uint);
-                            void* lMem = reinterpret_cast<void*>(reinterpret_cast<uint>(lShadowMemsIter->shadowMemData.subtaskMemLength) + lUnprotectedLength);
-
-                            lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, NULL, (uint)pAddressSpaceIndex, lMem, lShadowMemsIter->shadowMemData.subtaskMemLength - lUnprotectedLength, lUnprotectedRanges, (uint*)lShadowMemsIter->shadowMem.get_ptr());
-                        }
-                        else
-                    #endif
-                        {
-                            lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, NULL, (uint)pAddressSpaceIndex, lShadowMemsIter->shadowMem.get_ptr(), lShadowMemsIter->shadowMemData.subtaskMemLength, 0, NULL);
-                        }
-
-                        lReducer->AddSubtask(lStub, lData->reduceStruct.subtaskId, NULL);
-                        
-                        ++lShadowMemsIter;
-                    });
+                    pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetCpuStub((uint)0);
+                    lStub->RemoteSubtaskReduce(lTask, lCommunicatorCommand);
                     
 					break;
 				}

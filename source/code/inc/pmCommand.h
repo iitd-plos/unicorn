@@ -166,8 +166,8 @@ public:
     }
     
 protected:
-    pmCommunicatorCommandBase(ushort pPriority, ushort pType, communicator::communicatorCommandTags pTag, communicator::communicatorDataTypes pDataType, const pmHardware* pDestination, pmCommandCompletionCallbackType pCallback)
-    : pmCommand(pPriority, pType, pCallback)
+    pmCommunicatorCommandBase(ushort pPriority, ushort pType, communicator::communicatorCommandTags pTag, communicator::communicatorDataTypes pDataType, const pmHardware* pDestination, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier = NULL)
+    : pmCommand(pPriority, pType, pCallback, pUserIdentifier)
     , mTag(pTag)
     , mDataType(pDataType)
     , mDestination(pDestination)
@@ -185,9 +185,9 @@ template<typename T, typename D = deleteDeallocator<T> >
 class pmCommunicatorCommand : public pmCommunicatorCommandBase
 {
 	public:
-        static pmCommunicatorCommandPtr CreateSharedPtr(ushort pPriority, communicator::communicatorCommandTypes pType, communicator::communicatorCommandTags pTag, const pmHardware* pDestination, communicator::communicatorDataTypes pDataType, finalize_ptr<T, D>& pData, ulong pDataUnits, pmCommandCompletionCallbackType pCallback = NULL)
+        static pmCommunicatorCommandPtr CreateSharedPtr(ushort pPriority, communicator::communicatorCommandTypes pType, communicator::communicatorCommandTags pTag, const pmHardware* pDestination, communicator::communicatorDataTypes pDataType, finalize_ptr<T, D>& pData, ulong pDataUnits, pmCommandCompletionCallbackType pCallback = NULL, const void* pUserIdentifier = NULL)
         {
-            return pmCommunicatorCommandPtr(new pmCommunicatorCommand<T, D>(pPriority, pType, pTag, pDestination, pDataType, pData, pDataUnits, pCallback));
+            return pmCommunicatorCommandPtr(new pmCommunicatorCommand<T, D>(pPriority, pType, pTag, pDestination, pDataType, pData, pDataUnits, pCallback, pUserIdentifier));
         }
 
 		void* GetData() const
@@ -206,8 +206,8 @@ class pmCommunicatorCommand : public pmCommunicatorCommandBase
         }
 
     protected:
-		pmCommunicatorCommand(ushort pPriority, communicator::communicatorCommandTypes pType, communicator::communicatorCommandTags pTag, const pmHardware* pDestination, communicator::communicatorDataTypes pDataType, finalize_ptr<T, D>& pData, ulong pDataUnits, pmCommandCompletionCallbackType pCallback)
-        : pmCommunicatorCommandBase(pPriority, pType, pTag, pDataType, pDestination, pCallback)
+		pmCommunicatorCommand(ushort pPriority, communicator::communicatorCommandTypes pType, communicator::communicatorCommandTags pTag, const pmHardware* pDestination, communicator::communicatorDataTypes pDataType, finalize_ptr<T, D>& pData, ulong pDataUnits, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier)
+        : pmCommunicatorCommandBase(pPriority, pType, pTag, pDataType, pDestination, pCallback, pUserIdentifier)
         , mData(std::move(pData))
         , mDataUnits(pDataUnits)
         {}

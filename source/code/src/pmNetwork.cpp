@@ -569,7 +569,7 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 			PMTHROW(pmFatalErrorException());
 	}
 
-    return pmCommunicatorCommand<char, deleteArrayDeallocator<char>>::CreateSharedPtr(pCommand->GetPriority(), (communicatorCommandTypes)(pCommand->GetType()), pCommand->GetTag(), pCommand->GetDestination(), pCommand->GetDataType(), lPackedDataAutoPtr, lLength, pCommand->GetCommandCompletionCallback());
+    return pmCommunicatorCommand<char, deleteArrayDeallocator<char>>::CreateSharedPtr(pCommand->GetPriority(), (communicatorCommandTypes)(pCommand->GetType()), pCommand->GetTag(), pCommand->GetDestination(), pCommand->GetDataType(), lPackedDataAutoPtr, lLength, pCommand->GetCommandCompletionCallback(), pCommand->GetUserIdentifier());
 }
 
 pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pDataLength)

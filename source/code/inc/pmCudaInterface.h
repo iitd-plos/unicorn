@@ -49,6 +49,7 @@ struct pmCudaSubtaskMemoryStruct
 {
     void* cudaPtr;
     bool requiresLoad;
+    bool isUncached;
     
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     void* pinnedPtr;
@@ -57,6 +58,7 @@ struct pmCudaSubtaskMemoryStruct
     pmCudaSubtaskMemoryStruct()
     : cudaPtr(NULL)
     , requiresLoad(false)
+    , isUncached(false)
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     , pinnedPtr(NULL)
 #endif

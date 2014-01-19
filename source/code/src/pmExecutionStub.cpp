@@ -251,6 +251,11 @@ void pmExecutionStub::PostHandleRangeExecutionCompletion(pmSubtaskRange& pRange,
 {
     SwitchThread(std::shared_ptr<stubEvent>(new execCompletionEvent(POST_HANDLE_EXEC_COMPLETION, pRange, pExecStatus)), pRange.task->GetPriority() - 1);
 }
+    
+void pmExecutionStub::RemoteSubtaskReduce(pmTask* pTask, const pmCommunicatorCommandPtr& pCommandPtr)
+{
+    SwitchThread(std::shared_ptr<stubEvent>(new remoteSubtaskReduceEvent(REMOTE_SUBTASK_REDUCE, pTask, pCommandPtr)), pTask->GetPriority());
+}
 
 void pmExecutionStub::ProcessDeferredShadowMemCommits(pmTask* pTask)
 {
@@ -935,6 +940,43 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         }
     #endif
             
+        case REMOTE_SUBTASK_REDUCE:
+        {
+            remoteSubtaskReduceEvent& lEvent = static_cast<remoteSubtaskReduceEvent&>(pEvent);
+            
+            pmTask* lTask = lEvent.task;
+            communicator::subtaskReducePacked* lData = static_cast<communicator::subtaskReducePacked*>(lEvent.commandPtr->GetData());
+
+            pmSubscriptionManager& lSubscriptionManager = lTask->GetSubscriptionManager();
+            lSubscriptionManager.EraseSubtask(this, lData->reduceStruct.subtaskId, NULL);
+            lSubscriptionManager.FindSubtaskMemDependencies(this, lData->reduceStruct.subtaskId, NULL);
+
+            std::vector<communicator::shadowMemTransferPacked>::iterator lShadowMemsIter = lData->shadowMems.begin();
+
+            filtered_for_each_with_index(lTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (lTask->IsWritable(pAddressSpace) && lTask->IsReducible(pAddressSpace));},
+            [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
+            {
+            #ifdef SUPPORT_LAZY_MEMORY
+                if(lTask->IsLazyWriteOnly(pAddressSpace))
+                {
+                    uint lUnprotectedRanges = lShadowMemsIter->shadowMemData.writeOnlyUnprotectedPageRangesCount;
+                    uint lUnprotectedLength = lUnprotectedRanges * 2 * sizeof(uint);
+                    void* lMem = reinterpret_cast<void*>(reinterpret_cast<uint>(lShadowMemsIter->shadowMemData.subtaskMemLength) + lUnprotectedLength);
+
+                    lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, NULL, (uint)pAddressSpaceIndex, lMem, lShadowMemsIter->shadowMemData.subtaskMemLength - lUnprotectedLength, lUnprotectedRanges, (uint*)lShadowMemsIter->shadowMem.get_ptr());
+                }
+                else
+            #endif
+                {
+                    lSubscriptionManager.CreateSubtaskShadowMem(this, lData->reduceStruct.subtaskId, NULL, (uint)pAddressSpaceIndex, lShadowMemsIter->shadowMem.get_ptr(), lShadowMemsIter->shadowMemData.subtaskMemLength, 0, NULL);
+                }
+
+                lTask->GetReducer()->AddSubtask(this, lData->reduceStruct.subtaskId, NULL);
+                
+                ++lShadowMemsIter;
+            });
+        }
+            
         default:
             PMTHROW(pmFatalErrorException());
 	}
@@ -992,8 +1034,11 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
     #endif
     
         if(lRange.originalAllottee == NULL)
-            CommonPostNegotiationOnCPU(lRange.task, lCurrentRange.endSubtask, false, NULL);
-    
+        {
+            for(ulong lSubtaskId = lCurrentRange.startSubtask; lSubtaskId <= lCurrentRange.endSubtask; ++lSubtaskId)
+                CommonPostNegotiationOnCPU(lRange.task, lSubtaskId, false, NULL);
+        }
+
         if(lForceAckFlag)
             lRange.endSubtask = lCurrentRange.endSubtask;
     
@@ -2074,7 +2119,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
             lSubscriptionInfo = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex).subscriptionInfo;
         }
         
-        bool lTemporaryAddressSpaceData = (pTask->GetCallbackUnit()->GetDataReductionCB() || (pTask->IsReadWrite(pAddressSpace) && !pTask->HasDisjointReadWritesAcrossSubtasks(pAddressSpace)));
+        bool lTemporaryAddressSpaceData = ((pTask->IsWriteOnly(pAddressSpace) && pTask->GetCallbackUnit()->GetDataReductionCB()) || (pTask->IsReadWrite(pAddressSpace) && !pTask->HasDisjointReadWritesAcrossSubtasks(pAddressSpace)));
         
         if(lSubscriptionInfo.length && lCudaCacheEnabledForTask && !lTemporaryAddressSpaceData)
         {
@@ -2111,8 +2156,13 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
 
             lSubtaskMemoryVector[pAddressSpaceIndex].requiresLoad = true;
             
-            if(lCudaCacheEnabledForTask && !lTemporaryAddressSpaceData)
-                lPendingCacheInsertions.emplace_back(std::move(lCudaCacheKeyPtr), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr)));
+            if(lCudaCacheEnabledForTask)
+            {
+                if(lTemporaryAddressSpaceData)
+                    lSubtaskMemoryVector[pAddressSpaceIndex].isUncached = true;
+                else
+                    lPendingCacheInsertions.emplace_back(std::move(lCudaCacheKeyPtr), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr)));
+            }
         }
     });
 
@@ -2858,6 +2908,18 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSub
 
     if(pTask->IsCudaCacheEnabled())
     {
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+        for(ulong subtaskId = pStartSubtaskId; subtaskId <= pCleanupEndSubtaskId; ++subtaskId)
+        {
+            std::vector<pmCudaSubtaskMemoryStruct>& lCudaSubtaskMemoryVector = mSubtaskPointersMap[subtaskId];
+            
+            filtered_for_each(lCudaSubtaskMemoryVector, [] (pmCudaSubtaskMemoryStruct& pStruct) {return pStruct.isUncached;}, [&] (pmCudaSubtaskMemoryStruct& pStruct)
+            {
+                mCudaChunkCollection.Deallocate(pStruct.cudaPtr);
+            });
+        }
+    #endif
+        
         for(ulong subtaskId = pEndSubtaskId + 1; subtaskId <= pCleanupEndSubtaskId; ++subtaskId)
         {
             for_each(mCacheKeys[subtaskId], [&] (const pmCudaCacheKey& pKey)
@@ -2870,17 +2932,17 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSub
     }
     else
     {
+    #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
         for(ulong subtaskId = pStartSubtaskId; subtaskId <= pCleanupEndSubtaskId; ++subtaskId)
         {
             std::vector<pmCudaSubtaskMemoryStruct>& lCudaSubtaskMemoryVector = mSubtaskPointersMap[subtaskId];
             
-        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
             filtered_for_each(lCudaSubtaskMemoryVector, [] (pmCudaSubtaskMemoryStruct& pStruct) {return pStruct.requiresLoad;}, [&] (pmCudaSubtaskMemoryStruct& pStruct)
             {
                 mCudaChunkCollection.Deallocate(pStruct.cudaPtr);
             });
-        #endif
         }
+    #endif
     }
 
     uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
