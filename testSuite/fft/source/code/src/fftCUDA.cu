@@ -7,6 +7,8 @@
 
 #include <cufft.h>
 
+#include <map>
+
 namespace fft
 {
 
@@ -20,13 +22,55 @@ namespace fft
     } \
 }
 
+struct cufftWrapper
+{
+    cufftWrapper()
+    {}
+    
+    ~cufftWrapper()
+    {
+        std::map<int, cufftHandle>::iterator lIter = cufftMap.begin(), lEndIter = cufftMap.end();
+        
+        for(; lIter != lEndIter; ++lIter)
+            CUFFT_ERROR_CHECK("cufftDestroy", cufftDestroy(lIter->second));
+        
+        cufftMap.clear();
+    }
+
+    std::map<int, cufftHandle> cufftMap;  // deviceId versus cufftPlan1d handle
+};
+    
+// Assumes same pElemsY value is passed for every invocation
+cufftHandle getCufftPlan1d(size_t pElemsY)
+{
+    static cufftWrapper lWrapper;
+
+    int lDeviceId;
+    CUDA_ERROR_CHECK("cudaGetDevice", cudaGetDevice(&lDeviceId));
+
+    std::map<int, cufftHandle>::iterator lIter = lWrapper.cufftMap.find(lDeviceId);
+    if(lIter == lWrapper.cufftMap.end())
+    {
+        cufftHandle lPlan;
+
+        CUFFT_ERROR_CHECK("cufftPlan1d", cufftPlan1d(&lPlan, pElemsY, CUFFT_C2C, ROWS_PER_FFT_SUBTASK));
+
+        cudaDeviceProp lDeviceProp;
+        CUDA_ERROR_CHECK("cudaGetDeviceProperties", cudaGetDeviceProperties(&lDeviceProp, lDeviceId));
+    
+        lWrapper.cufftMap[lDeviceId] = lPlan;
+        
+        return lPlan;
+    }
+    
+    return lIter->second;
+}
+
 pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
-    cufftHandle lPlan;
-    
-    CUFFT_ERROR_CHECK("cufftPlan1d", cufftPlan1d(&lPlan, lTaskConf->elemsY, CUFFT_C2C, ROWS_PER_FFT_SUBTASK));
+    cufftHandle lPlan = getCufftPlan1d(lTaskConf->elemsY);
     CUFFT_ERROR_CHECK("cufftSetStream", cufftSetStream(lPlan, (cudaStream_t)pCudaStream));
     
     if(lTaskConf->inplace)
@@ -37,9 +81,7 @@ pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
     {
         CUFFT_ERROR_CHECK("cufftExecC2C", cufftExecC2C(lPlan, (cufftComplex*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr, (cufftComplex*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr, CUFFT_FORWARD));
     }
-    
-    CUFFT_ERROR_CHECK("cufftDestroy", cufftDestroy(lPlan));
-    
+
     return pmSuccess;
 }
 
