@@ -344,8 +344,13 @@ double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixD
     }
     else
     {
+    #ifdef USE_SQUARE_BLOCKS
         lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType, SUBSCRIPTION_COMPACT};
         lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType, SUBSCRIPTION_COMPACT};
+    #else
+        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, pInputMemType, SUBSCRIPTION_NATURAL};
+        lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, pOutputMemType, SUBSCRIPTION_NATURAL};
+    #endif
         
         lTaskDetails.taskMem = (pmTaskMem*)lTaskMem;
         lTaskDetails.taskMemCount = MAX_MEM_INDICES;

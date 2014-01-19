@@ -6,7 +6,7 @@ namespace matrixTranspose
 #define DEFAULT_POW_COLS 12
 #define DEFAULT_INPLACE_VALUE 0
 
-#define MAX_BLOCK_SIZE 4096   // Must be a power of 2
+#define MAX_BLOCK_SIZE 2048   // Must be a power of 2
 
 #ifndef MATRIX_DATA_TYPE
     #define MATRIX_DATA_TYPE int

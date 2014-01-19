@@ -102,20 +102,44 @@ void fftSerial(complex* input, complex* output, size_t powx, size_t nx, size_t p
 
 pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
-	pmSubscriptionInfo lSubscriptionInfo;
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
-    lSubscriptionInfo.offset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
-    lSubscriptionInfo.length = ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+    size_t lOffset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
 
-    if(lTaskConf->inplace)
+    if(lTaskConf->rowPlanner)   // Row FFT
     {
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPLACE_MEM_INDEX, READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        pmSubscriptionInfo lSubscriptionInfo(lOffset, ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE));
+
+        if(lTaskConf->inplace)
+        {
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPLACE_MEM_INDEX, READ_WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        }
+        else
+        {
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        }
     }
-    else
+    else    // Col FFT (for FFT_2D)
     {
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        // Instead of subscribing as a contiguous region, subscribe multiple scattered blocks (as they have been created by previous transpose)
+        size_t lTransposeBlockDim = ROWS_PER_FFT_SUBTASK;  // For efficient execution, ROWS_PER_FFT_SUBTASK should be equal to block size for matrix transpose
+        size_t lBlockCount = lTaskConf->elemsY / lTransposeBlockDim;
+        
+        for(size_t i = 0; i < lBlockCount; ++i)
+        {
+            pmScatteredSubscriptionInfo lScatteredSubscriptionInfo(lOffset + i * lTransposeBlockDim * sizeof(FFT_DATA_TYPE), lTransposeBlockDim * sizeof(FFT_DATA_TYPE), lTaskConf->elemsY * sizeof(FFT_DATA_TYPE), lTransposeBlockDim);
+
+            if(lTaskConf->inplace)
+            {
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPLACE_MEM_INDEX, READ_WRITE_SUBSCRIPTION, lScatteredSubscriptionInfo);
+            }
+            else
+            {
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lScatteredSubscriptionInfo);
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lScatteredSubscriptionInfo);
+            }
+        }
     }
 
 	return pmSuccess;
@@ -391,6 +415,12 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
 
+    if(lElemsX < ROWS_PER_FFT_SUBTASK)
+    {
+        std::cout << "[ERROR]: No. of cols should be more than " << ROWS_PER_FFT_SUBTASK << std::endl;
+        exit(1);
+    }
+        
 	srand((unsigned int)time(NULL));
 
     size_t lElems = lElemsX * lElemsY;
