@@ -548,9 +548,9 @@ int DoPreSetupPostMpiInit(int argc, char** argv, int pCommonArgs)
     
 #ifdef BUILD_CUDA
     size_t lMemReqd = (sizeof(FFT_DATA_TYPE) * std::max<size_t>(lElemsX, lElemsY) * ROWS_PER_FFT_SUBTASK);
-std::cout << "Reserving mem " << lMemReqd << std::endl;
+
     char lArray[64];
-    sprintf(lArray, "%d", lMemReqd);
+    sprintf(lArray, "%ld", lMemReqd);
     
     if(setenv("PMLIB_CUDA_MEM_PER_CARD_RESERVED_FOR_EXTERNAL_USE", lArray, 1) != 0)
     {
