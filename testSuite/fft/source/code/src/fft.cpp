@@ -366,6 +366,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         return (double)-1.0;
 
 #ifdef FFT_2D
+    
+#ifdef BUILD_CUDA
+    ClearCufftWrapper();
+#endif
 
 #ifdef NO_MATRIX_TRANSPOSE
     if(lInplace)
@@ -542,6 +546,19 @@ int DoPreSetupPostMpiInit(int argc, char** argv, int pCommonArgs)
 {
     READ_NON_COMMON_ARGS
     
+#ifdef BUILD_CUDA
+    size_t lMemReqd = (sizeof(FFT_DATA_TYPE) * std::max<size_t>(lElemsX, lElemsY) * ROWS_PER_FFT_SUBTASK);
+std::cout << "Reserving mem " << lMemReqd << std::endl;
+    char lArray[64];
+    sprintf(lArray, "%d", lMemReqd);
+    
+    if(setenv("PMLIB_CUDA_MEM_PER_CARD_RESERVED_FOR_EXTERNAL_USE", lArray, 1) != 0)
+    {
+        std::cout << "Error in setting env variable PMLIB_CUDA_MEM_PER_CARD_RESERVED_FOR_EXTERNAL_USE" << std::endl;
+        exit(1);
+    }
+#endif
+
     gRowPlanner.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, lElemsY, lElemsX, ROWS_PER_FFT_SUBTASK);
 
 #ifdef FFT_2D

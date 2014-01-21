@@ -29,6 +29,11 @@ struct cufftWrapper
     
     ~cufftWrapper()
     {
+        Clear();
+    }
+    
+    void Clear()
+    {
         std::map<std::pair<int, size_t>, cufftHandle>::iterator lIter = cufftMap.begin(), lEndIter = cufftMap.end();
         
         for(; lIter != lEndIter; ++lIter)
@@ -47,6 +52,11 @@ struct cufftManyWrapper
     
     ~cufftManyWrapper()
     {
+        Clear();
+    }
+    
+    void Clear()
+    {
         std::map<std::pair<int, std::pair<size_t, size_t> >, cufftHandle>::iterator lIter = cufftMap.begin(), lEndIter = cufftMap.end();
         
         for(; lIter != lEndIter; ++lIter)
@@ -57,10 +67,18 @@ struct cufftManyWrapper
 
     std::map<std::pair<int, std::pair<size_t, size_t> >, cufftHandle> cufftMap;  // pair<deviceId, pair<transformSize, rowStride>> versus cufftPlan1d handle
 };
-    
-cufftHandle getCufftPlan1d(size_t pElemsY)
+
+cufftWrapper& GetCufftWrapper()
 {
-    static cufftWrapper lWrapper;
+    static cufftWrapper sWrapper;
+
+    return sWrapper;
+}
+
+// A different plan is required for every GPU
+cufftHandle GetCufftPlan1d(size_t pElemsY)
+{
+    cufftWrapper& lWrapper = GetCufftWrapper();
 
     int lDeviceId;
     CUDA_ERROR_CHECK("cudaGetDevice", cudaGetDevice(&lDeviceId));
@@ -72,6 +90,7 @@ cufftHandle getCufftPlan1d(size_t pElemsY)
     {
         cufftHandle lPlan;
 
+        // cufftEstimate1d(pElemsY, CUFFT_C2C, ROWS_PER_FFT_SUBTASK, &lMemReqd)
         CUFFT_ERROR_CHECK("cufftPlan1d", cufftPlan1d(&lPlan, pElemsY, CUFFT_C2C, ROWS_PER_FFT_SUBTASK));
 
         cudaDeviceProp lDeviceProp;
@@ -85,9 +104,16 @@ cufftHandle getCufftPlan1d(size_t pElemsY)
     return lIter->second;
 }
 
-cufftHandle getCufftPlanMany(size_t pN, size_t pM)
+cufftManyWrapper& GetCufftManyWrapper()
 {
-    static cufftManyWrapper lWrapper;
+    static cufftManyWrapper sWrapper;
+    
+    return sWrapper;
+}
+
+cufftHandle GetCufftPlanMany(size_t pN, size_t pM)
+{
+    cufftManyWrapper& lWrapper = GetCufftManyWrapper();
 
     int lDeviceId;
     CUDA_ERROR_CHECK("cudaGetDevice", cudaGetDevice(&lDeviceId));
@@ -101,6 +127,7 @@ cufftHandle getCufftPlanMany(size_t pN, size_t pM)
         
         int lN[] = {pN};
 
+        // cufftEstimateMany(1, lN, lN, (int)pM, 1, lN, (int)pM, 1, CUFFT_C2C, ROWS_PER_FFT_SUBTASK, &lMemReqd)
         CUFFT_ERROR_CHECK("cufftPlanMany", cufftPlanMany(&lPlan, 1, lN, lN, (int)pM, 1, lN, (int)pM, 1, CUFFT_C2C, ROWS_PER_FFT_SUBTASK));
 
         cudaDeviceProp lDeviceProp;
@@ -113,15 +140,21 @@ cufftHandle getCufftPlanMany(size_t pN, size_t pM)
     
     return lIter->second;
 }
+    
+void ClearCufftWrapper()
+{
+    GetCufftWrapper().Clear();
+}
+
 
 pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
 #ifdef NO_MATRIX_TRANSPOSE
-    cufftHandle lPlan = lTaskConf->rowPlanner ? getCufftPlan1d(lTaskConf->elemsY) : getCufftPlanMany(lTaskConf->elemsX, ROWS_PER_FFT_SUBTASK);
+    cufftHandle lPlan = lTaskConf->rowPlanner ? GetCufftPlan1d(lTaskConf->elemsY) : GetCufftPlanMany(lTaskConf->elemsX, ROWS_PER_FFT_SUBTASK);
 #else
-    cufftHandle lPlan = getCufftPlan1d(lTaskConf->elemsY);
+    cufftHandle lPlan = GetCufftPlan1d(lTaskConf->elemsY);
 #endif
 
     CUFFT_ERROR_CHECK("cufftSetStream", cufftSetStream(lPlan, (cudaStream_t)pCudaStream));

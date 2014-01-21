@@ -65,6 +65,7 @@ typedef struct fftTaskConf
 #include <cuda.h>
 pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);
 int fftSingleGpu2D(bool inplace, complex* input, complex* output, size_t powx, size_t nx, size_t powy, size_t ny, int dir);
+void ClearCufftWrapper();
 #endif
 
 }

@@ -202,7 +202,23 @@ void pmCudaInterface::SetRuntimeHandle(void* pRuntimeHandle)
 {
     GetRuntimeHandle() = pRuntimeHandle;
 }
+
+size_t pmCudaInterface::GetUnallocatableCudaMemSize()
+{
+    static size_t sUnallocatableMem = 0;
     
+    if(!sUnallocatableMem)
+    {
+        const char* lVal = getenv("PMLIB_CUDA_MEM_PER_CARD_RESERVED_FOR_EXTERNAL_USE");
+        if(lVal)
+            sUnallocatableMem = (size_t)atoi(lVal);
+        
+        sUnallocatableMem += MIN_UNALLOCATED_CUDA_MEM_SIZE;
+    }
+    
+    return sUnallocatableMem;
+}
+
 void* pmCudaInterface::AllocateCudaMem(size_t pSize)
 {
     void* lAddr = NULL;
@@ -211,7 +227,7 @@ void* pmCudaInterface::AllocateCudaMem(size_t pSize)
     {
         size_t lAvailableCudaMem = GetAvailableCudaMem();
 
-        if(lAvailableCudaMem < pSize + MIN_UNALLOCATED_CUDA_MEM_SIZE)
+        if(lAvailableCudaMem < pSize + GetUnallocatableCudaMemSize())
             THROW_OUT_OF_MEMORY_CUDA_ERROR;
             
         SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaMalloc", gFuncPtr_cudaMalloc, (void**)&lAddr, pSize );
