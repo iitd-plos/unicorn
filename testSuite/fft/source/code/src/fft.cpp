@@ -79,7 +79,7 @@ void fftSerial(complex* input, complex* output, size_t powx, size_t nx, size_t p
     #ifdef FFT_2D
         matrixTranspose::serialMatrixTranspose(lInplace, output, input, nx, ny);
         
-        fftwPlanner lColPlan(true); // passed true here becuase matrix has been transposed; so we actually need a row plan
+        fftwPlanner lColPlan(true); // passed true here because matrix has been transposed; so we actually need a row plan
         lColPlan.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, nx, ny, ny);
     
         fftwf_execute_dft(lColPlan.mPlan, (fftwf_complex*)input, (fftwf_complex*)output);
@@ -111,6 +111,67 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
 
+#ifdef NO_MATRIX_TRANSPOSE
+    if(pSubtaskInfo.splitInfo.splitCount)
+    {
+        size_t lRowsPerSplit = ROWS_PER_FFT_SUBTASK / pSubtaskInfo.splitInfo.splitCount;
+        if(lRowsPerSplit == 0)
+            exit(1);
+
+        size_t lStartingRow = lRowsPerSplit * pSubtaskInfo.splitInfo.splitId;
+        size_t lRowsForCurrentSplit = (pSubtaskInfo.splitInfo.splitId == pSubtaskInfo.splitInfo.splitCount - 1) ? (ROWS_PER_FFT_SUBTASK - lStartingRow) : lRowsPerSplit;
+
+        if(lTaskConf->rowPlanner)   // Row FFT
+        {
+            size_t lOffset = (ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId + lStartingRow) * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+            pmSubscriptionInfo lSubscriptionInfo(lOffset, lRowsForCurrentSplit * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE));
+            
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        }
+        else    // Col FFT (for FFT_2D)
+        {
+            size_t lBlockDim = ROWS_PER_FFT_SUBTASK;
+            size_t lOffset = (lBlockDim * pSubtaskInfo.subtaskId + lStartingRow) * sizeof(FFT_DATA_TYPE);
+            size_t lBlockSpacing = ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+            size_t lBlockCount = lTaskConf->elemsX / lBlockDim; // Vertical blocks
+
+            for(size_t i = 0; i < lBlockCount; ++i)
+            {
+                pmScatteredSubscriptionInfo lScatteredSubscriptionInfo(lOffset + i * lBlockSpacing, lRowsForCurrentSplit * sizeof(FFT_DATA_TYPE), lTaskConf->elemsY * sizeof(FFT_DATA_TYPE), lBlockDim);
+
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lScatteredSubscriptionInfo);
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lScatteredSubscriptionInfo);
+            }
+        }
+    }
+    else
+    {
+        if(lTaskConf->rowPlanner)   // Row FFT
+        {
+            size_t lOffset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+            pmSubscriptionInfo lSubscriptionInfo(lOffset, ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE));
+
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lSubscriptionInfo);
+        }
+        else    // Col FFT (for FFT_2D)
+        {
+            size_t lBlockDim = ROWS_PER_FFT_SUBTASK;
+            size_t lOffset = lBlockDim * pSubtaskInfo.subtaskId * sizeof(FFT_DATA_TYPE);
+            size_t lBlockSpacing = ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
+            size_t lBlockCount = lTaskConf->elemsX / lBlockDim; // Vertical blocks
+            
+            for(size_t i = 0; i < lBlockCount; ++i)
+            {
+                pmScatteredSubscriptionInfo lScatteredSubscriptionInfo(lOffset + i * lBlockSpacing, lBlockDim * sizeof(FFT_DATA_TYPE), lTaskConf->elemsY * sizeof(FFT_DATA_TYPE), lBlockDim);
+
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lScatteredSubscriptionInfo);
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lScatteredSubscriptionInfo);
+            }
+        }
+    }
+#else
     if(lTaskConf->rowPlanner)   // Row FFT
     {
         size_t lOffset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
@@ -128,20 +189,6 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
     }
     else    // Col FFT (for FFT_2D)
     {
-    #ifdef NO_MATRIX_TRANSPOSE
-        size_t lBlockDim = ROWS_PER_FFT_SUBTASK;
-        size_t lOffset = lBlockDim * pSubtaskInfo.subtaskId * sizeof(FFT_DATA_TYPE);
-        size_t lBlockSpacing = ROWS_PER_FFT_SUBTASK * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
-        size_t lBlockCount = lTaskConf->elemsX / lBlockDim; // Vertical blocks
-        
-        for(size_t i = 0; i < lBlockCount; ++i)
-        {
-            pmScatteredSubscriptionInfo lScatteredSubscriptionInfo(lOffset + i * lBlockSpacing, lBlockDim * sizeof(FFT_DATA_TYPE), lTaskConf->elemsY * sizeof(FFT_DATA_TYPE), lBlockDim);
-
-            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lScatteredSubscriptionInfo);
-            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lScatteredSubscriptionInfo);
-        }
-    #else
         // Instead of subscribing as a contiguous region, subscribe multiple scattered blocks (as they have been created by previous transpose)
         size_t lOffset = ROWS_PER_FFT_SUBTASK * pSubtaskInfo.subtaskId * lTaskConf->elemsY * sizeof(FFT_DATA_TYPE);
         size_t lTransposeBlockDim = ROWS_PER_FFT_SUBTASK;  // For efficient execution, ROWS_PER_FFT_SUBTASK should be equal to block size for matrix transpose
@@ -161,8 +208,8 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
                 pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, lScatteredSubscriptionInfo);
             }
         }
-    #endif
     }
+#endif
 
 	return pmSuccess;
 }
@@ -170,23 +217,50 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	fftTaskConf* lTaskConf = (fftTaskConf*)(pTaskInfo.taskConf);
-    
-#ifdef FFT_2D
-    fftwf_plan lPlanner = (lTaskConf->rowPlanner ? gRowPlanner.mPlan : gColPlanner.mPlan);
-#else
-    fftwf_plan lPlanner = gRowPlanner.mPlan;
-#endif
 
-    if(lTaskConf->inplace)
-    {
-        fftwf_complex* lOutputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].ptr;
-        fftwf_execute_dft(lPlanner, lOutputLoc, lOutputLoc);
-    }
-    else
+#ifdef NO_MATRIX_TRANSPOSE
+    if(pSubtaskInfo.splitInfo.splitCount)
     {
         fftwf_complex* lInputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr;
         fftwf_complex* lOutputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
-        fftwf_execute_dft(lPlanner, lInputLoc, lOutputLoc);
+
+        size_t lRowsPerSplit = ROWS_PER_FFT_SUBTASK / pSubtaskInfo.splitInfo.splitCount;
+        size_t lStartingRow = lRowsPerSplit * pSubtaskInfo.splitInfo.splitId;
+        size_t lRowsForCurrentSplit = (pSubtaskInfo.splitInfo.splitId == pSubtaskInfo.splitInfo.splitCount - 1) ? (ROWS_PER_FFT_SUBTASK - lStartingRow) : lRowsPerSplit;
+        
+        if(lTaskConf->rowPlanner)
+        {
+            fftwPlanner lPlanner(true);
+            lPlanner.CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lTaskConf->elemsY, lTaskConf->elemsX, lRowsForCurrentSplit);
+            fftwf_execute_dft(lPlanner.mPlan, lInputLoc, lOutputLoc);
+        }
+        else
+        {
+            fftwPlanner lPlanner(false);
+            lPlanner.CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lTaskConf->elemsX, lTaskConf->elemsY, lRowsForCurrentSplit);
+            fftwf_execute_dft(lPlanner.mPlan, lInputLoc, lOutputLoc);
+        }
+    }
+    else
+#endif
+    {
+    #ifdef FFT_2D
+        fftwf_plan lPlanner = (lTaskConf->rowPlanner ? gRowPlanner.mPlan : gColPlanner.mPlan);
+    #else
+        fftwf_plan lPlanner = gRowPlanner.mPlan;
+    #endif
+
+        if(lTaskConf->inplace)
+        {
+            fftwf_complex* lOutputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[INPLACE_MEM_INDEX].ptr;
+            fftwf_execute_dft(lPlanner, lOutputLoc, lOutputLoc);
+        }
+        else
+        {
+            fftwf_complex* lInputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr;
+            fftwf_complex* lOutputLoc = (fftwf_complex*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
+            fftwf_execute_dft(lPlanner, lInputLoc, lOutputLoc);
+        }
     }
 
 	return pmSuccess;
@@ -303,6 +377,10 @@ bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemType pInputMemType, pmMem
 
 	lTaskDetails.taskConf = (void*)(pTaskConf);
 	lTaskDetails.taskConfLength = sizeof(fftTaskConf);
+    
+#ifdef NO_MATRIX_TRANSPOSE
+    lTaskDetails.canSplitCpuSubtasks = true;
+#endif
 
 	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
 	if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
