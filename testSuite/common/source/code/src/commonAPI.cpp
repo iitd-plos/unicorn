@@ -32,6 +32,11 @@ std::vector<Result> gResultVector;
 bool gSerialResultsCompared;
 preSetupPostMpiInitFunc gPreSetupPostMpiInitFunc = NULL;
 
+int GetCommonArgsCount()
+{
+    return COMMON_ARGS;
+}
+
 double ExecuteParallelTask(int argc, char** argv, int pParallelMode, parallelProcessFunc pParallelFunc, pmSchedulingPolicy pSchedulingPolicy, bool pFetchBack)
 {
     return (pParallelFunc)(argc, argv, COMMON_ARGS, &(gCallbackHandles[pParallelMode - 1])[0], pSchedulingPolicy, pFetchBack);

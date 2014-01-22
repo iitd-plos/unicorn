@@ -53,6 +53,8 @@ typedef int (*destroyFunc)();
 typedef int (*compareFunc)(int argc, char** argv, int pCommonArgs);
 typedef int (*preSetupPostMpiInitFunc)(int argc, char** argv, int pCommonArgs);
 
+int GetCommonArgsCount();
+
 typedef struct callbackStruct
 {
     callbacksFunc func;

@@ -386,7 +386,8 @@ bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemType pInputMemType, pmMem
 	lTaskDetails.taskConfLength = sizeof(fftTaskConf);
     
 #ifdef NO_MATRIX_TRANSPOSE
-    lTaskDetails.canSplitCpuSubtasks = true;
+    if(!pTaskConf->rowPlanner)
+        lTaskDetails.canSplitCpuSubtasks = true;
 #endif
 
 	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
@@ -630,19 +631,6 @@ int DoCompare(int argc, char** argv, int pCommonArgs)
 int DoPreSetupPostMpiInit(int argc, char** argv, int pCommonArgs)
 {
     READ_NON_COMMON_ARGS
-    
-#ifdef BUILD_CUDA
-    size_t lMemReqd = (sizeof(FFT_DATA_TYPE) * std::max<size_t>(lElemsX, lElemsY) * ROWS_PER_FFT_SUBTASK);
-
-    char lArray[64];
-    sprintf(lArray, "%ld", lMemReqd);
-    
-    if(setenv("PMLIB_CUDA_MEM_PER_CARD_RESERVED_FOR_EXTERNAL_USE", lArray, 1) != 0)
-    {
-        std::cout << "Error in setting env variable PMLIB_CUDA_MEM_PER_CARD_RESERVED_FOR_EXTERNAL_USE" << std::endl;
-        exit(1);
-    }
-#endif
 
     gRowPlanner.CreateDummyPlan(lInplace, FORWARD_TRANSFORM_DIRECTION, lElemsY, lElemsX, ROWS_PER_FFT_SUBTASK);
 
@@ -669,6 +657,23 @@ int DoPreSetupPostMpiInit(int argc, char** argv, int pCommonArgs)
  */
 int main(int argc, char** argv)
 {
+    int pCommonArgs = GetCommonArgsCount();
+
+    READ_NON_COMMON_ARGS
+
+#ifdef BUILD_CUDA
+    size_t lMemReqd = (sizeof(FFT_DATA_TYPE) * std::max<size_t>(lElemsX, lElemsY) * ROWS_PER_FFT_SUBTASK);
+    
+    char lArray[64];
+    sprintf(lArray, "%ld", lMemReqd);
+    
+    if(setenv("PMLIB_CUDA_MEM_PER_CARD_RESERVED_FOR_EXTERNAL_USE", lArray, 1) != 0)
+    {
+        std::cout << "Error in setting env variable PMLIB_CUDA_MEM_PER_CARD_RESERVED_FOR_EXTERNAL_USE" << std::endl;
+        exit(1);
+    }
+#endif
+
     RequestPreSetupCallbackPostMpiInit(DoPreSetupPostMpiInit);
     
     callbackStruct lStruct[2] = { {DoSetDefaultCallbacks, "FFT"}, {DoSetDefaultCallbacks2, "MATRIXTRANSPOSE"} };
