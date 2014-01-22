@@ -992,9 +992,40 @@ void pmScheduler::AssignSubtasksToDevices(pmLocalTask* pLocalTask)
 {
 	std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
 
-	size_t lSize = lDevices.size();
-	for(size_t i = 0; i < lSize; ++i)
-		AssignSubtasksToDevice(lDevices[i], pLocalTask);
+    // Interleave devices of various types for STATIC_EQUAL scheduling
+    if(pLocalTask->GetSchedulingModel() == scheduler::STATIC_EQUAL)
+    {
+        std::map<pmDeviceType, std::list<const pmProcessingElement*>> lDeviceClassificationMap;
+        for_each(lDevices, [&lDeviceClassificationMap] (const pmProcessingElement* pDevice)
+                 {
+                     lDeviceClassificationMap[pDevice->GetType()].push_front(pDevice);
+                 });
+        
+        lDevices.clear();
+
+        while(!lDeviceClassificationMap.empty())
+        {
+            for(size_t i = 0; i < MAX_DEVICE_TYPES; ++i)
+            {
+                auto lIter = lDeviceClassificationMap.find((pmDeviceType)i);
+                if(lIter != lDeviceClassificationMap.end())
+                {
+                    EXCEPTION_ASSERT(!lIter->second.empty());
+                    
+                    lDevices.push_back(lIter->second.back());
+
+                    lIter->second.pop_back();
+                    if(lIter->second.empty())
+                        lDeviceClassificationMap.erase(lIter);
+                }
+            }
+        }
+    }
+
+    for_each(lDevices, [&] (const pmProcessingElement* pDevice)
+             {
+                 AssignSubtasksToDevice(pDevice, pLocalTask);
+             });
 }
 
 void pmScheduler::AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<const pmMachine*>& pMachines)

@@ -260,29 +260,21 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
         
         ulong lSplittedGroupSubtasks = 0, lUnsplittedGroupSubtasks = 0;
         
-        if(pLocalTask->GetSchedulingModel() == scheduler::STATIC_EQUAL)
+        if(lSubtaskCount < lUnsplittedGroups)
         {
-            lSplittedGroupSubtasks = lSubtaskCount / 2;
-            lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
+            lUnsplittedGroupSubtasks = lSubtaskCount;
         }
         else
         {
-            if(lSubtaskCount < lUnsplittedGroups)
+            if(lSubtaskCount > lDeviceGroups.size())
             {
-                lUnsplittedGroupSubtasks = lSubtaskCount;
+                lSplittedGroupSubtasks = lSplittedGroups;
+                lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
             }
             else
             {
-                if(lSubtaskCount > lDeviceGroups.size())
-                {
-                    lSplittedGroupSubtasks = lSplittedGroups;
-                    lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
-                }
-                else
-                {
-                    lUnsplittedGroupSubtasks = lUnsplittedGroups;
-                    lSplittedGroupSubtasks = lSubtaskCount - lUnsplittedGroupSubtasks;
-                }
+                lUnsplittedGroupSubtasks = lUnsplittedGroups;
+                lSplittedGroupSubtasks = lSubtaskCount - lUnsplittedGroupSubtasks;
             }
         }
         
@@ -358,35 +350,6 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
         ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
         ulong lPartitionSize = lSubtaskCount / lPartitionCount;
         ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
-        
-        if(pLocalTask->GetSchedulingModel() == scheduler::STATIC_EQUAL)
-        {
-            std::map<pmDeviceType, std::list<const pmProcessingElement*>> lDeviceClassificationMap;
-            for_each(lDevices, [&lDeviceClassificationMap] (const pmProcessingElement* pDevice)
-                     {
-                         lDeviceClassificationMap[pDevice->GetType()].push_front(pDevice);
-                     });
-            
-            lDevices.clear();
-
-            while(!lDeviceClassificationMap.empty())
-            {
-                for(size_t i = 0; i < MAX_DEVICE_TYPES; ++i)
-                {
-                    auto lIter = lDeviceClassificationMap.find((pmDeviceType)i);
-                    if(lIter != lDeviceClassificationMap.end())
-                    {
-                        EXCEPTION_ASSERT(!lIter->second.empty());
-                        
-                        lDevices.push_back(lIter->second.back());
-
-                        lIter->second.pop_back();
-                        if(lIter->second.empty())
-                            lDeviceClassificationMap.erase(lIter);
-                    }
-                }
-            }
-        }
 
         std::vector<const pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
         for(ulong i = 0; i < lPartitionCount; ++i, ++lIter)
@@ -948,21 +911,29 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
         ulong lSplittedGroups = lDeviceGroups.size() - lUnsplittedGroups;
         
         ulong lSplittedGroupSubtasks = 0, lUnsplittedGroupSubtasks = 0;
-        if(lSubtaskCount < lUnsplittedGroups)
+        if(pLocalTask->GetSchedulingModel() == scheduler::STATIC_EQUAL)
         {
-            lUnsplittedGroupSubtasks = lSubtaskCount;
+            lSplittedGroupSubtasks = lSubtaskCount / 2;
+            lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
         }
         else
         {
-            if(lSubtaskCount > lDeviceGroups.size())
+            if(lSubtaskCount < lUnsplittedGroups)
             {
-                lSplittedGroupSubtasks = lSplittedGroups;
-                lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
+                lUnsplittedGroupSubtasks = lSubtaskCount;
             }
             else
             {
-                lUnsplittedGroupSubtasks = lUnsplittedGroups;
-                lSplittedGroupSubtasks = lSubtaskCount - lUnsplittedGroupSubtasks;
+                if(lSubtaskCount > lDeviceGroups.size())
+                {
+                    lSplittedGroupSubtasks = lSplittedGroups;
+                    lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
+                }
+                else
+                {
+                    lUnsplittedGroupSubtasks = lUnsplittedGroups;
+                    lSplittedGroupSubtasks = lSubtaskCount - lUnsplittedGroupSubtasks;
+                }
             }
         }
         
