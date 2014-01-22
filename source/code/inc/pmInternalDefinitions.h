@@ -115,7 +115,7 @@ const double MA_WAIT_FACTOR = 1.2;  // If local stub's exec rate is zero, do not
 #define SLOW_START_SCHEDULING_UPPER_LIMIT_EXEC_TIME_PER_ALLOCATION 15	// in seconds
 #define SLOW_START_SCHEDULING_LOWER_LIMIT_EXEC_TIME_PER_ALLOCATION 8	// in seconds
 
-#define MAX_SUBTASK_MULTI_ASSIGN_COUNT 3    // Max no. of devices to which a subtask may be assigned at any given time
+#define MAX_SUBTASK_MULTI_ASSIGN_COUNT 2    // Max no. of devices to which a subtask may be assigned at any given time
 #define MAX_STEAL_CYCLES_PER_DEVICE 5   // Max no. of steal attempts from a device to any other device
 
 #define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (memAddr % pageSize))

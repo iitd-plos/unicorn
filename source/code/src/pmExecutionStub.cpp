@@ -644,7 +644,14 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
     }
     else if(pTask->IsMultiAssignEnabled())
     {
-        if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned)
+        bool lProceed = (pRequestingDevice->GetType() != CPU || GetType() == CPU);  // Allow CPU to CPU transfers but not GPU to CPU
+
+    #ifdef SUPPORT_CUDA
+        if(GetType() == GPU_CUDA)   // no transfers from GPU for now
+            lProceed = false;
+    #endif
+
+        if(lProceed && mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned)
         {
             if(!(pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() == GetType()))
             {
@@ -696,12 +703,18 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                         bool lShouldMultiAssign = true;
 
                     #ifdef SUPPORT_CUDA
-                        // If both the requesting and target devices are GPU and the target has actually started executing the subtask, then
-                        // there is no need to multi assign because even if the source device finishes early after multi-assign, the target
-                        // one can't actually cancel the subtask execution.
+                        // If the target device is a GPU and has actually started executing the subtask, then
+                        // there is no need to multi assign because even if the source device finishes early
+                        // after multi-assign, the target one can't actually cancel the subtask execution.
                         
-                        if(GetType() == GPU_CUDA && pRequestingDevice->GetType() == GPU_CUDA && mCurrentSubtaskRangeStats->currentSubtaskInPostDataFetchStage)
+                        if(GetType() == GPU_CUDA && mCurrentSubtaskRangeStats->currentSubtaskInPostDataFetchStage)
                             lShouldMultiAssign = false;
+                    #endif
+
+                    #ifdef SUPPORT_SPLIT_SUBTASKS
+                        // Currently subtask splitter does not execute multi-assign ranges
+                        if(pTask->GetSubtaskSplitter().IsSplitting(pRequestingDevice->GetType()))
+                            lProceed = false;
                     #endif
                         
                         if(lShouldMultiAssign)
@@ -949,13 +962,21 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
             pmSubscriptionManager& lSubscriptionManager = lTask->GetSubscriptionManager();
             lSubscriptionManager.EraseSubtask(this, lData->reduceStruct.subtaskId, NULL);
-            lSubscriptionManager.FindSubtaskMemDependencies(this, lData->reduceStruct.subtaskId, NULL);
+
+            // Auto lock/unlock scope
+            {
+                guarded_ptr<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskRangeStats> lScopedPtr(&mCurrentSubtaskRangeLock, &mCurrentSubtaskRangeStats, new currentSubtaskRangeStats(lTask, lData->reduceStruct.subtaskId, lData->reduceStruct.subtaskId, false, lData->reduceStruct.subtaskId, NULL, pmBase::GetCurrentTimeInSecs(), NULL, NULL));
+
+                lSubscriptionManager.FindSubtaskMemDependencies(this, lData->reduceStruct.subtaskId, NULL);
+            }
 
             std::vector<communicator::shadowMemTransferPacked>::iterator lShadowMemsIter = lData->shadowMems.begin();
 
             filtered_for_each_with_index(lTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (lTask->IsWritable(pAddressSpace) && lTask->IsReducible(pAddressSpace));},
             [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
             {
+                EXCEPTION_ASSERT(lShadowMemsIter != lData->shadowMems.end());
+
             #ifdef SUPPORT_LAZY_MEMORY
                 if(lTask->IsLazyWriteOnly(pAddressSpace))
                 {
@@ -968,13 +989,16 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 else
             #endif
                 {
+                    std::cout << lShadowMemsIter->shadowMemData.subtaskMemLength << std::endl;
                     lSubscriptionManager.CreateSubtaskShadowMem(this, lData->reduceStruct.subtaskId, NULL, (uint)pAddressSpaceIndex, lShadowMemsIter->shadowMem.get_ptr(), lShadowMemsIter->shadowMemData.subtaskMemLength, 0, NULL);
                 }
-
-                lTask->GetReducer()->AddSubtask(this, lData->reduceStruct.subtaskId, NULL);
                 
                 ++lShadowMemsIter;
             });
+
+            lTask->GetReducer()->AddSubtask(this, lData->reduceStruct.subtaskId, NULL);
+
+            break;
         }
             
         default:

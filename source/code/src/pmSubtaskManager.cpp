@@ -434,6 +434,20 @@ bool pmPushSchedulingManager::IsUsefulAllottee(const pmProcessingElement* pPoten
     if(pOriginalAllottee->GetMachine() == lPotentialMachine && pOriginalAllottee->GetType() == lPotentialDeviceType)
         return false;
 
+    if(pPotentialAllottee->GetType() == CPU && pOriginalAllottee->GetType() != CPU)  // Allow CPU to CPU transfers but not GPU to CPU
+        return false;
+    
+#ifdef SUPPORT_CUDA
+    if(GetType() == GPU_CUDA)   // no transfers from GPU for now
+        return false;
+#endif
+
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    // Currently subtask splitter does not execute multi-assign ranges
+    if(pTask->GetSubtaskSplitter().IsSplitting(pPotentialAllottee->GetType()))
+        return false;
+#endif
+
     std::vector<const pmProcessingElement*>::iterator lIter = pExistingAllottees.begin(), lEndIter = pExistingAllottees.end();
     for(; lIter < lEndIter; ++lIter)
     {
