@@ -437,11 +437,6 @@ bool pmPushSchedulingManager::IsUsefulAllottee(const pmProcessingElement* pPoten
     if(pPotentialAllottee->GetType() == CPU && pOriginalAllottee->GetType() != CPU)  // Allow CPU to CPU transfers but not GPU to CPU
         return false;
     
-#ifdef SUPPORT_CUDA
-    if(pOriginalAllottee->GetType() == GPU_CUDA)   // no transfers from GPU for now
-        return false;
-#endif
-
 #ifdef SUPPORT_SPLIT_SUBTASKS
     // Currently subtask splitter does not execute multi-assign ranges
     if(mLocalTask->GetSubtaskSplitter().IsSplitting(pPotentialAllottee->GetType()))

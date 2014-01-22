@@ -534,13 +534,14 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
 }
 
 // This method must be called with mCurrentSubtaskRangeLock acquired
-ulong pmExecutionStub::GetStealCount(pmTask* pTask, ulong pAvailableSubtasks, double pLocalExecutionRate, double pRequestingDeviceExecutionRate)
+ulong pmExecutionStub::GetStealCount(pmTask* pTask, ulong pAvailableSubtasks, double pLocalExecutionRate, double pRequestingDeviceExecutionRate, bool pStrict)
 {
     ulong lStealCount = 0;
+    const float lStrictnessFactor = ((1.0 / pRequestingDeviceExecutionRate) < 0.5) ? 5.0 : 3.0;
+    const float lOverheadFactor = 1.05; // 5 percent
 
     if(pAvailableSubtasks)
     {
-        double lOverheadTime = 0;	// Add network and other overheads here
         double lTotalExecRate = pLocalExecutionRate + pRequestingDeviceExecutionRate;
     
         if(pLocalExecutionRate == (double)0.0)
@@ -548,23 +549,35 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, ulong pAvailableSubtasks, do
             if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
             {
                 double lElapsedTime = pmBase::GetCurrentTimeInSecs() - mCurrentSubtaskRangeStats->startTime;
-                if(lElapsedTime < (1.0 / pRequestingDeviceExecutionRate) * STEAL_WAIT_FACTOR)
-                    lStealCount = 0;
-                else if(lElapsedTime < (1.0 / pRequestingDeviceExecutionRate) * STEAL_WAIT_FACTOR * STEAL_WAIT_FACTOR)
-                    lStealCount = 1;
+                
+                if(pStrict)
+                {
+                    if(lElapsedTime < lStrictnessFactor * (1.0 / pRequestingDeviceExecutionRate) * STEAL_WAIT_FACTOR)
+                        lStealCount = 0;
+                    else
+                        lStealCount = 1;
+                }
                 else
-                    lStealCount = pAvailableSubtasks;
+                {
+                    if(lElapsedTime < (1.0 / pRequestingDeviceExecutionRate) * STEAL_WAIT_FACTOR)
+                        lStealCount = 0;
+                    else if(lElapsedTime < (1.0 / pRequestingDeviceExecutionRate) * STEAL_WAIT_FACTOR * STEAL_WAIT_FACTOR)
+                        lStealCount = 1;
+                    else
+                        lStealCount = pAvailableSubtasks;
+                }
             }
             else
             {
-                lStealCount = pAvailableSubtasks;
+                if(!pStrict)
+                    lStealCount = pAvailableSubtasks;
             }
         }
         else
         {
             double lTotalExecutionTimeRequired = pAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
             double lLocalExecutionTimeForAllSubtasks = pAvailableSubtasks / pLocalExecutionRate;	// if all subtasks are executed locally, how much time it will take
-            double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired + lOverheadTime;
+            double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired * lOverheadFactor;
             
             if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
             {
@@ -596,7 +609,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
         {
             ulong lAvailableSubtasks = ((lExecEvent.rangeExecutedOnce) ? (lExecEvent.range.endSubtask - lExecEvent.lastExecutedSubtaskId) : (lExecEvent.range.endSubtask - lExecEvent.range.startSubtask + 1));
 
-            ulong lStealCount = GetStealCount(pTask, lAvailableSubtasks, lLocalRate, pRequestingDeviceExecutionRate);
+            ulong lStealCount = GetStealCount(pTask, lAvailableSubtasks, lLocalRate, pRequestingDeviceExecutionRate, false);
             
             if(lStealCount)
             {                        
@@ -644,14 +657,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
     }
     else if(pTask->IsMultiAssignEnabled())
     {
-        bool lProceed = (pRequestingDevice->GetType() != CPU || GetType() == CPU);  // Allow CPU to CPU transfers but not GPU to CPU
-
-    #ifdef SUPPORT_CUDA
-        if(GetType() == GPU_CUDA)   // no transfers from GPU for now
-            lProceed = false;
-    #endif
-
-        if(lProceed && mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned)
+        if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned)
         {
             if(!(pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() == GetType()))
             {
@@ -681,7 +687,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
 
                     if(lPendingExecutions)
                     {
-                        ulong lStealCount = GetStealCount(pTask, lPendingExecutions, lLocalRate, pRequestingDeviceExecutionRate);
+                        ulong lStealCount = GetStealCount(pTask, lPendingExecutions, lLocalRate, pRequestingDeviceExecutionRate, true);
                         
                         if(lStealCount)
                         {
@@ -714,7 +720,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     #ifdef SUPPORT_SPLIT_SUBTASKS
                         // Currently subtask splitter does not execute multi-assign ranges
                         if(pTask->GetSubtaskSplitter().IsSplitting(pRequestingDevice->GetType()))
-                            lProceed = false;
+                            lShouldMultiAssign = false;
                     #endif
                         
                         if(lShouldMultiAssign)
