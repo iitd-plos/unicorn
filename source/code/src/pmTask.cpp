@@ -139,8 +139,6 @@ void pmTask::Start()
 
     mStarted = true;
 
-    CreateReducerAndRedistributors();
-
     if(dynamic_cast<pmLocalTask*>(this))
         pmTaskManager::GetTaskManager()->StartTask(static_cast<pmLocalTask*>(this));
     else
@@ -1003,6 +1001,8 @@ const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcess
             ++mPendingCompletions;
     }
 
+    CreateReducerAndRedistributors();
+
 	return mDevices;
 }
 
@@ -1013,15 +1013,18 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 
 /* class pmRemoteTask */
-pmRemoteTask::pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, ulong pSequenceNumber, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* = DEFAULT_TASK_FLAGS_VAL */)
-	: pmTask(pTaskConf.get_ptr(), pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, pAssignedDeviceCount, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags)
+pmRemoteTask::pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, const pmMachine* pOriginatingHost, ulong pSequenceNumber, std::vector<const pmProcessingElement*>&& pDevices, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* = DEFAULT_TASK_FLAGS_VAL */)
+	: pmTask(pTaskConf.get_ptr(), pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, (uint)pDevices.size(), pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags)
     , mTaskConfAutoPtr(std::move(pTaskConf))
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)
     , mCompletionLock __LOCK_NAME__("pmRemoteTask::mCompletionLock")
+    , mDevices(pDevices)
 {
     SetSequenceNumber(pSequenceNumber);
+
+    CreateReducerAndRedistributors();
 }
 
 pmRemoteTask::~pmRemoteTask()
@@ -1032,13 +1035,6 @@ void pmRemoteTask::DoPostInternalCompletion()
 {
     FlushMemoryOwnerships();
     UnlockMemories();    
-}
-
-void pmRemoteTask::AddAssignedDevice(const pmProcessingElement* pDevice)
-{
-	mDevices.push_back(pDevice);
-
-    DEBUG_EXCEPTION_ASSERT((uint)(mDevices.size()) <= GetAssignedDeviceCount());
 }
 
 std::vector<const pmProcessingElement*>& pmRemoteTask::GetAssignedDevices()

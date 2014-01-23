@@ -1008,7 +1008,6 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 else
             #endif
                 {
-                    std::cout << lShadowMemsIter->shadowMemData.subtaskMemLength << std::endl;
                     lSubscriptionManager.CreateSubtaskShadowMem(this, lData->reduceStruct.subtaskId, NULL, (uint)pAddressSpaceIndex, lShadowMemsIter->shadowMem.get_ptr(), lShadowMemsIter->shadowMemData.subtaskMemLength, 0, NULL);
                 }
                 

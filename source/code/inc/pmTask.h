@@ -159,7 +159,6 @@ class pmTask : public pmBase
 #endif
     
 	private:
-        void CreateReducerAndRedistributors();
 		void BuildTaskInfo();
         void BuildPreSubscriptionSubtaskInfo();
         void RandomizeDevices(std::vector<const pmProcessingElement*>& pDevices);
@@ -224,6 +223,7 @@ class pmTask : public pmBase
         std::map<const pmAddressSpace*, size_t> mAddressSpaceTaskMemIndexMap;
 
     protected:
+        void CreateReducerAndRedistributors();
         bool DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() const;
         bool RegisterRedistributionCompletion();    // Returns true when all address spaces finish redistribution
         void ReplaceTaskAddressSpace(uint pAddressSpaceIndex, pmAddressSpace* pNewAddressSpace);
@@ -287,11 +287,10 @@ class pmLocalTask : public pmTask
 class pmRemoteTask : public pmTask
 {
 	public:
-        pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, ulong pSequenceNumber, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
+        pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, const pmMachine* pOriginatingHost, ulong pSequenceNumber, std::vector<const pmProcessingElement*>&& pDevices, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
 
         virtual ~pmRemoteTask();
 
-        void AddAssignedDevice(const pmProcessingElement* pDevice);
 		std::vector<const pmProcessingElement*>& GetAssignedDevices();
 
         virtual void MarkSubtaskExecutionFinished();

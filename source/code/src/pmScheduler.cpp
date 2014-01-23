@@ -1154,7 +1154,7 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 	pLocalTask->InitializeSubtaskManager(pLocalTask->GetSchedulingModel());
 
     /* PENDING --- All machines where the memories associated with the task are currently residing
-     must also be sent task definition */
+     must also be sent in task definition */
 	AssignTaskToMachines(pLocalTask, lMachines);
 
 	AssignSubtasksToDevices(pLocalTask);
