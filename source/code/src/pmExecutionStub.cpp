@@ -534,7 +534,7 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
 }
 
 // This method must be called with mCurrentSubtaskRangeLock acquired
-ulong pmExecutionStub::GetStealCount(pmTask* pTask, ulong pAvailableSubtasks, double pLocalExecutionRate, double pRequestingDeviceExecutionRate, bool pStrict)
+ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* pRequestingDevice, ulong pAvailableSubtasks, double pLocalExecutionRate, double pRequestingDeviceExecutionRate, bool pStrict)
 {
     ulong lStealCount = 0;
     const float lStrictnessFactor = ((1.0 / pRequestingDeviceExecutionRate) < 0.5) ? 5.0 : 3.0;
@@ -587,6 +587,19 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, ulong pAvailableSubtasks, do
         }
     }
     
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    if(lStealCount)
+    {
+        // Currently subtask splitter sends acknowledgement every executing every subtask. This causes
+        // a problem for PULL scheduling because an acknowledgement leads to generation of a steal request.
+        // Now if a stolen range with more than one subtasks is assigned to a split executor, then the
+        // subsequent steal request after executing the first subtask of this range may lead to stealing
+        // another new range. This will add two ranges of same task in the stub queue. This is not supported.
+        if(pTask->GetSubtaskSplitter().IsSplitting(pRequestingDevice->GetType()))
+            lStealCount = 1;
+    }
+#endif
+    
     return lStealCount;
 }
     
@@ -609,7 +622,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
         {
             ulong lAvailableSubtasks = ((lExecEvent.rangeExecutedOnce) ? (lExecEvent.range.endSubtask - lExecEvent.lastExecutedSubtaskId) : (lExecEvent.range.endSubtask - lExecEvent.range.startSubtask + 1));
 
-            ulong lStealCount = GetStealCount(pTask, lAvailableSubtasks, lLocalRate, pRequestingDeviceExecutionRate, false);
+            ulong lStealCount = GetStealCount(pTask, pRequestingDevice, lAvailableSubtasks, lLocalRate, pRequestingDeviceExecutionRate, false);
             
             if(lStealCount)
             {                        
@@ -687,7 +700,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
 
                     if(lPendingExecutions)
                     {
-                        ulong lStealCount = GetStealCount(pTask, lPendingExecutions, lLocalRate, pRequestingDeviceExecutionRate, true);
+                        ulong lStealCount = GetStealCount(pTask, pRequestingDevice, lPendingExecutions, lLocalRate, pRequestingDeviceExecutionRate, true);
                         
                         if(lStealCount)
                         {
