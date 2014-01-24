@@ -90,7 +90,7 @@ public:
     std::unique_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
     void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
 
-    bool Negotiate(ulong pSubtaskId);
+    bool Negotiate(ulong pSubtaskId, std::vector<pmExecutionStub*>& pStubsToBeCancelled, pmExecutionStub*& pSourceStub);
     void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
 
     void FreezeDummyEvents();
@@ -129,7 +129,7 @@ public:
     std::unique_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
     void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
     
-    bool Negotiate(pmExecutionStub* pStub, ulong pSubtaskId);
+    bool Negotiate(pmExecutionStub* pStub, ulong pSubtaskId, std::vector<pmExecutionStub*>& pStubsToBeCancelled, pmExecutionStub*& pSourceStub);
     void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
     
     void FreezeDummyEvents();

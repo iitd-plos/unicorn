@@ -284,6 +284,30 @@ void pmExecutionStub::ProcessRedistributionBucket(pmTask* pTask, uint pAddressSp
     SwitchThread(std::shared_ptr<stubEvent>(new processRedistributionBucketEvent(PROCESS_REDISTRIBUTION_BUCKET, pTask, pAddressSpaceIndex, pBucketIndex)), pTask->GetPriority());
 }
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+// Must be called with mCurrentSubtaskRangeLock acquired
+void pmExecutionStub::CancelPostNegotiationSplittedExecutionInternal(std::vector<pmExecutionStub*>& pStubsToBeCancelled, const pmSubtaskRange& pRange)
+{
+    bool lCancelCurrent = false;
+    for_each(pStubsToBeCancelled, [&] (pmExecutionStub* pStub)
+             {
+                 if(pStub == this)
+                     lCancelCurrent = true;
+                 else
+                     pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(pStub->GetProcessingElement(), pRange);
+             });
+    
+    if(lCancelCurrent)
+    {
+        EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->endSubtaskId == pRange.endSubtask);
+        EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->splitData.valid);
+        
+        mCurrentSubtaskRangeStats->reassigned = true;
+        CancelCurrentlyExecutingSubtaskRange(false);
+    }
+}
+#endif
+
 void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange)
 {
     DEBUG_EXCEPTION_ASSERT(GetProcessingElement() == pRange.originalAllottee);
@@ -303,13 +327,43 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
             {
                 DEBUG_EXCEPTION_ASSERT(pRange.startSubtask == pRange.endSubtask);
                 
-                if(pRange.task->GetSubtaskSplitter().Negotiate(this, pRange.startSubtask))
+                FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
+                
+                std::vector<pmExecutionStub*> lStubsToBeCancelled;
+                pmExecutionStub* lSourceStub = NULL;
+                if(pRange.task->GetSubtaskSplitter().Negotiate(this, pRange.startSubtask, lStubsToBeCancelled, lSourceStub))
                 {
+                    EXCEPTION_ASSERT(lSourceStub);
+
+                    std::vector<const pmProcessingElement*> lSecondaryAllottees;
+
+                    // Auto lock/unlock scope
+                    {
+                        FINALIZE_RESOURCE_PTR(dSecondaryAllotteeLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lSourceStub->mSecondaryAllotteeLock, Lock(), Unlock());
+
+                        auto lAllotteeIter = lSourceStub->mSecondaryAllotteeMap.find(std::make_pair(pRange.task, pRange.endSubtask));
+                        if(lAllotteeIter != lSourceStub->mSecondaryAllotteeMap.end())
+                        {
+                            lSecondaryAllottees = std::move(lAllotteeIter->second);
+                            lSourceStub->mSecondaryAllotteeMap.erase(lAllotteeIter);
+                        }
+                    }
+                    
+                    DEBUG_EXCEPTION_ASSERT(std::find(lSecondaryAllottees.begin(), lSecondaryAllottees.end(), pRequestingDevice) != lSecondaryAllottees.end())
+
                 #ifdef TRACK_MULTI_ASSIGN
                     std::cout << "[Host " << pmGetHostId() << "]: Split subtask negotiation success from device " << GetProcessingElement()->GetGlobalDeviceIndex() << " to device " << pRequestingDevice->GetGlobalDeviceIndex() << "; Negotiated range [" << pRange.startSubtask << ", " << pRange.endSubtask << "]" << std::endl;
                 #endif
 
                     pmScheduler::GetScheduler()->SendRangeNegotiationSuccess(pRequestingDevice, pRange);
+
+                    CancelPostNegotiationSplittedExecutionInternal(lStubsToBeCancelled, pRange);
+
+                    for_each(lSecondaryAllottees, [&] (const pmProcessingElement* pElement)
+                    {
+                        if(pElement != pRequestingDevice)
+                            pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(pElement, pRange);
+                    });
                 }
             }
             else
@@ -334,14 +388,29 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
                             {
                                 lNegotiationStatus = true;
 
-                                for(ulong i = pRange.startSubtask; i < lExecEvent.range.startSubtask; ++i)
-                                    pRange.task->GetSubtaskSplitter().Negotiate(this, i);
+                                for(ulong i = pRange.startSubtask; i <= lExecEvent.range.endSubtask; ++i)
+                                {
+                                    std::vector<pmExecutionStub*> lStubsToBeCancelled;
+                                    pmExecutionStub* lSourceStub = NULL;
+
+                                    if(pRange.task->GetSubtaskSplitter().Negotiate(this, i, lStubsToBeCancelled, lSourceStub))
+                                        CancelPostNegotiationSplittedExecutionInternal(lStubsToBeCancelled, pmSubtaskRange(pRange.task, NULL, i, i));
+                                }
                             }
                         }
                         else
                         {
                             for(ulong i = pRange.startSubtask; i <= pRange.endSubtask; ++i)
-                                lNegotiationStatus |= pRange.task->GetSubtaskSplitter().Negotiate(this, i);
+                            {
+                                std::vector<pmExecutionStub*> lStubsToBeCancelled;
+                                pmExecutionStub* lSourceStub = NULL;
+                                
+                                if(pRange.task->GetSubtaskSplitter().Negotiate(this, i, lStubsToBeCancelled, lSourceStub))
+                                {
+                                    lNegotiationStatus = true;
+                                    CancelPostNegotiationSplittedExecutionInternal(lStubsToBeCancelled, pmSubtaskRange(pRange.task, NULL, i, i));
+                                }
+                            }
                         }
                         
                         if(lNegotiationStatus)

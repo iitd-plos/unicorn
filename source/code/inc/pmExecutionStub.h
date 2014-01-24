@@ -381,6 +381,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void CommitSplitSubtask(pmSubtaskRange& pRange, const splitter::splitRecord& pSplitRecord, pmStatus pExecStatus);
         bool UpdateSecondaryAllotteeMap(std::pair<pmTask*, ulong>& pPair, const pmProcessingElement* pRequestingDevice);
         bool UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulong>& pPair, const pmProcessingElement* pRequestingDevice);
+        void CancelPostNegotiationSplittedExecutionInternal(std::vector<pmExecutionStub*>& pStubsToBeCancelled, const pmSubtaskRange& pRange);
     #endif
     
         void ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent);

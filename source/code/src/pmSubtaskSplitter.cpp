@@ -148,9 +148,9 @@ void pmSubtaskSplitter::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, 
     mSplitGroupVector[mSplitGroupMap[pStub]].FinishedSplitExecution(pSubtaskId, pSplitId, pStub, pPrematureTermination);
 }
 
-bool pmSubtaskSplitter::Negotiate(pmExecutionStub* pStub, ulong pSubtaskId)
+bool pmSubtaskSplitter::Negotiate(pmExecutionStub* pStub, ulong pSubtaskId, std::vector<pmExecutionStub*>& pStubsToBeCancelled, pmExecutionStub*& pSourceStub)
 {
-    return mSplitGroupVector[mSplitGroupMap[pStub]].Negotiate(pSubtaskId);
+    return mSplitGroupVector[mSplitGroupMap[pStub]].Negotiate(pSubtaskId, pStubsToBeCancelled, pSourceStub);
 }
     
 void pmSubtaskSplitter::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
@@ -330,7 +330,7 @@ void pmSplitGroup::FreezeDummyEvents()
         (*lIter)->RemoveSplitSubtaskCheckEvent(mSubtaskSplitter->mTask);
 }
 
-bool pmSplitGroup::Negotiate(ulong pSubtaskId)
+bool pmSplitGroup::Negotiate(ulong pSubtaskId, std::vector<pmExecutionStub*>& pStubsToBeCancelled, pmExecutionStub*& pSourceStub)
 {
     bool lRetVal = false;
     std::vector<std::pair<pmExecutionStub*, bool>> lStubVector;
@@ -351,6 +351,7 @@ bool pmSplitGroup::Negotiate(ulong pSubtaskId)
 
             if(!lIter->reassigned)
             {
+                pSourceStub = lIter->sourceStub;
                 lStubVector = lIter->assignedStubs;
                 lIter->reassigned = true;
                 lRetVal = true;
@@ -360,14 +361,11 @@ bool pmSplitGroup::Negotiate(ulong pSubtaskId)
     
     if(lRetVal)
     {
-        pmSubtaskRange lRange(mSubtaskSplitter->mTask, NULL, pSubtaskId, pSubtaskId);
-        
-        std::vector<std::pair<pmExecutionStub*, bool> >::iterator lIter = lStubVector.begin(), lEndIter = lStubVector.end();
-        for(; lIter != lEndIter; ++lIter)
-        {
-            if(!(*lIter).second)
-                (*lIter).first->CancelSubtaskRange(lRange);
-        }
+        filtered_for_each(lStubVector, [] (const std::pair<pmExecutionStub*, bool>& pPair) {return !pPair.second;},
+                [&] (const std::pair<pmExecutionStub*, bool>& pPair)
+                {
+                    pStubsToBeCancelled.push_back(pPair.first);
+                });
     }
     
     return lRetVal;
