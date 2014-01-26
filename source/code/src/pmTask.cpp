@@ -87,6 +87,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
     , mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions(false)
     , mTaskMemVector(std::move(pTaskMemVector))
 	, mAssignedDeviceCount(pAssignedDeviceCount)
+    , mLastReductionScratchBuffer(NULL)
 {
     mAddressSpaces.reserve(mTaskMemVector.size());
 
@@ -123,14 +124,21 @@ pmTask::~pmTask()
     
 void pmTask::LockAddressSpaces()
 {
-    pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(mTaskMemVector.size(), GetPriority(), 0, AddressSpacesLockCallback, this);
-    lCountDownCommand->MarkExecutionStart();
-
-    for_each(mTaskMemVector, [this, &lCountDownCommand] (const pmTaskMemory& pTaskMem)
+    if(mTaskMemVector.empty())
     {
-        pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
-        lAddressSpace->EnqueueForLock(this, pTaskMem.memType, lCountDownCommand);
-    });
+        Start();
+    }
+    else
+    {
+        pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(mTaskMemVector.size(), GetPriority(), 0, AddressSpacesLockCallback, this);
+        lCountDownCommand->MarkExecutionStart();
+
+        for_each(mTaskMemVector, [this, &lCountDownCommand] (const pmTaskMemory& pTaskMem)
+        {
+            pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
+            lAddressSpace->EnqueueForLock(this, pTaskMem.memType, lCountDownCommand);
+        });
+    }
 }
     
 void pmTask::Start()
@@ -630,6 +638,11 @@ void pmTask::MarkRedistributionFinished(uint pOriginalAddressSpaceIndex, pmAddre
         MarkUserSideTaskCompletion();
 }
     
+void* pmTask::GetLastReductionScratchBuffer() const
+{
+    return mLastReductionScratchBuffer;
+}
+    
 bool pmTask::HasDisjointReadWritesAcrossSubtasks(const pmAddressSpace* pAddressSpace) const
 {
     DEBUG_EXCEPTION_ASSERT(mAddressSpaceTaskMemIndexMap.find(pAddressSpace) != mAddressSpaceTaskMemIndexMap.end());
@@ -849,16 +862,28 @@ void pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, pmAddressSpace*
     pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
     void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(pStub, pSubtaskId, pSplitInfo, lAddressSpaceIndex);
     
-    subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, pSubtaskId, pSplitInfo, lAddressSpaceIndex, lBeginIter, lEndIter);
-
-    pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub, pSubtaskId, pSplitInfo, lAddressSpaceIndex);
-
-    std::for_each(lBeginIter, lEndIter, [&] (const subscription::subscriptionRecordType::value_type& pPair)
+    if(lShadowMem)
     {
-        pAddressSpace->Update(pPair.first, pPair.second.first, reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + pPair.first - lUnifiedSubscriptionInfo.offset));
-    });
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, pSubtaskId, pSplitInfo, lAddressSpaceIndex, lBeginIter, lEndIter);
 
+        pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub, pSubtaskId, pSplitInfo, lAddressSpaceIndex);
+
+        std::for_each(lBeginIter, lEndIter, [&] (const subscription::subscriptionRecordType::value_type& pPair)
+        {
+            pAddressSpace->Update(pPair.first, pPair.second.first, reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + pPair.first - lUnifiedSubscriptionInfo.offset));
+        });
+    }
+}
+
+// This is called by reducer after all address spaces in the task are reduced
+void pmLocalTask::AllReductionsDone(pmExecutionStub* pLastStub, ulong pLastSubtaskId, pmSplitInfo* pLastSplitInfo)
+{
+    pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
+
+    size_t lScratchBufferSize = 0;
+    mLastReductionScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(pLastStub, pLastSubtaskId, pLastSplitInfo, REDUCTION_TO_REDUCTION, lScratchBufferSize);
+    
     ((pmLocalTask*)this)->MarkUserSideTaskCompletion();
 }
 

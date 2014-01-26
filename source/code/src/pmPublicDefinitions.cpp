@@ -309,6 +309,26 @@ pmStatus pmReleaseScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice
     SAFE_EXECUTE_ON_CONTROLLER(ReleaseScratchBuffer_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pScratchBufferType);
 }
 
+void* pmGetLastReductionScratchBuffer(pmTaskHandle pTaskHandle)
+{
+    try
+    {
+		pmController* lController = pmController::GetController();
+		if(!lController)
+			return NULL;
+    
+        return lController->GetLastReductionScratchBuffer_Public(pTaskHandle);
+    }
+    catch(pmException& e)
+    {
+        pmStatus lStatus = e.GetStatusCode();
+        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::ERROR, pmErrorMessages[lStatus]);
+    }
+    
+    return NULL;
+}
+
+    
 pmCallbacks::pmCallbacks()
     : dataDistribution(NULL)
 	, subtask_cpu(NULL)

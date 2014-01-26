@@ -193,6 +193,8 @@ void pmReducer::HandleReductionFinish()
     {
         (static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.stub, pAddressSpace, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
     });
+    
+    (static_cast<pmLocalTask*>(mTask))->AllReductionsDone(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
 }
     
 void pmReducer::SignalSendToMachineAboutNoLocalReduction()

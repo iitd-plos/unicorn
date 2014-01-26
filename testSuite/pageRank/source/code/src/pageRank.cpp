@@ -8,6 +8,8 @@
 #include <string.h>
 #include <math.h>
 
+#include <map>
+
 namespace pageRank
 {
 
@@ -197,6 +199,39 @@ void serialPageRank(unsigned int* pWebDump)
 
 	delete[] lLocalPageRankArray;
 }
+    
+bool GetSplitFilesAndPages(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo, unsigned int& pSplitStartFile, unsigned int& pSplitFileCount, unsigned int& pSplitStartPage, unsigned int& pSplitPageCount)
+{
+    if(pSubtaskInfo.splitInfo.splitCount)
+    {
+        pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
+
+        bool lPartialLastSubtask = (lTaskConf->totalWebPages < ((pSubtaskInfo.subtaskId + 1) * lTaskConf->webPagesPerSubtask));
+        unsigned int lWebPages = (unsigned int)(lPartialLastSubtask ? (lTaskConf->totalWebPages - (pSubtaskInfo.subtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
+        unsigned int lWebFiles = ((lWebPages / lTaskConf->webPagesPerFile) + ((lWebPages % lTaskConf->webPagesPerFile) ? 1 : 0));
+        
+        unsigned int lAllowedSplits = pSubtaskInfo.splitInfo.splitCount;
+        if(lWebFiles < pSubtaskInfo.splitInfo.splitCount)
+            lAllowedSplits = lWebFiles;
+        
+        if(pSubtaskInfo.splitInfo.splitId >= lAllowedSplits)
+            return false;
+        
+        pSplitFileCount = lWebFiles / lAllowedSplits;
+        pSplitStartFile = pSplitFileCount * lAllowedSplits;
+        
+        if(pSubtaskInfo.splitInfo.splitId + 1 == lAllowedSplits)
+            pSplitFileCount = lWebFiles - pSplitFileCount * pSubtaskInfo.splitInfo.splitId;
+        
+        pSplitStartPage = pSplitStartFile * lTaskConf->webPagesPerFile;
+        pSplitPageCount = pSplitFileCount * lTaskConf->webPagesPerFile;
+        
+        if(lPartialLastSubtask && pSubtaskInfo.splitInfo.splitId + 1 == lAllowedSplits)
+            pSplitPageCount = lWebPages - pSplitPageCount * pSubtaskInfo.splitInfo.splitId;
+    }
+    
+    return true;
+}
 
 pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
@@ -209,13 +244,16 @@ pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo
 	// Subscribe to an input memory partition (no data is required for first iteration)
     if(lTaskConf->iteration != 0)
     {
-        pmSubscriptionInfo lSubscriptionInfo(lStartPage * sizeof(PAGE_RANK_DATA_TYPE), sizeof(PAGE_RANK_DATA_TYPE) * lWebPages);
-
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
+        unsigned int lSplitStartFile, lSplitFileCount;
+        unsigned int lSplitStartPage = lStartPage;
+        unsigned int lSplitPageCount = lWebPages;
+        
+        if(!GetSplitFilesAndPages(pTaskInfo, pSubtaskInfo, lSplitStartFile, lSplitFileCount, lSplitStartPage, lSplitPageCount))
+            return pmSuccess;
+        
+        pmSubscriptionInfo lSubscriptionInfo(lSplitStartPage * sizeof(PAGE_RANK_DATA_TYPE), sizeof(PAGE_RANK_DATA_TYPE) * lSplitPageCount);
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
     }
-
-	// Subscribe to entire output matrix
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, pmSubscriptionInfo(0, lTaskConf->totalWebPages * sizeof(PAGE_RANK_DATA_TYPE)));
 
 #ifdef BUILD_CUDA
 	// Set CUDA Launch Configuration
@@ -223,18 +261,33 @@ pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo
     {
         size_t lReservedMem = lWebPages * (lTaskConf->maxOutlinksPerWebPage + 1) * sizeof(PAGE_RANK_DATA_TYPE);
         pmReserveCudaGlobalMem(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, lReservedMem);
+
+        size_t lPerPageStorageSize = sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE) + lTaskConf->maxOutlinksPerWebPage * sizeof(unsigned int);   // no. of outlinks, value (i.e. increment) and keys
+        size_t lScratchBufferSize = lWebPages * lPerPageStorageSize;
+        pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, SUBTASK_TO_POST_SUBTASK, lScratchBufferSize, NULL);
     }
 #endif
 
 	return pmSuccess;
 }
     
-void** LoadMappedFiles(pageRankTaskConf* pTaskConf, ulong pSubtaskId)
+void** LoadMappedFiles(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo)
 {
-    unsigned int lWebPages = (unsigned int)((pTaskConf->totalWebPages < ((pSubtaskId + 1) * pTaskConf->webPagesPerSubtask)) ? (pTaskConf->totalWebPages - (pSubtaskId * pTaskConf->webPagesPerSubtask)) : pTaskConf->webPagesPerSubtask);
+	pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
+    ulong lSubtaskId = pSubtaskInfo.subtaskId;
+
+    unsigned int lWebPages = (unsigned int)((lTaskConf->totalWebPages < ((lSubtaskId + 1) * lTaskConf->webPagesPerSubtask)) ? (lTaskConf->totalWebPages - (lSubtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
     
-    unsigned int lWebFiles = ((lWebPages / pTaskConf->webPagesPerFile) + ((lWebPages % pTaskConf->webPagesPerFile) ? 1 : 0));
-    unsigned int lFirstWebFile = (unsigned int)pSubtaskId * lWebFiles;
+    unsigned int lWebFiles = ((lWebPages / lTaskConf->webPagesPerFile) + ((lWebPages % lTaskConf->webPagesPerFile) ? 1 : 0));
+    unsigned int lFirstWebFile = (unsigned int)lSubtaskId * lWebFiles;
+    
+    unsigned int lSplitStartPage;
+    if(!GetSplitFilesAndPages(pTaskInfo, pSubtaskInfo, lFirstWebFile, lWebFiles, lSplitStartPage, lWebPages))
+    {
+        std::cout << "Problem in splitting code !!!" << std::endl;
+        exit(1);
+    }
+    
     unsigned int lLastWebFile = lFirstWebFile + lWebFiles;
     
     void** lWebFilePtrs = new void*[lWebFiles];
@@ -243,10 +296,10 @@ void** LoadMappedFiles(pageRankTaskConf* pTaskConf, ulong pSubtaskId)
         char filePath[1024];
         char buf[12];
         
-        unsigned int lFileNum = 1 + fileIndex * pTaskConf->webPagesPerFile;
+        unsigned int lFileNum = 1 + fileIndex * lTaskConf->webPagesPerFile;
         
         sprintf(buf, "%u", lFileNum);
-        strcpy(filePath, pTaskConf->basePath);
+        strcpy(filePath, lTaskConf->basePath);
         strcat(filePath, "/web/page_");
         strcat(filePath, buf);
         
@@ -259,19 +312,31 @@ void** LoadMappedFiles(pageRankTaskConf* pTaskConf, ulong pSubtaskId)
 pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
 	pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
-
-	PAGE_RANK_DATA_TYPE* lLocalArray = ((lTaskConf->iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
-	PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
-    
-    memset(lGlobalArray, 0, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].length);
-
     ulong lSubtaskId = pSubtaskInfo.subtaskId;
-    void** lWebFilePtrs = LoadMappedFiles(lTaskConf, lSubtaskId);
 
     unsigned int lWebPages = (unsigned int)((lTaskConf->totalWebPages < ((lSubtaskId + 1) * lTaskConf->webPagesPerSubtask)) ? (lTaskConf->totalWebPages - (lSubtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
     unsigned int lWebFiles = ((lWebPages / lTaskConf->webPagesPerFile) + ((lWebPages % lTaskConf->webPagesPerFile) ? 1 : 0));
     unsigned int lFirstWebFile = (unsigned int)pSubtaskInfo.subtaskId * lWebFiles;
 
+    unsigned int lSplitStartPage;
+    if(!GetSplitFilesAndPages(pTaskInfo, pSubtaskInfo, lFirstWebFile, lWebFiles, lSplitStartPage, lWebPages))
+        return pmSuccess;
+    
+	PAGE_RANK_DATA_TYPE* lLocalArray = ((lTaskConf->iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[MEM_INDEX].ptr);
+
+    void** lWebFilePtrs = LoadMappedFiles(pTaskInfo, pSubtaskInfo);
+    
+    /* The format of storage for every page (input to this subtask) in scratch buffer is -
+     * <No. of outlinks> <Incr> <Key 1> <Key 2> ... <Key (no. of outlinks)>
+     */
+
+    // Value for every key here is same (i.e. input page rank / outlinks); so no need to store key value pairs
+    size_t lPerPageStorageSize = sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE) + lTaskConf->maxOutlinksPerWebPage * sizeof(unsigned int);   // no. of outlinks, value (i.e. increment) and keys
+    size_t lScratchBufferSize = lWebPages * lPerPageStorageSize;
+    void* lScratchBuffer = pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, SUBTASK_TO_POST_SUBTASK, lScratchBufferSize, NULL);
+
+    size_t lScratchBufferWriteOffsetInBytes = 0;
+    
     unsigned int lTotalFiles = (lTaskConf->totalWebPages / lTaskConf->webPagesPerFile) + ((lTaskConf->totalWebPages % lTaskConf->webPagesPerFile) ? 1 : 0);
     for(unsigned int i = 0; i < lWebFiles; ++i)
     {
@@ -288,27 +353,125 @@ pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskI
 
             unsigned int lOutlinks = lMappedFile[index++];
             PAGE_RANK_DATA_TYPE lIncr = (PAGE_RANK_DATA_TYPE)(DAMPENING_FACTOR * ((lTaskConf->iteration == 0) ? lTaskConf->initialPageRank : lLocalArray[lPageNum])/(float)lOutlinks);
+            
+            char* lWriteLocation = (char*)lScratchBuffer + lScratchBufferWriteOffsetInBytes;
+            
+            ((unsigned int*)lWriteLocation)[0] = lOutlinks;
+            ((PAGE_RANK_DATA_TYPE*)(lWriteLocation + sizeof(unsigned int)))[0] = lIncr;
 
             for(unsigned int k = 0; k < lOutlinks; ++k)
-                lGlobalArray[lMappedFile[index + k] - 1] += lIncr;
+                ((unsigned int*)(lWriteLocation + sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE) + k * sizeof(unsigned int)))[0] = lMappedFile[index + k] - 1;
         
             index += lTaskConf->maxOutlinksPerWebPage;
+            lScratchBufferWriteOffsetInBytes += lPerPageStorageSize;
         }
     }
 
     delete[] lWebFilePtrs;
+
 	return pmSuccess;
 }
     
+void LoadSubtaskBufferInMap(std::map<unsigned int, PAGE_RANK_DATA_TYPE>& pMap, char* pBuffer, pageRankTaskConf* pTaskConf, unsigned long pSubtaskId)
+{
+    size_t lReadOffset = 0;
+    unsigned int lWebPages = (unsigned int)((pTaskConf->totalWebPages < ((pSubtaskId + 1) * pTaskConf->webPagesPerSubtask)) ? (pTaskConf->totalWebPages - (pSubtaskId * pTaskConf->webPagesPerSubtask)) : pTaskConf->webPagesPerSubtask);
+    size_t lPerPageStorageSize = sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE) + pTaskConf->maxOutlinksPerWebPage * sizeof(unsigned int);   // no. of outlinks, value (i.e. increment) and keys
+    
+    for(unsigned int i = 0; i < lWebPages; ++i)
+    {
+        unsigned int lOutlinks = ((unsigned int*)(pBuffer + lReadOffset))[0];
+        PAGE_RANK_DATA_TYPE lIncr = ((PAGE_RANK_DATA_TYPE*)(pBuffer + lReadOffset + sizeof(unsigned int)))[0];
+        
+        for(unsigned int j = 0; j < lOutlinks; ++j)
+        {
+            unsigned int lKey = ((unsigned int*)(pBuffer + lReadOffset + sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE) + j * sizeof(unsigned int)))[0];
+            
+            auto lIter = pMap.find(lKey);
+            if(lIter == pMap.end())
+                pMap.emplace(lKey, lIncr);
+            else
+                lIter->second += lIncr;
+        }
+        
+        lReadOffset += lPerPageStorageSize;
+    }
+}
+
+void LoadReductionBufferInMap(std::map<unsigned int, PAGE_RANK_DATA_TYPE>& pMap, char* pBuffer)
+{
+    size_t lKeyValuePairs = ((unsigned int*)pBuffer)[0];
+    size_t lKeyValueSize = (sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE));
+    
+    pBuffer += sizeof(unsigned int);
+    
+    for(unsigned int i = 0; i < lKeyValuePairs; ++i)
+    {
+        char* lKeyValueLocation = (pBuffer + i * lKeyValueSize);
+        unsigned int lKey = ((unsigned int*)lKeyValueLocation)[0];
+        PAGE_RANK_DATA_TYPE lValue = ((PAGE_RANK_DATA_TYPE*)(lKeyValueLocation + sizeof(unsigned int)))[0];
+        
+        auto lIter = pMap.find(lKey);
+        if(lIter == pMap.end())
+            pMap.emplace(lKey, lValue);
+        else
+            lIter->second += lValue;
+    }
+}
+    
+void PlaceMapIntoSubtaskReductionBuffer(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, std::map<unsigned int, PAGE_RANK_DATA_TYPE>& pMap)
+{
+    pmReleaseScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, REDUCTION_TO_REDUCTION);
+
+    size_t lBufferSize = pMap.size() * (sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE)) + sizeof(unsigned int); // count of key value pairs and key value pairs
+    char* lOutputBuffer = (char*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, REDUCTION_TO_REDUCTION, lBufferSize, NULL);
+
+    ((unsigned int*)lOutputBuffer)[0] = (unsigned int)pMap.size();  // Store the number of key value pairs
+    size_t lWriteOffset = sizeof(unsigned int);
+
+    auto lIter = pMap.begin(), lEndIter = pMap.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        ((unsigned int*)(lOutputBuffer + lWriteOffset))[0] = lIter->first;
+        lWriteOffset += sizeof(unsigned int);
+        
+        ((PAGE_RANK_DATA_TYPE*)(lOutputBuffer + lWriteOffset))[0] = lIter->second;
+        lWriteOffset += sizeof(PAGE_RANK_DATA_TYPE);
+    }
+}
+
 pmStatus pageRankDataReduction(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
 {
-#if PAGE_RANK_DATA_TYPE == float
-    return pmReduceFloats(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-#elif PAGE_RANK_DATA_TYPE == int
-    return pmReduceInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-#else
-#error "Unsupported data type"
-#endif
+    char* lScratchBuffer1 = (char*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, SUBTASK_TO_POST_SUBTASK, 0, NULL);
+    char* lScratchBuffer2 = (char*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, SUBTASK_TO_POST_SUBTASK, 0, NULL);
+
+    // The first entry in reduction buffer is the no. of key value pairs following it
+    char* lRBuffer1 = (char*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, REDUCTION_TO_REDUCTION, 0, NULL);
+    char* lRBuffer2 = (char*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCTION_TO_REDUCTION, 0, NULL);
+    
+    if((!lRBuffer1 && !lScratchBuffer1) || (!lRBuffer2 && !lScratchBuffer2))
+    {
+        std::cout << "Scratch buffer not available !!!" << std::endl;
+        exit(1);
+    }
+
+    std::map<unsigned int, PAGE_RANK_DATA_TYPE> lMap;
+
+    if(lRBuffer2)
+        LoadReductionBufferInMap(lMap, lRBuffer2);
+    else
+        LoadSubtaskBufferInMap(lMap, lScratchBuffer2, (pageRankTaskConf*)(pTaskInfo.taskConf), pSubtask2Info.subtaskId);
+
+    if(lRBuffer1)
+        LoadReductionBufferInMap(lMap, lRBuffer1);
+    else
+        LoadSubtaskBufferInMap(lMap, lScratchBuffer1, (pageRankTaskConf*)(pTaskInfo.taskConf), pSubtask1Info.subtaskId);
+
+    pmReleaseScratchBuffer(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, SUBTASK_TO_POST_SUBTASK);
+    
+    PlaceMapIntoSubtaskReductionBuffer(pTaskInfo, pDevice1Info, pSubtask1Info, lMap);
+    
+    return pmSuccess;
 }
 
 #define READ_NON_COMMON_ARGS \
@@ -380,23 +543,78 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 #endif
 }
 
-bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutputMemHandle, pageRankTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+void CopyReductionBufferIntoAddressSpace(char* pBuffer, pmMemHandle pMemHandle, unsigned int pIteration)
 {
-	size_t lMemSize = gTotalWebPages * sizeof(PAGE_RANK_DATA_TYPE);
-    unsigned long lSubtasks = (gTotalWebPages / gWebPagesPerSubtask) + ((gTotalWebPages % gWebPagesPerSubtask) ? 1 : 0);
+    pmRawMemPtr lRawMemPtr;
+    pmGetRawMemPtr(pMemHandle, &lRawMemPtr);
 
-	CREATE_SIMPLE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)
+    size_t lKeyValuePairs = ((unsigned int*)pBuffer)[0];
+    size_t lKeyValueSize = (sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE));
+    
+    unsigned int lLastKey = 0;  // Becuase pBuffer is created out of std::map, it is sorted
 
-    if(pInputMemHandle)
+    pBuffer += sizeof(unsigned int);
+
+    if(pIteration == 0) // Address space is first touched only after 0th iteration
     {
-        lTaskMem[INPUT_MEM_INDEX].memHandle = pInputMemHandle;
-        lTaskMem[INPUT_MEM_INDEX].memType = READ_ONLY;
-        lTaskMem[INPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_NATURAL;
-     
-        lTaskDetails.taskMemCount = 2;
+        // Initialize all entries in the address space
+        for(unsigned int i = 0; i < lKeyValuePairs; ++i)
+        {
+            char* lKeyValueLocation = (pBuffer + i * lKeyValueSize);
+            unsigned int lKey = ((unsigned int*)lKeyValueLocation)[0];
+            PAGE_RANK_DATA_TYPE lValue = ((PAGE_RANK_DATA_TYPE*)(lKeyValueLocation + sizeof(unsigned int)))[0];
+            
+            if(i != 0 && lLastKey + 1 != lKey)
+                memset((((PAGE_RANK_DATA_TYPE*)lRawMemPtr) + lLastKey + 1), 0, (lKey - lLastKey - 1) * sizeof(PAGE_RANK_DATA_TYPE));
+
+            ((PAGE_RANK_DATA_TYPE*)lRawMemPtr)[lKey] = lValue;
+            
+            lLastKey = lKey;
+        }
+    }
+    else
+    {
+        // Only modify entries which are in pBuffer
+        // In other words, pages with 0 inlinks are not updated here
+        for(unsigned int i = 0; i < lKeyValuePairs; ++i)
+        {
+            char* lKeyValueLocation = (pBuffer + i * lKeyValueSize);
+            unsigned int lKey = ((unsigned int*)lKeyValueLocation)[0];
+            PAGE_RANK_DATA_TYPE lValue = ((PAGE_RANK_DATA_TYPE*)(lKeyValueLocation + sizeof(unsigned int)))[0];
+
+            ((PAGE_RANK_DATA_TYPE*)lRawMemPtr)[lKey] = lValue;
+        }
+    }
+}
+
+bool ParallelPageRankIteration(pmMemHandle pMemHandle, pageRankTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+{
+    unsigned long lSubtasks = (gTotalWebPages / gWebPagesPerSubtask) + ((gTotalWebPages % gWebPagesPerSubtask) ? 1 : 0);
+    
+    if(lSubtasks == 1)
+    {
+        // CopyReductionBufferIntoAddressSpace expects sorted buffer
+        // for one subtask there will be no reduction and hence no sorting
+        std::cout << "One subtask case is not implemented !!!" << std::endl;
+        exit(1);
+    }
+
+	CREATE_TASK(lSubtasks, pCallbackHandle, pSchedulingPolicy)
+
+    pmTaskMem lTaskMem[1];
+    
+    if(pTaskConf->iteration != 0)
+    {
+        lTaskMem[0] = {pMemHandle, READ_ONLY, SUBSCRIPTION_NATURAL};
+        lTaskDetails.taskMem = (pmTaskMem*)(lTaskMem);
+        lTaskDetails.taskMemCount = 1;
+    }
+    else
+    {
+        lTaskDetails.taskMemCount = 0;
     }
     
-    lTaskMem[OUTPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_NATURAL;
+    lTaskDetails.canSplitCpuSubtasks = true;
     
 	lTaskDetails.taskConf = (void*)(pTaskConf);
 	lTaskDetails.taskConfLength = sizeof(pageRankTaskConf);
@@ -409,7 +627,8 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
         return (double)-1.0;
     }
 
-    *pOutputMemHandle = lTaskMem[OUTPUT_MEM_INDEX].memHandle;
+    char* lBuffer = (char*)pmGetLastReductionScratchBuffer(lTaskHandle);
+    CopyReductionBufferIntoAddressSpace(lBuffer, pMemHandle, pTaskConf->iteration);
 
     pmReleaseTask(lTaskHandle);
 
@@ -427,8 +646,9 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	// Output Mem contains the page rank of each page after the iteration
 	// Number of subtasks is equal to the number of rows
 	size_t lMemSize = gTotalWebPages * sizeof(PAGE_RANK_DATA_TYPE);
-
-    pmMemHandle lInputMemHandle = NULL, lOutputMemHandle = NULL;
+    
+    pmMemHandle lMemHandle = NULL;
+    pmCreateMemory(lMemSize, &lMemHandle);
 
 	pageRankTaskConf lTaskConf;
 	lTaskConf.totalWebPages = gTotalWebPages;
@@ -442,16 +662,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     for(int i = 0; i < PAGE_RANK_ITERATIONS; ++i)
     {
-		if(i != 0)
-		{
-            if(lInputMemHandle)
-                pmReleaseMemory(lInputMemHandle);
-
-			lInputMemHandle = lOutputMemHandle;
-		}
-    
         lTaskConf.iteration = i;
-		if(!ParallelPageRankIteration(lInputMemHandle, &lOutputMemHandle, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
+		if(!ParallelPageRankIteration(lMemHandle, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
 			return (double)-1.0;
     }
     
@@ -459,17 +671,14 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     if(pFetchBack)
     {
-        SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
+        SAFE_PM_EXEC( pmFetchMemory(lMemHandle) );
 
         pmRawMemPtr lRawOutputPtr;
-        pmGetRawMemPtr(lOutputMemHandle, &lRawOutputPtr);
+        pmGetRawMemPtr(lMemHandle, &lRawOutputPtr);
         memcpy(gParallelOutput, lRawOutputPtr, lMemSize);
     }
 
-    if(lInputMemHandle)
-        pmReleaseMemory(lInputMemHandle);
-
-	pmReleaseMemory(lOutputMemHandle);
+    pmReleaseMemory(lMemHandle);
 
     unMapAllFiles(lBasePath);
 

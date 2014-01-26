@@ -28,6 +28,34 @@ __global__ void pageRank_cuda(pageRankTaskConf pTaskConf, unsigned int pWebPages
         atomicAdd(lAddress, lIncr);
     }
 }
+
+__global__ void pageRank_cuda_key_val_generator(pageRankTaskConf pTaskConf, unsigned int pWebPages, PAGE_RANK_DATA_TYPE* pLocalArray, char* pScratchBuffer, unsigned int* pSubtaskWebDump)
+{
+	int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+
+	if(threadId >= pWebPages)
+		return;
+
+    /* The format of storage for every page (input to this subtask) in scratch buffer is -
+     * <No. of outlinks> <Incr> <Key 1> <Key 2> ... <Key (no. of outlinks)>
+     */
+
+    // Value for every key here is same (i.e. input page rank / outlinks); so no need to store key value pairs
+    size_t lPerPageStorageSize = sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE) + pTaskConf.maxOutlinksPerWebPage * sizeof(unsigned int);   // no. of outlinks, value (i.e. increment) and keys
+    size_t lScratchBufferWriteOffsetInBytes = threadId * lPerPageStorageSize;
+
+	unsigned int index = threadId * (1 + pTaskConf.maxOutlinksPerWebPage);
+    unsigned int lOutlinks = pSubtaskWebDump[index++];
+    PAGE_RANK_DATA_TYPE lIncr = (PAGE_RANK_DATA_TYPE)(DAMPENING_FACTOR * ((pTaskConf.iteration == 0) ? pTaskConf.initialPageRank : pLocalArray[threadId])/(float)lOutlinks);
+
+    char* lWriteLocation = (char*)pScratchBuffer + lScratchBufferWriteOffsetInBytes;
+    
+    ((unsigned int*)lWriteLocation)[0] = lOutlinks;
+    ((PAGE_RANK_DATA_TYPE*)(lWriteLocation + sizeof(unsigned int)))[0] = lIncr;
+
+    for(unsigned int k = 0; k < lOutlinks; ++k)
+        ((unsigned int*)(lWriteLocation + sizeof(unsigned int) + sizeof(PAGE_RANK_DATA_TYPE) + k * sizeof(unsigned int)))[0] = pSubtaskWebDump[index + k] - 1;
+}
     
 __global__ void zeroInit(PAGE_RANK_DATA_TYPE* pGlobalArray, unsigned int pWebPages)
 {
@@ -62,7 +90,7 @@ pmStatus pageRank_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
     pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
     
     ulong lSubtaskId = pSubtaskInfo.subtaskId;
-    void** lWebFilePtrs = LoadMappedFiles(lTaskConf, lSubtaskId);
+    void** lWebFilePtrs = LoadMappedFiles(pTaskInfo, pSubtaskInfo);
     
     unsigned int lWebPages = (unsigned int)((lTaskConf->totalWebPages < ((lSubtaskId + 1) * lTaskConf->webPagesPerSubtask)) ? (lTaskConf->totalWebPages - (lSubtaskId * lTaskConf->webPagesPerSubtask)) : lTaskConf->webPagesPerSubtask);
     unsigned int lWebFiles = ((lWebPages / lTaskConf->webPagesPerFile) + ((lWebPages % lTaskConf->webPagesPerFile) ? 1 : 0));
@@ -86,19 +114,12 @@ pmStatus pageRank_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
     
     delete[] lWebFilePtrs;
     
-	PAGE_RANK_DATA_TYPE* lLocalArray = ((lTaskConf->iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
-    PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
+	PAGE_RANK_DATA_TYPE* lLocalArray = ((lTaskConf->iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[MEM_INDEX].ptr);
 
-    pmCudaLaunchConf lCudaLaunchConf1 = GetCudaLaunchConf(lTaskConf->totalWebPages);
-    dim3 gridConf1(lCudaLaunchConf1.blocksX, 1, 1);
-    dim3 blockConf1(lCudaLaunchConf1.threadsX, 1, 1);
-
-    zeroInit<<<gridConf1, blockConf1, 0, (cudaStream_t)pCudaStream>>>(lGlobalArray, lTaskConf->totalWebPages);
-
-    pmCudaLaunchConf lCudaLaunchConf2 = GetCudaLaunchConf(lWebPages);
-    dim3 gridConf2(lCudaLaunchConf2.blocksX, 1, 1);
-    dim3 blockConf2(lCudaLaunchConf2.threadsX, 1, 1);
-    pageRank_cuda<<<gridConf2, blockConf2, 0, (cudaStream_t)pCudaStream>>>(*lTaskConf, lWebPages, lLocalArray, lGlobalArray, lWebDump);
+    pmCudaLaunchConf lCudaLaunchConf = GetCudaLaunchConf(lWebPages);
+    dim3 gridConf(lCudaLaunchConf.blocksX, 1, 1);
+    dim3 blockConf(lCudaLaunchConf.threadsX, 1, 1);
+    pageRank_cuda_key_val_generator<<<gridConf, blockConf, 0, (cudaStream_t)pCudaStream>>>(*lTaskConf, lWebPages, lLocalArray, (char*)pSubtaskInfo.gpuContext.scratchBuffer, lWebDump);
     
     return pmSuccess;
 }

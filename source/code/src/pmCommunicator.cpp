@@ -174,20 +174,37 @@ remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTask* pLocalTask)
 
 /* struct subtaskReducePacked */
 subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
-    : reduceStruct(*pTask->GetOriginatingHost(), pTask->GetSequenceNumber(), pSubtaskId, 0, 0)
+    : reduceStruct(*pTask->GetOriginatingHost(), pTask->GetSequenceNumber(), pSubtaskId, 0, 0, 0, 0)
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
-    size_t lScratchBufferSize = 0;
-    char* lScratchBuffer = (char*)lSubscriptionManager.CheckAndGetScratchBuffer(pReducingStub, pSubtaskId, pSplitInfo, REDUCTION_TO_REDUCTION, lScratchBufferSize);
+    size_t lScratchBuffer1Size = 0;
+    char* lScratchBuffer1 = (char*)lSubscriptionManager.CheckAndGetScratchBuffer(pReducingStub, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_POST_SUBTASK, lScratchBuffer1Size);
     
-    if(lScratchBufferSize)
+    if(lScratchBuffer1Size)
     {
-        reduceStruct.scratchBufferLength = (uint)lScratchBufferSize;
-        scratchBuffer.reset(lScratchBuffer, false);
+        reduceStruct.scratchBuffer3Length = (uint)lScratchBuffer1Size;
+        scratchBuffer1.reset(lScratchBuffer1, false);
     }
     
+    size_t lScratchBuffer2Size = 0;
+    char* lScratchBuffer2 = (char*)lSubscriptionManager.CheckAndGetScratchBuffer(pReducingStub, pSubtaskId, pSplitInfo, SUBTASK_TO_POST_SUBTASK, lScratchBuffer2Size);
+    
+    if(lScratchBuffer2Size)
+    {
+        reduceStruct.scratchBuffer2Length = (uint)lScratchBuffer2Size;
+        scratchBuffer2.reset(lScratchBuffer2, false);
+    }
 
+    size_t lScratchBuffer3Size = 0;
+    char* lScratchBuffer3 = (char*)lSubscriptionManager.CheckAndGetScratchBuffer(pReducingStub, pSubtaskId, pSplitInfo, REDUCTION_TO_REDUCTION, lScratchBuffer3Size);
+    
+    if(lScratchBuffer3Size)
+    {
+        reduceStruct.scratchBuffer3Length = (uint)lScratchBuffer3Size;
+        scratchBuffer3.reset(lScratchBuffer3, false);
+    }
+    
     filtered_for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pTask->IsWritable(pAddressSpace) && pTask->IsReducible(pAddressSpace));},
     [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
     {

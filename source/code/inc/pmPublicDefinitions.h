@@ -457,6 +457,8 @@ namespace pm
     /** This function is only supported from CPU and can not be called from GPU kernels */
     pmStatus pmReleaseScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType);
 
+    /** This function returns the REDUCTION_TO_REDUCTION scratch buffer associated with the final reduced subtask of the task pTaskHandle */
+    void* pmGetLastReductionScratchBuffer(pmTaskHandle pTaskHandle);
 } // end namespace pm
 
 #endif

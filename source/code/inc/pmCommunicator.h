@@ -597,11 +597,13 @@ struct subtaskReduceStruct
     ulong sequenceNumber;	// sequence number of local task object (on originating host)
     ulong subtaskId;
     uint shadowMemsCount;
-    uint scratchBufferLength;   // REDUCTION_TO_REDUCTION scratch buffer
+    uint scratchBuffer1Length;  // PRE_SUBTASK_TO_POST_SUBTASK scratch buffer
+    uint scratchBuffer2Length;  // SUBTASK_TO_POST_SUBTASK scratch buffer
+    uint scratchBuffer3Length;  // REDUCTION_TO_REDUCTION scratch buffer
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 5
+        FIELD_COUNT_VALUE = 7
     } fieldCount;
     
     subtaskReduceStruct()
@@ -609,15 +611,19 @@ struct subtaskReduceStruct
     , sequenceNumber(0)
     , subtaskId(std::numeric_limits<ulong>::max())
     , shadowMemsCount(0)
-    , scratchBufferLength(0)
+    , scratchBuffer1Length(0)
+    , scratchBuffer2Length(0)
+    , scratchBuffer3Length(0)
     {}
 
-    subtaskReduceStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pSubtaskId, uint pShadowMemsCount, uint pScratchBufferLength)
+    subtaskReduceStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pSubtaskId, uint pShadowMemsCount, uint pScratchBuffer1Length, uint pScratchBuffer2Length, uint pScratchBuffer3Length)
     : originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
     , subtaskId(pSubtaskId)
     , shadowMemsCount(pShadowMemsCount)
-    , scratchBufferLength(pScratchBufferLength)
+    , scratchBuffer1Length(pScratchBuffer1Length)
+    , scratchBuffer2Length(pScratchBuffer2Length)
+    , scratchBuffer3Length(pScratchBuffer3Length)
     {}
 };
 
@@ -625,8 +631,12 @@ struct subtaskReducePacked
 {
     subtaskReduceStruct reduceStruct;
     std::vector<shadowMemTransferPacked> shadowMems;
-    finalize_ptr<char, deleteArrayDeallocator<char>> scratchBuffer;
-    std::function<void (char*)> scratchBufferReceiver;   // Takes a mem and unpacks scratch buffer into it.
+    finalize_ptr<char, deleteArrayDeallocator<char>> scratchBuffer1;
+    std::function<void (char*)> scratchBuffer1Receiver;   // Takes a mem and unpacks PRE_SUBTASK_TO_POST_SUBTASK scratch buffer into it.
+    finalize_ptr<char, deleteArrayDeallocator<char>> scratchBuffer2;
+    std::function<void (char*)> scratchBuffer2Receiver;   // Takes a mem and unpacks SUBTASK_TO_POST_SUBTASK scratch buffer into it.
+    finalize_ptr<char, deleteArrayDeallocator<char>> scratchBuffer3;
+    std::function<void (char*)> scratchBuffer3Receiver;   // Takes a mem and unpacks REDUCTION_TO_REDUCTION scratch buffer into it.
 
     subtaskReducePacked()
     : reduceStruct()

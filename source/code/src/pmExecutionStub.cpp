@@ -1083,13 +1083,31 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 ++lShadowMemsIter;
             });
             
-            if(lData->reduceStruct.scratchBufferLength)
+            if(lData->reduceStruct.scratchBuffer1Length)
             {
-                char* lScratchBuffer = (char*)lSubscriptionManager.GetScratchBuffer(this, lData->reduceStruct.subtaskId, NULL, REDUCTION_TO_REDUCTION, lData->reduceStruct.scratchBufferLength);
+                char* lScratchBuffer1 = (char*)lSubscriptionManager.GetScratchBuffer(this, lData->reduceStruct.subtaskId, NULL, PRE_SUBTASK_TO_POST_SUBTASK, lData->reduceStruct.scratchBuffer1Length);
                 
-                EXCEPTION_ASSERT(lScratchBuffer);
+                EXCEPTION_ASSERT(lScratchBuffer1);
                 
-                lData->scratchBufferReceiver(lScratchBuffer);
+                lData->scratchBuffer1Receiver(lScratchBuffer1);
+            }
+            
+            if(lData->reduceStruct.scratchBuffer2Length)
+            {
+                char* lScratchBuffer2 = (char*)lSubscriptionManager.GetScratchBuffer(this, lData->reduceStruct.subtaskId, NULL, SUBTASK_TO_POST_SUBTASK, lData->reduceStruct.scratchBuffer2Length);
+                
+                EXCEPTION_ASSERT(lScratchBuffer2);
+                
+                lData->scratchBuffer2Receiver(lScratchBuffer2);
+            }
+
+            if(lData->reduceStruct.scratchBuffer3Length)
+            {
+                char* lScratchBuffer3 = (char*)lSubscriptionManager.GetScratchBuffer(this, lData->reduceStruct.subtaskId, NULL, REDUCTION_TO_REDUCTION, lData->reduceStruct.scratchBuffer3Length);
+                
+                EXCEPTION_ASSERT(lScratchBuffer3);
+                
+                lData->scratchBuffer3Receiver(lScratchBuffer3);
             }
 
             lTask->GetReducer()->AddSubtask(this, lData->reduceStruct.subtaskId, NULL);
@@ -1871,9 +1889,9 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
 
     if(lStatus != pmSuccess)
     {
-        lSubscriptionManager.DeleteScratchBuffer(this, pSubtaskId1, pSplitInfo1, REDUCTION_TO_REDUCTION);
         lSubscriptionManager.DeleteScratchBuffer(this, pSubtaskId1, pSplitInfo1, SUBTASK_TO_POST_SUBTASK);
         lSubscriptionManager.DeleteScratchBuffer(this, pSubtaskId1, pSplitInfo1, PRE_SUBTASK_TO_POST_SUBTASK);
+        lSubscriptionManager.DeleteScratchBuffer(this, pSubtaskId1, pSplitInfo1, REDUCTION_TO_REDUCTION);
     }
     
     if(lStatus == pmSuccess)

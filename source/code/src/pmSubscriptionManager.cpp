@@ -666,7 +666,7 @@ void* pmSubscriptionManager::GetScratchBuffer(pmExecutionStub* pStub, ulong pSub
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     
-    EXCEPTION_ASSERT(((size_t)(lSubtask.mScratchBuffers.find(PRE_SUBTASK_TO_SUBTASK) != lSubtask.mScratchBuffers.end()) + (size_t)(lSubtask.mScratchBuffers.find(SUBTASK_TO_POST_SUBTASK) != lSubtask.mScratchBuffers.end()) + (size_t)(lSubtask.mScratchBuffers.find(PRE_SUBTASK_TO_POST_SUBTASK) != lSubtask.mScratchBuffers.end())) == 1);    // Only one of these can exist (The CUDA code currently does not copy more than one in and out of the device
+    EXCEPTION_ASSERT(((size_t)(lSubtask.mScratchBuffers.find(PRE_SUBTASK_TO_SUBTASK) != lSubtask.mScratchBuffers.end()) + (size_t)(lSubtask.mScratchBuffers.find(SUBTASK_TO_POST_SUBTASK) != lSubtask.mScratchBuffers.end()) + (size_t)(lSubtask.mScratchBuffers.find(PRE_SUBTASK_TO_POST_SUBTASK) != lSubtask.mScratchBuffers.end())) <= 1);    // Only one of these can exist (The CUDA code currently does not copy more than one in and out of the device
 
     auto lIter = lSubtask.mScratchBuffers.find(pScratchBufferType);
     if(lIter == lSubtask.mScratchBuffers.end())

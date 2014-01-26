@@ -145,6 +145,8 @@ class pmTask : public pmBase
 
         pmSubscriptionVisibilityType GetAddressSpaceSubscriptionVisibility(const pmAddressSpace* pAddressSpace, const pmExecutionStub* pStub) const;
         pmMemType GetMemType(const pmAddressSpace* pAddressSpace) const;
+    
+        void* GetLastReductionScratchBuffer() const;
 
         bool IsReadOnly(const pmAddressSpace* pAddressSpace) const;
         bool IsWritable(const pmAddressSpace* pAddressSpace) const;
@@ -229,6 +231,7 @@ class pmTask : public pmBase
         void ReplaceTaskAddressSpace(uint pAddressSpaceIndex, pmAddressSpace* pNewAddressSpace);
     
 		uint mAssignedDeviceCount;
+        void* mLastReductionScratchBuffer;
 };
 
 class pmLocalTask : public pmTask
@@ -251,6 +254,7 @@ class pmLocalTask : public pmTask
         virtual void MarkUserSideTaskCompletion();
     
         void SaveFinalReducedOutput(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void AllReductionsDone(pmExecutionStub* pLastStub, ulong pLastSubtaskId, pmSplitInfo* pLastSplitInfo);
     
         virtual void MarkSubtaskExecutionFinished();
         virtual void TerminateTask();

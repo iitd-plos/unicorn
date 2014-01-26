@@ -361,7 +361,7 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
             for(uint i = 0; i < lStruct.shadowMemsCount; ++i)
                 lLength += lData->shadowMems[i].shadowMemData.subtaskMemLength;
             
-            lLength += lData->reduceStruct.scratchBufferLength;
+            lLength += lData->reduceStruct.scratchBuffer1Length + lData->reduceStruct.scratchBuffer2Length + lData->reduceStruct.scratchBuffer3Length;
             
 			if(lLength > __MAX_SIGNED(int))
 				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
@@ -389,10 +389,22 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
                     }
                 }
             }
-            
-            if(lData->reduceStruct.scratchBufferLength)
+
+            if(lData->reduceStruct.scratchBuffer1Length)
             {
-                if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->scratchBuffer.get_ptr(), lData->reduceStruct.scratchBufferLength, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->scratchBuffer1.get_ptr(), lData->reduceStruct.scratchBuffer1Length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            }
+
+            if(lData->reduceStruct.scratchBuffer2Length)
+            {
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->scratchBuffer2.get_ptr(), lData->reduceStruct.scratchBuffer2Length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            }
+
+            if(lData->reduceStruct.scratchBuffer3Length)
+            {
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->scratchBuffer3.get_ptr(), lData->reduceStruct.scratchBuffer3Length, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
                     PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
             }
 
@@ -696,17 +708,43 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
                 }
             }
             
-            if(lStruct.scratchBufferLength)
+            if(lStruct.scratchBuffer1Length)
             {
-                uint lScratchBufferLength = lStruct.scratchBufferLength;
+                uint lScratchBuffer1Length = lStruct.scratchBuffer1Length;
                 std::shared_ptr<finalize_ptr<char, deleteArrayDeallocator<char>>> lReceivedDataSharedPtr(new finalize_ptr<char, deleteArrayDeallocator<char>>(std::move(pPackedData)));
-                std::function<void (char*)> lFunc([lReceivedDataSharedPtr, pDataLength, lPos, lCommunicator, lScratchBufferLength] (char* pMem) mutable
+                std::function<void (char*)> lFunc([lReceivedDataSharedPtr, pDataLength, lPos, lCommunicator, lScratchBuffer1Length] (char* pMem) mutable
                                                          {
-                                                             if( MPI_CALL("MPI_Unpack", (MPI_Unpack((void*)lReceivedDataSharedPtr->get_ptr(), pDataLength, &lPos, pMem, (int)lScratchBufferLength, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+                                                             if( MPI_CALL("MPI_Unpack", (MPI_Unpack((void*)lReceivedDataSharedPtr->get_ptr(), pDataLength, &lPos, pMem, (int)lScratchBuffer1Length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
                                                                  PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
                                                          });
                 
-                lPackedData->scratchBufferReceiver = lFunc;
+                lPackedData->scratchBuffer1Receiver = lFunc;
+            }
+            
+            if(lStruct.scratchBuffer2Length)
+            {
+                uint lScratchBuffer2Length = lStruct.scratchBuffer2Length;
+                std::shared_ptr<finalize_ptr<char, deleteArrayDeallocator<char>>> lReceivedDataSharedPtr(new finalize_ptr<char, deleteArrayDeallocator<char>>(std::move(pPackedData)));
+                std::function<void (char*)> lFunc([lReceivedDataSharedPtr, pDataLength, lPos, lCommunicator, lScratchBuffer2Length] (char* pMem) mutable
+                                                         {
+                                                             if( MPI_CALL("MPI_Unpack", (MPI_Unpack((void*)lReceivedDataSharedPtr->get_ptr(), pDataLength, &lPos, pMem, (int)lScratchBuffer2Length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+                                                                 PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+                                                         });
+                
+                lPackedData->scratchBuffer2Receiver = lFunc;
+            }
+
+            if(lStruct.scratchBuffer3Length)
+            {
+                uint lScratchBuffer3Length = lStruct.scratchBuffer3Length;
+                std::shared_ptr<finalize_ptr<char, deleteArrayDeallocator<char>>> lReceivedDataSharedPtr(new finalize_ptr<char, deleteArrayDeallocator<char>>(std::move(pPackedData)));
+                std::function<void (char*)> lFunc([lReceivedDataSharedPtr, pDataLength, lPos, lCommunicator, lScratchBuffer3Length] (char* pMem) mutable
+                                                         {
+                                                             if( MPI_CALL("MPI_Unpack", (MPI_Unpack((void*)lReceivedDataSharedPtr->get_ptr(), pDataLength, &lPos, pMem, (int)lScratchBuffer3Length, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+                                                                 PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+                                                         });
+                
+                lPackedData->scratchBuffer3Receiver = lFunc;
             }
 
             lCommand = pmCommunicatorCommand<subtaskReducePacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, lCompletionCallback);
@@ -1577,7 +1615,9 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskId, lSubtaskIdMPI, MPI_UNSIGNED_LONG, 2, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.shadowMemsCount, lShadowMemsCountMPI, MPI_UNSIGNED, 3, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.scratchBufferLength, lScratchBufferLengthMPI, MPI_UNSIGNED, 4, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.scratchBuffer1Length, lScratchBuffer1LengthMPI, MPI_UNSIGNED, 4, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.scratchBuffer2Length, lScratchBuffer2LengthMPI, MPI_UNSIGNED, 5, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.scratchBuffer3Length, lScratchBuffer3LengthMPI, MPI_UNSIGNED, 6, 1);
 
 			break;
 		}
