@@ -214,7 +214,7 @@ pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo);
     }
 
-	// Subscribe to entire output matrix (default behaviour)
+	// Subscribe to entire output matrix
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, pmSubscriptionInfo(0, lTaskConf->totalWebPages * sizeof(PAGE_RANK_DATA_TYPE)));
 
 #ifdef BUILD_CUDA

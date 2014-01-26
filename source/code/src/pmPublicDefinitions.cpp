@@ -287,7 +287,7 @@ void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDevic
 		if(!lController)
 			return NULL;
     
-        if(pScratchBufferType != PRE_SUBTASK_TO_SUBTASK && pScratchBufferType != SUBTASK_TO_POST_SUBTASK && pScratchBufferType != PRE_SUBTASK_TO_POST_SUBTASK)
+        if(pScratchBufferType != PRE_SUBTASK_TO_SUBTASK && pScratchBufferType != SUBTASK_TO_POST_SUBTASK && pScratchBufferType != PRE_SUBTASK_TO_POST_SUBTASK && pScratchBufferType != REDUCTION_TO_REDUCTION)
             PMTHROW(pmFatalErrorException());
 
         pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
@@ -300,6 +300,13 @@ void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDevic
     }
     
     return NULL;
+}
+    
+pmStatus pmReleaseScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType)
+{
+    pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
+
+    SAFE_EXECUTE_ON_CONTROLLER(ReleaseScratchBuffer_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pScratchBufferType);
 }
 
 pmCallbacks::pmCallbacks()

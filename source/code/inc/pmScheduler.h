@@ -82,6 +82,7 @@ enum eventIdentifier
 	TASK_FINISH,
     TASK_COMPLETE,
 	SUBTASK_REDUCE,
+    NO_REDUCTION_REQD,
 	COMMAND_COMPLETION,
     HOST_FINALIZATION,
     SUBTASK_RANGE_CANCEL,
@@ -287,6 +288,18 @@ struct subtaskReduceEvent : public schedulerEvent
     , splitData(pSplitData)
     {}
 };
+    
+struct noReductionRequiredEvent : public schedulerEvent
+{
+    pmTask* task;
+    const pmMachine* machine;
+    
+    noReductionRequiredEvent(eventIdentifier pEventId, pmTask* pTask, const pmMachine* pMachine)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    , machine(pMachine)
+    {}
+};
 
 struct commandCompletionEvent : public schedulerEvent
 {
@@ -415,7 +428,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void TaskFinishEvent(pmTask* pTask);
         void TaskCompleteEvent(pmLocalTask* pLocalTask);
 		void ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, const pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
-		void MemTransferEvent(pmAddressSpace* pSrcAddressSpace, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
+        void NoReductionRequiredEvent(pmTask* pTask, const pmMachine* pDestMachine);
+        void MemTransferEvent(pmAddressSpace* pSrcAddressSpace, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
     
         void CommandCompletionEvent(const pmCommandPtr& pCommand);
         void RangeCancellationEvent(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
@@ -462,6 +476,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void SetupNewMemTransferRequestReception();
         void SetupNewHostFinalizationReception();
         void SetupNewSubtaskRangeCancelReception();
+        void SetupNewNoReductionReqdReception();
     
         void ProcessEvent(scheduler::schedulerEvent& pEvent);
 
@@ -493,6 +508,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         pmCommunicatorCommandPtr mMemTransferRequestCommand;
         pmCommunicatorCommandPtr mHostFinalizationCommand;
         pmCommunicatorCommandPtr mSubtaskRangeCancelCommand;
+        pmCommunicatorCommandPtr mNoReductionReqdCommand;
 
     #ifdef TRACK_SUBTASK_EXECUTION
         ulong mSubtasksAssigned;

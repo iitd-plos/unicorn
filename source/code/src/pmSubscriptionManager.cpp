@@ -654,45 +654,54 @@ size_t pmSubscriptionManager::GetReservedCudaGlobalMemSize(pmExecutionStub* pStu
 
 	return lSubtask.mReservedCudaGlobalMemSize;
 }
-    
+
+void pmSubscriptionManager::DeleteScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+
+    lSubtask.mScratchBuffers.erase(pScratchBufferType);
+}
+
 void* pmSubscriptionManager::GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     
-    if(!lSubtask.mScratchBuffer.get_ptr())
+    EXCEPTION_ASSERT(((size_t)(lSubtask.mScratchBuffers.find(PRE_SUBTASK_TO_SUBTASK) != lSubtask.mScratchBuffers.end()) + (size_t)(lSubtask.mScratchBuffers.find(SUBTASK_TO_POST_SUBTASK) != lSubtask.mScratchBuffers.end()) + (size_t)(lSubtask.mScratchBuffers.find(PRE_SUBTASK_TO_POST_SUBTASK) != lSubtask.mScratchBuffers.end())) == 1);    // Only one of these can exist (The CUDA code currently does not copy more than one in and out of the device
+
+    auto lIter = lSubtask.mScratchBuffers.find(pScratchBufferType);
+    if(lIter == lSubtask.mScratchBuffers.end())
     {
-        lSubtask.mScratchBuffer.reset(new char[pBufferSize]);
-        lSubtask.mScratchBufferSize = pBufferSize;
-        lSubtask.mScratchBufferType = pScratchBufferType;
+        if(!pBufferSize)
+            return NULL;    // Calling this function with a zero scratch buffer size serves as a user check if the scratch buffer already exists or not
+            
+        lIter = lSubtask.mScratchBuffers.emplace(std::piecewise_construct, std::forward_as_tuple(pScratchBufferType), std::forward_as_tuple(new char[pBufferSize], pBufferSize)).first;
     }
     
-    return lSubtask.mScratchBuffer.get_ptr();
+    return lIter->second.mScratchBuffer.get_ptr();
 }
 
-void* pmSubscriptionManager::CheckAndGetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t& pScratchBufferSize, pmScratchBufferType& pScratchBufferType)
+void* pmSubscriptionManager::CheckAndGetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType, size_t& pScratchBufferSize)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     
-	char* lScratchBuffer = lSubtask.mScratchBuffer.get_ptr();
+    auto lIter = lSubtask.mScratchBuffers.find(pScratchBufferType);
+    if(lIter == lSubtask.mScratchBuffers.end())
+        return NULL;
+
+	char* lScratchBuffer = lIter->second.mScratchBuffer.get_ptr();
     if(!lScratchBuffer)
         return NULL;
 
-    pScratchBufferSize = lSubtask.mScratchBufferSize;
-    pScratchBufferType = lSubtask.mScratchBufferType;
+    pScratchBufferSize = lIter->second.mScratchBufferSize;
 
     return lScratchBuffer;
 }
     
-void pmSubscriptionManager::DropScratchBufferIfNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+void pmSubscriptionManager::DropScratchBuffersNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
-    
-	char* lScratchBuffer = lSubtask.mScratchBuffer.get_ptr();
-    if(lScratchBuffer && lSubtask.mScratchBufferType == PRE_SUBTASK_TO_SUBTASK)
-    {
-        lSubtask.mScratchBuffer.reset(NULL);
-        lSubtask.mScratchBufferSize = 0;
-    }
+
+    lSubtask.mScratchBuffers.erase(PRE_SUBTASK_TO_SUBTASK);
 }
     
 bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptions(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmSubscriptionType pSubscriptionType)
@@ -1672,9 +1681,7 @@ void pmSubscriptionManager::ClearInputMemLazyProtectionForCuda(pmSubtask& pSubta
     
 /* struct pmSubtask */
 pmSubtask::pmSubtask(pmTask* pTask)
-    : mScratchBufferSize(0)
-    , mScratchBufferType(SUBTASK_TO_POST_SUBTASK)
-    , mAddressSpacesData(pTask->GetAddressSpaceCount())
+    : mAddressSpacesData(pTask->GetAddressSpaceCount())
     , mReadyForExecution(false)
     , mReservedCudaGlobalMemSize(0)
 {

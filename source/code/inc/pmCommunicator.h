@@ -572,6 +572,24 @@ struct shadowMemTransferPacked
     , shadowMem((pWriteOnlyUnprotectedPageRangesCount + pSubtaskMemLength) ? new char[pWriteOnlyUnprotectedPageRangesCount + pSubtaskMemLength] : NULL)
     {}
 };
+    
+struct noReductionReqdStruct
+{
+    uint originatingHost;
+    ulong sequenceNumber;	// sequence number of local task object (on originating host)
+
+    typedef enum fieldCount
+    {
+        FIELD_COUNT_VALUE = 2
+    } fieldCount;
+    
+    noReductionReqdStruct()
+    : originatingHost(std::numeric_limits<uint>::max())
+    , sequenceNumber(0)
+    {}
+
+    noReductionReqdStruct(pmTask* pTask);
+};
 
 struct subtaskReduceStruct
 {
@@ -579,10 +597,11 @@ struct subtaskReduceStruct
     ulong sequenceNumber;	// sequence number of local task object (on originating host)
     ulong subtaskId;
     uint shadowMemsCount;
+    uint scratchBufferLength;   // REDUCTION_TO_REDUCTION scratch buffer
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 4
+        FIELD_COUNT_VALUE = 5
     } fieldCount;
     
     subtaskReduceStruct()
@@ -590,13 +609,15 @@ struct subtaskReduceStruct
     , sequenceNumber(0)
     , subtaskId(std::numeric_limits<ulong>::max())
     , shadowMemsCount(0)
+    , scratchBufferLength(0)
     {}
 
-    subtaskReduceStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pSubtaskId, uint pShadowMemsCount)
+    subtaskReduceStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pSubtaskId, uint pShadowMemsCount, uint pScratchBufferLength)
     : originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
     , subtaskId(pSubtaskId)
     , shadowMemsCount(pShadowMemsCount)
+    , scratchBufferLength(pScratchBufferLength)
     {}
 };
 
@@ -604,6 +625,8 @@ struct subtaskReducePacked
 {
     subtaskReduceStruct reduceStruct;
     std::vector<shadowMemTransferPacked> shadowMems;
+    finalize_ptr<char, deleteArrayDeallocator<char>> scratchBuffer;
+    std::function<void (char*)> scratchBufferReceiver;   // Takes a mem and unpacks scratch buffer into it.
 
     subtaskReducePacked()
     : reduceStruct()
@@ -675,7 +698,7 @@ struct memoryReceivePacked
     memoryReceiveStruct receiveStruct;
 
     std::function<char* (ulong)> mDataProducer;  // Takes an index and returns a pointer to scattered data for that index (for non-scattered transfers, index is 0)
-    std::function<void (char*, ulong)> mDataReceiver;   // Takes a mem and scattered index and unpacks data at that index into the provided mem.
+    std::function<void (char*, ulong)> mDataReceiver;   // Takes a mem and length and unpacks data into the provided mem.
     
     memoryReceivePacked()
     : receiveStruct()

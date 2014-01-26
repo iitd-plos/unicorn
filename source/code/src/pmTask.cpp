@@ -1109,6 +1109,10 @@ void pmRemoteTask::MarkSubtaskExecutionFinished()
     const pmCallbackUnit* lCallbackUnit = GetCallbackUnit();
     if(!lCallbackUnit->GetDataReductionCB() && !lCallbackUnit->GetDataRedistributionCB())
         MarkUserSideTaskCompletion();
+    
+    // If no subtask is executed on this machine, then signal the send to machine to continue with reduction
+    if(lCallbackUnit->GetDataReductionCB() && GetSubtasksExecuted() == 0)
+        GetReducer()->SignalSendToMachineAboutNoLocalReduction();
 }   
 
 };

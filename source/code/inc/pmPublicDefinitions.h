@@ -252,7 +252,8 @@ namespace pm
     {
         PRE_SUBTASK_TO_SUBTASK,         // Scratch buffer lives from data distribution callback to subtask callback
         SUBTASK_TO_POST_SUBTASK,        // Scractch buffer lives from subtask callback to data redistribution/reduction callback
-        PRE_SUBTASK_TO_POST_SUBTASK     // Scratch buffer lives from data distribution callback to data redistribution/reduction callback
+        PRE_SUBTASK_TO_POST_SUBTASK,    // Scratch buffer lives from data distribution callback to data redistribution/reduction callback
+        REDUCTION_TO_REDUCTION          // Scratch buffer lives and travels from one data reduction callback to the next (even across machines)
     } pmScratchBufferType;
 
 
@@ -437,8 +438,8 @@ namespace pm
 
     
     /** This function returns a writable buffer accessible to data distribution, subtask, data reduction and data redistribution callbacks.
-     ScratchBufferType and Size parameters are only honored for the first invocation of this function for a particular subtask. Successive
-     invocations return the buffer allocated at initial request size. This buffer is only used to pass information generated in one callback
+     Scratch buffer size parameter is only honored for the first invocation of this function for a particular subtask and scratch buffer type.
+     Successive invocations return the buffer allocated at initial request size. This buffer is only used to pass information generated in one callback
      to other callbacks */
     #ifdef __CUDACC__
     __host__ __device__
@@ -452,6 +453,9 @@ namespace pm
         return pmGetScratchBufferHostFunc(pTaskHandle, pDeviceHandle, pSubtaskId, pSplitInfo, pScratchBufferType, pBufferSize);
     #endif
     }
+    
+    /** This function is only supported from CPU and can not be called from GPU kernels */
+    pmStatus pmReleaseScratchBuffer(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType);
 
 } // end namespace pm
 

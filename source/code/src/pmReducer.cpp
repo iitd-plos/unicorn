@@ -56,8 +56,7 @@ void pmReducer::PopulateExternalMachineList()
     if(lMachines.find(mTask->GetOriginatingHost()) == lMachines.end())
         lMachines.insert(mTask->GetOriginatingHost());
     
-    if(lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
-		PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(lMachines.find(PM_LOCAL_MACHINE) != lMachines.end());
 
 	std::vector<const pmMachine*> lMachinesVector(lMachines.begin(), lMachines.end());
 	std::vector<const pmMachine*>::iterator lIter = std::find(lMachinesVector.begin(), lMachinesVector.end(), mTask->GetOriginatingHost());
@@ -72,7 +71,7 @@ void pmReducer::PopulateExternalMachineList()
 
 	if(lLocalMachineIndex != 0)
 	{
-		// Find index of first set bit while moving from LSB to MSB in mLocalMachineIndex
+		// Find index of first set bit while moving from LSB to MSB in lLocalMachineIndex
 		// This is equivalent to how many rounds are required before a node sends. In each round odd numbered nodes send.
 		// Then ranks of even numbered nodes are reduced by half.
 
@@ -85,6 +84,8 @@ void pmReducer::PopulateExternalMachineList()
 			++lRoundCount;
 			lMachineIndex >>= 1;
 		}
+
+        mExternalReductionsRequired = std::min<ulong>(mExternalReductionsRequired, (ulong)lRoundCount);
 
 		uint lSendToMachineIndex = lLocalMachineIndex - lPower;
 		mSendToMachine = lMachinesVector[lSendToMachineIndex];
@@ -102,7 +103,7 @@ ulong pmReducer::GetMaxPossibleExternalReductionReceives(uint pFollowingMachineC
 
 	if(pFollowingMachineCountInclusive > 1)	// If there is only one machine, then it does not receive anything
 	{
-		for(int i=0; pFollowingMachineCountInclusive && i<lBitCount; ++i)
+		for(int i = 0; pFollowingMachineCountInclusive && i < lBitCount; ++i)
 		{
 			if((pFollowingMachineCountInclusive & 0x1) == 0x1)
 			{
@@ -163,8 +164,7 @@ void pmReducer::CheckReductionFinishInternal()
 	{
 		if(mSendToMachine)
 		{
-			if(mSendToMachine == PM_LOCAL_MACHINE || mLastSubtask.stub == NULL)
-				PMTHROW(pmFatalErrorException());
+			EXCEPTION_ASSERT(mSendToMachine != PM_LOCAL_MACHINE && mLastSubtask.stub != NULL);
 
 			// Send mLastSubtaskId to machine mSendToMachine for reduction
 			pmScheduler::GetScheduler()->ReduceRequestEvent(mLastSubtask.stub, mTask, mSendToMachine, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
@@ -193,6 +193,42 @@ void pmReducer::HandleReductionFinish()
     {
         (static_cast<pmLocalTask*>(mTask))->SaveFinalReducedOutput(mLastSubtask.stub, pAddressSpace, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
     });
+}
+    
+void pmReducer::SignalSendToMachineAboutNoLocalReduction()
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    SignalSendToMachineAboutNoLocalReductionInternal();
+}
+
+/* This function must be called with mResourceLock acquired */
+void pmReducer::SignalSendToMachineAboutNoLocalReductionInternal()
+{
+    if(mSendToMachine && !mExternalReductionsRequired)
+    {
+        // No subtask has been executed on this machine
+        EXCEPTION_ASSERT(mSendToMachine != PM_LOCAL_MACHINE && mLastSubtask.stub == NULL);
+        
+        if(mSendToMachine)
+            pmScheduler::GetScheduler()->NoReductionRequiredEvent(mTask, mSendToMachine);
+        else
+            AddReductionFinishEvent();
+    }
+}
+    
+void pmReducer::RegisterNoReductionReqdResponse()
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    EXCEPTION_ASSERT(mExternalReductionsRequired);
+
+    --mExternalReductionsRequired;
+
+    if(mTask->GetSubtasksExecuted())
+        CheckReductionFinishInternal();
+    else
+        SignalSendToMachineAboutNoLocalReductionInternal();
 }
 
 template<typename datatype>
@@ -251,8 +287,7 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
             pmSubscriptionInfo lUnifiedSubscriptionInfo1 = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub1, pSubtaskId1, pSplitInfo1, lAddressSpaceIndex);
             pmSubscriptionInfo lUnifiedSubscriptionInfo2 = lSubscriptionManager.GetUnifiedReadWriteSubscription(pStub2, pSubtaskId2, pSplitInfo2, lAddressSpaceIndex);
             
-            if(lUnifiedSubscriptionInfo1.length != lUnifiedSubscriptionInfo2.length)
-                PMTHROW(pmFatalErrorException());
+            EXCEPTION_ASSERT(lUnifiedSubscriptionInfo1.length == lUnifiedSubscriptionInfo2.length);
             
             size_t lDataCount = lUnifiedSubscriptionInfo1.length / lDataSize;
 

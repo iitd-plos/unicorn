@@ -61,7 +61,7 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
     else
     {
         lJmpBufAutoPtr.SetHasJumped();
-         PMTHROW_NODUMP(pmPrematureExitException(true));
+        PMTHROW_NODUMP(pmPrematureExitException(true));
     }
     
     return lStatus;
@@ -175,7 +175,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo*
 			PMTHROW(pmFatalErrorException());
 	}
     
-    pTask->GetSubscriptionManager().DropScratchBufferIfNotRequiredPostSubtaskExec(pStub, pSubtaskInfo.subtaskId, pSplitInfo);
+    pTask->GetSubscriptionManager().DropScratchBuffersNotRequiredPostSubtaskExec(pStub, pSubtaskInfo.subtaskId, pSplitInfo);
 
 	return lStatus;
 }

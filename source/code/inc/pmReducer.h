@@ -59,6 +59,9 @@ class pmReducer : public pmBase
 		void CheckReductionFinish();
         void HandleReductionFinish();
 		void AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+    
+        void SignalSendToMachineAboutNoLocalReduction();
+        void RegisterNoReductionReqdResponse();
 
         void ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
         void ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
@@ -71,6 +74,8 @@ class pmReducer : public pmBase
 		ulong GetMaxPossibleExternalReductionReceives(uint pFollowingMachineCount);
         void CheckReductionFinishInternal();
         void AddReductionFinishEvent();
+
+        void SignalSendToMachineAboutNoLocalReductionInternal();
 
         template<typename datatype>
         void ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);

@@ -147,6 +147,7 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(DATA_REDISTRIBUTION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(REDISTRIBUTION_OFFSETS_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SUBTASK_RANGE_CANCEL_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(NO_REDUCTION_REQD_STRUCT);
 
 	SetupPersistentCommunicationCommands();
 }
@@ -172,6 +173,7 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(DATA_REDISTRIBUTION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REDISTRIBUTION_OFFSETS_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SUBTASK_RANGE_CANCEL_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(NO_REDUCTION_REQD_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 
@@ -199,6 +201,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     finalize_ptr<communicator::stealResponseStruct> lStealResponseRecvData(new stealResponseStruct());
     finalize_ptr<communicator::memoryTransferRequest> lMemTransferRequestData(new memoryTransferRequest());
     finalize_ptr<communicator::subtaskRangeCancelStruct> lSubtaskRangeCancelData(new subtaskRangeCancelStruct());
+    finalize_ptr<communicator::noReductionReqdStruct> lNoReductionReqdData(new noReductionReqdStruct());
 
 #define PERSISTENT_RECV_COMMAND(tag, structEnumType, structType, recvDataPtr) pmCommunicatorCommand<structType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structEnumType, recvDataPtr, 1, SchedulerCommandCompletionCallback)
 
@@ -208,6 +211,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
 	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, stealResponseStruct, lStealResponseRecvData);
 	mMemTransferRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_TRANSFER_REQUEST_TAG, MEMORY_TRANSFER_REQUEST_STRUCT, memoryTransferRequest, lMemTransferRequestData);
     mSubtaskRangeCancelCommand = PERSISTENT_RECV_COMMAND(SUBTASK_RANGE_CANCEL_TAG, SUBTASK_RANGE_CANCEL_STRUCT, subtaskRangeCancelStruct, lSubtaskRangeCancelData);
+	mNoReductionReqdCommand = PERSISTENT_RECV_COMMAND(NO_REDUCTION_REQD_TAG, NO_REDUCTION_REQD_STRUCT, noReductionReqdStruct, lNoReductionReqdData);
 
     mRemoteSubtaskRecvCommand->SetPersistent();
     mTaskEventRecvCommand->SetPersistent();
@@ -215,6 +219,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     mStealResponseRecvCommand->SetPersistent();
     mMemTransferRequestCommand->SetPersistent();
     mSubtaskRangeCancelCommand->SetPersistent();
+    mNoReductionReqdCommand->SetPersistent();
     
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
     lNetwork->InitializePersistentCommand(mRemoteSubtaskRecvCommand);
@@ -223,6 +228,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     lNetwork->InitializePersistentCommand(mStealResponseRecvCommand);
     lNetwork->InitializePersistentCommand(mMemTransferRequestCommand);
     lNetwork->InitializePersistentCommand(mSubtaskRangeCancelCommand);
+    lNetwork->InitializePersistentCommand(mNoReductionReqdCommand);
 
 	SetupNewRemoteSubtaskReception();
 	SetupNewTaskEventReception();
@@ -230,6 +236,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
 	SetupNewStealResponseReception();
 	SetupNewMemTransferRequestReception();
     SetupNewSubtaskRangeCancelReception();
+	SetupNewNoReductionReqdReception();
 	
 	// Only MPI master host receives finalization signal
 	if(pmMachinePool::GetMachinePool()->GetMachine(0) == PM_LOCAL_MACHINE)
@@ -256,6 +263,7 @@ void pmScheduler::DestroyPersistentCommunicationCommands()
     lNetwork->TerminatePersistentCommand(mStealResponseRecvCommand);
     lNetwork->TerminatePersistentCommand(mMemTransferRequestCommand);
     lNetwork->TerminatePersistentCommand(mSubtaskRangeCancelCommand);
+    lNetwork->TerminatePersistentCommand(mNoReductionReqdCommand);
 
 	if(mHostFinalizationCommand.get())
         lNetwork->TerminatePersistentCommand(mHostFinalizationCommand);
@@ -294,6 +302,11 @@ void pmScheduler::SetupNewHostFinalizationReception()
 void pmScheduler::SetupNewSubtaskRangeCancelReception()
 {
 	pmCommunicator::GetCommunicator()->Receive(mSubtaskRangeCancelCommand, false);
+}
+
+void pmScheduler::SetupNewNoReductionReqdReception()
+{
+    pmCommunicator::GetCommunicator()->Receive(mNoReductionReqdCommand, false);
 }
 
 void pmScheduler::SubmitTaskEvent(pmLocalTask* pLocalTask)
@@ -410,6 +423,11 @@ void pmScheduler::ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTa
     pmSplitData lSplitData(pSplitInfo);
 
 	SwitchThread(std::shared_ptr<schedulerEvent>(new subtaskReduceEvent(SUBTASK_REDUCE, pTask, pDestMachine, pReducingStub, pSubtaskId, lSplitData)), pTask->GetPriority());
+}
+    
+void pmScheduler::NoReductionRequiredEvent(pmTask* pTask, const pmMachine* pDestMachine)
+{
+    SwitchThread(std::shared_ptr<schedulerEvent>(new noReductionRequiredEvent(NO_REDUCTION_REQD, pTask, pDestMachine)), pTask->GetPriority());
 }
 
 void pmScheduler::CommandCompletionEvent(const pmCommandPtr& pCommand)
@@ -670,6 +688,21 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
             pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
 
+            break;
+        }
+            
+        case NO_REDUCTION_REQD:
+        {
+            noReductionRequiredEvent& lEventDetails = static_cast<noReductionRequiredEvent&>(pEvent);
+            
+            EXCEPTION_ASSERT(lEventDetails.machine != PM_LOCAL_MACHINE);
+            
+            finalize_ptr<noReductionReqdStruct> lData(new noReductionReqdStruct(lEventDetails.task));
+            
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<noReductionReqdStruct>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, NO_REDUCTION_REQD_TAG, lEventDetails.machine, NO_REDUCTION_REQD_STRUCT, lData, 1, SchedulerCommandCompletionCallback);
+            
+            pmCommunicator::GetCommunicator()->Send(lCommand, false);
+            
             break;
         }
 
@@ -1396,6 +1429,15 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                 
                 lRemoteTask->MarkReductionFinished();
             }
+			else if(lCommunicatorCommand->GetTag() == NO_REDUCTION_REQD_TAG)
+            {
+                noReductionReqdStruct* lData = (noReductionReqdStruct*)(lCommunicatorCommand->GetData());
+                
+                const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+                pmRemoteTask* lRemoteTask = dynamic_cast<pmRemoteTask*>(pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber));
+                
+                lRemoteTask->MarkReductionFinished();
+            }
 
 			break;
 		}
@@ -1527,6 +1569,20 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 
 					break;
 				}
+                    
+                case NO_REDUCTION_REQD_TAG:
+                {
+                    noReductionReqdStruct* lData = (noReductionReqdStruct*)(lCommunicatorCommand->GetData());
+                    
+					const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+                    
+                    lTask->GetReducer()->RegisterNoReductionReqdResponse();
+                    
+                    SetupNewNoReductionReqdReception();
+                    
+                    break;
+                }
 
 				case SUBTASK_REDUCE_TAG:
 				{

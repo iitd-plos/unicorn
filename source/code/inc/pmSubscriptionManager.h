@@ -136,17 +136,25 @@ namespace subscription
     #endif
         {}
     };
+    
+    struct pmSubtaskScratchBuffers
+    {
+        finalize_ptr_array<char> mScratchBuffer;
+        size_t mScratchBufferSize;
+        
+        pmSubtaskScratchBuffers(finalize_ptr_array<char>&& pScratchBuffer, size_t pScratchBufferSize)
+        : mScratchBuffer(std::move(pScratchBuffer))
+        , mScratchBufferSize(pScratchBufferSize)
+        {}
+    };
 
 	struct pmSubtask
 	{
 		pmCudaLaunchConf mCudaLaunchConf;
-
-        finalize_ptr_array<char> mScratchBuffer;
-        size_t mScratchBufferSize;
-        pmScratchBufferType mScratchBufferType;
-
         finalize_ptr<pmSubtaskInfo> mSubtaskInfo;
-        
+
+        std::map<pmScratchBufferType, pmSubtaskScratchBuffers> mScratchBuffers;
+
         std::vector<pmMemInfo> mMemInfo;
         std::vector<pmSubtaskAddressSpaceData> mAddressSpacesData;  // The address space ordering is same as in class pmTask
     
@@ -222,9 +230,10 @@ class pmSubscriptionManager : public pmBase
 		pmCudaLaunchConf& GetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
         size_t GetReservedCudaGlobalMemSize(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
     
-        void DropScratchBufferIfNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void DropScratchBuffersNotRequiredPostSubtaskExec(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void DeleteScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType);
         void* GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize);
-        void* CheckAndGetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t& pScratchBufferSize, pmScratchBufferType& pScratchBufferType);
+        void* CheckAndGetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType, size_t& pScratchBufferSize);
     
         std::vector<pmSubscriptionInfo> GetNonConsolidatedReadWriteSubscriptions(const pmExecutionStub* pStub, ulong pSubtaskId, const pmSplitInfo* pSplitInfo, uint pMemIndex);
 

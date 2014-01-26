@@ -365,6 +365,13 @@ void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHa
     return NULL;
 }
 
+void pmController::ReleaseScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType)
+{
+    pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
+    
+    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().DeleteScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pScratchBufferType);
+}
+
 void pmController::pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
     if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)

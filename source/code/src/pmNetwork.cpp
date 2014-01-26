@@ -361,6 +361,8 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
             for(uint i = 0; i < lStruct.shadowMemsCount; ++i)
                 lLength += lData->shadowMems[i].shadowMemData.subtaskMemLength;
             
+            lLength += lData->reduceStruct.scratchBufferLength;
+            
 			if(lLength > __MAX_SIGNED(int))
 				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
 
@@ -386,6 +388,12 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
                             PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
                     }
                 }
+            }
+            
+            if(lData->reduceStruct.scratchBufferLength)
+            {
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->scratchBuffer.get_ptr(), lData->reduceStruct.scratchBufferLength, MPI_BYTE, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
             }
 
             lLength = lPos;
@@ -686,6 +694,19 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
                             PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
                     }
                 }
+            }
+            
+            if(lStruct.scratchBufferLength)
+            {
+                uint lScratchBufferLength = lStruct.scratchBufferLength;
+                std::shared_ptr<finalize_ptr<char, deleteArrayDeallocator<char>>> lReceivedDataSharedPtr(new finalize_ptr<char, deleteArrayDeallocator<char>>(std::move(pPackedData)));
+                std::function<void (char*)> lFunc([lReceivedDataSharedPtr, pDataLength, lPos, lCommunicator, lScratchBufferLength] (char* pMem) mutable
+                                                         {
+                                                             if( MPI_CALL("MPI_Unpack", (MPI_Unpack((void*)lReceivedDataSharedPtr->get_ptr(), pDataLength, &lPos, pMem, (int)lScratchBufferLength, MPI_BYTE, lCommunicator) != MPI_SUCCESS)) )
+                                                                 PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+                                                         });
+                
+                lPackedData->scratchBufferReceiver = lFunc;
             }
 
             lCommand = pmCommunicatorCommand<subtaskReducePacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, lCompletionCallback);
@@ -1208,8 +1229,7 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
     {
         FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mDataTypesResourceLock, Lock(), Unlock());
         
-        if(mRegisteredDataTypes.find(pDataType) != mRegisteredDataTypes.end())
-            PMTHROW(pmFatalErrorException());
+        EXCEPTION_ASSERT(mRegisteredDataTypes.find(pDataType) == mRegisteredDataTypes.end());
     }
 #endif
 
@@ -1300,7 +1320,13 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
             lFieldCount = shadowMemTransferStruct::FIELD_COUNT_VALUE;
             break;
         }
-            
+
+        case NO_REDUCTION_REQD_STRUCT:
+        {
+            lFieldCount = noReductionReqdStruct::FIELD_COUNT_VALUE;
+            break;
+        }
+
 		case SUBTASK_REDUCE_STRUCT:
 		{
 			lFieldCount = subtaskReduceStruct::FIELD_COUNT_VALUE;
@@ -1535,6 +1561,15 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			break;
 		}
 
+        case NO_REDUCTION_REQD_STRUCT:
+        {
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(noReductionReqdStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
+
+            break;
+        }
+        
 		case SUBTASK_REDUCE_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(subtaskReduceStruct, lData, lDataMPI);
@@ -1542,6 +1577,7 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskId, lSubtaskIdMPI, MPI_UNSIGNED_LONG, 2, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.shadowMemsCount, lShadowMemsCountMPI, MPI_UNSIGNED, 3, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.scratchBufferLength, lScratchBufferLengthMPI, MPI_UNSIGNED, 4, 1);
 
 			break;
 		}

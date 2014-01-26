@@ -1082,6 +1082,15 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 
                 ++lShadowMemsIter;
             });
+            
+            if(lData->reduceStruct.scratchBufferLength)
+            {
+                char* lScratchBuffer = (char*)lSubscriptionManager.GetScratchBuffer(this, lData->reduceStruct.subtaskId, NULL, REDUCTION_TO_REDUCTION, lData->reduceStruct.scratchBufferLength);
+                
+                EXCEPTION_ASSERT(lScratchBuffer);
+                
+                lData->scratchBufferReceiver(lScratchBuffer);
+            }
 
             lTask->GetReducer()->AddSubtask(this, lData->reduceStruct.subtaskId, NULL);
 
@@ -1838,6 +1847,8 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
 	pmStatus lStatus = pTask->GetCallbackUnit()->GetDataReductionCB()->Invoke(pTask, this, pSubtaskId1, pSplitInfo1, true, pStub2, pSubtaskId2, pSplitInfo2, true);
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
 
+    pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+    
     const std::vector<pmAddressSpace*>& lAddressSpaceVector = pTask->GetAddressSpaces();
 
     std::vector<pmAddressSpace*>::const_iterator lIter = lAddressSpaceVector.begin(), lEndIter = lAddressSpaceVector.end();
@@ -1847,12 +1858,23 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
         
         if(pTask->IsWritable(lAddressSpace))
         {
-            pTask->GetSubscriptionManager().DestroySubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2, lMemIndex);
+            lSubscriptionManager.DestroySubtaskShadowMem(pStub2, pSubtaskId2, pSplitInfo2, lMemIndex);
             
             if(lStatus != pmSuccess)
-                pTask->GetSubscriptionManager().DestroySubtaskShadowMem(this, pSubtaskId1, pSplitInfo1, lMemIndex);
+                lSubscriptionManager.DestroySubtaskShadowMem(this, pSubtaskId1, pSplitInfo1, lMemIndex);
         }
 	}
+    
+    lSubscriptionManager.DeleteScratchBuffer(pStub2, pSubtaskId2, pSplitInfo2, REDUCTION_TO_REDUCTION);
+    lSubscriptionManager.DeleteScratchBuffer(pStub2, pSubtaskId2, pSplitInfo2, SUBTASK_TO_POST_SUBTASK);
+    lSubscriptionManager.DeleteScratchBuffer(pStub2, pSubtaskId2, pSplitInfo2, PRE_SUBTASK_TO_POST_SUBTASK);
+
+    if(lStatus != pmSuccess)
+    {
+        lSubscriptionManager.DeleteScratchBuffer(this, pSubtaskId1, pSplitInfo1, REDUCTION_TO_REDUCTION);
+        lSubscriptionManager.DeleteScratchBuffer(this, pSubtaskId1, pSplitInfo1, SUBTASK_TO_POST_SUBTASK);
+        lSubscriptionManager.DeleteScratchBuffer(this, pSubtaskId1, pSplitInfo1, PRE_SUBTASK_TO_POST_SUBTASK);
+    }
     
     if(lStatus == pmSuccess)
         pTask->GetReducer()->AddSubtask(this, pSubtaskId1, pSplitInfo1);
@@ -2279,9 +2301,14 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
 
     if(lLoadStatus)
     {
-        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_SUBTASK, lScratchBufferSize);
+        
+        if(!lCpuScratchBuffer)
+            lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
+
+        if(!lCpuScratchBuffer)
+            lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
 
         if(lCpuScratchBuffer && lScratchBufferSize)
         {
@@ -2625,21 +2652,21 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
     
     if(lVector.size() > lAddressSpaceCount)
     {
-        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_SUBTASK, lScratchBufferSize);
+        
+        if(!lCpuScratchBuffer)
+            lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
+        
         if(lCpuScratchBuffer && lScratchBufferSize)
         {
-            if(lScratchBufferType == PRE_SUBTASK_TO_SUBTASK || lScratchBufferType == PRE_SUBTASK_TO_POST_SUBTASK)
-            {
-                pmCudaSubtaskMemoryStruct& lStruct = lVector.back();
-                
-            #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lStruct.pinnedPtr, lStruct.cudaPtr, lScratchBufferSize));
-            #else
-                mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lCpuScratchBuffer, lStruct.cudaPtr, lScratchBufferSize));
-            #endif
-            }
+            pmCudaSubtaskMemoryStruct& lStruct = lVector.back();
+            
+        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+            mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lStruct.pinnedPtr, lStruct.cudaPtr, lScratchBufferSize));
+        #else
+            mHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lCpuScratchBuffer, lStruct.cudaPtr, lScratchBufferSize));
+        #endif
         }
     }
 
@@ -2743,21 +2770,21 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
 
     if(lVector.size() > lAddressSpaceCount)
     {
-        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
+        
+        if(!lCpuScratchBuffer)
+            lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
+        
         if(lCpuScratchBuffer && lScratchBufferSize)
         {
-            if(lScratchBufferType == SUBTASK_TO_POST_SUBTASK || lScratchBufferType == PRE_SUBTASK_TO_POST_SUBTASK)
-            {
-                pmCudaSubtaskMemoryStruct& lStruct = lVector.back();
+            pmCudaSubtaskMemoryStruct& lStruct = lVector.back();
 
-            #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-                mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lStruct.cudaPtr, lStruct.pinnedPtr, lScratchBufferSize));
-            #else
-                mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lStruct.cudaPtr, lCpuScratchBuffer, lScratchBufferSize));
-            #endif
-            }
+        #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+            mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lStruct.cudaPtr, lStruct.pinnedPtr, lScratchBufferSize));
+        #else
+            mDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lStruct.cudaPtr, lCpuScratchBuffer, lScratchBufferSize));
+        #endif
         }
     }
 
@@ -2884,14 +2911,14 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
 
     if(lVector.size() > lAddressSpaceCount)
     {
-        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_SUBTASK, lScratchBufferSize);
+        
+        if(!lCpuScratchBuffer)
+            lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
+        
         if(lCpuScratchBuffer && lScratchBufferSize)
-        {
-            if(lScratchBufferType == PRE_SUBTASK_TO_SUBTASK || lScratchBufferType == PRE_SUBTASK_TO_POST_SUBTASK)
-                memcpy(lVector.back().pinnedPtr, lCpuScratchBuffer, lScratchBufferSize);
-        }
+            memcpy(lVector.back().pinnedPtr, lCpuScratchBuffer, lScratchBufferSize);
     }
     
     pmCudaSubtaskSecondaryBuffersStruct& lStruct = mSubtaskSecondaryBuffersMap[pSubtaskId];
@@ -2968,14 +2995,14 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
     
     if(lVector.size() > lAddressSpaceCount)
     {
-        pmScratchBufferType lScratchBufferType = SUBTASK_TO_POST_SUBTASK;
         size_t lScratchBufferSize = 0;
-        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, lScratchBufferSize, lScratchBufferType);
+        void* lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
+        
+        if(!lCpuScratchBuffer)
+            lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
+        
         if(lCpuScratchBuffer && lScratchBufferSize)
-        {
-            if(lScratchBufferType == SUBTASK_TO_POST_SUBTASK || lScratchBufferType == PRE_SUBTASK_TO_POST_SUBTASK)
-                memcpy(lCpuScratchBuffer, lVector.back().pinnedPtr, lScratchBufferSize);
-        }
+            memcpy(lCpuScratchBuffer, lVector.back().pinnedPtr, lScratchBufferSize);
     }
 
     pmCudaSubtaskSecondaryBuffersStruct& lStruct = mSubtaskSecondaryBuffersMap[pSubtaskId];

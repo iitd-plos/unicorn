@@ -98,6 +98,13 @@ void pmCommunicator::All2All(pmCommunicatorCommandPtr& pCommand, bool pBlocking 
 		pCommand->WaitForFinish();
 }
 
+
+/* struct noReductionReqdStruct */
+noReductionReqdStruct::noReductionReqdStruct(pmTask* pTask)
+	: originatingHost(*(pTask->GetOriginatingHost()))
+    , sequenceNumber(pTask->GetSequenceNumber())
+{}
+
     
 /* struct remoteTaskAssignStruct */
 remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTask* pLocalTask)
@@ -167,9 +174,19 @@ remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTask* pLocalTask)
 
 /* struct subtaskReducePacked */
 subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
-    : reduceStruct(*pTask->GetOriginatingHost(), pTask->GetSequenceNumber(), pSubtaskId, 0)
+    : reduceStruct(*pTask->GetOriginatingHost(), pTask->GetSequenceNumber(), pSubtaskId, 0, 0)
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+
+    size_t lScratchBufferSize = 0;
+    char* lScratchBuffer = (char*)lSubscriptionManager.CheckAndGetScratchBuffer(pReducingStub, pSubtaskId, pSplitInfo, REDUCTION_TO_REDUCTION, lScratchBufferSize);
+    
+    if(lScratchBufferSize)
+    {
+        reduceStruct.scratchBufferLength = (uint)lScratchBufferSize;
+        scratchBuffer.reset(lScratchBuffer, false);
+    }
+    
 
     filtered_for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pTask->IsWritable(pAddressSpace) && pTask->IsReducible(pAddressSpace));},
     [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
