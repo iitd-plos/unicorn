@@ -176,6 +176,27 @@ void pmSubscriptionManager::DropAllSubscriptions()
     mSplitSubtaskMapVector.clear();
 #endif
 }
+    
+bool pmSubscriptionManager::HasSubtask(pm::pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+{
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    if(pSplitInfo)
+    {
+        std::pair<splitSubtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS>& lPair = mSplitSubtaskMapVector[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+        
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
+        return (lPair.first.find(std::make_pair(pSubtaskId, *pSplitInfo)) != lPair.first.end());
+    }
+    else
+#endif
+    {
+        std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS>& lPair = mSubtaskMapVector[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+        
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
+
+        return (lPair.first.find(pSubtaskId) != lPair.first.end());
+    }
+}
 
 void pmSubscriptionManager::EraseSubtask(pm::pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
@@ -193,6 +214,7 @@ void pmSubscriptionManager::EraseSubtask(pm::pmExecutionStub* pStub, ulong pSubt
         std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS>& lPair = mSubtaskMapVector[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
         
         FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
+
         lPair.first.erase(pSubtaskId);
     }
 }
@@ -665,7 +687,7 @@ void pmSubscriptionManager::DeleteScratchBuffer(pmExecutionStub* pStub, ulong pS
 void* pmSubscriptionManager::GetScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
-    
+
     EXCEPTION_ASSERT(((size_t)(lSubtask.mScratchBuffers.find(PRE_SUBTASK_TO_SUBTASK) != lSubtask.mScratchBuffers.end()) + (size_t)(lSubtask.mScratchBuffers.find(SUBTASK_TO_POST_SUBTASK) != lSubtask.mScratchBuffers.end()) + (size_t)(lSubtask.mScratchBuffers.find(PRE_SUBTASK_TO_POST_SUBTASK) != lSubtask.mScratchBuffers.end())) <= 1);    // Only one of these can exist (The CUDA code currently does not copy more than one in and out of the device
 
     auto lIter = lSubtask.mScratchBuffers.find(pScratchBufferType);

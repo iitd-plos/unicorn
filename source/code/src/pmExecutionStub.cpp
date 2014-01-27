@@ -797,6 +797,10 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                         
                         if(GetType() == GPU_CUDA && mCurrentSubtaskRangeStats->currentSubtaskInPostDataFetchStage)
                             lShouldMultiAssign = false;
+
+                        // There is some problem with multi-assign from CUDA to CUDA in case of reduction. Temporary turning it off
+                        if(pTask->GetCallbackUnit()->GetDataReductionCB() && GetType() == GPU_CUDA && pRequestingDevice->GetType() == GPU_CUDA)
+                            lShouldMultiAssign = false;
                     #endif
 
                     #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -804,7 +808,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                         if(pTask->GetSubtaskSplitter().IsSplitting(pRequestingDevice->GetType()))
                             lShouldMultiAssign = false;
                     #endif
-                        
+
                         if(lShouldMultiAssign)
                         {
                             ulong lMultiAssignSubtaskCount = 1;
@@ -1097,7 +1101,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                 char* lScratchBuffer2 = (char*)lSubscriptionManager.GetScratchBuffer(this, lData->reduceStruct.subtaskId, NULL, SUBTASK_TO_POST_SUBTASK, lData->reduceStruct.scratchBuffer2Length);
                 
                 EXCEPTION_ASSERT(lScratchBuffer2);
-                
+
                 lData->scratchBuffer2Receiver(lScratchBuffer2);
             }
 
@@ -1256,7 +1260,7 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
         });
     }
 
-    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector));
+    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), 0);
 }
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -1383,7 +1387,7 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
         });
     }
 
-    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector));
+    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), (pRange.endSubtask - pRange.startSubtask + 1) * pRange.task->GetSubtaskSplitter().GetSplitFactor());
 }
 
 bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)

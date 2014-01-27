@@ -25,6 +25,7 @@
 #include "pmHardware.h"
 #include "pmNetwork.h"
 #include "pmLogger.h"
+#include "pmCallbackUnit.h"
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
 #include "pmSubtaskSplitter.h"
@@ -440,6 +441,12 @@ bool pmPushSchedulingManager::IsUsefulAllottee(const pmProcessingElement* pPoten
 #ifdef SUPPORT_SPLIT_SUBTASKS
     // Currently subtask splitter does not execute multi-assign ranges
     if(mLocalTask->GetSubtaskSplitter().IsSplitting(pPotentialAllottee->GetType()))
+        return false;
+#endif
+
+#ifdef SUPPORT_CUDA
+    // There is some problem with multi-assign from CUDA to CUDA in case of reduction. Temporary turning it off
+    if(mLocalTask->GetCallbackUnit()->GetDataReductionCB() && pOriginalAllottee->GetType() == GPU_CUDA && pPotentialAllottee->GetType() == GPU_CUDA)
         return false;
 #endif
 

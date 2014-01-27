@@ -93,8 +93,9 @@ class pmTask : public pmBase
         pmReducer* GetReducer();
         pmRedistributor* GetRedistributor(const pmAddressSpace* pAddressSpace);
 		bool HasSubtaskExecutionFinished();
-		pmStatus IncrementSubtasksExecuted(ulong pSubtaskCount);
+		pmStatus IncrementSubtasksExecuted(ulong pSubtaskCount, ulong pTotalSplitCount);
 		ulong GetSubtasksExecuted();
+        ulong GetTotalSplitCount(ulong& pSubtasksSplitted);
 		bool DoSubtasksNeedShadowMemory(const pmAddressSpace* pAddressSpace) const;
         bool CanForciblyCancelSubtasks();
         bool CanSplitCpuSubtasks();
@@ -197,6 +198,8 @@ class pmTask : public pmBase
     
 		/* Updating properties require locking */
 		ulong mSubtasksExecuted;
+        ulong mTotalSplitCount;
+        ulong mSubtasksSplitted;
 		bool mSubtaskExecutionFinished;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mExecLock;
 

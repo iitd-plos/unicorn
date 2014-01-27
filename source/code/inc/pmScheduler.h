@@ -218,8 +218,28 @@ struct sendAcknowledgementEvent : public schedulerEvent
 	pmStatus execStatus;
     std::vector<communicator::ownershipDataStruct> ownershipVector;
     std::vector<uint> addressSpaceIndexVector;
+    ulong totalSplitCount;
     
-    sendAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipData, std::vector<uint>&& pAddressSpaceIndexVector)
+    sendAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipData, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount)
+    : schedulerEvent(pEventId)
+    , device(pDevice)
+    , range(pRange)
+    , execStatus(pExecStatus)
+    , ownershipVector(pOwnershipData)
+    , addressSpaceIndexVector(pAddressSpaceIndexVector)
+    , totalSplitCount(pTotalSplitCount)
+    {}
+};
+
+struct receiveAcknowledgementEvent : public schedulerEvent
+{
+    const pmProcessingElement* device;
+    const pmSubtaskRange range;
+    pmStatus execStatus;
+    std::vector<communicator::ownershipDataStruct> ownershipVector;
+    std::vector<uint> addressSpaceIndexVector;
+    
+    receiveAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipData, std::vector<uint>&& pAddressSpaceIndexVector)
     : schedulerEvent(pEventId)
     , device(pDevice)
     , range(pRange)
@@ -228,8 +248,6 @@ struct sendAcknowledgementEvent : public schedulerEvent
     , addressSpaceIndexVector(pAddressSpaceIndexVector)
     {}
 };
-
-typedef sendAcknowledgementEvent receiveAcknowledgementEvent;
 
 struct taskCancelEvent : public schedulerEvent
 {
@@ -406,7 +424,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         virtual ~pmScheduler();
 		static pmScheduler* GetScheduler();
 
-		void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
+		void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
 		void ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 
         virtual void ThreadSwitchCallback(std::shared_ptr<scheduler::schedulerEvent>& pEvent);
@@ -422,7 +440,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void StealFailedEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
 		void StealSuccessReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 		void StealFailedReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
-        void AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
+        void AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
 		void AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 		void TaskCancelEvent(pmTask* pTask);
         void TaskFinishEvent(pmTask* pTask);

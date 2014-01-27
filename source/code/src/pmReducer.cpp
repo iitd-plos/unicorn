@@ -143,6 +143,8 @@ void pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo
         
         if(pSplitInfo)
             mLastSubtask.splitInfo.reset(new pmSplitInfo(pSplitInfo->splitId, pSplitInfo->splitCount));
+        else
+            mLastSubtask.splitInfo.reset(NULL);
 
 		mReduceState = true;
 
@@ -160,7 +162,11 @@ void pmReducer::CheckReductionFinish()
 /* This function must be called with mResourceLock acquired */
 void pmReducer::CheckReductionFinishInternal()
 {
-	if(mReduceState && mTask->HasSubtaskExecutionFinished() && (mReductionsDone == (mExternalReductionsRequired + mTask->GetSubtasksExecuted() - 1)))
+    ulong lSubtasksSplitted = 0;
+    ulong lSplitCount = mTask->GetTotalSplitCount(lSubtasksSplitted);
+    ulong lExtraReductionsForSplits = lSplitCount - lSubtasksSplitted;
+    
+	if(mReduceState && mTask->HasSubtaskExecutionFinished() && (mReductionsDone == (mExternalReductionsRequired + lExtraReductionsForSplits + mTask->GetSubtasksExecuted() - 1)))
 	{
 		if(mSendToMachine)
 		{

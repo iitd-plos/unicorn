@@ -383,7 +383,7 @@ void pmScheduler::StealFailedReturnEvent(const pmProcessingElement* pStealingDev
 	SwitchThread(std::shared_ptr<schedulerEvent>(new stealFailStealerEvent(STEAL_FAIL_STEALER, pStealingDevice, pTargetDevice, pTask)), pTask->GetPriority());
 }
 
-void pmScheduler::AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
+void pmScheduler::AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, size_t pTotalSplitCount)
 {
 #ifdef TRACK_SUBTASK_EXECUTION
     // Auto lock/unlock scope
@@ -395,7 +395,7 @@ void pmScheduler::AcknowledgementSendEvent(const pmProcessingElement* pDevice, c
     }
 #endif
 
-	SwitchThread(std::shared_ptr<schedulerEvent>(new sendAcknowledgementEvent(SEND_ACKNOWLEDGEMENT, pDevice, pRange, pExecStatus, std::move(pOwnershipVector), std::move(pAddressSpaceIndexVector))), pRange.task->GetPriority());
+	SwitchThread(std::shared_ptr<schedulerEvent>(new sendAcknowledgementEvent(SEND_ACKNOWLEDGEMENT, pDevice, pRange, pExecStatus, std::move(pOwnershipVector), std::move(pAddressSpaceIndexVector), pTotalSplitCount)), pRange.task->GetPriority());
 }
 
 void pmScheduler::AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
@@ -601,7 +601,7 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lTask))
                 break;
         
-            lTask->IncrementSubtasksExecuted(lEventDetails.range.endSubtask - lEventDetails.range.startSubtask + 1);
+            lTask->IncrementSubtasksExecuted(lEventDetails.range.endSubtask - lEventDetails.range.startSubtask + 1, lEventDetails.totalSplitCount);
 
             const pmMachine* lOriginatingHost = lTask->GetOriginatingHost();
             if(lOriginatingHost == PM_LOCAL_MACHINE)
@@ -1374,12 +1374,12 @@ void pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProces
 	}
 }
 
-void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
+void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount)
 {
     if(pRange.task->GetOriginatingHost() != PM_LOCAL_MACHINE)
         RegisterPostTaskCompletionOwnershipTransfers(pDevice, pRange, pOwnershipVector, pAddressSpaceIndexVector);
 
-	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, std::move(pOwnershipVector), std::move(pAddressSpaceIndexVector));
+	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, std::move(pOwnershipVector), std::move(pAddressSpaceIndexVector), pTotalSplitCount);
 
 	if(pRange.task->GetSchedulingModel() == PULL)
 	{
@@ -1591,8 +1591,29 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 					const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->reduceStruct.originatingHost);
 					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->reduceStruct.sequenceNumber);
                 
-                    pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetCpuStub((uint)0);
-                    lStub->RemoteSubtaskReduce(lTask, lCommunicatorCommand);
+                    // Can not assign the received subtask to a stub which is already executing the same subtask (in case of multi-assign).
+                    // This is because the incoming subtask will erase the original subtask from subscription manager making it crash.
+                    // One solution is to use ProcessingElements in subscription manager rather than ExecutionStubs.
+                    // For now, using a stub which has actually not registered that subtask
+                    pmSubscriptionManager& lSubscriptionManager = lTask->GetSubscriptionManager();
+                    pmStubManager* lStubManager = pmStubManager::GetStubManager();
+                    
+                    bool lStubFound = false;
+                    
+                    size_t lCpuStubCount = lStubManager->GetProcessingElementsCPU();
+                    for(size_t i = 0; i < lCpuStubCount; ++i)
+                    {
+                        pmExecutionStub* lStub = lStubManager->GetCpuStub((uint)i);
+                        if(!lSubscriptionManager.HasSubtask(lStub, lData->reduceStruct.subtaskId, NULL))
+                        {
+                            lStubFound = true;
+
+                            lStub->RemoteSubtaskReduce(lTask, lCommunicatorCommand);
+                            break;
+                        }
+                    }
+                    
+                    EXCEPTION_ASSERT(lStubFound);
                     
 					break;
 				}

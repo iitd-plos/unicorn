@@ -73,6 +73,8 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
     , mSubtaskSplitter(this)
 #endif
 	, mSubtasksExecuted(0)
+    , mTotalSplitCount(0)
+    , mSubtasksSplitted(0)
 	, mSubtaskExecutionFinished(false)
     , mExecLock __LOCK_NAME__("pmTask::mExecLock")
     , mCompletedRedistributions(0)
@@ -514,13 +516,25 @@ bool pmTask::HasSubtaskExecutionFinished()
 	return mSubtaskExecutionFinished;
 }
 
-pmStatus pmTask::IncrementSubtasksExecuted(ulong pSubtaskCount)
+pmStatus pmTask::IncrementSubtasksExecuted(ulong pSubtaskCount, ulong pTotalSplitCount)
 {
 	FINALIZE_RESOURCE_PTR(dExecLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mExecLock, Lock(), Unlock());
 
 	mSubtasksExecuted += pSubtaskCount;
+    mTotalSplitCount += pTotalSplitCount;
+
+    if(pTotalSplitCount)
+        mSubtasksSplitted += pSubtaskCount;
 
 	return pmSuccess;
+}
+
+ulong pmTask::GetTotalSplitCount(ulong& pSubtasksSplitted)
+{
+	FINALIZE_RESOURCE_PTR(dExecLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mExecLock, Lock(), Unlock());
+
+    pSubtasksSplitted = mSubtasksSplitted;
+	return mTotalSplitCount;
 }
 
 ulong pmTask::GetSubtasksExecuted()
