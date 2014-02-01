@@ -173,7 +173,7 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(DATA_REDISTRIBUTION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REDISTRIBUTION_OFFSETS_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SUBTASK_RANGE_CANCEL_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(NO_REDUCTION_REQD_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(NO_REDUCTION_REQD_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 

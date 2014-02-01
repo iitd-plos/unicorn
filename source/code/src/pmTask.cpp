@@ -171,8 +171,6 @@ void pmTask::FlushMemoryOwnerships()
     
 void pmTask::UnlockMemories()
 {
-    mSubscriptionManager.DropAllSubscriptions();
-
     for_each(mTaskMemVector, [this] (const pmTaskMemory& pTaskMem)
     {
         pTaskMem.addressSpace->Unlock(this);

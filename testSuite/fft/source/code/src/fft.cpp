@@ -126,7 +126,6 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 #ifdef NO_MATRIX_TRANSPOSE
     if(pSubtaskInfo.splitInfo.splitCount)
     {
-        
         if(pSubtaskInfo.splitInfo.splitCount != gDevicesPerSplitGroup)
         {
             std::cout << "FFT currently configured for " << gDevicesPerSplitGroup << " and not " << pSubtaskInfo.splitInfo.splitCount << " devices per split group" << std::endl;
@@ -453,10 +452,6 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 #ifdef FFT_2D
     
-#ifdef BUILD_CUDA
-    ClearCufftWrapper();
-#endif
-
 #ifdef NO_MATRIX_TRANSPOSE
     if(lInplace)
         exit(1);    // In DoInit, this condition is checked

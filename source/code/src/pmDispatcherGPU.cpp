@@ -178,7 +178,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const 
 
     if(lSubtaskPointers.size() > pTask->GetAddressSpaceCount())
     {
-        DEBUG_EXCEPTION_ASSERT(lSubtaskInfoCuda.gpuContext.scratchBuffer);
+        DEBUG_EXCEPTION_ASSERT(!lSubtaskInfoCuda.gpuContext.scratchBuffer);
         lSubtaskInfoCuda.gpuContext.scratchBuffer = lSubtaskPointers.back().cudaPtr;
     }
     
