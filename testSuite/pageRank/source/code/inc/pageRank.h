@@ -1,6 +1,4 @@
 
-#include <map>
-
 namespace pageRank
 {
 
@@ -16,7 +14,7 @@ using namespace pm;
 
 #define MAX_BASE_PATH_LENGTH 256
 //#define DEFAULT_BASE_PATH (char*)"../../web_dump"
-#define DEFAULT_BASE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/pageRank/web_dump_1M"
+#define DEFAULT_BASE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/pageRank/web_dump"
 
 typedef struct pageRankTaskConf
 {
@@ -37,14 +35,11 @@ int singleGpuPageRank(pageRankTaskConf& pTaskConf, unsigned int* pWebDump, void*
 
 enum memIndex
 {
-    MEM_INDEX = 0,
+    OUTPUT_MEM_INDEX = 0,
+    INPUT_MEM_INDEX,
     MAX_MEM_INDICES
 };
     
-void** LoadMappedFiles(pmTaskInfo pTaskInfo, pmSubtaskInfo pSubtaskInfo);
-
-void LoadSubtaskBufferInMap(std::map<unsigned int, PAGE_RANK_DATA_TYPE>& pMap, char* pBuffer, pageRankTaskConf* pTaskConf, unsigned long pSubtaskId);
-void LoadReductionBufferInMap(std::map<unsigned int, PAGE_RANK_DATA_TYPE>& pMap, char* pBuffer);
-void PlaceMapIntoSubtaskReductionBuffer(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, std::map<unsigned int, PAGE_RANK_DATA_TYPE>& pMap);
+void** LoadMappedFiles(pageRankTaskConf* pTaskConf, ulong pSubtaskId);
     
 }
