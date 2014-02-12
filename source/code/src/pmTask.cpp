@@ -122,6 +122,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 
 pmTask::~pmTask()
 {
+    mSubscriptionManager.DropAllSubscriptions();
 }
     
 void pmTask::LockAddressSpaces()
