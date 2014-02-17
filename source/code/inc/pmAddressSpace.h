@@ -28,6 +28,7 @@
 #include <vector>
 #include <map>
 #include <memory>
+#include <list>
 
 #define FIND_FLOOR_ELEM(mapType, mapVar, searchKey, iterAddr) \
 { \
@@ -182,10 +183,13 @@ class pmAddressSpace : public pmBase
         void SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap);
     
         void SetWaitingForOwnershipChange();
+        bool IsWaitingForOwnershipChange();
         void TransferOwnershipImmediate(ulong pOffset, ulong pLength, const pmMachine* pNewOwnerHost);
     
         void Lock(pmTask* pTask, pmMemType pMemType);
         void FetchCompletionCallback(const pmCommandPtr& pCommand);
+    
+        void ScanLockQueue();
     
 #ifdef _DEBUG
         void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
@@ -205,7 +209,7 @@ class pmAddressSpace : public pmBase
         std::string mName;
     
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingTasksLock;
-        std::vector<std::pair<std::pair<pmTask*, pmMemType>, pmCommandPtr>> mTasksWaitingForLock;
+        std::list<std::pair<std::pair<pmTask*, pmMemType>, pmCommandPtr>> mTasksWaitingForLock;
 
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingFetchLock;
         std::map<pmCommandPtr, pmCommandPtr> mCommandsWaitingForFetch;

@@ -117,10 +117,7 @@ pmAddressSpace::~pmAddressSpace()
     {
         FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
 
-    #ifdef _DEBUG
-        if(mLockingTask)
-            PMTHROW(pmFatalErrorException());
-    #endif
+        DEBUG_EXCEPTION_ASSERT(!mLockingTask);
 
     #ifdef SUPPORT_LAZY_MEMORY
         if(mReadOnlyLazyMapping)
@@ -306,37 +303,54 @@ void pmAddressSpace::SetWaitingForOwnershipChange()
     mWaitingForOwnershipChange = true;
 }
 
+bool pmAddressSpace::IsWaitingForOwnershipChange()
+{
+	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
+    
+    return mWaitingForOwnershipChange;
+}
+
 void pmAddressSpace::ChangeOwnership(std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>& pOwnershipData)
 {
     EXCEPTION_ASSERT(!GetLockingTask());
 
-	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
-
-    EXCEPTION_ASSERT(mWaitingForOwnershipChange);
-
-    for_each(*pOwnershipData.get(), [this] (communicator::ownershipChangeStruct& pStruct)
+    // Auto lock/unlock scope
     {
-        TransferOwnershipImmediate(pStruct.offset, pStruct.length, pmMachinePool::GetMachinePool()->GetMachine(pStruct.newOwnerHost));
-    });
+        FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
+
+        EXCEPTION_ASSERT(mWaitingForOwnershipChange);
+
+        for_each(*pOwnershipData.get(), [this] (communicator::ownershipChangeStruct& pStruct)
+        {
+            TransferOwnershipImmediate(pStruct.offset, pStruct.length, pmMachinePool::GetMachinePool()->GetMachine(pStruct.newOwnerHost));
+        });
+
+        mWaitingForOwnershipChange = false;
+    }
+
+    ScanLockQueue();
+}
     
+void pmAddressSpace::ScanLockQueue()
+{
     FINALIZE_RESOURCE_PTR(dWaitingTasksLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mWaitingTasksLock, Lock(), Unlock());
 
-    for_each(mTasksWaitingForLock, [this] (decltype(mTasksWaitingForLock)::value_type& pValue)
-    {
-        Lock(pValue.first.first, pValue.first.second);
-        pValue.second->MarkExecutionEnd(pmSuccess, pValue.second);
-    });
+    if(mTasksWaitingForLock.empty() || IsWaitingForOwnershipChange() || GetLockingTask())
+        return;
+
+    auto lValue = mTasksWaitingForLock.front();  // For now, only one task can acquire lock
+
+    Lock(lValue.first.first, lValue.first.second);
+    lValue.second->MarkExecutionEnd(pmSuccess, lValue.second);
     
-    mTasksWaitingForLock.clear();
-    
-    mWaitingForOwnershipChange = false;
+    mTasksWaitingForLock.pop_front();
 }
 
 void pmAddressSpace::EnqueueForLock(pm::pmTask* pTask, pmMemType pMemType, pmCommandPtr& pCountDownCommand)
 {
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
     
-    if(mWaitingForOwnershipChange)
+    if(mWaitingForOwnershipChange || GetLockingTask())
     {
         FINALIZE_RESOURCE_PTR(dWaitingTasksLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mWaitingTasksLock, Lock(), Unlock());
 
@@ -443,6 +457,8 @@ void pmAddressSpace::Unlock(pmTask* pTask)
         
         if(lOwnershipTransferRequired)
             SetWaitingForOwnershipChange();
+
+        ScanLockQueue();
     }
 }
     
