@@ -320,6 +320,8 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
 
+	double lStartTime = getCurrentTimeInSecs();
+
 	unsigned int* lWebDump = new unsigned int[gTotalWebPages * (gMaxOutlinksPerWebPage + 1)];
 
     unsigned int lTotalFiles = (gTotalWebPages / gWebPagesPerFile);
@@ -330,13 +332,11 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
     if((gTotalWebPages % gWebPagesPerFile) != 0)
         readWebPagesFile(lBasePath, gTotalWebPages, gMaxOutlinksPerWebPage, gWebPagesPerFile, i*gWebPagesPerFile, gTotalWebPages - i*gWebPagesPerFile, lWebDump + (i * gWebPagesPerFile * (gMaxOutlinksPerWebPage + 1)));
 
-	double lStartTime = getCurrentTimeInSecs();
-
 	serialPageRank(lWebDump);
 
-	double lEndTime = getCurrentTimeInSecs();
-
     delete[] lWebDump;
+
+	double lEndTime = getCurrentTimeInSecs();
 
 	return (lEndTime - lStartTime);
 }
@@ -421,6 +421,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 {
 	READ_NON_COMMON_ARGS
     
+	double lStartTime = getCurrentTimeInSecs();
+
     mapAllFiles(lBasePath);
 
 	// Input Mem contains page rank of each page before the iteration
@@ -438,8 +440,6 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     lTaskConf.initialPageRank = INITIAL_PAGE_RANK;
     strcpy(lTaskConf.basePath, lBasePath);
 
-	double lStartTime = getCurrentTimeInSecs();
-
     for(int i = 0; i < PAGE_RANK_ITERATIONS; ++i)
     {
 		if(i != 0)
@@ -455,6 +455,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 			return (double)-1.0;
     }
     
+    unMapAllFiles(lBasePath);
+
 	double lEndTime = getCurrentTimeInSecs();
 
     if(pFetchBack)
@@ -470,8 +472,6 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         pmReleaseMemory(lInputMemHandle);
 
 	pmReleaseMemory(lOutputMemHandle);
-
-    unMapAllFiles(lBasePath);
 
 	return (lEndTime - lStartTime);
 }
