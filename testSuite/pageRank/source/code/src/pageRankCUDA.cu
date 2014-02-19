@@ -13,7 +13,8 @@ namespace pageRank
     
 __global__ void pageRank_cuda(pageRankTaskConf pTaskConf, unsigned int pWebPages, PAGE_RANK_DATA_TYPE* pLocalArray, PAGE_RANK_DATA_TYPE* pGlobalArray, unsigned int* pSubtaskWebDump)
 {
-	int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+    int blockId = blockIdx.y * gridDim.x + blockIdx.x;
+	int threadId = blockId * blockDim.x + threadIdx.x;
 
 	if(threadId >= pWebPages)
 		return;
@@ -42,7 +43,7 @@ __global__ void zeroInit(PAGE_RANK_DATA_TYPE* pGlobalArray, unsigned int pWebPag
     pGlobalArray[threadId] = 0;
 }
 
-pmCudaLaunchConf GetGlobalCudaLaunchConf(unsigned int pWebPages)
+pmCudaLaunchConf GetCudaLaunchConf(unsigned int pWebPages)
 {
     const unsigned int maxThreadsPerBlockDim = 512;
     const unsigned int maxBlocksPerGridDim = 65535;
@@ -83,25 +84,6 @@ pmCudaLaunchConf GetGlobalCudaLaunchConf(unsigned int pWebPages)
     return lCudaLaunchConf;
 }
     
-pmCudaLaunchConf GetCudaLaunchConf(unsigned int pWebPages)
-{
-    const unsigned int maxThreadsPerBlockDim = 512;
-    pmCudaLaunchConf lCudaLaunchConf;
-    
-    if(pWebPages > maxThreadsPerBlockDim)
-    {
-        lCudaLaunchConf.blocksX = pWebPages / maxThreadsPerBlockDim + ((pWebPages % maxThreadsPerBlockDim) ? 1 : 0);
-        lCudaLaunchConf.threadsX = maxThreadsPerBlockDim;
-    }
-    else
-    {
-        lCudaLaunchConf.blocksX = 1;
-        lCudaLaunchConf.threadsX = pWebPages;
-    }
-    
-    return lCudaLaunchConf;
-}
-    
 pmStatus pageRank_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream)
 {
     pageRankTaskConf* lTaskConf = (pageRankTaskConf*)(pTaskInfo.taskConf);
@@ -134,14 +116,14 @@ pmStatus pageRank_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
 	PAGE_RANK_DATA_TYPE* lLocalArray = ((lTaskConf->iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
     PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
 
-    pmCudaLaunchConf lGlobalCudaLaunchConf = GetGlobalCudaLaunchConf(lTaskConf->totalWebPages);
+    pmCudaLaunchConf lGlobalCudaLaunchConf = GetCudaLaunchConf(lTaskConf->totalWebPages);
     dim3 globalGridConf(lGlobalCudaLaunchConf.blocksX, lGlobalCudaLaunchConf.blocksY, 1);
     dim3 globalBlockConf(lGlobalCudaLaunchConf.threadsX, 1, 1);
 
     zeroInit<<<globalGridConf, globalBlockConf>>>(lGlobalArray, lTaskConf->totalWebPages);
 
     pmCudaLaunchConf lCudaLaunchConf = GetCudaLaunchConf(lWebPages);
-    dim3 gridConf(lCudaLaunchConf.blocksX, 1, 1);
+    dim3 gridConf(lCudaLaunchConf.blocksX, lCudaLaunchConf.blocksY, 1);
     dim3 blockConf(lCudaLaunchConf.threadsX, 1, 1);
 
     pageRank_cuda<<<gridConf, blockConf, 0, (cudaStream_t)pCudaStream>>>(*lTaskConf, lWebPages, lLocalArray, lGlobalArray, lWebDump);
