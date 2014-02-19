@@ -6,6 +6,8 @@
 #include "commonAPI.h"
 #include "pageRank.h"
 
+#include <cmath>
+
 namespace pageRank
 {
     
@@ -31,7 +33,8 @@ __global__ void pageRank_cuda(pageRankTaskConf pTaskConf, unsigned int pWebPages
     
 __global__ void zeroInit(PAGE_RANK_DATA_TYPE* pGlobalArray, unsigned int pWebPages)
 {
-	int threadId = blockIdx.x * blockDim.x + threadIdx.x;
+    int blockId = blockIdx.y * gridDim.x + blockIdx.x;
+	int threadId = blockId * blockDim.x + threadIdx.x;
     
 	if(threadId >= pWebPages)
 		return;
@@ -39,14 +42,56 @@ __global__ void zeroInit(PAGE_RANK_DATA_TYPE* pGlobalArray, unsigned int pWebPag
     pGlobalArray[threadId] = 0;
 }
 
-pmCudaLaunchConf GetCudaLaunchConf(unsigned int pWebPages)
+pmCudaLaunchConf GetGlobalCudaLaunchConf(unsigned int pWebPages)
 {
+    const unsigned int maxThreadsPerBlockDim = 512;
+    const unsigned int maxBlocksPerGridDim = 65535;
     pmCudaLaunchConf lCudaLaunchConf;
     
-    if(pWebPages > 512)
+    if(pWebPages > maxThreadsPerBlockDim)
     {
-        lCudaLaunchConf.blocksX = pWebPages/512 + ((pWebPages%512) ? 1 : 0);
-        lCudaLaunchConf.threadsX = 512;
+        lCudaLaunchConf.blocksX = pWebPages / maxThreadsPerBlockDim + ((pWebPages % maxThreadsPerBlockDim) ? 1 : 0);
+        lCudaLaunchConf.threadsX = maxThreadsPerBlockDim;
+    }
+    else
+    {
+        lCudaLaunchConf.blocksX = 1;
+        lCudaLaunchConf.threadsX = pWebPages;
+    }
+    
+    lCudaLaunchConf.blocksY = 1;
+    
+    if(lCudaLaunchConf.blocksX > maxBlocksPerGridDim)
+    {
+        double lSqrt = std::sqrt((double)lCudaLaunchConf.blocksX);
+        unsigned int lFloor = (unsigned int)std::floor(lSqrt);
+        unsigned int lCeil = lFloor;
+
+        if(lFloor * lFloor < lCudaLaunchConf.blocksX)
+            lCeil = lFloor + 1;
+        
+        if(lCeil * lFloor < lCudaLaunchConf.blocksX)
+            lFloor = lCeil;
+        
+        if(lCeil * lFloor < lCudaLaunchConf.blocksX)
+            exit(1);
+
+        lCudaLaunchConf.blocksX = lCeil;
+        lCudaLaunchConf.blocksY = lFloor;
+    }
+    
+    return lCudaLaunchConf;
+}
+    
+pmCudaLaunchConf GetCudaLaunchConf(unsigned int pWebPages)
+{
+    const unsigned int maxThreadsPerBlockDim = 512;
+    pmCudaLaunchConf lCudaLaunchConf;
+    
+    if(pWebPages > maxThreadsPerBlockDim)
+    {
+        lCudaLaunchConf.blocksX = pWebPages / maxThreadsPerBlockDim + ((pWebPages % maxThreadsPerBlockDim) ? 1 : 0);
+        lCudaLaunchConf.threadsX = maxThreadsPerBlockDim;
     }
     else
     {
@@ -89,8 +134,8 @@ pmStatus pageRank_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
 	PAGE_RANK_DATA_TYPE* lLocalArray = ((lTaskConf->iteration == 0) ? NULL : (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
     PAGE_RANK_DATA_TYPE* lGlobalArray = (PAGE_RANK_DATA_TYPE*)pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr;
 
-    pmCudaLaunchConf lGlobalCudaLaunchConf = GetCudaLaunchConf(lTaskConf->totalWebPages);
-    dim3 globalGridConf(lGlobalCudaLaunchConf.blocksX, 1, 1);
+    pmCudaLaunchConf lGlobalCudaLaunchConf = GetGlobalCudaLaunchConf(lTaskConf->totalWebPages);
+    dim3 globalGridConf(lGlobalCudaLaunchConf.blocksX, lGlobalCudaLaunchConf.blocksY, 1);
     dim3 globalBlockConf(lGlobalCudaLaunchConf.threadsX, 1, 1);
 
     zeroInit<<<globalGridConf, globalBlockConf>>>(lGlobalArray, lTaskConf->totalWebPages);
@@ -98,7 +143,7 @@ pmStatus pageRank_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
     pmCudaLaunchConf lCudaLaunchConf = GetCudaLaunchConf(lWebPages);
     dim3 gridConf(lCudaLaunchConf.blocksX, 1, 1);
     dim3 blockConf(lCudaLaunchConf.threadsX, 1, 1);
-    
+
     pageRank_cuda<<<gridConf, blockConf, 0, (cudaStream_t)pCudaStream>>>(*lTaskConf, lWebPages, lLocalArray, lGlobalArray, lWebDump);
     
     return pmSuccess;
