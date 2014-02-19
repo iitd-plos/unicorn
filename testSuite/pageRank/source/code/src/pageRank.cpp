@@ -14,7 +14,6 @@ namespace pageRank
 unsigned int gTotalWebPages;
 unsigned int gMaxOutlinksPerWebPage;
 unsigned int gWebPagesPerFile;
-unsigned int gWebPagesPerSubtask;
 
 PAGE_RANK_DATA_TYPE* gSerialOutput;
 PAGE_RANK_DATA_TYPE* gParallelOutput;
@@ -149,6 +148,38 @@ void unMapAllFiles(char* pBasePath)
         if(pmUnmapFile(filePath) != pmSuccess)
             exit(1);
     }
+}
+    
+unsigned int getWebPagesPerSubtask(unsigned int pDeviceCount)
+{
+    unsigned int lWebPagesPerSubtask = 0;
+
+#ifdef ONE_SUBTASK_PER_DEVICE
+    unsigned int lFileCount = (gTotalWebPages / gWebPagesPerFile) + ((gTotalWebPages % gWebPagesPerFile) ? 1 : 0);
+    unsigned int lFilesPerDevice = (lFileCount / pDeviceCount);
+    
+    if(lFilesPerDevice == 0)
+    {
+        std::cout << "Too less files !!!" << std::endl;
+        exit(1);
+    }
+    
+    lWebPagesPerSubtask = lFilesPerDevice * gWebPagesPerFile;
+#else
+    if(gWebPagesPerFile > WEB_PAGES_PER_SUBTASK)
+    {
+        lWebPagesPerSubtask = gWebPagesPerFile;
+    }
+    else
+    {
+        if((WEB_PAGES_PER_SUBTASK % gWebPagesPerFile) == 0)
+            lWebPagesPerSubtask = WEB_PAGES_PER_SUBTASK;
+        else
+            lWebPagesPerSubtask = (WEB_PAGES_PER_SUBTASK / gWebPagesPerFile) * gWebPagesPerFile;
+    }
+#endif
+    
+    return lWebPagesPerSubtask;
 }
     
 void initializePageRankArray(PAGE_RANK_DATA_TYPE* pPageRankArray, PAGE_RANK_DATA_TYPE pVal, unsigned int pCount)
@@ -351,7 +382,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 	lTaskConf.totalWebPages = gTotalWebPages;
     lTaskConf.maxOutlinksPerWebPage = gMaxOutlinksPerWebPage;
     lTaskConf.webPagesPerFile = gWebPagesPerFile;
-    lTaskConf.webPagesPerSubtask = gWebPagesPerSubtask;
+    lTaskConf.webPagesPerSubtask = 0;
     lTaskConf.initialPageRank = INITIAL_PAGE_RANK;
     strcpy(lTaskConf.basePath, lBasePath);
 
@@ -383,7 +414,8 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutputMemHandle, pageRankTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
 	size_t lMemSize = gTotalWebPages * sizeof(PAGE_RANK_DATA_TYPE);
-    unsigned long lSubtasks = (gTotalWebPages / gWebPagesPerSubtask) + ((gTotalWebPages % gWebPagesPerSubtask) ? 1 : 0);
+    pTaskConf->webPagesPerSubtask = getWebPagesPerSubtask(pmGetHostCount() * 5);    // Assuming 5 devices per host
+    unsigned long lSubtasks = (gTotalWebPages / pTaskConf->webPagesPerSubtask) + ((gTotalWebPages % pTaskConf->webPagesPerSubtask) ? 1 : 0);
 
 	CREATE_SIMPLE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)
 
@@ -436,7 +468,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	lTaskConf.totalWebPages = gTotalWebPages;
     lTaskConf.maxOutlinksPerWebPage = gMaxOutlinksPerWebPage;
     lTaskConf.webPagesPerFile = gWebPagesPerFile;
-    lTaskConf.webPagesPerSubtask = gWebPagesPerSubtask;
+    lTaskConf.webPagesPerSubtask = 0;
     lTaskConf.initialPageRank = INITIAL_PAGE_RANK;
     strcpy(lTaskConf.basePath, lBasePath);
 
@@ -505,18 +537,6 @@ int DoInit(int argc, char** argv, int pCommonArgs)
     }
 
     readWebMetaData(lBasePath);
-    
-    if(gWebPagesPerFile > WEB_PAGES_PER_SUBTASK)
-    {
-        gWebPagesPerSubtask = gWebPagesPerFile;
-    }
-    else
-    {
-        if((WEB_PAGES_PER_SUBTASK % gWebPagesPerFile) == 0)
-            gWebPagesPerSubtask = WEB_PAGES_PER_SUBTASK;
-        else
-            gWebPagesPerSubtask = (WEB_PAGES_PER_SUBTASK / gWebPagesPerFile) * gWebPagesPerFile;
-    }
 
 	gSerialOutput = new PAGE_RANK_DATA_TYPE[gTotalWebPages];
 	gParallelOutput = new PAGE_RANK_DATA_TYPE[gTotalWebPages];

@@ -10,6 +10,8 @@ using namespace pm;
 #define DAMPENING_FACTOR (float)0.85
 #define INITIAL_PAGE_RANK (float)1.0
 
+#define ONE_SUBTASK_PER_DEVICE
+
 #define WEB_PAGES_PER_SUBTASK 100000
 
 #define MAX_BASE_PATH_LENGTH 256
