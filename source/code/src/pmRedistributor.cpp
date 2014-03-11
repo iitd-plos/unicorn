@@ -29,42 +29,32 @@
 namespace pm
 {
 
+using namespace redistribution;
+    
 pmRedistributor::pmRedistributor(pmTask* pTask, uint pAddressSpaceIndex)
 	: mTask(pTask)
     , mAddressSpaceIndex(pAddressSpaceIndex)
     , mSubtasksAccounted(0)
     , mRedistributedAddressSpace(NULL)
     , mGlobalRedistributionLock __LOCK_NAME__("pmRedistributor::mGlobalRedistributionLock")
-    , mLocalRedistributionLock __LOCK_NAME__("pmRedistributor::mLocalRedistributionLock")
     , mPendingBucketsCount(0)
     , mPendingBucketsCountLock __LOCK_NAME__("pmRedistributor::mPendingBucketCountLock")
     , mOrdersPerBucket(0)
 {
 }
-
-void pmRedistributor::RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, ulong pOffset, ulong pLength, uint pOrder)
+    
+uint pmRedistributor::GetAddressSpaceIndex() const
 {
-    if(!pLength)
-        return;
+    return mAddressSpaceIndex;
+}
 
+void pmRedistributor::BuildRedistributionData()
+{
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
 
-    pmSubscriptionInfo lSubscriptionInfo = mTask->GetSubscriptionManager().GetConsolidatedWriteSubscription(pStub, pSubtaskId, pSplitInfo, mAddressSpaceIndex);
-    if(!lSubscriptionInfo.length)
-        PMTHROW(pmFatalErrorException());
-    
-    size_t lGlobalOffset = lSubscriptionInfo.offset + pOffset;
-    if(lGlobalOffset >= mTask->GetAddressSpace(mAddressSpaceIndex)->GetLength())
-        PMTHROW(pmFatalErrorException());
-        
-	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLocalRedistributionLock, Lock(), Unlock());
-
-    mLocalRedistributionVector.push_back(communicator::redistributionOrderStruct(pOrder, pLength));
-    mLocalRedistributionOffsets.push_back(lGlobalOffset);
-    
-    mLocalRedistributionMap[pOrder].push_back(mLocalRedistributionVector.size() - 1);
+    mTask->GetSubscriptionManager().ConsolidateRedistributionRecords(*this, mLocalRedistributionData);
 }
     
 void pmRedistributor::SendRedistributionInfo()
@@ -73,9 +63,9 @@ void pmRedistributor::SendRedistributionInfo()
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
 #endif
 
-	FINALIZE_RESOURCE_PTR(dRedistributionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mLocalRedistributionLock, Lock(), Unlock());
+    BuildRedistributionData();
 
-    pmScheduler::GetScheduler()->RedistributionMetaDataEvent(mTask, mAddressSpaceIndex, &mLocalRedistributionVector);
+    pmScheduler::GetScheduler()->RedistributionMetaDataEvent(mTask, mAddressSpaceIndex, &mLocalRedistributionData.mLocalRedistributionVector);
 
     ComputeRedistributionBuckets();
 }
@@ -101,11 +91,11 @@ void pmRedistributor::PerformRedistribution(const pmMachine* pHost, ulong pSubta
         const communicator::redistributionOrderStruct& lData = *lIter;
         std::pair<uint, uint> lPair(lData.order, lHostId);
   
-        globalRedistributionMapType::iterator lIter = mGlobalRedistributionMap.find(lPair);
-        if(lIter == mGlobalRedistributionMap.end())
+        globalRedistributionMapType::iterator lInnerIter = mGlobalRedistributionMap.find(lPair);
+        if(lInnerIter == mGlobalRedistributionMap.end())
             mGlobalRedistributionMap[lPair] = lData.length;
         else
-            lIter->second += lData.length;
+            lInnerIter->second += lData.length;
     }
 
     mSubtasksAccounted += pSubtasksAccounted;
@@ -142,7 +132,7 @@ void pmRedistributor::ComputeGlobalOffsets()
         lRunningOffset += lIter->second;
     }
 }
-    
+
 void pmRedistributor::SendGlobalOffsets()
 {
     std::map<uint, std::vector<ulong> >::iterator lIter = mGlobalOffsetsMap.begin(), lEndIter = mGlobalOffsetsMap.end();
@@ -168,30 +158,44 @@ void pmRedistributor::ReceiveGlobalOffsets(const std::vector<ulong>& pGlobalOffs
 void pmRedistributor::ComputeRedistributionBuckets()
 {
     size_t lDevices = pmStubManager::GetStubManager()->GetProcessingElementsCPU();
-    size_t lOrders = mLocalRedistributionMap.size();
+    size_t lOrders = mLocalRedistributionData.mLocalRedistributionMap.size();
+    
+    if(!lOrders)
+        return;
+
     size_t lBuckets = ((lOrders > lDevices) ? lDevices : lOrders);
     mOrdersPerBucket = ((lOrders + lBuckets - 1) / lBuckets);
     
     mLocalRedistributionBucketsVector.resize(lBuckets);
     
-    std::map<ulong, std::vector<size_t> >::iterator lIter = mLocalRedistributionMap.begin(), lEndIter = mLocalRedistributionMap.end();
-    for(size_t i = 0; i < lBuckets; ++i)
+    auto lIter = mLocalRedistributionData.mLocalRedistributionMap.begin(), lEndIter = mLocalRedistributionData.mLocalRedistributionMap.end();
+    for(size_t i = 0; i < lBuckets - 1; ++i)
     {
         mLocalRedistributionBucketsVector[i].startIter = lIter;
         
-        for(size_t j = 0; j < mOrdersPerBucket && (lIter != lEndIter); ++lIter, ++j);
-
+        std::advance(lIter, mOrdersPerBucket);
+        
         mLocalRedistributionBucketsVector[i].endIter = lIter;
     }
+
+    mLocalRedistributionBucketsVector[lBuckets - 1].startIter = lIter;
+    mLocalRedistributionBucketsVector[lBuckets - 1].endIter = lEndIter;
 }
     
 void pmRedistributor::DoParallelRedistribution()
 {
     mPendingBucketsCount = mLocalRedistributionBucketsVector.size();
 
-    pmStubManager* lStubManager = pmStubManager::GetStubManager();
-    for(size_t i = 0; i < mPendingBucketsCount; ++i)
-        lStubManager->GetStub((uint)i)->ProcessRedistributionBucket(mTask, mAddressSpaceIndex, i);
+    if(mPendingBucketsCount)
+    {
+        pmStubManager* lStubManager = pmStubManager::GetStubManager();
+        for(size_t i = 0; i < mPendingBucketsCount; ++i)
+            lStubManager->GetStub((uint)i)->ProcessRedistributionBucket(mTask, mAddressSpaceIndex, i);
+    }
+    else
+    {
+        DoPostParallelRedistribution();
+    }
 }
 
 void pmRedistributor::CreateRedistributedAddressSpace(ulong pGenerationNumber /* = std::numeric_limits<ulong>::max() */)
@@ -231,24 +235,20 @@ void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
     {
         size_t lCurrentOffset = mGlobalOffsetsVector[lGlobalOffsetsIndex++];
         
-        std::vector<size_t>& lVector = lIter->second;
+        std::vector<std::pair<size_t, ulong>>& lVector = lIter->second;
         
-        std::vector<size_t>::iterator lInnerIter = lVector.begin(), lInnerEndIter = lVector.end();
+        std::vector<std::pair<size_t, ulong>>::iterator lInnerIter = lVector.begin(), lInnerEndIter = lVector.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
         {
-            communicator::redistributionOrderStruct& lData = mLocalRedistributionVector[*lInnerIter];
-            
-            DEBUG_EXCEPTION_ASSERT(lData.order == lIter->first);
-            
-            mRedistributedAddressSpace->Update(lCurrentOffset, lData.length, lMemAddr + mLocalRedistributionOffsets[*lInnerIter]);
+            mRedistributedAddressSpace->Update(lCurrentOffset, lInnerIter->second, lMemAddr + lInnerIter->first);
 
             if(mTask->GetOriginatingHost() != PM_LOCAL_MACHINE)
             {
                 lRangeOwner.hostOffset = lCurrentOffset;
-                mRedistributedAddressSpace->TransferOwnershipPostTaskCompletion(lRangeOwner, lCurrentOffset, lData.length);
+                mRedistributedAddressSpace->TransferOwnershipPostTaskCompletion(lRangeOwner, lCurrentOffset, lInnerIter->second);
             }
 
-            lCurrentOffset += lData.length;
+            lCurrentOffset += lInnerIter->second;
         }
     }
     
@@ -267,7 +267,34 @@ void pmRedistributor::DoPostParallelRedistribution()
 {
     static_cast<pmRemoteTask*>(mTask)->MarkRedistributionFinished(mAddressSpaceIndex, mRedistributedAddressSpace);
 }
-    
+
+pmRedistributionMetadata* pmRedistributor::GetRedistributionMetadata(ulong* pCount)
+{
+    if(mRedistributionMetaData.empty())
+    {
+        std::map<uint, uint> mMap;    // Order no. versus length
+        globalRedistributionMapType::const_iterator lIter = mGlobalRedistributionMap.begin(), lEndIter = mGlobalRedistributionMap.end();
+        for(; lIter != lEndIter; ++lIter)
+        {
+            auto lInnerIter = mMap.find(lIter->first.first);
+            if(lInnerIter == mMap.end())
+                lInnerIter = mMap.emplace(lIter->first.first, 0).first;
+            
+            lInnerIter->second += lIter->second;
+        }
+        
+        *pCount = mMap.size();
+        mRedistributionMetaData.reserve(mMap.size());
+        
+        for_each(mMap, [&] (typename decltype(mMap)::value_type& pPair)
+                 {
+                     mRedistributionMetaData.emplace_back(pPair.first, pPair.second);
+                 });
+    }
+        
+    return &mRedistributionMetaData[0];
+}
+
 }
 
 

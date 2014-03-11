@@ -913,6 +913,59 @@ struct fileOperationsStruct
     }
 };
 
+struct multiFileOperationsStruct
+{
+    ushort fileOp;  // enum fileOperations
+    uint sourceHost;    // host to which ack needs to be sent
+    ulong userId;    // identifier used to bind received ack to the correct request
+    uint fileCount;
+    uint totalLength;   // length in bytes of all file names
+
+    typedef enum fieldCount
+    {
+        FIELD_COUNT_VALUE = 5
+    } fieldCount;
+
+    multiFileOperationsStruct()
+    : fileOp(std::numeric_limits<ushort>::max())
+    , sourceHost(std::numeric_limits<uint>::max())
+    , userId(std::numeric_limits<ulong>::max())
+    , fileCount(std::numeric_limits<uint>::max())
+    , totalLength(std::numeric_limits<uint>::max())
+    {
+    }
+    
+    multiFileOperationsStruct(fileOperations pFileOp, uint pSourceHost, ulong pUserId, uint pFileCount, uint pTotalLength)
+    : fileOp((ushort)pFileOp)
+    , sourceHost(pSourceHost)
+    , userId(pUserId)
+    , fileCount(pFileCount)
+    , totalLength(pTotalLength)
+    {
+    }
+};
+    
+struct multiFileOperationsPacked
+{
+    multiFileOperationsStruct multiFileOpsStruct;
+    
+    finalize_ptr<ushort, deleteArrayDeallocator<ushort>> fileNameLengthsArray;  // MAX_FILE_SIZE_LEN
+    finalize_ptr<char, deleteArrayDeallocator<char>> fileNames;
+    
+    multiFileOperationsPacked()
+    {}
+    
+    multiFileOperationsPacked(fileOperations pFileOp, uint pSourceHost, ulong pUserId)
+    : multiFileOpsStruct(pFileOp, pSourceHost, pUserId, 0, 0)
+    {}
+
+    multiFileOperationsPacked(fileOperations pFileOp, uint pSourceHost, ulong pUserId, uint pFileCount, uint pTotalLength, finalize_ptr<ushort, deleteArrayDeallocator<ushort>>&& pFileNameLengthsArray, finalize_ptr<char, deleteArrayDeallocator<char>>&& pFileNames)
+    : multiFileOpsStruct(pFileOp, pSourceHost, pUserId, pFileCount, pTotalLength)
+    , fileNameLengthsArray(std::move(pFileNameLengthsArray))
+    , fileNames(std::move(pFileNames))
+    {}
+};
+    
 }
 
 /**

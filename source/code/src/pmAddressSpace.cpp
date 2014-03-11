@@ -27,6 +27,7 @@
 #include "pmHeavyOperations.h"
 #include "pmDevicePool.h"
 #include "pmStubManager.h"
+#include "pmUtility.h"
 
 #include <string.h>
 #include <sstream>
@@ -182,8 +183,6 @@ ulong pmAddressSpace::GetNextGenerationNumber()
 
 void pmAddressSpace::Update(size_t pOffset, size_t pLength, void* pSrcAddr)
 {
-    DEBUG_EXCEPTION_ASSERT(!GetLockingTask()->IsReadOnly(this));
-    
 	void* lDestAddr = (void*)((char*)GetMem() + pOffset);
 	memcpy(lDestAddr, pSrcAddr, pLength);
 }
@@ -374,7 +373,7 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
         mLockingTask = pTask;
 
     #ifdef SUPPORT_LAZY_MEMORY
-        if((pTask->IsWritable(this) || !pTask->IsLazy(this)) && mReadOnlyLazyMapping)
+        if((pmUtility::IsWritable(pMemType) || !pmUtility::IsLazy(pMemType)) && mReadOnlyLazyMapping)
         {
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeleteReadOnlyMemoryMapping(mReadOnlyLazyMapping, mAllocatedLength);
  
@@ -386,7 +385,7 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
             mReadOnlyLazyMapping = NULL;
         }
     
-        if(pTask->IsReadOnly(this) && pTask->IsLazy(this) && !mReadOnlyLazyMapping)
+        if(pmUtility::IsReadOnly(pMemType) && pmUtility::IsLazy(pMemType) && !mReadOnlyLazyMapping)
         {
             mReadOnlyLazyMapping = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateReadOnlyMemoryMapping(this);
 
@@ -398,14 +397,14 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
     #endif
     }
     
-    if(pTask->IsWritable(this))
+    if(pmUtility::IsWritable(pMemType))
     {
         FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
         mOriginalOwnershipMap = mOwnershipMap;
     }
     
 #ifdef SUPPORT_LAZY_MEMORY
-    if(pTask->IsReadOnly(this) && pTask->IsLazy(this))
+    if(pmUtility::IsReadOnly(pMemType) && pmUtility::IsLazy(pMemType))
     {
         if(IsRegionLocallyOwned(0, GetLength()))
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->SetLazyProtection(mReadOnlyLazyMapping, mAllocatedLength, true, true);
@@ -413,7 +412,7 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
 #endif
 
 #ifdef SUPPORT_CUDA
-    if(pTask->IsWritable(this))
+    if(pmUtility::IsWritable(pMemType))
         pmStubManager::GetStubManager()->PurgeAddressSpaceEntriesFromGpuCaches(this);
 #endif
 }

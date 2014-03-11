@@ -585,6 +585,43 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 			break;
 		}
         
+        case MULTI_FILE_OPERATIONS_PACKED:
+        {
+			multiFileOperationsPacked* lData = (multiFileOperationsPacked*)(pCommand->GetData());
+            EXCEPTION_ASSERT(lData);
+            
+			multiFileOperationsStruct& lStruct = lData->multiFileOpsStruct;
+			lLength += sizeof(lStruct) + lStruct.fileCount * sizeof(uint) + lStruct.totalLength * sizeof(char);
+            
+			if(lLength > __MAX_SIGNED(int))
+				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
+            
+            lPackedDataAutoPtr.reset(new char[lLength]);
+			char* lPackedData = lPackedDataAutoPtr.get_ptr();
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(MULTI_FILE_OPERATIONS_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+            if(lStruct.fileCount)
+            {
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->fileNameLengthsArray.get_ptr(), lStruct.fileCount, MPI_UNSIGNED_SHORT, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            }
+            
+            if(lStruct.totalLength)
+            {
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->fileNames.get_ptr(), lStruct.totalLength, MPI_CHAR, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            }
+            
+            lLength = lPos;
+            
+            break;
+        }
+
 		default:
 			PMTHROW(pmFatalErrorException());
 	}
@@ -856,6 +893,34 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
             
             lCommand = pmCommunicatorCommand<ownershipTransferPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, lCompletionCallback);
+        
+            break;
+        }
+            
+        case MULTI_FILE_OPERATIONS_PACKED:
+        {
+            finalize_ptr<multiFileOperationsPacked> lPackedData(new multiFileOperationsPacked());
+
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->multiFileOpsStruct), 1, GetDataTypeMPI(MULTI_FILE_OPERATIONS_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+        
+            if(lPackedData->multiFileOpsStruct.fileCount)
+            {
+                lPackedData->fileNameLengthsArray.reset(new ushort[lPackedData->multiFileOpsStruct.fileCount]);
+                
+                if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, lPackedData->fileNameLengthsArray.get_ptr(), lPackedData->multiFileOpsStruct.fileCount, MPI_UNSIGNED_SHORT, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            }
+
+            if(lPackedData->multiFileOpsStruct.totalLength)
+            {
+                lPackedData->fileNames.reset(new char[lPackedData->multiFileOpsStruct.totalLength]);
+                
+                if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, lPackedData->fileNames.get_ptr(), lPackedData->multiFileOpsStruct.totalLength, MPI_CHAR, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            }
+            
+            lCommand = pmCommunicatorCommand<multiFileOperationsPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, lCompletionCallback);
         
             break;
         }
@@ -1413,6 +1478,12 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			break;
 		}
 
+        case MULTI_FILE_OPERATIONS_STRUCT:
+		{
+			lFieldCount = multiFileOperationsStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+
 		default:
 			PMTHROW(pmFatalErrorException());
 	}
@@ -1700,6 +1771,18 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.fileName, lFileNameMPI, MPI_CHAR, 0, MAX_FILE_SIZE_LEN);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.fileOp, lFileOpMPI, MPI_UNSIGNED_SHORT, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sourceHost, lSourceHostMPI, MPI_UNSIGNED, 2, 1);
+
+			break;        
+        }
+
+        case MULTI_FILE_OPERATIONS_STRUCT:
+        {
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(multiFileOperationsStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.fileOp, lFileOpMPI, MPI_UNSIGNED_SHORT, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sourceHost, lSourceHostMPI, MPI_UNSIGNED, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.userId, lUserIdMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.fileCount, lFileCountMPI, MPI_UNSIGNED, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.totalLength, lTotalLengthMPI, MPI_UNSIGNED, 4, 1);
 
 			break;        
         }

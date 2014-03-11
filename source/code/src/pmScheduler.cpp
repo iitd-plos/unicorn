@@ -35,6 +35,7 @@
 #include "pmController.h"
 #include "pmCallbackUnit.h"
 #include "pmHeavyOperations.h"
+#include "pmUtility.h"
 
 namespace pm
 {
@@ -1376,6 +1377,13 @@ void pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProces
 
 void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount)
 {
+    // If task owner is not same as address space owner, then there is a problem.
+    // We need to send ownership updates to address space owner and not task owner.
+    // This works currently because an address space handle is only available on the
+    // host where it has been created (i.e. address space owner) and task can only be
+    // created with address space handle. This forces task owner to be same as address
+    // space owner.
+
     if(pRange.task->GetOriginatingHost() != PM_LOCAL_MACHINE)
         RegisterPostTaskCompletionOwnershipTransfers(pDevice, pRange, pOwnershipVector, pAddressSpaceIndexVector);
 
@@ -1802,6 +1810,60 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                     }
                     
                     SetupNewSubtaskRangeCancelReception();
+                
+                    break;
+                }
+
+                case MULTI_FILE_OPERATIONS_TAG:
+                {
+                    multiFileOperationsPacked* lData = (multiFileOperationsPacked*)(lCommunicatorCommand->GetData());
+                    multiFileOperationsStruct& lStruct = lData->multiFileOpsStruct;
+                    
+                    switch((fileOperations)(lStruct.fileOp))
+                    {
+                        case MMAP_FILE:
+                        {
+                            uint lStartIndex = 0;
+                            for(uint i = 0; i < lStruct.fileCount; ++i)
+                            {
+                                pmUtility::MapFile(std::string(lData->fileNames.get_ptr()[lStartIndex], (size_t)lData->fileNameLengthsArray.get_ptr()[i]).c_str());
+                                lStartIndex += (size_t)lData->fileNameLengthsArray.get_ptr()[i];
+                            }
+
+                            pmUtility::SendMultiFileMappingAcknowledgement(lStruct.userId, pmMachinePool::GetMachinePool()->GetMachine(lStruct.sourceHost));
+
+                            break;
+                        }
+
+                        case MUNMAP_FILE:
+                        {
+                            uint lStartIndex = 0;
+                            for(uint i = 0; i < lStruct.fileCount; ++i)
+                            {
+                                pmUtility::UnmapFile(std::string(lData->fileNames.get_ptr()[lStartIndex], (size_t)lData->fileNameLengthsArray.get_ptr()[i]).c_str());
+                                lStartIndex += (size_t)lData->fileNameLengthsArray.get_ptr()[i];
+                            }
+
+                            pmUtility::SendMultiFileUnmappingAcknowledgement(lStruct.userId, pmMachinePool::GetMachinePool()->GetMachine(lStruct.sourceHost));
+                            
+                            break;
+                        }
+                            
+                        case MMAP_ACK:
+                        {
+                            pmUtility::RegisterMultiFileMappingResponse(lStruct.userId);
+                            break;
+                        }
+
+                        case MUNMAP_ACK:
+                        {
+                            pmUtility::RegisterMultiFileUnmappingResponse(lStruct.userId);
+                            break;
+                        }
+
+                        default:
+                            PMTHROW(pmFatalErrorException());
+                    }
                 
                     break;
                 }

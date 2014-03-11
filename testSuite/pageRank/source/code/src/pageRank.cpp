@@ -112,42 +112,56 @@ void readWebPagesFile(char* pBasePath, unsigned int pTotalWebPages, unsigned int
     
 void mapAllFiles(char* pBasePath)
 {
-    char filePath[1024];
+    unsigned int lTotalFiles = gTotalWebPages / gWebPagesPerFile;
+    
+    char** filePaths = new char*[lTotalFiles];
     char buf[12];
 
-    unsigned int lTotalFiles = gTotalWebPages / gWebPagesPerFile;
     for(unsigned int i = 0; i < lTotalFiles; ++i)
     {
+        filePaths[i] = new char[1024];
         unsigned int lFileNum = 1 + i * gWebPagesPerFile;
         
         sprintf(buf, "%u", lFileNum);
-        strcpy(filePath, pBasePath);
-        strcat(filePath, "/web/page_");
-        strcat(filePath, buf);
-
-        if(pmMapFile(filePath) != pmSuccess)
-            exit(1);
+        strcpy(filePaths[i], pBasePath);
+        strcat(filePaths[i], "/web/page_");
+        strcat(filePaths[i], buf);
     }
+
+    if(pmMapFiles(filePaths, lTotalFiles) != pmSuccess)
+        exit(1);
+
+    for(unsigned int i = 0; i < lTotalFiles; ++i)
+        delete[] filePaths[i];
+    
+    delete[] filePaths;
 }
 
 void unMapAllFiles(char* pBasePath)
 {
-    char filePath[1024];
+    unsigned int lTotalFiles = gTotalWebPages / gWebPagesPerFile;
+    
+    char** filePaths = new char*[lTotalFiles];
     char buf[12];
 
-    unsigned int lTotalFiles = gTotalWebPages / gWebPagesPerFile;
     for(unsigned int i = 0; i < lTotalFiles; ++i)
     {
+        filePaths[i] = new char[1024];
         unsigned int lFileNum = 1 + i * gWebPagesPerFile;
         
         sprintf(buf, "%u", lFileNum);
-        strcpy(filePath, pBasePath);
-        strcat(filePath, "/web/page_");
-        strcat(filePath, buf);
-    
-        if(pmUnmapFile(filePath) != pmSuccess)
-            exit(1);
+        strcpy(filePaths[i], pBasePath);
+        strcat(filePaths[i], "/web/page_");
+        strcat(filePaths[i], buf);
     }
+
+    if(pmUnmapFiles(filePaths, lTotalFiles) != pmSuccess)
+        exit(1);
+
+    for(unsigned int i = 0; i < lTotalFiles; ++i)
+        delete[] filePaths[i];
+    
+    delete[] filePaths;
 }
     
 unsigned int getWebPagesPerSubtask(unsigned int pDeviceCount)
@@ -414,7 +428,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutputMemHandle, pageRankTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
 	size_t lMemSize = gTotalWebPages * sizeof(PAGE_RANK_DATA_TYPE);
-    pTaskConf->webPagesPerSubtask = getWebPagesPerSubtask(pmGetHostCount() * 5);    // Assuming 5 devices per host
+    pTaskConf->webPagesPerSubtask = getWebPagesPerSubtask(pmGetHostCount() * 4);    // Assuming 5 devices per host
     unsigned long lSubtasks = (gTotalWebPages / pTaskConf->webPagesPerSubtask) + ((gTotalWebPages % pTaskConf->webPagesPerSubtask) ? 1 : 0);
 
 	CREATE_SIMPLE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)

@@ -83,6 +83,7 @@ class pmController : public pmBase
         void* GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize);
         void ReleaseScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType);
         void* GetLastReductionScratchBuffer_Public(pmTaskHandle pTaskHandle);
+        pmRedistributionMetadata* GetRedistributionMetadata_Public(pmTaskHandle pTaskHandle, uint pMemIndex, ulong* pCount);
     
 		uint GetHostId_Public();
 		uint GetHostCount_Public();
@@ -93,9 +94,11 @@ class pmController : public pmBase
         void pmReduceULongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
         void pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
     
-        void MapFile_Public(const char* pPath);
         void* GetMappedFile_Public(const char* pPath);
+        void MapFile_Public(const char* pPath);
         void UnmapFile_Public(const char* pPath);
+        void MapFiles_Public(const char* const* pPaths, uint pFileCount);
+        void UnmapFiles_Public(const char* const* pPaths, uint pFileCount);
 
 	private:
 		pmController();

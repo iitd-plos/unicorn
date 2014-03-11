@@ -36,36 +36,51 @@ class pmTask;
 class pmMachine;
 class pmAddressSpace;
 
+namespace redistribution
+{
+
+typedef std::map<std::pair<uint, uint>, size_t> globalRedistributionMapType;
+typedef std::map<ulong, std::vector<std::pair<size_t, ulong>>> localRedistributionMapType;
+
+struct localRedistributionData
+{
+    std::vector<communicator::redistributionOrderStruct> mLocalRedistributionVector;
+    localRedistributionMapType mLocalRedistributionMap;   // Order vs. vector of mLocalRedistributionVector indices
+};
+
+}
+
 class pmRedistributor : public pmBase
 {
 	public:
 		pmRedistributor(pmTask* pTask, uint pAddressSpaceIndex);
 
-        void RedistributeData(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, ulong pOffset, ulong pLength, uint pOrder);
         void PerformRedistribution(const pmMachine* pHost, ulong pSubtasksAccounted, const std::vector<communicator::redistributionOrderStruct>& pVector);
     
+        uint GetAddressSpaceIndex() const;
         void SendRedistributionInfo();
     
         void ProcessRedistributionBucket(size_t pBucketIndex);
         void ReceiveGlobalOffsets(const std::vector<ulong>& pGlobalOffsetsVector, ulong pGenerationNumber);
+    
+        pmRedistributionMetadata* GetRedistributionMetadata(ulong* pCount);
 	
 	private:
-        typedef std::map<std::pair<uint, uint>, size_t> globalRedistributionMapType;
-        typedef std::map<ulong, std::vector<size_t> > localRedistributionMapType;
-
         typedef struct localRedistributionBucket
         {
-            localRedistributionMapType::iterator startIter;
-            localRedistributionMapType::iterator endIter;
+            redistribution::localRedistributionMapType::iterator startIter;
+            redistribution::localRedistributionMapType::iterator endIter;
         } localRedistributionBucket;
     
         typedef struct globalRedistributionBucket
         {
             size_t bucketOffset;
-            globalRedistributionMapType::iterator startIter;
-            globalRedistributionMapType::iterator endIter;
+            redistribution::globalRedistributionMapType::iterator startIter;
+            redistribution::globalRedistributionMapType::iterator endIter;
         } globalRedistributionBucket;
     
+        void BuildRedistributionData();
+
         void ComputeRedistributionBuckets();
         void CreateRedistributedAddressSpace(ulong pGenerationNumber = std::numeric_limits<ulong>::max());
 
@@ -82,20 +97,19 @@ class pmRedistributor : public pmBase
 
         std::vector<localRedistributionBucket> mLocalRedistributionBucketsVector;
     
-        globalRedistributionMapType mGlobalRedistributionMap;   // Pair of Order no. and Machine id vs. length
+        redistribution::globalRedistributionMapType mGlobalRedistributionMap;   // Pair of Order no. and Machine id vs. length
         std::map<uint, std::vector<ulong> > mGlobalOffsetsMap;  // Machine Id vs. vector of offsets for each order in the host's mLocalRedistributionMap
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mGlobalRedistributionLock;
 
-        std::vector<communicator::redistributionOrderStruct> mLocalRedistributionVector;
-        std::vector<size_t> mLocalRedistributionOffsets;
-        localRedistributionMapType mLocalRedistributionMap;   // Order vs. vector of mLocalRedistributionVector indices
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mLocalRedistributionLock;
+        redistribution::localRedistributionData mLocalRedistributionData;
     
         size_t mPendingBucketsCount;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mPendingBucketsCountLock;
     
         std::vector<ulong> mGlobalOffsetsVector;
         size_t mOrdersPerBucket;
+    
+        std::vector<pmRedistributionMetadata> mRedistributionMetaData;
     };
 
 } // end namespace pm

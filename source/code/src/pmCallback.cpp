@@ -212,10 +212,15 @@ pmDataRedistributionCB::pmDataRedistributionCB(pmDataRedistributionCallback pCal
 
 pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign) const
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_REDISTRIBUTION);
+#endif
+
 	if(!mCallback)
 		return pmSuccess;
 
     const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(pStub, pSubtaskId, pSplitInfo);
+
 	return mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
 }
 

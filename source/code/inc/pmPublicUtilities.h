@@ -48,17 +48,25 @@ namespace pm
 
     const size_t MAX_FILE_SIZE_LEN = 2048;
 
-    /** This function memory maps an entire file specified by pPath on all machines in the cluster.
-     The number of bytes in pPath must be less than MAX_FILE_SIZE_LEN. */
-    pmStatus pmMapFile(const char* pPath);
-
     /** This function returns the starting address of the file specified by pPath and memory mapped by the call pmMapFile.
      The number of bytes in pPath must be less than MAX_FILE_SIZE_LEN. */
     void* pmGetMappedFile(const char* pPath);
 
-    /** This function unmaps the file specified by pPath and mapped by the call pmMapFile from all machines in the cluster.
+    /** This function memory maps an entire file specified by pPath on all machines in the cluster.
+     The number of bytes in pPath must be less than MAX_FILE_SIZE_LEN. */
+    pmStatus pmMapFile(const char* pPath);
+
+    /** This function unmaps the file specified by pPath and mapped by the call pmMapFile(s) from all machines in the cluster.
      The number of bytes in pPath must be less than MAX_FILE_SIZE_LEN. */
     pmStatus pmUnmapFile(const char* pPath);
+
+    /** This function memory maps pFileCount files specified by pPaths on all machines in the cluster.
+     The number of bytes in each pPaths entry must be less than MAX_FILE_SIZE_LEN. */
+    pmStatus pmMapFiles(const char* const* pPaths, uint pFileCount);
+
+    /** This function unmaps pFileCount files specified by pPaths and mapped by the call pmMapFile(s) from all machines in the cluster.
+     The number of bytes in each pPaths entry must be less than MAX_FILE_SIZE_LEN. */
+    pmStatus pmUnmapFiles(const char* const* pPaths, uint pFileCount);
 
 }   // end namespace pm
 

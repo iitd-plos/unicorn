@@ -255,6 +255,15 @@ namespace pm
         PRE_SUBTASK_TO_POST_SUBTASK,    // Scratch buffer lives from data distribution callback to data redistribution/reduction callback
         REDUCTION_TO_REDUCTION          // Scratch buffer lives and travels from one data reduction callback to the next (even across machines)
     } pmScratchBufferType;
+    
+    typedef struct pmRedistributionMetadata
+    {
+        uint order;
+        uint count;
+        
+        pmRedistributionMetadata();
+        pmRedistributionMetadata(uint, uint);
+    } pmRedistributionMetadata;
 
 
 	/** The following type definitions stand for the callbacks implemented by the user programs.*/
@@ -329,8 +338,8 @@ namespace pm
 	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo);
 	pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
     
-	/** The memory redistribution API. It establishes memory ordering for the
-	 *	output section computed by a subtask in the final task memory. Order 0 is assumed
+	/** The memory redistribution API. It establishes memory ordering for an
+	 *	address space computed by a subtask in the final task memory. Order 0 is assumed
      *  to be the first order. Data for order 1 is placed after all data for order 0.
      *  There is no guaranteed ordering inside an order number if multiple subtasks
      *  produce data for that order. This function can only be called from DataRedistribution
@@ -459,6 +468,11 @@ namespace pm
 
     /** This function returns the REDUCTION_TO_REDUCTION scratch buffer associated with the final reduced subtask of the task pTaskHandle */
     void* pmGetLastReductionScratchBuffer(pmTaskHandle pTaskHandle);
+    
+    /** This function returns the redistribution metadata i.e. a set of tuples representing order number and redistributions received for that order.
+     *  The pCount output parameter is the total count of redistributions. */
+    pmRedistributionMetadata* pmGetRedistributionMetadata(pmTaskHandle pTaskHandle, uint pMemIndex, ulong* pCount);
+
 } // end namespace pm
 
 #endif

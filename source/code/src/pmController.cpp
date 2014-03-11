@@ -323,7 +323,7 @@ void pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHan
     pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
     const pmAddressSpace* lAddressSpace = lTask->GetAddressSpace(pMemIndex);
     
-    lTask->GetRedistributor(lAddressSpace)->RedistributeData(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pOffset, pLength, pOrder);
+    (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterRedistribution(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, *lTask->GetRedistributor(lAddressSpace), pOffset, pLength, pOrder);
 }
     
 void pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf)
@@ -377,6 +377,14 @@ void* pmController::GetLastReductionScratchBuffer_Public(pmTaskHandle pTaskHandl
     return (static_cast<pmTask*>(pTaskHandle))->GetLastReductionScratchBuffer();
 }
     
+pmRedistributionMetadata* pmController::GetRedistributionMetadata_Public(pmTaskHandle pTaskHandle, uint pMemIndex, ulong* pCount)
+{
+    pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
+    const pmAddressSpace* lAddressSpace = lTask->GetAddressSpace(pMemIndex);
+
+    return lTask->GetRedistributor(lAddressSpace)->GetRedistributionMetadata(pCount);
+}
+
 void pmController::pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
 {
     if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
@@ -419,23 +427,27 @@ void pmController::pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandl
 
 void pmController::MapFile_Public(const char* pPath)
 {
-    if(strlen(pPath) > MAX_FILE_SIZE_LEN - 1)
-        PMTHROW(pmFatalErrorException());
-
     pmUtility::MapFileOnAllMachines(pPath);
+}
+    
+void pmController::UnmapFile_Public(const char* pPath)
+{
+    pmUtility::UnmapFileOnAllMachines(pPath);
+}
+
+void pmController::MapFiles_Public(const char* const* pPaths, uint pFileCount)
+{
+    pmUtility::MapFilesOnAllMachines(pPaths, pFileCount);
+}
+    
+void pmController::UnmapFiles_Public(const char* const* pPaths, uint pFileCount)
+{
+    pmUtility::UnmapFilesOnAllMachines(pPaths, pFileCount);
 }
 
 void* pmController::GetMappedFile_Public(const char* pPath)
 {
     return pmUtility::GetMappedFile(pPath);
-}
-    
-void pmController::UnmapFile_Public(const char* pPath)
-{
-    if(strlen(pPath) > MAX_FILE_SIZE_LEN - 1)
-        PMTHROW(pmFatalErrorException());
-
-    pmUtility::UnmapFileOnAllMachines(pPath);
 }
 
 } // end namespace pm

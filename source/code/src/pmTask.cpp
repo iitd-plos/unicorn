@@ -35,6 +35,7 @@
 #include "pmMemoryManager.h"
 #include "pmHeavyOperations.h"
 #include "pmExecutionStub.h"
+#include "pmUtility.h"
 
 #include <vector>
 #include <algorithm>
@@ -99,25 +100,9 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 
         mAddressSpaces.push_back(lAddressSpace);
         mAddressSpaceTaskMemIndexMap[lAddressSpace] = pMemIndex;
-        
-    #ifdef SUPPORT_LAZY_MEMORY
-        if(IsReadOnly(lAddressSpace) && IsLazy(lAddressSpace))
-        {
-            pmMemInfo lMemInfo(lAddressSpace->GetReadOnlyLazyMemoryMapping(), lAddressSpace->GetReadOnlyLazyMemoryMapping(), NULL, lAddressSpace->GetLength());
-            mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo);
-        }
-        else
-    #endif
-        {
-            pmMemInfo lMemInfo;
-            mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo); // Output address spaces do not have a global lazy protection, rather have at subtask level
-        }
-        
+
         mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions |= (IsReadWrite(lAddressSpace) && !pTaskMem.disjointReadWritesAcrossSubtasks);
     });
-
-    BuildTaskInfo();
-    BuildPreSubscriptionSubtaskInfo();
 }
 
 pmTask::~pmTask()
@@ -147,6 +132,27 @@ void pmTask::LockAddressSpaces()
 void pmTask::Start()
 {
     EXCEPTION_ASSERT(!mStarted);
+
+    for_each_with_index(mTaskMemVector, [this] (const pmTaskMemory& pTaskMem, size_t pMemIndex)
+    {
+        pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
+
+    #ifdef SUPPORT_LAZY_MEMORY
+        if(IsReadOnly(lAddressSpace) && IsLazy(lAddressSpace))
+        {
+            pmMemInfo lMemInfo(lAddressSpace->GetReadOnlyLazyMemoryMapping(), lAddressSpace->GetReadOnlyLazyMemoryMapping(), NULL, lAddressSpace->GetLength());
+            mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo);
+        }
+        else
+    #endif
+        {
+            pmMemInfo lMemInfo;
+            mPreSubscriptionMemInfoForSubtasks.push_back(lMemInfo); // Output address spaces do not have a global lazy protection, rather have at subtask level
+        }
+    });
+
+    BuildTaskInfo();
+    BuildPreSubscriptionSubtaskInfo();
 
     mStarted = true;
 
@@ -439,7 +445,8 @@ void pmTask::CreateReducerAndRedistributors()
         },
         [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
         {
-            mRedistributorsMap.emplace(std::piecewise_construct, std::forward_as_tuple(pAddressSpace), std::forward_as_tuple(this, GetAddressSpaceIndex(pAddressSpace)));
+            mRedistributorsList.emplace_back(this, GetAddressSpaceIndex(pAddressSpace));
+            mRedistributorsMap.emplace(pAddressSpace, (++mRedistributorsList.rbegin()).base());
         });
     }
 }
@@ -457,7 +464,7 @@ pmRedistributor* pmTask::GetRedistributor(const pmAddressSpace* pAddressSpace)
     if(!mCallbackUnit->GetDataRedistributionCB())
         return NULL;
 
-    return &mRedistributorsMap.find(pAddressSpace)->second;
+    return &*mRedistributorsMap.find(pAddressSpace)->second;
 }
     
 bool pmTask::RegisterRedistributionCompletion()
@@ -505,7 +512,7 @@ void pmTask::MarkSubtaskExecutionFinished()
         GetReducer()->CheckReductionFinish();
 
     if(mCallbackUnit->GetDataRedistributionCB())
-        for_each(mRedistributorsMap, [] (decltype(mRedistributorsMap)::value_type& pPair) {pPair.second.SendRedistributionInfo();});
+        for_each(mRedistributorsMap, [] (decltype(mRedistributorsMap)::value_type& pPair) {(*pPair.second).SendRedistributionInfo();});
 }
 
 bool pmTask::HasSubtaskExecutionFinished()
@@ -637,13 +644,18 @@ void pmTask::MarkRedistributionFinished(uint pOriginalAddressSpaceIndex, pmAddre
         if(GetOriginatingHost() == PM_LOCAL_MACHINE)
             lAddressSpace->GetUserMemHandle()->Reset(pRedistributedAddressSpace);
 
+        lAddressSpace->Unlock(this);
+
         mAddressSpaceTaskMemIndexMap.erase(lAddressSpace);
         mAddressSpaceTaskMemIndexMap[pRedistributedAddressSpace] = pOriginalAddressSpaceIndex;
         
         mAddressSpaces[pOriginalAddressSpaceIndex] = pRedistributedAddressSpace;
         mTaskMemVector[pOriginalAddressSpaceIndex].addressSpace = pRedistributedAddressSpace;
         
-        lAddressSpace->Unlock(this);
+        auto lIter = mRedistributorsMap.find(lAddressSpace);
+        mRedistributorsMap[pRedistributedAddressSpace] = lIter->second;
+        mRedistributorsMap.erase(lIter);
+        
         lAddressSpace->UserDelete();
     }
 
@@ -718,43 +730,43 @@ pmMemType pmTask::GetMemType(const pmAddressSpace* pAddressSpace) const
 bool pmTask::IsReadOnly(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
-    return (lMemType == READ_ONLY || lMemType == READ_ONLY_LAZY);
+    return pmUtility::IsReadOnly(lMemType);
 }
 
 bool pmTask::IsWritable(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
-    return (lMemType == WRITE_ONLY || lMemType == READ_WRITE || lMemType == WRITE_ONLY_LAZY || lMemType == READ_WRITE_LAZY);
+    return pmUtility::IsWritable(lMemType);
 }
 
 bool pmTask::IsWriteOnly(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
-    return (lMemType == WRITE_ONLY || lMemType == WRITE_ONLY_LAZY);
+    return pmUtility::IsWriteOnly(lMemType);
 }
 
 bool pmTask::IsReadWrite(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
-    return (lMemType == READ_WRITE || lMemType == READ_WRITE_LAZY);
+    return pmUtility::IsReadWrite(lMemType);
 }
     
 bool pmTask::IsLazy(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
-    return ((lMemType == READ_ONLY_LAZY) || (lMemType == READ_WRITE_LAZY) || (lMemType == WRITE_ONLY_LAZY));
+    return pmUtility::IsLazy(lMemType);
 }
 
 bool pmTask::IsLazyWriteOnly(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
-    return (lMemType == WRITE_ONLY_LAZY);
+    return pmUtility::IsLazyWriteOnly(lMemType);
 }
 
 bool pmTask::IsLazyReadWrite(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
-    return (lMemType == READ_WRITE_LAZY);
+    return pmUtility::IsLazyReadWrite(lMemType);
 }
 
 

@@ -1076,7 +1076,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
                     uint lUnprotectedLength = lUnprotectedRanges * 2 * sizeof(uint);
                     void* lMem = reinterpret_cast<void*>(reinterpret_cast<uint>(lShadowMemsIter->shadowMemData.subtaskMemLength) + lUnprotectedLength);
 
-                    lSubscriptionManager.CreateSubtaskShadowMem(lStub, lData->reduceStruct.subtaskId, NULL, (uint)pAddressSpaceIndex, lMem, lShadowMemsIter->shadowMemData.subtaskMemLength - lUnprotectedLength, lUnprotectedRanges, (uint*)lShadowMemsIter->shadowMem.get_ptr());
+                    lSubscriptionManager.CreateSubtaskShadowMem(this, lData->reduceStruct.subtaskId, NULL, (uint)pAddressSpaceIndex, lMem, lShadowMemsIter->shadowMemData.subtaskMemLength - lUnprotectedLength, lUnprotectedRanges, (uint*)lShadowMemsIter->shadowMem.get_ptr());
                 }
                 else
             #endif

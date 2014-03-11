@@ -650,6 +650,103 @@ void pmSubscriptionManager::SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSub
 	lSubtask.mCudaLaunchConf = pCudaLaunchConf;
 }
 
+void pmSubscriptionManager::RegisterRedistribution(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmRedistributor& pRedistributor, ulong pOffset, ulong pLength, uint pOrder)
+{
+    if(!pLength)
+        return;
+
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+
+    pmSubscriptionInfo lSubscriptionInfo = GetConsolidatedWriteSubscriptionInternal(pStub, lSubtask, pRedistributor.GetAddressSpaceIndex());
+    EXCEPTION_ASSERT(lSubscriptionInfo.length);
+
+    size_t lGlobalOffset = lSubscriptionInfo.offset + pOffset;
+    EXCEPTION_ASSERT(lGlobalOffset < mTask->GetAddressSpace(pRedistributor.GetAddressSpaceIndex())->GetLength());
+
+    auto& lOrderData = lSubtask.mAddressSpacesData[pRedistributor.GetAddressSpaceIndex()].mRedistributionData[pOrder];
+    lOrderData.entryVector.emplace_back(lGlobalOffset, pLength);
+    lOrderData.orderLength += pLength;
+}
+
+void pmSubscriptionManager::ConsolidateRedistributionRecords(pmRedistributor& pRedistributor, redistribution::localRedistributionData& pData)
+{
+    auto lLambda = [&] (std::map<uint, pmAddressSpaceRedistributionData>& pSubtaskData)
+    {
+        pData.mLocalRedistributionVector.reserve(pSubtaskData.size());
+        
+        for_each(pSubtaskData, [&] (std::pair<const uint, pmAddressSpaceRedistributionData>& pPair)
+        {
+            pData.mLocalRedistributionVector.emplace_back(pPair.first, pPair.second.orderLength);
+            std::move(pPair.second.entryVector.begin(), pPair.second.entryVector.end(), std::back_inserter(pData.mLocalRedistributionMap[pPair.first]));
+        });
+    };
+    
+    std::map<uint, ulong> lCollectiveOrderLengths;
+
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    for_each(mSplitSubtaskMapVector, [&] (decltype(mSplitSubtaskMapVector)::value_type& pPair)
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &pPair.second, Lock(), Unlock());
+        
+        for_each(pPair.first, [&] (decltype(pPair.first)::value_type& pSubtaskMapPair)
+        {
+            for_each(pSubtaskMapPair.second.mAddressSpacesData[pRedistributor.GetAddressSpaceIndex()].mRedistributionData, [&] (std::pair<const uint, pmAddressSpaceRedistributionData>& pInternalPair)
+            {
+                auto lIter = lCollectiveOrderLengths.find(pInternalPair.first);
+                if(lIter == lCollectiveOrderLengths.end())
+                    lIter = lCollectiveOrderLengths.emplace(pInternalPair.first, 0).first;
+                
+                lIter->second += pInternalPair.second.orderLength;
+            });
+        });
+    });
+#endif
+
+    for_each(mSubtaskMapVector, [&] (decltype(mSubtaskMapVector)::value_type& pPair)
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &pPair.second, Lock(), Unlock());
+        
+        for_each(pPair.first, [&] (decltype(pPair.first)::value_type& pSubtaskMapPair)
+        {
+            for_each(pSubtaskMapPair.second.mAddressSpacesData[pRedistributor.GetAddressSpaceIndex()].mRedistributionData, [&] (std::pair<const uint, pmAddressSpaceRedistributionData>& pInternalPair)
+            {
+                auto lIter = lCollectiveOrderLengths.find(pInternalPair.first);
+                if(lIter == lCollectiveOrderLengths.end())
+                    lIter = lCollectiveOrderLengths.emplace(pInternalPair.first, 0).first;
+                
+                lIter->second += pInternalPair.second.orderLength;
+            });
+        });
+    });
+    
+    for_each(lCollectiveOrderLengths, [&] (typename decltype(lCollectiveOrderLengths)::value_type& pPair)
+    {
+        pData.mLocalRedistributionMap[pPair.first].reserve(pPair.second);
+    });
+
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    for_each(mSplitSubtaskMapVector, [&] (decltype(mSplitSubtaskMapVector)::value_type& pPair)
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &pPair.second, Lock(), Unlock());
+        
+        for_each(pPair.first, [&] (decltype(pPair.first)::value_type& pSubtaskMapPair)
+        {
+            lLambda(pSubtaskMapPair.second.mAddressSpacesData[pRedistributor.GetAddressSpaceIndex()].mRedistributionData);
+        });
+    });
+#endif
+
+    for_each(mSubtaskMapVector, [&] (decltype(mSubtaskMapVector)::value_type& pPair)
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &pPair.second, Lock(), Unlock());
+        
+        for_each(pPair.first, [&] (decltype(pPair.first)::value_type& pSubtaskMapPair)
+        {
+            lLambda(pSubtaskMapPair.second.mAddressSpacesData[pRedistributor.GetAddressSpaceIndex()].mRedistributionData);
+        });
+    });
+}
+    
 void pmSubscriptionManager::ReserveCudaGlobalMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);

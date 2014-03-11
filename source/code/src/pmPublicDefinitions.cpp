@@ -277,6 +277,16 @@ pmDeviceInfo::pmDeviceInfo()
 	name[0] = '\0';
 	description[0] = '\0';
 }
+    
+pmRedistributionMetadata::pmRedistributionMetadata()
+    : order(0)
+    , count(0)
+{}
+
+pmRedistributionMetadata::pmRedistributionMetadata(uint pOrder, uint pCount)
+    : order(pOrder)
+    , count(pCount)
+{}
 
 void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize);
 void* pmGetScratchBufferHostFunc(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo& pSplitInfo, pmScratchBufferType pScratchBufferType, size_t pBufferSize)
@@ -327,7 +337,26 @@ void* pmGetLastReductionScratchBuffer(pmTaskHandle pTaskHandle)
     
     return NULL;
 }
-
+    
+pmRedistributionMetadata* pmGetRedistributionMetadata(pmTaskHandle pTaskHandle, uint pMemIndex, ulong* pCount)
+{
+    try
+    {
+		pmController* lController = pmController::GetController();
+		if(!lController)
+			return NULL;
+    
+        return lController->GetRedistributionMetadata_Public(pTaskHandle, pMemIndex, pCount);
+    }
+    catch(pmException& e)
+    {
+        pmStatus lStatus = e.GetStatusCode();
+        pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::ERROR, pmErrorMessages[lStatus]);
+    }
+    
+    *pCount = 0;
+    return NULL;
+}
     
 pmCallbacks::pmCallbacks()
     : dataDistribution(NULL)
@@ -683,11 +712,6 @@ pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle,
     SAFE_EXECUTE_ON_CONTROLLER(pmReduceFloats_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
 }
 
-pmStatus pmMapFile(const char* pPath)
-{
-	SAFE_EXECUTE_ON_CONTROLLER(MapFile_Public, pPath);
-}
-
 void* pmGetMappedFile(const char* pPath)
 {
 	try
@@ -706,9 +730,24 @@ void* pmGetMappedFile(const char* pPath)
 	return NULL;
 }
 
+pmStatus pmMapFile(const char* pPath)
+{
+	SAFE_EXECUTE_ON_CONTROLLER(MapFile_Public, pPath);
+}
+
 pmStatus pmUnmapFile(const char* pPath)
 {
 	SAFE_EXECUTE_ON_CONTROLLER(UnmapFile_Public, pPath);
+}
+
+pmStatus pmMapFiles(const char* const* pPaths, uint pFileCount)
+{
+	SAFE_EXECUTE_ON_CONTROLLER(MapFiles_Public, pPaths, pFileCount);
+}
+
+pmStatus pmUnmapFiles(const char* const* pPaths, uint pFileCount)
+{
+	SAFE_EXECUTE_ON_CONTROLLER(UnmapFiles_Public, pPaths, pFileCount);
 }
 
 } // end namespace pm

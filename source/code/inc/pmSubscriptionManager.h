@@ -24,6 +24,7 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 #include "pmCommunicator.h"
+#include "pmRedistributor.h"
 
 #include <map>
 #include <vector>
@@ -107,6 +108,16 @@ namespace subscription
         : subscriptionInfo()
         {}
     };
+    
+    struct pmAddressSpaceRedistributionData
+    {
+        std::vector<std::pair<size_t, ulong>> entryVector;  // offset versus length
+        ulong orderLength;
+        
+        pmAddressSpaceRedistributionData()
+        : orderLength(0)
+        {}
+    };
 
     struct pmSubtaskAddressSpaceData
     {
@@ -123,6 +134,8 @@ namespace subscription
         finalize_ptr<pmCompactViewData> mCompactedSubscription;
 
         finalize_ptr<void, shadowMemDeallocator> mShadowMem;
+        
+        std::map<uint, pmAddressSpaceRedistributionData> mRedistributionData;   // order no. versus data
 
     #ifdef SUPPORT_LAZY_MEMORY
         std::vector<char> mWriteOnlyLazyDefaultValue;
@@ -147,7 +160,7 @@ namespace subscription
         , mScratchBufferSize(pScratchBufferSize)
         {}
     };
-
+    
 	struct pmSubtask
 	{
 		pmCudaLaunchConf mCudaLaunchConf;
@@ -214,6 +227,9 @@ class pmSubscriptionManager : public pmBase
 
 		void SetCudaLaunchConf(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf);
         void ReserveCudaGlobalMem(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize);
+    
+        void RegisterRedistribution(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmRedistributor& pRedistributor, ulong pOffset, ulong pLength, uint pOrder);
+        void ConsolidateRedistributionRecords(pmRedistributor& pRedistributor, redistribution::localRedistributionData& pData);
     
         pmSubscriptionFormat GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
         std::vector<pmScatteredSubscriptionInfo> GetUnifiedScatteredSubscriptionInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);

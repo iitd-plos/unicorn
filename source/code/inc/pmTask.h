@@ -203,8 +203,9 @@ class pmTask : public pmBase
 		bool mSubtaskExecutionFinished;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mExecLock;
 
-        finalize_ptr<pmReducer> mReducer;    
-        std::map<const pmAddressSpace*, pmRedistributor> mRedistributorsMap;
+        finalize_ptr<pmReducer> mReducer;
+        std::list<pmRedistributor> mRedistributorsList;
+        std::map<const pmAddressSpace*, std::list<pmRedistributor>::iterator> mRedistributorsMap;
     
         uint mCompletedRedistributions; // How many address spaces have finished redistribution
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mRedistributionLock;

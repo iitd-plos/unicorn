@@ -82,6 +82,7 @@ namespace pm
             REDISTRIBUTION_OFFSETS_TAG,
             SUBTASK_RANGE_CANCEL_TAG,
             FILE_OPERATIONS_TAG,
+            MULTI_FILE_OPERATIONS_TAG,
         #ifdef SERIALIZE_DEFERRED_LOGS
             DEFERRED_LOG_LENGTH_TAG,
             DEFERRED_LOG_TAG,
@@ -124,6 +125,8 @@ namespace pm
             REDISTRIBUTION_OFFSETS_PACKED,
             SUBTASK_RANGE_CANCEL_STRUCT,
             FILE_OPERATIONS_STRUCT,
+            MULTI_FILE_OPERATIONS_STRUCT,
+            MULTI_FILE_OPERATIONS_PACKED,
             MAX_COMMUNICATOR_DATA_TYPES
         };
     }
