@@ -36,7 +36,7 @@ namespace pm
  1. creator - To create a new chunk. It should define std::shared_ptr<__allocator_traits::allocator> operator()(size_t size)
  2. destructor - To destroy an existing chunk. It should define void operator()(const std::shared_ptr<__allocator_traits::allocator>&)
  
-(b) an allocator that defines two functions
+(b) an allocator that defines the following functions
  1. void* Allocate(size_t size, size_t alignment) or void* Allocate(size_t size)
  2. void Deallocate(void*)
  3. bool HasNoAllocations()
