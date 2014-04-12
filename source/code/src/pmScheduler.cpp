@@ -149,6 +149,7 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(REDISTRIBUTION_OFFSETS_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SUBTASK_RANGE_CANCEL_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(NO_REDUCTION_REQD_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MULTI_FILE_OPERATIONS_STRUCT);
 
 	SetupPersistentCommunicationCommands();
 }
@@ -175,6 +176,7 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REDISTRIBUTION_OFFSETS_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SUBTASK_RANGE_CANCEL_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(NO_REDUCTION_REQD_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MULTI_FILE_OPERATIONS_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 
@@ -1853,7 +1855,7 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                             uint lStartIndex = 0;
                             for(uint i = 0; i < lStruct.fileCount; ++i)
                             {
-                                pmUtility::MapFile(std::string(lData->fileNames.get_ptr()[lStartIndex], (size_t)lData->fileNameLengthsArray.get_ptr()[i]).c_str());
+                                pmUtility::MapFile(std::string((char*)&(lData->fileNames.get_ptr()[lStartIndex]), (size_t)lData->fileNameLengthsArray.get_ptr()[i]).c_str());
                                 lStartIndex += (size_t)lData->fileNameLengthsArray.get_ptr()[i];
                             }
 
@@ -1867,7 +1869,7 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                             uint lStartIndex = 0;
                             for(uint i = 0; i < lStruct.fileCount; ++i)
                             {
-                                pmUtility::UnmapFile(std::string(lData->fileNames.get_ptr()[lStartIndex], (size_t)lData->fileNameLengthsArray.get_ptr()[i]).c_str());
+                                pmUtility::UnmapFile(std::string((char*)&(lData->fileNames.get_ptr()[lStartIndex]), (size_t)lData->fileNameLengthsArray.get_ptr()[i]).c_str());
                                 lStartIndex += (size_t)lData->fileNameLengthsArray.get_ptr()[i];
                             }
 

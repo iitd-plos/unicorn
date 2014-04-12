@@ -231,9 +231,6 @@ void pmUtility::MapFilesOnAllMachines(const char* const* pPath, uint pFileCount)
         }
     }
     
-    finalize_ptr<ushort, deleteArrayDeallocator<ushort>> lFileNameLengthsArray(&lLengthsVector[0], false);
-    finalize_ptr<char, deleteArrayDeallocator<char>> lFileNames(&lNamesVector[0], false);
-
     for(uint i = 0; i < lCount; ++i)
     {
         const pmMachine* lMachine = pmMachinePool::GetMachinePool()->GetMachine(i);
@@ -245,6 +242,9 @@ void pmUtility::MapFilesOnAllMachines(const char* const* pPath, uint pFileCount)
         }
         else
         {
+            finalize_ptr<ushort, deleteArrayDeallocator<ushort>> lFileNameLengthsArray(&lLengthsVector[0], false);
+            finalize_ptr<char, deleteArrayDeallocator<char>> lFileNames(&lNamesVector[0], false);
+
             finalize_ptr<communicator::multiFileOperationsPacked> lPackedData(new communicator::multiFileOperationsPacked(communicator::MMAP_FILE, NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId(), lMultiFileOperationsId, pFileCount, lTotalLength, std::move(lFileNameLengthsArray), std::move(lFileNames)));
 
             pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::multiFileOperationsPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, communicator::SEND, communicator::MULTI_FILE_OPERATIONS_TAG, lMachine, communicator::MULTI_FILE_OPERATIONS_PACKED, lPackedData, 1);
@@ -298,9 +298,6 @@ void pmUtility::UnmapFilesOnAllMachines(const char* const* pPath, uint pFileCoun
             std::copy(lStr.begin(), lStr.end(), std::back_inserter(lNamesVector));
         }
     }
-    
-    finalize_ptr<ushort, deleteArrayDeallocator<ushort>> lFileNameLengthsArray(&lLengthsVector[0], false);
-    finalize_ptr<char, deleteArrayDeallocator<char>> lFileNames(&lNamesVector[0], false);
 
     for(uint i = 0; i < lCount; ++i)
     {
@@ -313,6 +310,9 @@ void pmUtility::UnmapFilesOnAllMachines(const char* const* pPath, uint pFileCoun
         }
         else
         {
+            finalize_ptr<ushort, deleteArrayDeallocator<ushort>> lFileNameLengthsArray(&lLengthsVector[0], false);
+            finalize_ptr<char, deleteArrayDeallocator<char>> lFileNames(&lNamesVector[0], false);
+    
             finalize_ptr<communicator::multiFileOperationsPacked> lPackedData(new communicator::multiFileOperationsPacked(communicator::MUNMAP_FILE, NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetHostId(), lMultiFileOperationsId, pFileCount, lTotalLength, std::move(lFileNameLengthsArray), std::move(lFileNames)));
 
             pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::multiFileOperationsPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, communicator::SEND, communicator::MULTI_FILE_OPERATIONS_TAG, lMachine, communicator::MULTI_FILE_OPERATIONS_PACKED, lPackedData, 1);
@@ -411,7 +411,7 @@ void pmUtility::UnmapFile(const char* pPath)
     std::string lStr(pPath);
 
     FINALIZE_RESOURCE(dResourceLock, GetResourceLock().Lock(), GetResourceLock().Unlock());
-    
+
     fileMappingsMapType& lFileMappings = GetFileMappingsMap();
     if(lFileMappings.find(lStr) == lFileMappings.end())
         PMTHROW(pmFatalErrorException());

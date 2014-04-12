@@ -670,6 +670,10 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
             lDataType = OWNERSHIP_TRANSFER_PACKED;
             break;
         
+        case MULTI_FILE_OPERATIONS_TAG:
+            lDataType = MULTI_FILE_OPERATIONS_PACKED;
+            break;
+
         default:
             PMTHROW(pmFatalErrorException());
     }
@@ -940,7 +944,8 @@ bool pmMPI::IsUnknownLengthTag(communicatorCommandTags pTag)
             pTag == DATA_REDISTRIBUTION_TAG ||
             pTag == REDISTRIBUTION_OFFSETS_TAG ||
             pTag == SEND_ACKNOWLEDGEMENT_TAG ||
-            pTag == OWNERSHIP_TRANSFER_TAG);
+            pTag == OWNERSHIP_TRANSFER_TAG ||
+            pTag == MULTI_FILE_OPERATIONS_TAG);
 }
 
 void pmMPI::SendNonBlocking(pmCommunicatorCommandPtr& pCommand)
@@ -1293,6 +1298,7 @@ MPI_Datatype pmMPI::GetDataTypeMPI(communicatorDataTypes pDataType)
         case REDISTRIBUTION_OFFSETS_PACKED:
         case SEND_ACKNOWLEDGEMENT_PACKED:
         case OWNERSHIP_TRANSFER_PACKED:
+        case MULTI_FILE_OPERATIONS_PACKED:
 			return MPI_PACKED;
 			break;
 
