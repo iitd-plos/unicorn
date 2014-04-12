@@ -10,6 +10,8 @@
 # make regressions clean - Cleans the entire regression suite's release build files [Not Implemented Yet]
 
 SUPPORT_CUDA=$(BUILD_FOR_CUDA)
+SUPPORT_OPENCL=$(BUILD_FOR_OPENCL)
+
 DEBUG=0
 
 PTHREAD_LIBS= -lpthread
@@ -83,6 +85,7 @@ OBJECTS= $(OUTDIR)/pmAddressSpace.o \
 	$(OUTDIR)/pmLogger.o \
 	$(OUTDIR)/pmMemChunk.o \
 	$(OUTDIR)/pmMemoryManager.o \
+	$(OUTDIR)/pmOpenCLManager.o \
 	$(OUTDIR)/pmNetwork.o \
 	$(OUTDIR)/pmReducer.o \
 	$(OUTDIR)/pmRedistributor.o \

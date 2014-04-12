@@ -135,9 +135,9 @@ void pmTask::Start()
 
     for_each_with_index(mTaskMemVector, [this] (const pmTaskMemory& pTaskMem, size_t pMemIndex)
     {
+    #ifdef SUPPORT_LAZY_MEMORY
         pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
 
-    #ifdef SUPPORT_LAZY_MEMORY
         if(IsReadOnly(lAddressSpace) && IsLazy(lAddressSpace))
         {
             pmMemInfo lMemInfo(lAddressSpace->GetReadOnlyLazyMemoryMapping(), lAddressSpace->GetReadOnlyLazyMemoryMapping(), NULL, lAddressSpace->GetLength());
@@ -767,6 +767,11 @@ bool pmTask::IsLazyReadWrite(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
     return pmUtility::IsLazyReadWrite(lMemType);
+}
+    
+bool pmTask::IsOpenCLTask() const
+{
+    return mCallbackUnit->GetSubtaskCB()->HasOpenCLCallback();
 }
 
 

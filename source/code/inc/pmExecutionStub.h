@@ -303,7 +303,11 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
         void CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus);
 
-	protected:
+    #ifdef SUPPORT_OPENCL
+        void SetOpenCLDevice(void* pOpenCLDevice);
+    #endif
+
+    protected:
 		bool IsHighPriorityEventWaiting(ushort pPriority);
 		void CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, bool pPrefetch, pmSplitInfo* pSplitInfo);
 
@@ -419,6 +423,10 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     #ifdef SUPPORT_SPLIT_SUBTASKS
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mPushAckLock;
         std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::map<ulong, std::vector<pmExecutionStub*>>>> mPushAckHolder;   // Key - Task, Value - Start Subtask, End Subtask, Map of subtask id versus vector of stubs that executed splits
+    #endif
+    
+    #ifdef SUPPORT_OPENCL
+        void* mOpenCLDevice;    // cl_device_id
     #endif
 };
 

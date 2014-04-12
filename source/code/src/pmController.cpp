@@ -37,6 +37,7 @@
 #include "pmSubscriptionManager.h"
 #include "pmUtility.h"
 #include "pmReducer.h"
+#include "pmOpenCLManager.h"
 
 namespace pm
 {
@@ -62,6 +63,7 @@ pmController::pmController()
     pmScheduler::GetScheduler();
     pmTimedEventManager::GetTimedEventManager();
     pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
+    pmOpenCLManager::GetOpenCLManager();
 
 #ifdef DUMP_EVENT_TIMELINE
     pmStubManager::GetStubManager()->InitializeEventTimelines();
@@ -150,7 +152,11 @@ void pmController::RegisterCallbacks_Public(const char* pKey, pmCallbacks pCallb
     bool lSubtaskCB = (pCallbacks.subtask_cpu || pCallbacks.subtask_gpu_cuda || pCallbacks.subtask_gpu_custom);
 
 	finalize_ptr<pmDataDistributionCB> lDataDistribution(pCallbacks.dataDistribution ? new pmDataDistributionCB(pCallbacks.dataDistribution) : NULL);
+#ifdef SUPPORT_OPENCL
+	finalize_ptr<pmSubtaskCB> lSubtask(lSubtaskCB ? new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda, pCallbacks.subtask_gpu_custom, pCallbacks.subtask_opencl) : NULL);
+#else
 	finalize_ptr<pmSubtaskCB> lSubtask(lSubtaskCB ? new pmSubtaskCB(pCallbacks.subtask_cpu, pCallbacks.subtask_gpu_cuda, pCallbacks.subtask_gpu_custom) : NULL);
+#endif
 	finalize_ptr<pmDataReductionCB> lDataReduction(pCallbacks.dataReduction ? new pmDataReductionCB(pCallbacks.dataReduction) : NULL);
 	finalize_ptr<pmDeviceSelectionCB> lDeviceSelection(pCallbacks.deviceSelection ? new pmDeviceSelectionCB(pCallbacks.deviceSelection) : NULL);
 	finalize_ptr<pmDataRedistributionCB> lDataRedistributionCB(pCallbacks.dataRedistribution ? new pmDataRedistributionCB(pCallbacks.dataRedistribution) : NULL);

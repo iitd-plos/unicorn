@@ -438,7 +438,7 @@ pmStatus pmUtility::CloseLibrary(void* pLibHandle)
 	return pmSuccess;
 }
 
-void* pmUtility::GetExportedSymbol(void* pLibHandle, char* pSymbol)
+void* pmUtility::GetExportedSymbol(void* pLibHandle, const char* pSymbol)
 {
     static std::map<void*, std::map<std::string, void*>> sSymbolMap;    // map of libHandle versus map of symbol versus address in dynamic library
 

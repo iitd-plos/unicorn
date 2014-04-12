@@ -31,6 +31,7 @@
 
 #include <string.h>
 #include <sstream>
+#include <cmath>
 
 namespace pm
 {
@@ -138,6 +139,66 @@ pmAddressSpace::~pmAddressSpace()
     DisposeMemory();
 }
     
+void pmAddressSpace::Do1DCyclicBlockRowDistribution(uint pBlockDim, uint pMatrixDim, uint pElemSize)
+{
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+
+    uint lMachines = pmGetHostCount();
+ 
+    EXCEPTION_ASSERT(pMatrixDim % pBlockDim == 0);
+    
+    uint lBlocksPerMatrixDim = pMatrixDim / pBlockDim;
+    EXCEPTION_ASSERT(lBlocksPerMatrixDim % lMachines == 0);
+    
+    uint lBlockRowsPerMachine = lBlocksPerMatrixDim / lMachines;
+    uint lRowsPerMachine = lBlockRowsPerMachine * pBlockDim;
+    size_t lLengthPerMachine = lRowsPerMachine * pMatrixDim * pElemSize;
+    
+    EXCEPTION_ASSERT((uint)(*mOwner) == 0);
+
+    mOwnershipMap.clear();
+    for(uint i = 0; i < lMachines; ++i)
+    {
+        const pmMachine* lRowOwnerMachine = ((PM_LOCAL_MACHINE == mOwner || (uint)(*PM_LOCAL_MACHINE) == i) ? pmMachinePool::GetMachinePool()->GetMachine(i) : mOwner);
+        size_t lRowOffset = i * lLengthPerMachine;
+        
+        mOwnershipMap.emplace(std::piecewise_construct, std::forward_as_tuple(lRowOffset), std::forward_as_tuple(std::piecewise_construct, std::forward_as_tuple(lLengthPerMachine), std::forward_as_tuple(lRowOwnerMachine, lRowOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner))));
+    }
+}
+
+void pmAddressSpace::Do1DCyclicBlockColDistribution(uint pBlockDim, uint pMatrixDim, uint pElemSize)
+{
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+
+    uint lMachines = pmGetHostCount();
+ 
+    EXCEPTION_ASSERT(pMatrixDim % pBlockDim == 0);
+    
+    uint lBlocksPerMatrixDim = pMatrixDim / pBlockDim;
+    EXCEPTION_ASSERT(lBlocksPerMatrixDim % lMachines == 0);
+    
+    uint lBlockColsPerMachine = lBlocksPerMatrixDim / lMachines;
+    uint lColsPerMachine = lBlockColsPerMachine * pBlockDim;
+    size_t lColLengthPerMachine = lColsPerMachine * pElemSize;
+
+    EXCEPTION_ASSERT((uint)(*mOwner) == 0);
+
+    mOwnershipMap.clear();
+    for(uint i = 0; i < lMachines; ++i)
+    {
+        const pmMachine* lColOwnerMachine = ((PM_LOCAL_MACHINE == mOwner || (uint)(*PM_LOCAL_MACHINE) == i) ? pmMachinePool::GetMachinePool()->GetMachine(i) : mOwner);
+        size_t lFirstColOffset = i * lColLengthPerMachine;
+        
+        for(uint j = 0; j < pMatrixDim; ++j)
+        {
+            size_t lRowOffset = j * pMatrixDim * pElemSize;
+            size_t lOffset = lRowOffset + lFirstColOffset;
+
+            mOwnershipMap.emplace(std::piecewise_construct, std::forward_as_tuple(lOffset), std::forward_as_tuple(std::piecewise_construct, std::forward_as_tuple(lColLengthPerMachine), std::forward_as_tuple(lColOwnerMachine, lOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner))));
+        }
+    }
+}
+    
 pmAddressSpace* pmAddressSpace::CreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner /* = GetNextGenerationNumber() */)
 {
     return new pmAddressSpace(pLength, pOwner, pGenerationNumberOnOwner);
@@ -237,7 +298,7 @@ pmUserMemHandle* pmAddressSpace::GetUserMemHandle()
 
 void pmAddressSpace::Init(const pmMachine* pOwner)
 {
-	mOwnershipMap.insert(std::make_pair(0, std::make_pair(mRequestedLength, vmRangeOwner(pOwner, 0, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)))));
+	mOwnershipMap.emplace(std::piecewise_construct, std::forward_as_tuple(0), std::forward_as_tuple(std::piecewise_construct, std::forward_as_tuple(mRequestedLength), std::forward_as_tuple(pOwner, 0, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner))));
 }
 
 void* pmAddressSpace::GetMem() const
@@ -364,6 +425,16 @@ void pmAddressSpace::EnqueueForLock(pm::pmTask* pTask, pmMemType pMemType, pmCom
     
 void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
 {
+#if 0
+    if(pMemType == READ_ONLY && (uint)(*pTask->GetOriginatingHost()) == 0 && pTask->GetSequenceNumber() == 0)
+    {
+        if(mGenerationNumberOnOwner == 1)
+            Do1DCyclicBlockRowDistribution(2048, std::sqrt(mRequestedLength / sizeof(float)), sizeof(float));
+        else if(mGenerationNumberOnOwner == 2)
+            Do1DCyclicBlockColDistribution(2048, std::sqrt(mRequestedLength / sizeof(float)), sizeof(float));
+    }
+#endif
+
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());

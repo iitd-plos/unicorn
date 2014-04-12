@@ -57,18 +57,24 @@ class pmDataDistributionCB : public pmCallback
 class pmSubtaskCB : public pmCallback
 {
 	public:
+    #ifdef SUPPORT_OPENCL
+        pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom, std::string pOpenCLImpplementation);
+    #else
 		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom);
+    #endif
 
 		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, void* pStreamPtr = NULL) const;
 
 		bool IsCallbackDefinedForDevice(pmDeviceType pDeviceType) const;
         bool HasCustomGpuCallback() const;
         bool HasBothCpuAndGpuCallbacks() const;
+        bool HasOpenCLCallback() const;
 
 	private:
 		pmSubtaskCallback_CPU mCallback_CPU;
         pmSubtaskCallback_GPU_CUDA mCallback_GPU_CUDA;
         pmSubtaskCallback_GPU_Custom mCallback_GPU_Custom;
+        std::string mOpenCLImplementation;
 };
 
 class pmDataReductionCB : public pmCallback

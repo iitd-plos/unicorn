@@ -156,10 +156,12 @@ class pmTask : public pmBase
         bool IsLazy(const pmAddressSpace* pAddressSpace) const;
         bool IsLazyWriteOnly(const pmAddressSpace* pAddressSpace) const;
         bool IsLazyReadWrite(const pmAddressSpace* pAddressSpace) const;
+
+        bool IsOpenCLTask() const;
     
-#ifdef ENABLE_TASK_PROFILING
+    #ifdef ENABLE_TASK_PROFILING
         pmTaskProfiler* GetTaskProfiler();
-#endif
+    #endif
     
 	private:
 		void BuildTaskInfo();

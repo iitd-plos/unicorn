@@ -37,7 +37,9 @@
     #define CUDA_LIBRARY_RUNTIME (char*)"libcudart.so"
 #endif
 
+#ifdef SUPPORT_CUDA
 const int MIN_SUPPORTED_CUDA_DRIVER_VERSION = 4000;
+#endif
 
 namespace pm
 {

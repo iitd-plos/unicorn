@@ -64,7 +64,7 @@ public:
 
     static void* OpenLibrary(char* pPath);
     static pmStatus CloseLibrary(void* pLibHandle);
-    static void* GetExportedSymbol(void* pLibHandle, char* pSymbol);
+    static void* GetExportedSymbol(void* pLibHandle, const char* pSymbol);
 
     static bool IsReadOnly(pmMemType pMemType);
     static bool IsWritable(pmMemType pMemType);

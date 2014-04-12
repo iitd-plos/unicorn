@@ -311,6 +311,29 @@ typedef unsigned long ulong;
             int mCudaError;
 	};
 
+	class pmExceptionOpenCL : public pmException
+	{
+		public:
+			typedef enum failureTypes
+			{
+				LIBRARY_OPEN_FAILURE,
+				RUNTIME_ERROR,
+				UNDEFINED_SYMBOL,
+                NO_OPENCL_DEVICES,
+                DEVICE_FISSION_UNAVAILABLE,
+                DEVICE_COUNT_MISMATCH
+			} failureTypes;
+
+            pmExceptionOpenCL(failureTypes pFailureId, int openCLError = 0) {mFailureId = pFailureId; mOpenCLError = openCLError;}
+			pmStatus GetStatusCode() {return pmGraphicsCardError;}
+        
+            failureTypes GetFailureId() {return mFailureId;}
+
+		private:
+			failureTypes mFailureId;
+            int mOpenCLError;
+	};
+
 	class pmBeyondComputationalLimitsException : public pmException
 	{
 		public:

@@ -22,7 +22,9 @@
 		2B12642217DDF6AA00D34C09 /* pmSubtaskSplitter.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B12642017DDF6AA00D34C09 /* pmSubtaskSplitter.cpp */; };
 		2B23A24117F61C600019FCD3 /* pmPoolAllocator.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B23A23F17F61C600019FCD3 /* pmPoolAllocator.cpp */; };
 		2B2E44041795C8B900309100 /* pmMemChunk.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B2E44021795C8B900309100 /* pmMemChunk.cpp */; };
+		2B4C2BBF18E9E30E00306F87 /* pmOpenCLManager.h in Headers */ = {isa = PBXBuildFile; fileRef = 2B4C2BBE18E9E30E00306F87 /* pmOpenCLManager.h */; };
 		2BC0D9D217F9F0DC001CAE05 /* pmCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */; };
+		2BC4072018E9E37B00D1472B /* pmOpenCLManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC4071E18E9E37B00D1472B /* pmOpenCLManager.cpp */; };
 		2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED2F151C7B07006AA45D /* pmBase.h */; };
 		2BCCED6F151C7B07006AA45D /* pmCallback.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED30151C7B07006AA45D /* pmCallback.h */; };
 		2BCCED70151C7B07006AA45D /* pmCallbackUnit.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED31151C7B07006AA45D /* pmCallbackUnit.h */; };
@@ -112,8 +114,11 @@
 		2B23A23F17F61C600019FCD3 /* pmPoolAllocator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmPoolAllocator.cpp; sourceTree = "<group>"; };
 		2B2E44011795C6E800309100 /* pmMemChunk.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmMemChunk.h; sourceTree = "<group>"; };
 		2B2E44021795C8B900309100 /* pmMemChunk.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemChunk.cpp; sourceTree = "<group>"; };
+		2B4C2BBE18E9E30E00306F87 /* pmOpenCLManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmOpenCLManager.h; sourceTree = "<group>"; };
 		2BC0D9CF17F9F0C3001CAE05 /* pmCache.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmCache.h; sourceTree = "<group>"; };
 		2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmCache.cpp; sourceTree = "<group>"; };
+		2BC4071E18E9E37B00D1472B /* pmOpenCLManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmOpenCLManager.cpp; sourceTree = "<group>"; };
+		2BC4072118E9E3B800D1472B /* pmCudaInterface.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = pmCudaInterface.cu; sourceTree = "<group>"; };
 		2BCCED1D151C7AA1006AA45D /* pmlib.dylib */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.dylib"; includeInIndex = 0; path = pmlib.dylib; sourceTree = BUILT_PRODUCTS_DIR; };
 		2BCCED21151C7AA1006AA45D /* pmlib-Prefix.pch */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "pmlib-Prefix.pch"; sourceTree = "<group>"; };
 		2BCCED22151C7AA1006AA45D /* pmlibProj.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = pmlibProj.xcconfig; sourceTree = "<group>"; };
@@ -158,7 +163,6 @@
 		2BCCED55151C7B07006AA45D /* pmCommunicator.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmCommunicator.cpp; sourceTree = "<group>"; };
 		2BCCED56151C7B07006AA45D /* pmController.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; lineEnding = 0; path = pmController.cpp; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED57151C7B07006AA45D /* pmDevicePool.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmDevicePool.cpp; sourceTree = "<group>"; };
-		2BCCED58151C7B07006AA45D /* pmCudaInterface.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = pmCudaInterface.cu; sourceTree = "<group>"; xcLanguageSpecificationIdentifier = xcode.lang.cpp; };
 		2BCCED59151C7B07006AA45D /* pmDispatcherGPU.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmDispatcherGPU.cpp; sourceTree = "<group>"; };
 		2BCCED5A151C7B07006AA45D /* pmExecutionStub.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmExecutionStub.cpp; sourceTree = "<group>"; };
 		2BCCED5B151C7B07006AA45D /* pmHardware.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmHardware.cpp; sourceTree = "<group>"; };
@@ -263,6 +267,7 @@
 				2B2E44011795C6E800309100 /* pmMemChunk.h */,
 				2BCCED3E151C7B07006AA45D /* pmMemoryManager.h */,
 				2BCCED40151C7B07006AA45D /* pmNetwork.h */,
+				2B4C2BBE18E9E30E00306F87 /* pmOpenCLManager.h */,
 				2B23A23E17F61C300019FCD3 /* pmPoolAllocator.h */,
 				2BCCED41151C7B07006AA45D /* pmPublicDefinitions.h */,
 				0E64400316F1080600D4D8E6 /* pmPublicUtilities.h */,
@@ -303,7 +308,7 @@
 				2BCCED54151C7B07006AA45D /* pmCommand.cpp */,
 				2BCCED55151C7B07006AA45D /* pmCommunicator.cpp */,
 				2BCCED56151C7B07006AA45D /* pmController.cpp */,
-				2BCCED58151C7B07006AA45D /* pmCudaInterface.cu */,
+				2BC4072118E9E3B800D1472B /* pmCudaInterface.cu */,
 				0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */,
 				2BCCED57151C7B07006AA45D /* pmDevicePool.cpp */,
 				2BCCED59151C7B07006AA45D /* pmDispatcherGPU.cpp */,
@@ -314,6 +319,7 @@
 				2BCCED5C151C7B07006AA45D /* pmLogger.cpp */,
 				2B2E44021795C8B900309100 /* pmMemChunk.cpp */,
 				2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */,
+				2BC4071E18E9E37B00D1472B /* pmOpenCLManager.cpp */,
 				2BCCED5F151C7B07006AA45D /* pmNetwork.cpp */,
 				2B23A23F17F61C600019FCD3 /* pmPoolAllocator.cpp */,
 				2BCCED60151C7B07006AA45D /* pmPublicDefinitions.cpp */,
@@ -369,6 +375,7 @@
 				2BCCED80151C7B07006AA45D /* pmPublicDefinitions.h in Headers */,
 				2BCCED81151C7B07006AA45D /* pmReducer.h in Headers */,
 				2BCCED82151C7B07006AA45D /* pmResourceLock.h in Headers */,
+				2B4C2BBF18E9E30E00306F87 /* pmOpenCLManager.h in Headers */,
 				2BCCED83151C7B07006AA45D /* pmSafePriorityQueue.h in Headers */,
 				2BCCED84151C7B07006AA45D /* pmScheduler.h in Headers */,
 				2BCCED85151C7B07006AA45D /* pmSignalWait.h in Headers */,
@@ -456,6 +463,7 @@
 				2BCCED9D151C7B07006AA45D /* pmPublicDefinitions.cpp in Sources */,
 				2BCCED9E151C7B07006AA45D /* pmReducer.cpp in Sources */,
 				2BCCED9F151C7B07006AA45D /* pmResourceLock.cpp in Sources */,
+				2BC4072018E9E37B00D1472B /* pmOpenCLManager.cpp in Sources */,
 				2BCCEDA0151C7B07006AA45D /* pmSafePriorityQueue.cpp in Sources */,
 				2BCCEDA1151C7B07006AA45D /* pmScheduler.cpp in Sources */,
 				2BCCEDA2151C7B07006AA45D /* pmSignalWait.cpp in Sources */,
@@ -499,6 +507,7 @@
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
 				GCC_OPTIMIZATION_LEVEL = 0;
 				GCC_PREPROCESSOR_DEFINITIONS = (
+					"SUPPORT_OPENCL=1",
 					"DEBUG=1",
 					"$(inherited)",
 				);
@@ -533,6 +542,7 @@
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
 				GCC_C_LANGUAGE_STANDARD = gnu99;
 				GCC_ENABLE_OBJC_EXCEPTIONS = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = "SUPPORT_OPENCL=1";
 				GCC_VERSION = com.apple.compilers.llvm.clang.1_0;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
 				GCC_WARN_ABOUT_MISSING_PROTOTYPES = YES;

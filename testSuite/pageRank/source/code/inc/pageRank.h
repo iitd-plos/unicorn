@@ -6,17 +6,17 @@ using namespace pm;
     
 #define PAGE_RANK_DATA_TYPE float
 
-#define PAGE_RANK_ITERATIONS 1
+#define PAGE_RANK_ITERATIONS 2
 #define DAMPENING_FACTOR (float)0.85
 #define INITIAL_PAGE_RANK (float)1.0
 
 #define ONE_SUBTASK_PER_DEVICE
 
-#define WEB_PAGES_PER_SUBTASK 100000
+#define WEB_PAGES_PER_SUBTASK 10000000
 
 #define MAX_BASE_PATH_LENGTH 256
 //#define DEFAULT_BASE_PATH (char*)"../../web_dump"
-#define DEFAULT_BASE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/pageRank/web_dump"
+#define DEFAULT_BASE_PATH (char*)"/Users/tberi/Development/git-repositories/pmlib/testSuite/pageRank/web_dump_100M"
 
 typedef struct pageRankTaskConf
 {

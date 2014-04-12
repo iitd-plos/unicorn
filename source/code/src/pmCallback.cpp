@@ -69,10 +69,17 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
 
 
 /* class pmSubtaskCB */
+#ifdef SUPPORT_OPENCL
+pmSubtaskCB::pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom, std::string pOpenCLImplementation)
+#else
 pmSubtaskCB::pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom)
+#endif
 	: mCallback_CPU(pCallback_CPU)
 	, mCallback_GPU_CUDA(pCallback_GPU_CUDA)
     , mCallback_GPU_Custom(pCallback_GPU_Custom)
+#ifdef SUPPORT_OPENCL
+    , mOpenCLImplementation(pOpenCLImplementation)
+#endif
 {
 }
 
@@ -82,7 +89,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType) const
 	{
 		case CPU:
 		{
-			if(mCallback_CPU)
+			if(mCallback_CPU || !mOpenCLImplementation.empty())
 				return true;
 			
 			break;
@@ -91,7 +98,7 @@ bool pmSubtaskCB::IsCallbackDefinedForDevice(pmDeviceType pDeviceType) const
 #ifdef SUPPORT_CUDA
 		case GPU_CUDA:
 		{
-			if(mCallback_GPU_CUDA || mCallback_GPU_Custom)
+			if(mCallback_GPU_CUDA || mCallback_GPU_Custom || !mOpenCLImplementation.empty())
 				return true;
 
 			break;
@@ -123,6 +130,16 @@ bool pmSubtaskCB::HasBothCpuAndGpuCallbacks() const
     
     return false;
 }
+
+bool pmSubtaskCB::HasOpenCLCallback() const
+{
+#ifdef SUPPORT_OPENCL
+    return !mOpenCLImplementation.empty();
+#else
+    return false;
+#endif
+}
+
 
 pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, void* pStreamPtr /* = NULL */) const
 {    

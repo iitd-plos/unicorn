@@ -234,10 +234,6 @@ std::string pmSubtaskRangeExecutionTimelineAutoPtr::GetCancelledEventName(ulong 
 #endif
 
 
-const uint MAX_FLOAT_WIDTH = 8;
-const uint MAX_INT_WIDTH = 8;
-const double MIN_ACCUMULATED_TIME = 0.001;
-
 /* class pmScopeTimer */
 pmScopeTimer::pmScopeTimer(const char* pStr)
 : mStr(pStr)
@@ -252,6 +248,11 @@ pmScopeTimer::~pmScopeTimer()
 
     
 #ifdef ENABLE_ACCUMULATED_TIMINGS
+
+const uint MAX_FLOAT_WIDTH = 8;
+const uint MAX_INT_WIDTH = 8;
+const double MIN_ACCUMULATED_TIME = 0.001;
+
 /* class pmAccumulationTimer */
 pmAccumulationTimer::pmAccumulationTimer(const std::string& pStr)
 : mStr(pStr)

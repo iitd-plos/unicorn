@@ -76,6 +76,9 @@ pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
     , mCurrentSubtaskRangeStats(NULL)
     , mSecondaryAllotteeLock __LOCK_NAME__("pmExecutionStub::mSecondaryAllotteeLock")
     , mDeferredShadowMemCommitsLock __LOCK_NAME__("pmExecutionStub::mDeferredShadowMemCommitsLock")
+#ifdef SUPPORT_OPENCL
+    , mOpenCLDevice(NULL)
+#endif
 {
 }
 
@@ -1901,6 +1904,15 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
     if(lStatus == pmSuccess)
         pTask->GetReducer()->AddSubtask(this, pSubtaskId1, pSplitInfo1);
 }
+    
+#ifdef SUPPORT_OPENCL
+void pmExecutionStub::SetOpenCLDevice(void* pOpenCLDevice)
+{
+    EXCEPTION_ASSERT(!mOpenCLDevice);
+
+    mOpenCLDevice = pOpenCLDevice;
+}
+#endif
 
 void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetworkCommands)
 {

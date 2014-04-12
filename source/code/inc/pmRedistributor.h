@@ -45,7 +45,7 @@ typedef std::map<ulong, std::vector<std::pair<size_t, ulong>>> localRedistributi
 struct localRedistributionData
 {
     std::vector<communicator::redistributionOrderStruct> mLocalRedistributionVector;
-    localRedistributionMapType mLocalRedistributionMap;   // Order vs. vector of mLocalRedistributionVector indices
+    localRedistributionMapType mLocalRedistributionMap;   // Order vs. vector of offset/length pairs
 };
 
 }

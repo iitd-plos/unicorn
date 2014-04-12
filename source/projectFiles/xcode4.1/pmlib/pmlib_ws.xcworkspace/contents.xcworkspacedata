@@ -54,6 +54,9 @@
          location = "group:pageRankInvertedIndex/PageRankInvertedIndex.xcodeproj">
       </FileRef>
       <FileRef
+         location = "group:pageRankMultiIndex/PageRankMultiIndex.xcodeproj">
+      </FileRef>
+      <FileRef
          location = "group:ImageFiltering/ImageFiltering.xcodeproj">
       </FileRef>
       <FileRef

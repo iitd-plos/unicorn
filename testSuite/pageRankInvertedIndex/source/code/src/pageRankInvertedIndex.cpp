@@ -351,32 +351,6 @@ pmStatus invertIndex_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
     
 pmStatus invertIndexDataRedistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
-#if 0
-	invertIndexTaskConf* lTaskConf = (invertIndexTaskConf*)(pTaskInfo.taskConf);
-
-	invertedIndex* lInvertedIndex = (invertedIndex*)pSubtaskInfo.memInfo[INVERTED_INDEX_MEM_INDEX].ptr;
-    
-	unsigned int* lCountBuffer = (unsigned int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, SUBTASK_TO_POST_SUBTASK, 0, NULL);
-    unsigned int lCount = lCountBuffer[0];
-    
-    size_t lInvertedIndexOffset = 0;
-
-    for(unsigned int i = 0; i < lCount; ++i)
-    {
-        unsigned int lPotentialSubtask = lInvertedIndex->destPage / lTaskConf->webPagesPerSubtask; // The subtask that will process this inlink in the page rank computation tasks
-
-        pmRedistributeData(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INVERTED_INDEX_MEM_INDEX, lInvertedIndexOffset, sizeof(invertedIndex), lPotentialSubtask);
-
-        lInvertedIndexOffset += sizeof(invertedIndex);
-        
-        ++lInvertedIndex;
-    }
-    
-    unsigned int lWastedOffset = lCount * sizeof(invertedIndex);
-    unsigned int lWastedLength = (gWebPagesPerSubtask * gMaxOutlinksPerWebPage - lCount) * sizeof(invertedIndex);
-    
-    pmRedistributeData(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INVERTED_INDEX_MEM_INDEX, lWastedOffset, lWastedLength, (unsigned int)pTaskInfo.subtaskCount);
-#else
 	unsigned int* lIndicesPerSubtask = (unsigned int*)pmGetScratchBuffer(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, SUBTASK_TO_POST_SUBTASK, 0, NULL);
 
     unsigned int lCount = 0;
@@ -388,12 +362,6 @@ pmStatus invertIndexDataRedistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDevic
         lCount += lIndicesPerSubtask[i];
         lInvertedIndexOffset += lIndicesPerSubtask[i] * sizeof(invertedIndex);
     }
-    
-    unsigned int lWastedOffset = lCount * sizeof(invertedIndex);
-    unsigned int lWastedLength = (gWebPagesPerSubtask * gMaxOutlinksPerWebPage - lCount) * sizeof(invertedIndex);
-    
-    pmRedistributeData(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INVERTED_INDEX_MEM_INDEX, lWastedOffset, lWastedLength, (unsigned int)pTaskInfo.subtaskCount);
-#endif
 
     return pmSuccess;
 }
@@ -409,7 +377,7 @@ pmStatus pageRankDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo
     if(lFirstPage + lPageCount > lTaskConf->totalWebPages)
         lPageCount = lTaskConf->totalWebPages - lFirstPage;
 
-    // Inverted index address space (lazy)
+    // Inverted index address space
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INVERTED_LINKS_MEM_INDEX, READ_SUBSCRIPTION, pmSubscriptionInfo(lSubtaskMetaData.inlinksStartOffset, lSubtaskMetaData.inlinksCount * sizeof(invertedIndex)));
 
     // Output page rank address space
@@ -565,13 +533,13 @@ bool InvertIndexTask(invertIndexTaskConf* pTaskConf, pmCallbackHandle pCallbackH
     unsigned long lCount = 0;
     pmRedistributionMetadata* lMetaData = pmGetRedistributionMetadata(lTaskHandle, INVERTED_INDEX_MEM_INDEX, &lCount);
     
-    if(lCount != pSubtasks + 1)
+    if(lCount != pSubtasks)
     {
         std::cout << "Redistribution count mismatch !!!" << std::endl;
         exit(1);
     }
 
-    pPageRankTaskConf->reset((pageRankTaskConf*)new char[sizeof(pageRankTaskConf) + sizeof(subtaskMetadata) * (lCount - 1)]);
+    pPageRankTaskConf->reset((pageRankTaskConf*)new char[sizeof(pageRankTaskConf) + sizeof(subtaskMetadata) * lCount]);
     
     pageRankTaskConf* lPageRankTaskConf = pPageRankTaskConf->get();
     lPageRankTaskConf->totalWebPages = gTotalWebPages;
@@ -582,7 +550,7 @@ bool InvertIndexTask(invertIndexTaskConf* pTaskConf, pmCallbackHandle pCallbackH
     
     unsigned long lOffset = 0;
     subtaskMetadata* lSubtaskMetadata = (subtaskMetadata*)((char*)lPageRankTaskConf + sizeof(pageRankTaskConf));
-    for(unsigned long i = 0; i < lCount - 1; ++i)
+    for(unsigned long i = 0; i < lCount; ++i)
     {
         unsigned int lInlinksCount = lMetaData->count / sizeof(invertedIndex);
         lSubtaskMetadata->inlinksStartOffset =  lOffset;

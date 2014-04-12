@@ -40,10 +40,10 @@ using namespace heavyOperations;
 using namespace communicator;
 
 #ifdef TRACK_MEMORY_REQUESTS
-void __dump_mem_forward(const pmAddressSpace* addressSpace, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, memoryIdentifierStruct& newIdentifier, ulong newOffset);
-void __dump_mem_transfer(const pmAddressSpace* addressSpace, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host);
+void __dump_mem_forward(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, const memoryIdentifierStruct& newIdentifier, ulong newOffset);
+void __dump_mem_transfer(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host);
     
-void __dump_mem_forward(const pmAddressSpace* addressSpace, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, memoryIdentifierStruct&  newIdentifier, ulong newOffset)
+void __dump_mem_forward(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, const memoryIdentifierStruct&  newIdentifier, ulong newOffset)
 {
     char lStr[512];
     
@@ -52,7 +52,7 @@ void __dump_mem_forward(const pmAddressSpace* addressSpace, memoryIdentifierStru
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-void __dump_mem_transfer(const pmAddressSpace* addressSpace, memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host)
+void __dump_mem_transfer(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host)
 {
     char lStr[512];
     
@@ -351,7 +351,7 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
                 
                 finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset + lInternalOffset - pOffset, lInternalLength, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
             
-                MEM_TRANSFER_DUMP(lSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lInternalLength, (uint)(*pRequestingMachine))
+                MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lInternalLength, (uint)(*pRequestingMachine))
 
                 pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 
@@ -416,7 +416,7 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
             
             finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset, pLength, pStep, pCount, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
         
-            MEM_TRANSFER_DUMP(lSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength * pCount, (uint)(*pRequestingMachine))
+            MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength * pCount, (uint)(*pRequestingMachine))
 
             pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
 

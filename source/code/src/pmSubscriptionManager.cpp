@@ -672,16 +672,13 @@ void pmSubscriptionManager::ConsolidateRedistributionRecords(pmRedistributor& pR
 {
     auto lLambda = [&] (std::map<uint, pmAddressSpaceRedistributionData>& pSubtaskData)
     {
-        pData.mLocalRedistributionVector.reserve(pSubtaskData.size());
-        
         for_each(pSubtaskData, [&] (std::pair<const uint, pmAddressSpaceRedistributionData>& pPair)
         {
-            pData.mLocalRedistributionVector.emplace_back(pPair.first, pPair.second.orderLength);
             std::move(pPair.second.entryVector.begin(), pPair.second.entryVector.end(), std::back_inserter(pData.mLocalRedistributionMap[pPair.first]));
         });
     };
     
-    std::map<uint, ulong> lCollectiveOrderLengths;
+    std::map<uint, std::pair<size_t, ulong>> lCollectiveOrderData;  // order no. versus pair of (no. of redistributions registered and total length of redistributions)
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
     for_each(mSplitSubtaskMapVector, [&] (decltype(mSplitSubtaskMapVector)::value_type& pPair)
@@ -692,11 +689,12 @@ void pmSubscriptionManager::ConsolidateRedistributionRecords(pmRedistributor& pR
         {
             for_each(pSubtaskMapPair.second.mAddressSpacesData[pRedistributor.GetAddressSpaceIndex()].mRedistributionData, [&] (std::pair<const uint, pmAddressSpaceRedistributionData>& pInternalPair)
             {
-                auto lIter = lCollectiveOrderLengths.find(pInternalPair.first);
-                if(lIter == lCollectiveOrderLengths.end())
-                    lIter = lCollectiveOrderLengths.emplace(pInternalPair.first, 0).first;
+                auto lIter = lCollectiveOrderData.find(pInternalPair.first);
+                if(lIter == lCollectiveOrderData.end())
+                    lIter = lCollectiveOrderData.emplace(std::piecewise_construct, std::forward_as_tuple(pInternalPair.first), std::forward_as_tuple(0, 0)).first;
                 
-                lIter->second += pInternalPair.second.orderLength;
+                ++lIter->second.first;
+                lIter->second.second += pInternalPair.second.orderLength;
             });
         });
     });
@@ -710,18 +708,22 @@ void pmSubscriptionManager::ConsolidateRedistributionRecords(pmRedistributor& pR
         {
             for_each(pSubtaskMapPair.second.mAddressSpacesData[pRedistributor.GetAddressSpaceIndex()].mRedistributionData, [&] (std::pair<const uint, pmAddressSpaceRedistributionData>& pInternalPair)
             {
-                auto lIter = lCollectiveOrderLengths.find(pInternalPair.first);
-                if(lIter == lCollectiveOrderLengths.end())
-                    lIter = lCollectiveOrderLengths.emplace(pInternalPair.first, 0).first;
+                auto lIter = lCollectiveOrderData.find(pInternalPair.first);
+                if(lIter == lCollectiveOrderData.end())
+                    lIter = lCollectiveOrderData.emplace(std::piecewise_construct, std::forward_as_tuple(pInternalPair.first), std::forward_as_tuple(0, 0)).first;
                 
-                lIter->second += pInternalPair.second.orderLength;
+                ++lIter->second.first;
+                lIter->second.second += pInternalPair.second.orderLength;
             });
         });
     });
     
-    for_each(lCollectiveOrderLengths, [&] (typename decltype(lCollectiveOrderLengths)::value_type& pPair)
+    pData.mLocalRedistributionVector.reserve(lCollectiveOrderData.size());
+    
+    for_each(lCollectiveOrderData, [&] (typename decltype(lCollectiveOrderData)::value_type& pPair)
     {
-        pData.mLocalRedistributionMap[pPair.first].reserve(pPair.second);
+        pData.mLocalRedistributionVector.emplace_back(pPair.first, pPair.second.second);
+        pData.mLocalRedistributionMap[pPair.first].reserve(pPair.second.first);
     });
 
 #ifdef SUPPORT_SPLIT_SUBTASKS

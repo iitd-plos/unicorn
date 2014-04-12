@@ -116,6 +116,9 @@ class pmAddressSpace : public pmBase
 
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
+        void Do1DCyclicBlockRowDistribution(uint pBlockDim, uint pMatrixDim, uint pElemSize);
+        void Do1DCyclicBlockColDistribution(uint pBlockDim, uint pMatrixDim, uint pElemSize);
+
         static pmAddressSpace* CreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
         static pmAddressSpace* CheckAndCreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
 

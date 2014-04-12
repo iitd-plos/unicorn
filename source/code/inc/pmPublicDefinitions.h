@@ -290,8 +290,12 @@ namespace pm
 			pmDeviceSelectionCallback deviceSelection;
 			pmPreDataTransferCallback preDataTransfer;
 			pmPostDataTransferCallback postDataTransfer;
+            const char* subtask_opencl;
 
 			pmCallbacks();
+            pmCallbacks(pmDataDistributionCallback, const char* subtask_opencl);
+            pmCallbacks(pmDataDistributionCallback, const char* subtask_opencl, pmDataReductionCallback);
+            pmCallbacks(pmDataDistributionCallback, const char* subtask_opencl, pmDataRedistributionCallback);
             pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_CUDA);
             pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_Custom);
             pmCallbacks(pmDataDistributionCallback, pmSubtaskCallback_CPU, pmSubtaskCallback_GPU_CUDA, pmDataReductionCallback);

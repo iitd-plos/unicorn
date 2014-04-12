@@ -401,6 +401,6 @@ pmStatus pmCudaInterface::ExecuteKernel(const pmTaskInfo& pTaskInfo, const pmTas
 	return pmSuccess;
 }
 
-#endif	// SUPPORT_CUDA
-
 }
+
+#endif	// SUPPORT_CUDA

@@ -368,6 +368,7 @@ pmCallbacks::pmCallbacks()
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , subtask_opencl(NULL)
 {
 }
     
@@ -381,6 +382,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , subtask_opencl(NULL)
 {}
 
 pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_Custom pGpuCustomCallback)
@@ -393,6 +395,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , subtask_opencl(NULL)
 {}
 
 pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_CUDA pGpuCudaCallback, pmDataReductionCallback pReductionCallback)
@@ -405,6 +408,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , subtask_opencl(NULL)
 {}
 
 pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_Custom pGpuCustomCallback, pmDataReductionCallback pReductionCallback)
@@ -417,6 +421,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , subtask_opencl(NULL)
 {}
 
 pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_CUDA pGpuCudaCallback, pmDataRedistributionCallback pRedistributionCallback)
@@ -429,6 +434,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , subtask_opencl(NULL)
 {}
 
 pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, pmSubtaskCallback_CPU pCpuCallback, pmSubtaskCallback_GPU_Custom pGpuCustomCallback, pmDataRedistributionCallback pRedistributionCallback)
@@ -441,12 +447,55 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , subtask_opencl(NULL)
+{}
+
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, const char* pSubtask_opencl)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(NULL)
+	, subtask_gpu_cuda(NULL)
+    , subtask_gpu_custom(NULL)
+	, dataReduction(NULL)
+	, dataRedistribution(NULL)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+    , subtask_opencl(pSubtask_opencl)
+{}
+
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, const char* pSubtask_opencl, pmDataReductionCallback pReductionCallback)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(NULL)
+	, subtask_gpu_cuda(NULL)
+    , subtask_gpu_custom(NULL)
+	, dataReduction(pReductionCallback)
+	, dataRedistribution(NULL)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+    , subtask_opencl(pSubtask_opencl)
+{}
+    
+pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, const char* pSubtask_opencl, pmDataRedistributionCallback pRedistributionCallback)
+    : dataDistribution(pDataDistributionCallback)
+	, subtask_cpu(NULL)
+	, subtask_gpu_cuda(NULL)
+    , subtask_gpu_custom(NULL)
+	, dataReduction(NULL)
+	, dataRedistribution(pRedistributionCallback)
+	, deviceSelection(NULL)
+	, preDataTransfer(NULL)
+	, postDataTransfer(NULL)
+    , subtask_opencl(pSubtask_opencl)
 {}
 
 
 pmStatus pmRegisterCallbacks(const char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle)
 {
     if(pCallbacks.subtask_gpu_cuda != NULL && pCallbacks.subtask_gpu_custom != NULL)
+        return pmInvalidCallbacks;
+    
+    if(pCallbacks.subtask_opencl && (pCallbacks.subtask_cpu || pCallbacks.subtask_gpu_cuda || pCallbacks.subtask_gpu_custom))
         return pmInvalidCallbacks;
 
 	SAFE_EXECUTE_ON_CONTROLLER(RegisterCallbacks_Public, pKey, pCallbacks, pCallbackHandle);
