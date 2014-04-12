@@ -909,6 +909,8 @@ void pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, pmAddressSpace*
 // This is called by reducer after all address spaces in the task are reduced
 void pmLocalTask::AllReductionsDone(pmExecutionStub* pLastStub, ulong pLastSubtaskId, pmSplitInfo* pLastSplitInfo)
 {
+    pmScheduler::GetScheduler()->ReductionTerminationEvent(this);
+    
     pmSubscriptionManager& lSubscriptionManager = GetSubscriptionManager();
 
     size_t lScratchBufferSize = 0;

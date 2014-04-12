@@ -466,6 +466,11 @@ void pmScheduler::TerminateTaskEvent(pmTask* pTask)
 	SwitchThread(std::shared_ptr<schedulerEvent>(new taskTerminateEvent(TERMINATE_TASK, pTask)), pTask->GetPriority());
 }
     
+void pmScheduler::ReductionTerminationEvent(pmLocalTask* pLocalTask)
+{
+	SwitchThread(std::shared_ptr<schedulerEvent>(new reductionTerminationEvent(REDUCTION_TERMINATION_EVENT, pLocalTask)), pLocalTask->GetPriority());
+}
+    
 void pmScheduler::SendFinalizationSignal()
 {
 	SwitchThread(std::shared_ptr<schedulerEvent>(new hostFinalizationEvent(HOST_FINALIZATION, false)), MAX_CONTROL_PRIORITY);
@@ -834,6 +839,14 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             break;
         }
             
+        case REDUCTION_TERMINATION_EVENT:
+        {
+            reductionTerminationEvent& lEventDetails = static_cast<reductionTerminationEvent&>(pEvent);
+            SendReductionTerminationToMachines(lEventDetails.localTask);
+
+            break;
+        }
+
         default:
             PMTHROW(pmFatalErrorException());
     }
@@ -1108,6 +1121,28 @@ void pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 
 			pmCommunicator::GetCommunicator()->Send(lCommand, false);
 		}
+	}
+}
+
+void pmScheduler::SendReductionTerminationToMachines(pmLocalTask* pLocalTask)
+{
+	std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
+	std::set<const pmMachine*> lMachines;
+
+	pmProcessingElement::GetMachines(lDevices, lMachines);
+
+    lMachines.erase(PM_LOCAL_MACHINE);  // Master host is not to be sent the reduction termination event
+    
+	std::set<const pmMachine*>::iterator lIter;
+	for(lIter = lMachines.begin(); lIter != lMachines.end(); ++lIter)
+	{
+		const pmMachine* lMachine = *lIter;
+
+        finalize_ptr<taskEventStruct> lTaskEventData(new taskEventStruct(REDUCTION_TERMINATE_EVENT, *pLocalTask->GetOriginatingHost(), pLocalTask->GetSequenceNumber()));
+
+        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<taskEventStruct>::CreateSharedPtr(pLocalTask->GetPriority(), SEND, TASK_EVENT_TAG, lMachine, TASK_EVENT_STRUCT, lTaskEventData, 1, SchedulerCommandCompletionCallback);
+
+        pmCommunicator::GetCommunicator()->Send(lCommand, false);
 	}
 }
     
@@ -1431,22 +1466,6 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 
 		case SEND:
 		{
-			if(lCommunicatorCommand->GetTag() == SUBTASK_REDUCE_TAG)
-            {
-                pmRemoteTask* lRemoteTask = const_cast<pmRemoteTask*>(static_cast<const pmRemoteTask*>(lCommunicatorCommand->GetUserIdentifier()));
-                
-                lRemoteTask->MarkReductionFinished();
-            }
-			else if(lCommunicatorCommand->GetTag() == NO_REDUCTION_REQD_TAG)
-            {
-                noReductionReqdStruct* lData = (noReductionReqdStruct*)(lCommunicatorCommand->GetData());
-                
-                const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
-                pmRemoteTask* lRemoteTask = dynamic_cast<pmRemoteTask*>(pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber));
-                
-                lRemoteTask->MarkReductionFinished();
-            }
-
 			break;
 		}
 
@@ -1551,6 +1570,14 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                                 DEBUG_EXCEPTION_ASSERT(dynamic_cast<pmLocalTask*>(lTask));
                             
                                 TaskCompleteEvent(static_cast<pmLocalTask*>(lTask));
+                                break;
+                            }
+                                
+                            case REDUCTION_TERMINATE_EVENT:
+                            {
+                                DEBUG_EXCEPTION_ASSERT(dynamic_cast<pmRemoteTask*>(lTask));
+                                (static_cast<pmRemoteTask*>(lTask))->MarkReductionFinished();
+
                                 break;
                             }
 

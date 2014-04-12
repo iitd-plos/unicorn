@@ -91,6 +91,7 @@ enum eventIdentifier
     RANGE_NEGOTIATION_EVENT,
     RANGE_NEGOTIATION_SUCCESS_EVENT,
     TERMINATE_TASK,
+    REDUCTION_TERMINATION_EVENT,
     MAX_SCHEDULER_EVENTS
 };
 
@@ -408,6 +409,16 @@ struct rangeNegotiationSuccessEvent : public schedulerEvent
     , negotiatedRange(pNegotiatedRange)
     {}
 };
+    
+struct reductionTerminationEvent : public schedulerEvent
+{
+	pmLocalTask* localTask;
+    
+    reductionTerminationEvent(eventIdentifier pEventId, pmLocalTask* pLocalTask)
+    : schedulerEvent(pEventId)
+    , localTask(pLocalTask)
+    {}
+};
 
 }
 
@@ -456,6 +467,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void RangeNegotiationEvent(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange);
         void RangeNegotiationSuccessEvent(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pNegotiatedRange);
         void TerminateTaskEvent(pmTask* pTask);
+        void ReductionTerminationEvent(pmLocalTask* pLocalTask);
 
         void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> >& pChangeData);
         void SendSubtaskRangeCancellationMessage(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
@@ -519,6 +531,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void ClearPendingTaskCommands(pmTask* pTask);
         void SendTaskFinishToMachines(pmLocalTask* pLocalTask);
     
+        void SendReductionTerminationToMachines(pmLocalTask* pLocalTask);
+
         pmCommunicatorCommandPtr mRemoteSubtaskRecvCommand;
 		pmCommunicatorCommandPtr mTaskEventRecvCommand;
 		pmCommunicatorCommandPtr mStealRequestRecvCommand;
