@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -210,7 +210,7 @@ void pmRedistributor::CreateRedistributedAddressSpace(ulong pGenerationNumber /*
     pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(1, mTask->GetPriority(), 0, NULL);
     lCountDownCommand->MarkExecutionStart();
 
-    mRedistributedAddressSpace->EnqueueForLock(mTask, mTask->GetMemType(lAddressSpace), lCountDownCommand);
+    mRedistributedAddressSpace->EnqueueForLock(mTask, mTask->GetMemType(lAddressSpace), pmMemDistributionInfo(), lCountDownCommand);
     
     lCountDownCommand->WaitForFinish();
 }

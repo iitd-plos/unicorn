@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -98,6 +98,7 @@ namespace pm
             MACHINE_POOL_STRUCT,
             DEVICE_POOL_STRUCT,
             MEMORY_IDENTIFIER_STRUCT,
+            MEMORY_DISTRIBUTION_STRUCT,
             TASK_MEMORY_STRUCT,
             REMOTE_TASK_ASSIGN_STRUCT,
             REMOTE_TASK_ASSIGN_PACKED,
@@ -145,12 +146,14 @@ namespace pm
         pmMemType memType;
         pmSubscriptionVisibilityType subscriptionVisibilityType;
         bool disjointReadWritesAcrossSubtasks;
+        pmMemDistributionInfo memDistributionInfo;
 
-        pmTaskMemory(pmAddressSpace* pAddressSpace, pmMemType pMemType, pmSubscriptionVisibilityType pVisibility, bool pDisjointReadWrites)
+        pmTaskMemory(pmAddressSpace* pAddressSpace, pmMemType pMemType, pmSubscriptionVisibilityType pVisibility, bool pDisjointReadWrites, const pmMemDistributionInfo& pMemDistInfo)
         : addressSpace(pAddressSpace)
         , memType(pMemType)
         , subscriptionVisibilityType(pVisibility)
         , disjointReadWritesAcrossSubtasks(pDisjointReadWrites)
+        , memDistributionInfo(pMemDistInfo)
         {}
     };
 

@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution,
+ * of Indian Institute of Technology, New Delhi. Redistribution,
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology,
  * New Delhi. Use of software in binary form is allowed provided
@@ -41,6 +41,7 @@ namespace heavyOperations
 
 enum eventIdentifier
 {
+    NETWORK_REQUEST_EVENT,
 	PACK_DATA,
     UNPACK_DATA,
     MEM_TRANSFER,
@@ -49,6 +50,12 @@ enum eventIdentifier
     COMMAND_COMPLETION,
     MAX_HEAVY_OPERATIONS_EVENT
 };
+    
+enum networkRequestType
+{
+    NETWORK_SEND_REQUEST,
+    NETWORK_RECEIVE_REQUEST
+};
 
 struct heavyOperationsEvent : public pmBasicThreadEvent
 {
@@ -56,6 +63,18 @@ struct heavyOperationsEvent : public pmBasicThreadEvent
     
     heavyOperationsEvent(eventIdentifier pEventId = MAX_HEAVY_OPERATIONS_EVENT)
     : eventId(pEventId)
+    {}
+};
+    
+struct networkRequestEvent : public heavyOperationsEvent
+{
+    pmCommunicatorCommandPtr command;
+    networkRequestType type;
+    
+    networkRequestEvent(eventIdentifier pEventId, pmCommunicatorCommandPtr& pCommand, networkRequestType pType)
+    : heavyOperationsEvent(pEventId)
+    , command(pCommand)
+    , type(pType)
     {}
 };
 
@@ -183,6 +202,7 @@ class pmHeavyOperationsThreadPool
 public:
     virtual ~pmHeavyOperationsThreadPool();
 
+    void QueueNetworkRequest(pmCommunicatorCommandPtr& pCommand, heavyOperations::networkRequestType pType);
     void PackAndSendData(const pmCommunicatorCommandPtr& pCommand);
     void UnpackDataEvent(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pPackedLength, ushort pPriority);
     void MemTransferEvent(communicator::memoryIdentifierStruct& pSrcMemIdentifier, communicator::memoryIdentifierStruct& pDestMemIdentifier, communicator::memoryTransferType pTransferType, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
@@ -198,7 +218,6 @@ private:
     void SubmitToAllThreadsInPool(const std::shared_ptr<heavyOperations::heavyOperationsEvent>& pEvent, ushort pPriority) const;
 	void SetupPersistentCommunicationCommands();
 	void DestroyPersistentCommunicationCommands();
-    void SetupNewFileOperationsReception();
 
     void CommandCompletionEvent(pmCommandPtr pCommand);
     

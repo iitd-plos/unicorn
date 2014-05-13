@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -128,6 +128,26 @@ namespace pm
         SUBSCRIPTION_OPTIMAL,           // Either SUBSCRIPTION_NATURAL or SUBSCRIPTION_COMPACT whichever is optimal for the subtask
         MAX_SUBSCRIPTION_VISBILITY_TYPE
     } pmSubscriptionVisibilityType;
+
+    typedef enum pmMemDistributionType
+    {
+        DIST_1D_BLOCK_ROW,
+        DIST_1D_BLOCK_COL,
+        DIST_2D_BLOCK,
+        MAX_MEM_DISTRIBUTION_TYPES
+    } pmMemDistributionType;
+    
+    typedef struct pmMemDistributionInfo
+    {
+        pmMemDistributionType distType;
+        unsigned int blockDim;
+        unsigned int matrixWidth;
+        unsigned int matrixHeight;
+        bool randomize;
+        
+        pmMemDistributionInfo();
+        pmMemDistributionInfo(pmMemDistributionType, unsigned int, unsigned int, unsigned int, bool);
+    } pmMemDistributionInfo;
 
 	/** Structures for memory subscription */
 	typedef struct pmSubscriptionInfo
@@ -390,6 +410,7 @@ namespace pm
         pmMemType memType;
         pmSubscriptionVisibilityType subscriptionVisibilityType;    /* By default, this is SUBSCRIPTION_NATURAL */
         bool disjointReadWritesAcrossSubtasks;                      /* By default, this is false. Applies only to RW adress spaces. */
+        pmMemDistributionInfo memDistributionInfo;
         
         pmTaskMem();
         pmTaskMem(pmMemHandle, pmMemType);

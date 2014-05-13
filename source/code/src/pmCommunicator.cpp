@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -51,12 +51,13 @@ void pmCommunicator::Send(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* 
 {
 	SAFE_GET_NETWORK(lNetwork);
 
-	lNetwork->SendNonBlocking(pCommand);
+    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->QueueNetworkRequest(pCommand, heavyOperations::NETWORK_SEND_REQUEST);
 
 	if(pBlocking)
 		pCommand->WaitForFinish();
 }
 
+// This method is called by heavy operations thread
 void pmCommunicator::SendPacked(pmCommunicatorCommandPtr&& pCommand, bool pBlocking /* = false */)
 {
 	SAFE_GET_NETWORK(lNetwork);
@@ -78,6 +79,7 @@ void pmCommunicator::Broadcast(pmCommunicatorCommandPtr& pCommand, bool pBlockin
 		pCommand->WaitForFinish();
 }
 
+// All receive operations are persistent and initiated at library intialization time, so these are not done on heavy operations thread
 void pmCommunicator::Receive(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* = false */)
 {
 	SAFE_GET_NETWORK(lNetwork);
@@ -156,7 +158,7 @@ remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTask* pLocalTask)
         for_each(pLocalTask->GetTaskMemVector(), [&] (const pmTaskMemory& pTaskMemory)
         {
             const pmAddressSpace* lAddressSpace = pTaskMemory.addressSpace;
-            taskMem.emplace_back(memoryIdentifierStruct(*(lAddressSpace->GetMemOwnerHost()), lAddressSpace->GetGenerationNumber()), lAddressSpace->GetLength(), pLocalTask->GetMemType(lAddressSpace), pTaskMemory.subscriptionVisibilityType, (ushort)pTaskMemory.disjointReadWritesAcrossSubtasks);
+            taskMem.emplace_back(memoryIdentifierStruct(*(lAddressSpace->GetMemOwnerHost()), lAddressSpace->GetGenerationNumber()), memoryDistributionStruct(pTaskMemory.memDistributionInfo.distType, pTaskMemory.memDistributionInfo.blockDim, pTaskMemory.memDistributionInfo.matrixWidth, pTaskMemory.memDistributionInfo.matrixHeight, pTaskMemory.memDistributionInfo.randomize), lAddressSpace->GetLength(), pLocalTask->GetMemType(lAddressSpace), pTaskMemory.subscriptionVisibilityType, (ushort)pTaskMemory.disjointReadWritesAcrossSubtasks);
         });
     }
 

@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -84,12 +84,11 @@ pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
     : mCurrentThread(0)
     , mResourceLock __LOCK_NAME__("pmHeavyOperationsThreadPool::mResourceLock")
 {
-    if(pThreadCount == 0)
-        PMTHROW(pmFatalErrorException());
+    EXCEPTION_ASSERT(pThreadCount != 0);
 
     for(size_t i = 0; i < pThreadCount; ++i)
         mThreadVector.emplace_back(new pmHeavyOperationsThread(i));
-    
+
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(FILE_OPERATIONS_STRUCT);
 	SetupPersistentCommunicationCommands();
 }
@@ -115,7 +114,7 @@ void pmHeavyOperationsThreadPool::SetupPersistentCommunicationCommands()
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
     lNetwork->InitializePersistentCommand(mFileOperationsRecvCommand);
 
-	SetupNewFileOperationsReception();
+	pmCommunicator::GetCommunicator()->Receive(mFileOperationsRecvCommand, false);
 }
     
 void pmHeavyOperationsThreadPool::DestroyPersistentCommunicationCommands()
@@ -123,9 +122,9 @@ void pmHeavyOperationsThreadPool::DestroyPersistentCommunicationCommands()
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->TerminatePersistentCommand(mFileOperationsRecvCommand);
 }
 
-void pmHeavyOperationsThreadPool::SetupNewFileOperationsReception()
+void pmHeavyOperationsThreadPool::QueueNetworkRequest(pmCommunicatorCommandPtr& pCommand, heavyOperations::networkRequestType pType)
 {
-	pmCommunicator::GetCommunicator()->Receive(mFileOperationsRecvCommand, false);
+    SubmitToThreadPool(std::shared_ptr<heavyOperationsEvent>(new networkRequestEvent(NETWORK_REQUEST_EVENT, pCommand, pType)), pCommand->GetPriority());
 }
 
 void pmHeavyOperationsThreadPool::PackAndSendData(const pmCommunicatorCommandPtr& pCommand)
@@ -210,6 +209,24 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
 {
     switch(pEvent.eventId)
     {
+        case NETWORK_REQUEST_EVENT:
+        {
+            networkRequestEvent& lEvent = static_cast<networkRequestEvent&>(pEvent);
+            
+            switch(lEvent.type)
+            {
+                case NETWORK_SEND_REQUEST:
+                    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->SendNonBlocking(lEvent.command);
+                    break;
+                    
+                case NETWORK_RECEIVE_REQUEST:
+                    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->ReceiveNonBlocking(lEvent.command);
+                    break;
+            }
+            
+            break;
+        }
+
         case PACK_DATA:
         {
             packEvent& lEventDetails = static_cast<packEvent&>(pEvent);
@@ -226,7 +243,9 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
             pmCommunicatorCommandPtr lCommand = NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnpackData(std::move(lEventDetails.packedData), lEventDetails.packedLength);
 
             lCommand->MarkExecutionStart();
-            NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->ReceiveComplete(lCommand, pmSuccess);
+
+            pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lCommand);
+            lCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
 
             break;
         }
@@ -353,7 +372,7 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
             
                 MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lInternalLength, (uint)(*pRequestingMachine))
 
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
 
                 pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
             }
@@ -418,7 +437,7 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
         
             MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength * pCount, (uint)(*pRequestingMachine))
 
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
 
             pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
         }
@@ -445,7 +464,7 @@ void pmHeavyOperationsThread::ForwardMemoryRequest(pmAddressSpace* pSrcAddressSp
     
     MEM_FORWARD_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength, (uint)(*pRequestingMachine), *pRangeOwner.host, pRangeOwner.memIdentifier, pRangeOwner.hostOffset)
 
-    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryTransferRequest>::CreateSharedPtr(MAX_CONTROL_PRIORITY, SEND, MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1, pmScheduler::GetScheduler()->GetSchedulerCommandCompletionCallback());
+    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryTransferRequest>::CreateSharedPtr(MAX_CONTROL_PRIORITY, SEND, MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1);
     
     pmCommunicator::GetCommunicator()->Send(lCommand);
 }
@@ -497,8 +516,6 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
                             PMTHROW(pmFatalErrorException());
                     }
 
-                    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->SetupNewFileOperationsReception();
-                
                     break;
                 }
                 

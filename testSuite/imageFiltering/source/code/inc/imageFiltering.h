@@ -7,7 +7,9 @@ namespace imageFiltering
 #define PIXEL_COUNT (size_t)3    // assumes 24-bit RGB
 #define IMAGE_SIZE ((size_t)gImageWidth * gImageHeight * PIXEL_COUNT)
     
-#define TILE_DIM 2048
+#define LOAD_IMAGE_INTO_ADDRESS_SPACE
+    
+#define TILE_DIM 256
 #define GPU_BLOCK_DIM 32
 
 #define DEFAULT_FILTER_RADIUS 1
@@ -26,11 +28,20 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
 int singleGpuImageFilter(void* pInvertedImageData, size_t pImageWidth, size_t pImageHeight, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], size_t pFilterRadius, size_t pImageBytesPerLine, void* pOutputMem);
 #endif
 
+#ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+enum memIndex
+{
+    INPUT_MEM_INDEX = 0,
+    OUTPUT_MEM_INDEX = 1,
+    MAX_MEM_INDICES
+};
+#else
 enum memIndex
 {
     OUTPUT_MEM_INDEX = 0,
     MAX_MEM_INDICES
 };
+#endif
 
 typedef struct imageFilterTaskConf
 {

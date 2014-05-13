@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -61,8 +61,6 @@ typedef struct networkEvent : public pmBasicThreadEvent
 
 class pmNetwork : public pmBase
 {
-    friend class pmHeavyOperationsThread;
-
 	public:
 		virtual void SendNonBlocking(pmCommunicatorCommandPtr& pCommand) = 0;
 		virtual void ReceiveNonBlocking(pmCommunicatorCommandPtr& pCommand) = 0;
@@ -85,13 +83,10 @@ class pmNetwork : public pmBase
 		virtual void TerminatePersistentCommand(pmCommunicatorCommandPtr& pCommand) = 0;
 
 		virtual void GlobalBarrier() = 0;
+        virtual void StartReceiving() = 0;
 
 		pmNetwork();
 		virtual ~pmNetwork();
-
-    protected:
-		void SendComplete(pmCommunicatorCommandPtr& pCommand, pmStatus pStatus);
-		void ReceiveComplete(pmCommunicatorCommandPtr& pCommand, pmStatus pStatus);
 };
     
 struct pmMPITypesAllocatorTraits
@@ -99,7 +94,7 @@ struct pmMPITypesAllocatorTraits
     typedef pmPoolAllocator allocator;
 
     static const bool alignedAllocations = false;
-    static const size_t maxAllocationsPerPool = 1024;
+    static const size_t maxAllocationsPerPool = 10240;
     
     struct creator
     {
@@ -174,6 +169,7 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		virtual void TerminatePersistentCommand(pmCommunicatorCommandPtr& pCommand);
 
 		virtual void GlobalBarrier();
+        virtual void StartReceiving();
 
 	private:
 		pmMPI();
@@ -188,20 +184,27 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		virtual MPI_Request* GetPersistentSendRequest(pmCommunicatorCommandPtr& pCommand);
 		virtual MPI_Request* GetPersistentRecvRequest(pmCommunicatorCommandPtr& pCommand);
 
+        virtual MPI_Request* GetPersistentSendRequestInternal(pmCommunicatorCommandPtr& pCommand);
+        virtual MPI_Request* GetPersistentRecvRequestInternal(pmCommunicatorCommandPtr& pCommand);
+
 		void SetupDummyRequest();
 		void CancelDummyRequest();
+
+        void CommandComplete(pmCommunicatorCommandPtr& pCommand, pmStatus pStatus);
 
 		uint mTotalHosts;
 		uint mHostId;
 
 		std::map<MPI_Request*, pmCommunicatorCommandPtr> mNonBlockingRequestMap;	// Map of MPI_Request objects and corresponding pmCommunicatorCommand objects
         std::map<pmCommunicatorCommandPtr, size_t> mRequestCountMap;	// Maps MpiCommunicatorCommand object to the number of MPI_Requests issued
-		MPI_Request* mDummyReceiveRequest;
+
+        bool mDummyRequestInitiated;
+        std::unique_ptr<MPI_Request> mPersistentDummyRecvRequest;
 
         std::map<pmCommunicatorCommandPtr, MPI_Request*> mPersistentSendRequest;
         std::map<pmCommunicatorCommandPtr, MPI_Request*> mPersistentRecvRequest;
 
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	   // Resource lock on mDummyReceiveRequest, mNonBlockingRequestMap, mResourceCountMap, mPersistentSendRequest, mPersistentRecvRequest
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	   // Resource lock on mDummyRequestInitiated, mPersistentDummyRecvRequest, mNonBlockingRequestMap, mResourceCountMap, mPersistentSendRequest, mPersistentRecvRequest
 
 		std::map<communicator::communicatorDataTypes, MPI_Datatype*> mRegisteredDataTypes;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mDataTypesResourceLock;	   // Resource lock on mRegisteredDataTypes

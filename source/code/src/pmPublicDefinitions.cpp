@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution,
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -672,6 +672,24 @@ pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice
     pmSplitInfo* lSplitInfo = ((pSplitInfo.splitCount == 0) ? NULL : &pSplitInfo);
 
 	SAFE_EXECUTE_ON_CONTROLLER(ReserveCudaGlobalMem_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pSize);
+}
+    
+pmMemDistributionInfo::pmMemDistributionInfo()
+    : distType(MAX_MEM_DISTRIBUTION_TYPES)
+    , blockDim(0)
+    , matrixWidth(0)
+    , matrixHeight(0)
+    , randomize(false)
+{
+}
+
+pmMemDistributionInfo::pmMemDistributionInfo(pmMemDistributionType pType, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pRandomize)
+    : distType(pType)
+    , blockDim(pBlockDim)
+    , matrixWidth(pMatrixWidth)
+    , matrixHeight(pMatrixHeight)
+    , randomize(pRandomize)
+{
 }
 
 pmSubscriptionInfo::pmSubscriptionInfo()

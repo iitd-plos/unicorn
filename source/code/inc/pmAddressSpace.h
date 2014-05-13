@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -116,8 +116,9 @@ class pmAddressSpace : public pmBase
 
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
-        void Do1DCyclicBlockRowDistribution(uint pBlockDim, uint pMatrixDim, uint pElemSize);
-        void Do1DCyclicBlockColDistribution(uint pBlockDim, uint pMatrixDim, uint pElemSize);
+        void Do1DBlockRowDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize);
+        void Do1DBlockColDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize);
+        void Do2DBlockDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize);
 
         static pmAddressSpace* CreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
         static pmAddressSpace* CheckAndCreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
@@ -142,7 +143,7 @@ class pmAddressSpace : public pmBase
         void FetchAsync(ushort pPriority, pmCommandPtr pCommand);
         void FetchRange(ushort pPriority, ulong pOffset, ulong pLength);
     
-        void EnqueueForLock(pmTask* pTask, pmMemType pMemType, pmCommandPtr& pCountDownCommand);
+        void EnqueueForLock(pmTask* pTask, pmMemType pMemType, const pmMemDistributionInfo& pDistInfo, pmCommandPtr& pCountDownCommand);
         void Unlock(pmTask* pTask);
         pmTask* GetLockingTask();
     
@@ -189,7 +190,7 @@ class pmAddressSpace : public pmBase
         bool IsWaitingForOwnershipChange();
         void TransferOwnershipImmediate(ulong pOffset, ulong pLength, const pmMachine* pNewOwnerHost);
     
-        void Lock(pmTask* pTask, pmMemType pMemType);
+        void Lock(pmTask* pTask, pmMemType pMemType, const pmMemDistributionInfo& pDistInfo);
         void FetchCompletionCallback(const pmCommandPtr& pCommand);
     
         void ScanLockQueue();
@@ -199,7 +200,9 @@ class pmAddressSpace : public pmBase
         void SanitizeOwnerships();
         void PrintOwnerships();
 #endif
-    
+
+        std::vector<uint> GetMachinesForDistribution(bool pRandomize);
+
         const pmMachine* mOwner;
         ulong mGenerationNumberOnOwner;
         pmUserMemHandle* mUserMemHandle;
@@ -212,7 +215,7 @@ class pmAddressSpace : public pmBase
         std::string mName;
     
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingTasksLock;
-        std::list<std::pair<std::pair<pmTask*, pmMemType>, pmCommandPtr>> mTasksWaitingForLock;
+        std::list<std::pair<std::pair<pmTask*, std::pair<pmMemType, pmMemDistributionInfo>>, pmCommandPtr>> mTasksWaitingForLock;
 
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingFetchLock;
         std::map<pmCommandPtr, pmCommandPtr> mCommandsWaitingForFetch;

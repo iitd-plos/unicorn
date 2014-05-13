@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -53,6 +53,7 @@ pmController::pmController()
 
     pmLogger::GetLogger();
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
+    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
     TLS_IMPLEMENTATION_CLASS::GetTls();
     pmDispatcherGPU::GetDispatcherGPU();
     pmStubManager::GetStubManager();
@@ -62,12 +63,13 @@ pmController::pmController()
     pmTaskManager::GetTaskManager();
     pmScheduler::GetScheduler();
     pmTimedEventManager::GetTimedEventManager();
-    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
     pmOpenCLManager::GetOpenCLManager();
 
 #ifdef DUMP_EVENT_TIMELINE
     pmStubManager::GetStubManager()->InitializeEventTimelines();
 #endif
+
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->StartReceiving();
 }
 
 pmController* pmController::GetController()
@@ -77,7 +79,7 @@ pmController* pmController::GetController()
     
     if(lFirstCall)
     {
-        NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();     
+        NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();
         lFirstCall = false;
     }
 
@@ -276,7 +278,7 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
             PMTHROW(pmFatalErrorException());
         
         pmTaskMem& pTaskMem = pTaskDetails.taskMem[i];
-        lTaskMemVector.emplace_back(lAddressSpace, pTaskMem.memType, pTaskMem.subscriptionVisibilityType, pTaskMem.disjointReadWritesAcrossSubtasks);
+        lTaskMemVector.emplace_back(lAddressSpace, pTaskMem.memType, pTaskMem.subscriptionVisibilityType, pTaskMem.disjointReadWritesAcrossSubtasks, pTaskMem.memDistributionInfo);
     }
     
 	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags);

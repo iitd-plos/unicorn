@@ -52,7 +52,7 @@ void readImageMetaData(char* pImagePath)
     
     gImageWidth = fileHeader.width;
     gImageHeight = fileHeader.height;
-    
+
 	fclose(fp);
 }
 
@@ -78,7 +78,7 @@ void readImage(char* pImagePath, void* pImageData, bool pInverted)
         {
             if(fread((void*)(&lColor), sizeof(lColor), 1, fp) != 1)
                 exit(1);
-        
+
             lRow[PIXEL_COUNT * j] = (pInverted ? lColor[0] : lColor[2]);
             lRow[PIXEL_COUNT * j + 1] = lColor[1];
             lRow[PIXEL_COUNT * j + 2] = (pInverted ? lColor[2] : lColor[0]);
@@ -181,6 +181,18 @@ pmStatus imageFilterDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceI
     if(GetSubtaskSubscription(lTaskConf, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
     {
         size_t lRowSize = lTaskConf->imageWidth * PIXEL_COUNT;
+        
+    #ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+        int lFirstRow = ((lSubscriptionStartRow - (int)lTaskConf->filterRadius < 0) ? 0 : (lSubscriptionStartRow - (int)lTaskConf->filterRadius));
+        int lLastRow = ((lSubscriptionEndRow - 1 + (int)lTaskConf->filterRadius >= lTaskConf->imageHeight) ? (int)(lTaskConf->imageHeight - 1) : (lSubscriptionEndRow - 1 + (int)lTaskConf->filterRadius));
+        int lFirstCol = ((lSubscriptionStartCol - (int)lTaskConf->filterRadius < 0) ? 0 : (lSubscriptionStartCol - (int)lTaskConf->filterRadius));
+        int lLastCol = ((lSubscriptionEndCol - 1 + (int)lTaskConf->filterRadius >= lTaskConf->imageWidth) ? (int)(lTaskConf->imageWidth - 1) : (lSubscriptionEndCol - 1 + (int)lTaskConf->filterRadius));
+        
+        int lFirstInvertedRow = (int)(lTaskConf->imageHeight - 1 - lFirstRow);
+        int lLastInvertedRow = (int)(lTaskConf->imageHeight - 1 - lLastRow);
+        
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_INDEX, READ_SUBSCRIPTION, pmScatteredSubscriptionInfo((lLastInvertedRow * lRowSize) + (lFirstCol * PIXEL_COUNT), (lLastCol - lFirstCol + 1) * PIXEL_COUNT, lRowSize, lFirstInvertedRow - lLastInvertedRow + 1));
+    #endif
 
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, OUTPUT_MEM_INDEX, WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo((lSubscriptionStartRow * lRowSize) + (lSubscriptionStartCol * PIXEL_COUNT), (lSubscriptionEndCol - lSubscriptionStartCol) * PIXEL_COUNT, lRowSize, lSubscriptionEndRow - lSubscriptionStartRow));
 
@@ -201,12 +213,25 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
 {
 	imageFilterTaskConf* lTaskConf = (imageFilterTaskConf*)(pTaskInfo.taskConf);
 
-    char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset;
     char* lOutput = (char*)(pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr);
 
     int lSubscriptionStartCol, lSubscriptionEndCol, lSubscriptionStartRow, lSubscriptionEndRow;
     if(!GetSubtaskSubscription(lTaskConf, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, &lSubscriptionStartCol, &lSubscriptionEndCol, &lSubscriptionStartRow, &lSubscriptionEndRow))
         return pmSuccess;
+
+#ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+    if(pSubtaskInfo.memInfo[INPUT_MEM_INDEX].visibilityType != SUBSCRIPTION_NATURAL)
+        exit(1);
+
+    char* lInvertedImageData = (char*)(pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
+    int lFirstRow = ((lSubscriptionStartRow - (int)lTaskConf->filterRadius < 0) ? 0 : (lSubscriptionStartRow - (int)lTaskConf->filterRadius));
+    int lFirstCol = ((lSubscriptionStartCol - (int)lTaskConf->filterRadius < 0) ? 0 : (lSubscriptionStartCol - (int)lTaskConf->filterRadius));
+    int lLastRow = ((lSubscriptionEndRow - 1 + (int)lTaskConf->filterRadius >= lTaskConf->imageHeight) ? (int)(lTaskConf->imageHeight - 1) : (lSubscriptionEndRow - 1 + (int)lTaskConf->filterRadius));
+    
+    int lTotalRows = lLastRow - lFirstRow + 1;
+#else
+    char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset;
+#endif
 
     int lDimMinX, lDimMaxX, lDimMinY, lDimMaxY;
     size_t lWidth = ((pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->imageWidth : (lSubscriptionEndCol - lSubscriptionStartCol));
@@ -215,10 +240,10 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
     {
         for(int j = lSubscriptionStartCol; j < lSubscriptionEndCol; ++j)
         {
-            lDimMinX = j - lTaskConf->filterRadius;
-            lDimMaxX = j + lTaskConf->filterRadius;
-            lDimMinY = i - lTaskConf->filterRadius;
-            lDimMaxY = i + lTaskConf->filterRadius;
+            lDimMinX = j - (int)lTaskConf->filterRadius;
+            lDimMaxX = j + (int)lTaskConf->filterRadius;
+            lDimMinY = i - (int)lTaskConf->filterRadius;
+            lDimMaxY = i + (int)lTaskConf->filterRadius;
             
             char lRedVal = 0, lGreenVal = 0, lBlueVal = 0;
             for(int k = lDimMinY; k <= lDimMaxY; ++k)
@@ -228,7 +253,13 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
                     int m = ((k < 0) ? 0 : (((size_t)k >= lTaskConf->imageHeight) ? (lTaskConf->imageHeight - 1) : k));
                     int n = ((l < 0) ? 0 : (((size_t)l >= lTaskConf->imageWidth) ? (lTaskConf->imageWidth - 1) : l));
                     
+                #ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+                    // The allocated address space is of size imageWidth * imageHeight. Every row is not aligned at imageBytesPerLine offset.
+                    size_t lInvertedIndex = ((lTotalRows - 1 - (m - lFirstRow)) * lTaskConf->imageWidth + (n - lFirstCol)) * PIXEL_COUNT;
+                #else
                     size_t lInvertedIndex = (lTaskConf->imageHeight - 1 - m) * lTaskConf->imageBytesPerLine + n * PIXEL_COUNT;
+                #endif
+                    
                     lBlueVal += lInvertedImageData[lInvertedIndex] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
                     lGreenVal += lInvertedImageData[lInvertedIndex + 1] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
                     lRedVal += lInvertedImageData[lInvertedIndex + 2] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
@@ -277,7 +308,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 
     void* lImageData = malloc(IMAGE_SIZE);
     readImage(lImagePath, lImageData, true);
-    
+
 	double lStartTime = getCurrentTimeInSecs();
 
 	if(singleGpuImageFilter(lImageData, gImageWidth, gImageHeight, gFilter, lFilterRadius, gImageBytesPerLine, gParallelOutput) != 0)
@@ -297,13 +328,25 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 {
 	READ_NON_COMMON_ARGS
 
+	// Number of subtasks is equal to the number of tiles in the image
+    unsigned int lSubtasks = ((unsigned int)gImageWidth/TILE_DIM + ((unsigned int)gImageWidth%TILE_DIM ? 1 : 0)) * ((unsigned int)gImageHeight/TILE_DIM + ((unsigned int)gImageHeight%TILE_DIM ? 1 : 0));
+
+#ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+    CREATE_SIMPLE_TASK(IMAGE_SIZE, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
+    
+    pmRawMemPtr lRawInputPtr;
+    pmGetRawMemPtr(lTaskDetails.taskMem[INPUT_MEM_INDEX].memHandle, &lRawInputPtr);
+
+    readImage(lImagePath, lRawInputPtr, true);
+    
+    lTaskMem[INPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_OPTIMAL;
+    lTaskMem[INPUT_MEM_INDEX].memDistributionInfo = pmMemDistributionInfo(DIST_2D_BLOCK, TILE_DIM, (unsigned int)gImageWidth, (unsigned int)gImageHeight, false);
+#else
     if(pmMapFile(lImagePath) != pmSuccess)
         exit(1);
 
-	// Output Mem contains the result image
-	// Number of subtasks is equal to the number of tiles in the image
-    unsigned int lSubtasks = (gImageWidth/TILE_DIM + (gImageWidth%TILE_DIM ? 1 : 0)) * (gImageHeight/TILE_DIM + (gImageHeight%TILE_DIM ? 1 : 0));
 	CREATE_SIMPLE_TASK(0, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
+#endif
     
     lTaskMem[OUTPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_OPTIMAL;
 
@@ -348,8 +391,11 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	FREE_TASK_AND_RESOURCES
 
+#ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+#else
     if(pmUnmapFile(lImagePath) != pmSuccess)
         exit(1);
+#endif
 
 	return (lEndTime - lStartTime);
 }
@@ -396,7 +442,7 @@ int DoInit(int argc, char** argv, int pCommonArgs)
     int lFilterDim = 2 * lFilterRadius + 1;
     for(int i = 0; i < lFilterDim; ++i)
         for(int j = 0; j < lFilterDim; ++j)
-            gFilter[i][j] = (((rand() % 2) ? 1 : -1) * rand());
+            gFilter[i][j] = i;  //(((rand() % 2) ? 1 : -1) * rand());
     
 	return 0;
 }

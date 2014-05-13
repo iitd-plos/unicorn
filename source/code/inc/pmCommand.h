@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -70,12 +70,13 @@ class pmCommand : public pmBase
     
         ushort GetPriority() const {return mPriority;}
         ushort GetType() const {return mType;}
-        const pmCommandCompletionCallbackType GetCommandCompletionCallback() const {return mCallback;}
+        pmCommandCompletionCallbackType GetCommandCompletionCallback() const {return mCallback;}
         const void* GetUserIdentifier() const {return mUserIdentifier;}
 
         pmStatus GetStatus();
 
 		void SetStatus(pmStatus pStatus);
+        void SetCommandCompletionCallback(pmCommandCompletionCallbackType pCallback) {mCallback = pCallback;}
 
 		/** The following functions must be called by clients for command
          execution time measurement, status reporting and callback calling. */
@@ -112,7 +113,7 @@ class pmCommand : public pmBase
 
         const ushort mPriority;
 		const ushort mType;
-        const pmCommandCompletionCallbackType mCallback;
+        pmCommandCompletionCallbackType mCallback;
         const void* mUserIdentifier;
 
 		pmStatus mStatus;
@@ -154,6 +155,7 @@ public:
     virtual void* GetData() const = 0;
     virtual ulong GetDataUnits() const = 0;
     virtual ulong GetDataLength() const = 0;
+    virtual pmCommunicatorCommandPtr Clone() = 0;   /* Creates a copy of the command. The data is not copied, however */
     
     void SetPersistent()
     {
@@ -180,11 +182,52 @@ private:
     const pmHardware* mDestination;
     bool mPersistent;
 };
+    
+template<typename T, typename D, bool>
+struct pmCommunicatorCommandCloner
+{
+    pmCommunicatorCommandPtr operator() (pmCommunicatorCommand<T, deleteDeallocator<T>>* pCommand)
+    {
+        EXCEPTION_ASSERT(0);
+    }
+};
+    
+template<typename T>
+struct pmCommunicatorCommandCloner<T, deleteDeallocator<T>, true>
+{
+    pmCommunicatorCommandPtr operator() (pmCommunicatorCommand<T, deleteDeallocator<T>>* pCommand)
+    {
+        DEBUG_EXCEPTION_ASSERT(pCommand->GetDataUnits() == 1);
+
+        finalize_ptr<T, deleteDeallocator<T>> lPtr(new T());
+        *(lPtr.get_ptr()) = *static_cast<T*>(pCommand->GetData());
+
+        return pmCommunicatorCommand<T, deleteDeallocator<T>>::CreateSharedPtr(pCommand->GetPriority(), (communicator::communicatorCommandTypes)(pCommand->GetType()), pCommand->GetTag(), pCommand->GetDestination(), pCommand->GetDataType(), lPtr, pCommand->GetDataUnits(), pCommand->GetCommandCompletionCallback(), pCommand->GetUserIdentifier());
+    }
+};
+
+template<typename T>
+struct pmCommunicatorCommandCloner<T, deleteArrayDeallocator<T>, true>
+{
+    pmCommunicatorCommandPtr operator() (pmCommunicatorCommand<T, deleteArrayDeallocator<T>>* pCommand)
+    {
+        auto lDataUnits = pCommand->GetDataUnits();
+        finalize_ptr<T, deleteArrayDeallocator<T>> lPtr(new T[lDataUnits]);
+        
+        for(auto i = 0; i < lDataUnits; ++i)
+            (lPtr.get_ptr())[i] = static_cast<T*>(pCommand->GetData())[i];
+        
+        return pmCommunicatorCommand<T, deleteArrayDeallocator<T>>::CreateSharedPtr(pCommand->GetPriority(), (communicator::communicatorCommandTypes)(pCommand->GetType()), pCommand->GetTag(), pCommand->GetDestination(), pCommand->GetDataType(), lPtr, lDataUnits, pCommand->GetCommandCompletionCallback(), pCommand->GetUserIdentifier());
+    }
+};
 
 template<typename T, typename D = deleteDeallocator<T> >
 class pmCommunicatorCommand : public pmCommunicatorCommandBase
 {
 	public:
+        typedef T value_type;
+        typedef D deallocator_type;
+    
         static pmCommunicatorCommandPtr CreateSharedPtr(ushort pPriority, communicator::communicatorCommandTypes pType, communicator::communicatorCommandTags pTag, const pmHardware* pDestination, communicator::communicatorDataTypes pDataType, finalize_ptr<T, D>& pData, ulong pDataUnits, pmCommandCompletionCallbackType pCallback = NULL, const void* pUserIdentifier = NULL)
         {
             return pmCommunicatorCommandPtr(new pmCommunicatorCommand<T, D>(pPriority, pType, pTag, pDestination, pDataType, pData, pDataUnits, pCallback, pUserIdentifier));
@@ -203,6 +246,12 @@ class pmCommunicatorCommand : public pmCommunicatorCommandBase
         ulong GetDataLength() const
         {
             return GetDataUnits() * sizeof(T);
+        }
+    
+        pmCommunicatorCommandPtr Clone()
+        {
+            pmCommunicatorCommandCloner<T, D, std::is_default_constructible<T>::value && std::is_copy_constructible<T>::value> lCloner;
+            return lCloner(this);
         }
 
     protected:

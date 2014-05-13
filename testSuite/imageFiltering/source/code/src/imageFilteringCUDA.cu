@@ -182,13 +182,13 @@ __global__ void imageFilter_cuda(int pOffsetX, int pOffsetY, int pSubImageWidth,
     ((char*)pOutputMem)[lOffset + 2] = lBlueVal;
 }
     
-void prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImageData, int pImageBytesPerLine, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, void* pOutputMem, int pOutputMemRowStep, int pOffsetX, int pOffsetY, int pCols, int pRows, size_t pTexturePitch, void* pTextureMem, char* pFilterPtr, cudaStream_t pCudaStream)
+void prepareForLaunch(int pTextureWidth, int pTextureHeight, char* pInvertedImageData, int pImageBytesPerLine, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM], int pFilterRadius, void* pOutputMem, int pOutputMemRowStep, int pOffsetX, int pOffsetY, int pCols, int pRows, size_t pTexturePitch, void* pTextureMem, char* pFilterPtr, cudaStream_t pCudaStream, bool pCopyImageFromHostToDevice)
 {
     int lEffectiveTextureWidth = pTextureWidth * PIXEL_COUNT;
 
     CUDA_ERROR_CHECK("cudaMemcpyAsync", cudaMemcpyAsync(pFilterPtr, pFilter, MAX_FILTER_DIM * MAX_FILTER_DIM, cudaMemcpyHostToDevice, pCudaStream));
 
-    CUDA_ERROR_CHECK("cudaMemcpy2DAsync", cudaMemcpy2DAsync(pTextureMem, pTexturePitch, pInvertedImageData, pImageBytesPerLine, lEffectiveTextureWidth, pTextureHeight, cudaMemcpyHostToDevice, pCudaStream));
+    CUDA_ERROR_CHECK("cudaMemcpy2DAsync", cudaMemcpy2DAsync(pTextureMem, pTexturePitch, pInvertedImageData, pImageBytesPerLine, lEffectiveTextureWidth, pTextureHeight, (pCopyImageFromHostToDevice ? cudaMemcpyHostToDevice : cudaMemcpyDeviceToDevice), pCudaStream));
 
     gInvertedTextureRef.addressMode[0] = cudaAddressModeClamp;
     gInvertedTextureRef.addressMode[1] = cudaAddressModeClamp;
@@ -260,8 +260,12 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     int lSubImageWidth = lEndCol - lStartCol;
     int lSubImageHeight = lEndRow - lStartRow;
     
+#ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+    char* lInvertedImageData = (char*)(pSubtaskInfo.memInfo[INPUT_MEM_INDEX].ptr);
+#else
     char* lInvertedImageData = ((char*)pmGetMappedFile(lTaskConf->imagePath)) + lTaskConf->imageOffset;
     lInvertedImageData += (lTaskConf->imageBytesPerLine * (lTaskConf->imageHeight - lEndRow) + lStartCol * PIXEL_COUNT);
+#endif
     
     int lOffsetX = lSubscriptionStartCol - lStartCol;
     int lOffsetY = lEndRow - lSubscriptionEndRow;
@@ -273,7 +277,13 @@ pmStatus imageFilter_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceIn
     void* lTextureMem  = (void*)(lFilterPtr + (MAX_FILTER_DIM * MAX_FILTER_DIM));
     
     size_t lWidth = ((pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->imageWidth : (lSubscriptionEndCol - lSubscriptionStartCol));
-    prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr, lWidth, lOffsetX, lOffsetY, lCols, lRows, getTexturePitch(lSubImageWidth), lTextureMem, lFilterPtr, (cudaStream_t)pCudaStream);
+#ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+    // The allocated address space is of size imageWidth * imageHeight. Every row is not aligned at imageBytesPerLine offset.
+    size_t lInputWidth = ((pSubtaskInfo.memInfo[INPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->imageWidth : lSubImageWidth);
+    prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lInputWidth * PIXEL_COUNT, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr, lWidth, lOffsetX, lOffsetY, lCols, lRows, getTexturePitch(lSubImageWidth), lTextureMem, lFilterPtr, (cudaStream_t)pCudaStream, false);
+#else
+    prepareForLaunch(lSubImageWidth, lSubImageHeight, lInvertedImageData, lTaskConf->imageBytesPerLine, lTaskConf->filter, lTaskConf->filterRadius, pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].ptr, lWidth, lOffsetX, lOffsetY, lCols, lRows, getTexturePitch(lSubImageWidth), lTextureMem, lFilterPtr, (cudaStream_t)pCudaStream, true);
+#endif
 
     return pmSuccess;
 }
@@ -295,7 +305,7 @@ int singleGpuImageFilter(void* pInvertedImageData, size_t pImageWidth, size_t pI
     void* lTextureMem = NULL;
     CUDA_ERROR_CHECK("cudaMallocPitch", cudaMallocPitch(&lTextureMem, &lPitch, lEffectiveTextureWidth, pImageHeight));
 
-    prepareForLaunch(pImageWidth, pImageHeight, (char*)pInvertedImageData, pImageWidth * PIXEL_COUNT, pFilter, pFilterRadius, lOutputMemCudaPtr, pImageWidth, 0, 0, pImageWidth, pImageHeight, lPitch, lTextureMem, lFilterPtr, NULL);
+    prepareForLaunch(pImageWidth, pImageHeight, (char*)pInvertedImageData, pImageWidth * PIXEL_COUNT, pFilter, pFilterRadius, lOutputMemCudaPtr, pImageWidth, 0, 0, pImageWidth, pImageHeight, lPitch, lTextureMem, lFilterPtr, NULL, true);
     
     CUDA_ERROR_CHECK("cudaMemcpy", cudaMemcpy(pOutputMem, lOutputMemCudaPtr, lImageSize, cudaMemcpyDeviceToHost));
 

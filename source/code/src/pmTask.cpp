@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -39,6 +39,7 @@
 
 #include <vector>
 #include <algorithm>
+#include <random>
 
 namespace pm
 {
@@ -124,7 +125,7 @@ void pmTask::LockAddressSpaces()
         for_each(mTaskMemVector, [this, &lCountDownCommand] (const pmTaskMemory& pTaskMem)
         {
             pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
-            lAddressSpace->EnqueueForLock(this, pTaskMem.memType, lCountDownCommand);
+            lAddressSpace->EnqueueForLock(this, pTaskMem.memType, pTaskMem.memDistributionInfo, lCountDownCommand);
         });
     }
 }
@@ -323,7 +324,10 @@ pmTaskExecStats& pmTask::GetTaskExecStats()
 
 void pmTask::RandomizeDevices(std::vector<const pmProcessingElement*>& pDevices)
 {
-	std::random_shuffle(pDevices.begin(), pDevices.end());
+    std::random_device lRandomDevice;
+    std::mt19937 lGenerator(lRandomDevice());
+    
+	std::shuffle(pDevices.begin(), pDevices.end(), lGenerator);
 }
 
 std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(const pmProcessingElement* pDevice)
@@ -797,6 +801,9 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, s
     }
 
     mTaskCommand = pmCommand::CreateSharedPtr(pPriority, 0, NULL);
+    
+    std::set<const pmMachine*> lMachines;
+    FindCandidateProcessingElements(lMachines);
 }
 
 pmLocalTask::~pmLocalTask()

@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -28,10 +28,12 @@
 #include "pmDevicePool.h"
 #include "pmStubManager.h"
 #include "pmUtility.h"
+#include "pmHardware.h"
 
 #include <string.h>
 #include <sstream>
 #include <cmath>
+#include <iterator>
 
 namespace pm
 {
@@ -139,64 +141,181 @@ pmAddressSpace::~pmAddressSpace()
     DisposeMemory();
 }
     
-void pmAddressSpace::Do1DCyclicBlockRowDistribution(uint pBlockDim, uint pMatrixDim, uint pElemSize)
+void pmAddressSpace::Do1DBlockRowDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize)
 {
     FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
 
-    uint lMachines = pmGetHostCount();
- 
-    EXCEPTION_ASSERT(pMatrixDim % pBlockDim == 0);
-    
-    uint lBlocksPerMatrixDim = pMatrixDim / pBlockDim;
-    EXCEPTION_ASSERT(lBlocksPerMatrixDim % lMachines == 0);
-    
-    uint lBlockRowsPerMachine = lBlocksPerMatrixDim / lMachines;
+    uint lElemSize = (uint)(mRequestedLength / (pMatrixWidth * pMatrixHeight));
+
+    std::vector<uint> lMachinesVector = GetMachinesForDistribution(pRandomize);
+    uint lMachines = (uint)lMachinesVector.size();
+
+    uint lBlockRows = pMatrixHeight / pBlockDim;
+    uint lBlockRowsPerMachine = lBlockRows / lMachines;
+    uint lLeftoverBlockRows = lBlockRows - (lBlockRowsPerMachine * lMachines);
     uint lRowsPerMachine = lBlockRowsPerMachine * pBlockDim;
-    size_t lLengthPerMachine = lRowsPerMachine * pMatrixDim * pElemSize;
-    
-    EXCEPTION_ASSERT((uint)(*mOwner) == 0);
+    size_t lLengthPerMachine = lRowsPerMachine * pMatrixWidth * lElemSize;
 
     mOwnershipMap.clear();
+    Init(mOwner);
+
+    size_t lRowOffset = 0;
     for(uint i = 0; i < lMachines; ++i)
     {
-        const pmMachine* lRowOwnerMachine = ((PM_LOCAL_MACHINE == mOwner || (uint)(*PM_LOCAL_MACHINE) == i) ? pmMachinePool::GetMachinePool()->GetMachine(i) : mOwner);
-        size_t lRowOffset = i * lLengthPerMachine;
+        size_t lTotalLength = lLengthPerMachine;
+        if(lLeftoverBlockRows)
+        {
+            lTotalLength += pBlockDim * pMatrixWidth * lElemSize;
+            --lLeftoverBlockRows;
+        }
+
+        const pmMachine* lRowOwnerMachine = ((PM_LOCAL_MACHINE == mOwner || (uint)(*PM_LOCAL_MACHINE) == lMachinesVector[i]) ? pmMachinePool::GetMachinePool()->GetMachine(i) : mOwner);
         
-        mOwnershipMap.emplace(std::piecewise_construct, std::forward_as_tuple(lRowOffset), std::forward_as_tuple(std::piecewise_construct, std::forward_as_tuple(lLengthPerMachine), std::forward_as_tuple(lRowOwnerMachine, lRowOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner))));
+        if(lRowOwnerMachine != mOwner)
+            SetRangeOwnerInternal(vmRangeOwner(lRowOwnerMachine, lRowOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)), lRowOffset, lTotalLength, mOwnershipMap);
+        
+        lRowOffset += lTotalLength;
     }
 }
 
-void pmAddressSpace::Do1DCyclicBlockColDistribution(uint pBlockDim, uint pMatrixDim, uint pElemSize)
+void pmAddressSpace::Do1DBlockColDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize)
+{
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+ 
+    uint lElemSize = (uint)(mRequestedLength / (pMatrixWidth * pMatrixHeight));
+
+    std::vector<uint> lMachinesVector = GetMachinesForDistribution(pRandomize);
+    uint lMachines = (uint)lMachinesVector.size();
+
+    uint lBlockCols = pMatrixWidth / pBlockDim;
+    uint lBlockColsPerMachine = lBlockCols / lMachines;
+    uint lLeftoverBlockCols = lBlockCols - (lBlockColsPerMachine * lMachines);
+    uint lColsPerMachine = lBlockColsPerMachine * pBlockDim;
+    size_t lColLengthPerMachine = lColsPerMachine * lElemSize;
+
+    mOwnershipMap.clear();
+    Init(mOwner);
+
+    size_t lFirstColOffset = 0;
+    for(uint i = 0; i < lMachines; ++i)
+    {
+        size_t lTotalColLength = lColLengthPerMachine;
+        if(lLeftoverBlockCols)
+        {
+            lTotalColLength += pBlockDim * lElemSize;
+            --lLeftoverBlockCols;
+        }
+        
+        const pmMachine* lColOwnerMachine = ((PM_LOCAL_MACHINE == mOwner || (uint)(*PM_LOCAL_MACHINE) == lMachinesVector[i]) ? pmMachinePool::GetMachinePool()->GetMachine(i) : mOwner);
+        
+        for(uint j = 0; j < pMatrixHeight; ++j)
+        {
+            size_t lRowOffset = j * pMatrixWidth * lElemSize;
+            size_t lOffset = lRowOffset + lFirstColOffset;
+
+            if(lColOwnerMachine != mOwner)
+                SetRangeOwnerInternal(vmRangeOwner(lColOwnerMachine, lOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)), lOffset, lTotalColLength, mOwnershipMap);
+        }
+        
+        lFirstColOffset += lTotalColLength;
+    }
+}
+
+void pmAddressSpace::Do2DBlockDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize)
 {
     FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
 
-    uint lMachines = pmGetHostCount();
- 
-    EXCEPTION_ASSERT(pMatrixDim % pBlockDim == 0);
-    
-    uint lBlocksPerMatrixDim = pMatrixDim / pBlockDim;
-    EXCEPTION_ASSERT(lBlocksPerMatrixDim % lMachines == 0);
-    
-    uint lBlockColsPerMachine = lBlocksPerMatrixDim / lMachines;
-    uint lColsPerMachine = lBlockColsPerMachine * pBlockDim;
-    size_t lColLengthPerMachine = lColsPerMachine * pElemSize;
+    uint lElemSize = (uint)(mRequestedLength / (pMatrixWidth * pMatrixHeight));
 
-    EXCEPTION_ASSERT((uint)(*mOwner) == 0);
+    std::vector<uint> lMachinesVector = GetMachinesForDistribution(pRandomize);
+    uint lMachines = (uint)lMachinesVector.size();
+
+    uint lBlockRows = pMatrixHeight / pBlockDim;    // Any left over partial blocks are kept on owner host
+    uint lBlockCols = pMatrixWidth / pBlockDim;
+    uint lTotalBlocks = lBlockRows * lBlockCols;
+    uint lBlocksPerMachine = lTotalBlocks / lMachines;
+    uint lLeftoverBlocks = lTotalBlocks - (lBlocksPerMachine * lMachines);
+    
+    size_t lBlockRowLength = pBlockDim * lElemSize;
 
     mOwnershipMap.clear();
-    for(uint i = 0; i < lMachines; ++i)
-    {
-        const pmMachine* lColOwnerMachine = ((PM_LOCAL_MACHINE == mOwner || (uint)(*PM_LOCAL_MACHINE) == i) ? pmMachinePool::GetMachinePool()->GetMachine(i) : mOwner);
-        size_t lFirstColOffset = i * lColLengthPerMachine;
-        
-        for(uint j = 0; j < pMatrixDim; ++j)
-        {
-            size_t lRowOffset = j * pMatrixDim * pElemSize;
-            size_t lOffset = lRowOffset + lFirstColOffset;
+    Init(mOwner);
 
-            mOwnershipMap.emplace(std::piecewise_construct, std::forward_as_tuple(lOffset), std::forward_as_tuple(std::piecewise_construct, std::forward_as_tuple(lColLengthPerMachine), std::forward_as_tuple(lColOwnerMachine, lOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner))));
+    for(uint i = 0, blockId = 0; i < lMachines; ++i)
+    {
+        uint lBlocks = lBlocksPerMachine;
+        if(lLeftoverBlocks)
+        {
+            ++lBlocks;
+            --lLeftoverBlocks;
+        }
+
+        const pmMachine* lBlockOwnerMachine = ((PM_LOCAL_MACHINE == mOwner || (uint)(*PM_LOCAL_MACHINE) == lMachinesVector[i]) ? pmMachinePool::GetMachinePool()->GetMachine(i) : mOwner);
+        if(lBlockOwnerMachine == mOwner)
+        {
+            blockId += lBlocks;
+        }
+        else
+        {
+            for(uint j = 0; j < lBlocks; ++j)
+            {
+                uint lBlockId = blockId;
+                uint lBlockRow = lBlockId / lBlockCols;
+                uint lBlockCol = lBlockId % lBlockCols;
+                
+                ++blockId;
+                
+                size_t lBlockOffset = (lBlockRow * pMatrixWidth + lBlockCol) * pBlockDim * lElemSize;
+
+                for(uint k = 0; k < pBlockDim; ++k)
+                {
+                    size_t lBlockRowOffset = lBlockOffset + k * pMatrixWidth * lElemSize;
+
+                    SetRangeOwnerInternal(vmRangeOwner(lBlockOwnerMachine, lBlockRowOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)), lBlockRowOffset, lBlockRowLength, mOwnershipMap);
+                }
+            }
         }
     }
+}
+    
+std::vector<uint> pmAddressSpace::GetMachinesForDistribution(bool pRandomize)
+{
+    std::set<const pmMachine*> lMachinesSet;
+    std::map<uint, const pmMachine*> lMachinesMap;
+    std::vector<uint> lMachinesVector;
+
+    if(dynamic_cast<pmLocalTask*>(mLockingTask))
+        pmProcessingElement::GetMachines(((pmLocalTask*)mLockingTask)->GetAssignedDevices(), lMachinesSet);
+    else
+        pmProcessingElement::GetMachines(((pmRemoteTask*)mLockingTask)->GetAssignedDevices(), lMachinesSet);
+    
+    lMachinesSet.emplace(mOwner);
+    
+    for_each(lMachinesSet, [&lMachinesMap] (const pmMachine* pMachine)
+    {
+        lMachinesMap.emplace((uint)(*pMachine), pMachine);
+    });
+
+    lMachinesVector.reserve(lMachinesMap.size());
+
+    for_each(lMachinesMap, [&lMachinesVector] (typename decltype(lMachinesMap)::value_type& pPair)
+    {
+        lMachinesVector.emplace_back(pPair.first);
+    });
+    
+    if(pRandomize)
+    {
+        // Using same seed on all machines, so that they produce same randomization.
+        // This may not be portable.
+        std::srand((uint)mGenerationNumberOnOwner);
+        std::random_shuffle(lMachinesVector.begin(), lMachinesVector.end());
+        
+        std::cout << "Randomized list on machine " << (uint)(*PM_LOCAL_MACHINE);
+        std::copy(lMachinesVector.begin(), lMachinesVector.end(), std::ostream_iterator<uint>(std::cout, " "));
+        std::cout << std::endl;
+    }
+    
+    return lMachinesVector;
 }
     
 pmAddressSpace* pmAddressSpace::CreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner /* = GetNextGenerationNumber() */)
@@ -400,13 +519,13 @@ void pmAddressSpace::ScanLockQueue()
 
     auto lValue = mTasksWaitingForLock.front();  // For now, only one task can acquire lock
 
-    Lock(lValue.first.first, lValue.first.second);
+    Lock(lValue.first.first, lValue.first.second.first, lValue.first.second.second);
     lValue.second->MarkExecutionEnd(pmSuccess, lValue.second);
     
     mTasksWaitingForLock.pop_front();
 }
 
-void pmAddressSpace::EnqueueForLock(pm::pmTask* pTask, pmMemType pMemType, pmCommandPtr& pCountDownCommand)
+void pmAddressSpace::EnqueueForLock(pm::pmTask* pTask, pmMemType pMemType, const pmMemDistributionInfo& pDistInfo, pmCommandPtr& pCountDownCommand)
 {
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
     
@@ -414,27 +533,17 @@ void pmAddressSpace::EnqueueForLock(pm::pmTask* pTask, pmMemType pMemType, pmCom
     {
         FINALIZE_RESOURCE_PTR(dWaitingTasksLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mWaitingTasksLock, Lock(), Unlock());
 
-        mTasksWaitingForLock.emplace_back(std::make_pair(pTask, pMemType), pCountDownCommand);
+        mTasksWaitingForLock.emplace_back(std::make_pair(pTask, std::make_pair(pMemType, pDistInfo)), pCountDownCommand);
     }
     else
     {
-        Lock(pTask, pMemType);
+        Lock(pTask, pMemType, pDistInfo);
         pCountDownCommand->MarkExecutionEnd(pmSuccess, pCountDownCommand);
     }
 }
     
-void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
+void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType, const pmMemDistributionInfo& pDistInfo)
 {
-#if 0
-    if(pMemType == READ_ONLY && (uint)(*pTask->GetOriginatingHost()) == 0 && pTask->GetSequenceNumber() == 0)
-    {
-        if(mGenerationNumberOnOwner == 1)
-            Do1DCyclicBlockRowDistribution(2048, std::sqrt(mRequestedLength / sizeof(float)), sizeof(float));
-        else if(mGenerationNumberOnOwner == 2)
-            Do1DCyclicBlockColDistribution(2048, std::sqrt(mRequestedLength / sizeof(float)), sizeof(float));
-    }
-#endif
-
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
@@ -442,6 +551,28 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
         EXCEPTION_ASSERT(!mLockingTask && pMemType != MAX_MEM_TYPE);
 
         mLockingTask = pTask;
+        
+        EXCEPTION_ASSERT(pDistInfo.distType <= MAX_MEM_DISTRIBUTION_TYPES);
+        if(pDistInfo.distType < MAX_MEM_DISTRIBUTION_TYPES)
+        {
+            switch(pDistInfo.distType)
+            {
+                case DIST_1D_BLOCK_ROW:
+                    Do1DBlockRowDistribution(pDistInfo.blockDim, pDistInfo.matrixWidth, pDistInfo.matrixHeight, pDistInfo.randomize);
+                    break;
+
+                case DIST_1D_BLOCK_COL:
+                    Do1DBlockColDistribution(pDistInfo.blockDim, pDistInfo.matrixWidth, pDistInfo.matrixHeight, pDistInfo.randomize);
+                    break;
+                
+                case DIST_2D_BLOCK:
+                    Do2DBlockDistribution(pDistInfo.blockDim, pDistInfo.matrixWidth, pDistInfo.matrixHeight, pDistInfo.randomize);
+                    break;
+                    
+                default:
+                    PMTHROW(pmFatalErrorException());
+            }
+        }
 
     #ifdef SUPPORT_LAZY_MEMORY
         if((pmUtility::IsWritable(pMemType) || !pmUtility::IsLazy(pMemType)) && mReadOnlyLazyMapping)

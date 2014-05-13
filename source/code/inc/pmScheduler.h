@@ -4,7 +4,7 @@
  * All Rights Reserved
  *
  * Entire information in this file and PMLIB software is property
- * of Indian Institue of Technology, New Delhi. Redistribution, 
+ * of Indian Institute of Technology, New Delhi. Redistribution, 
  * modification and any use in source form is strictly prohibited
  * without formal written approval from Indian Institute of Technology, 
  * New Delhi. Use of software in binary form is allowed provided
@@ -499,15 +499,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void SetupPersistentCommunicationCommands();
 		void DestroyPersistentCommunicationCommands();
 
-		void SetupNewRemoteSubtaskReception();
-		void SetupNewTaskEventReception();
-		void SetupNewStealRequestReception();
-		void SetupNewStealResponseReception();
-        void SetupNewMemTransferRequestReception();
-        void SetupNewHostFinalizationReception();
-        void SetupNewSubtaskRangeCancelReception();
-        void SetupNewNoReductionReqdReception();
-    
         void ProcessEvent(scheduler::schedulerEvent& pEvent);
 
 		void AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<const pmMachine*>& pMachines);
