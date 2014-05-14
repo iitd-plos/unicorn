@@ -1043,8 +1043,6 @@ void pmMPI::ReceiveNonBlocking(pmCommunicatorCommandPtr& pCommand)
 
 void pmMPI::SendNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength)
 {
-    ACCUMULATION_TIMER(SendNonBlockingInternal, "SendNonBlockingInternal");
-    
 	MPI_Request* lRequest = NULL;
 	MPI_Comm lCommunicator;
 	int lDest;
@@ -1080,8 +1078,6 @@ void pmMPI::SendNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pD
         else
         {
             MPI_Request lActualRequest;
-            
-            ACCUMULATION_TIMER(SendNonBlockingInternal4, "SendNonBlockingInternal5");
             
             if( MPI_CALL("MPI_Isend", (MPI_Isend(pData, pLength, lDataType, lDest, (int)lTag, lCommunicator, &lActualRequest) != MPI_SUCCESS)) )
                 PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
@@ -1938,7 +1934,6 @@ void pmMPI::SetupDummyRequest()
 
     if(!mDummyRequestInitiated)
     {
-        ACCUMULATION_TIMER(SetupDummyRequest, "SetupDummyRequest");
 		if( MPI_CALL("MPI_Start", (MPI_Start(mPersistentDummyRecvRequest.get()) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::DUMMY_REQUEST_CREATION_ERROR));
         
@@ -1956,7 +1951,6 @@ void pmMPI::CancelDummyRequest()
         // For some reason, persistent send request has proved to be slower than non-persistent one here. So, using the latter variant.
         MPI_Request lRequest;
 
-        ACCUMULATION_TIMER(CancelDummyRequest, "CancelDummyRequest");
         if( MPI_CALL("MPI_Isend", (MPI_Isend(NULL, 0, MPI_BYTE, mHostId, PM_MPI_DUMMY_TAG, MPI_COMM_WORLD, &lRequest) != MPI_SUCCESS)) )
             PMTHROW(pmNetworkException(pmNetworkException::DUMMY_REQUEST_CANCEL_ERROR));
         
