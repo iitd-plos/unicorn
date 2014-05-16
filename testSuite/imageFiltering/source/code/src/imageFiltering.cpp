@@ -444,7 +444,7 @@ int DoInit(int argc, char** argv, int pCommonArgs)
     int lFilterDim = 2 * lFilterRadius + 1;
     for(int i = 0; i < lFilterDim; ++i)
         for(int j = 0; j < lFilterDim; ++j)
-            gFilter[i][j] = i;  //(((rand() % 2) ? 1 : -1) * rand());
+            gFilter[i][j] = (((rand() % 2) ? 1 : -1) * rand());
     
 	return 0;
 }

@@ -466,18 +466,16 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
     }
 }
 
-#if 1
 void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector)
 {
-    struct RegionConsumer
+    struct localFilter
     {
-        RegionConsumer(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
-        : mAddressSpace(pAddressSpace)
-        , mScatteredSubscriptionInfo(pScatteredSubscriptionInfo)
-        , mMem(reinterpret_cast<ulong>(mAddressSpace->GetMem()))
+        localFilter(pmScatteredSubscriptionFilter& pGlobalFilter, pmAddressSpace* pAddressSpace)
+        : mGlobalFilter(pGlobalFilter)
+        , mAddressSpace(pAddressSpace)
+        , mMem(reinterpret_cast<ulong>(pAddressSpace->GetMem()))
         {}
- 
-        // emplace_back must be called in increasing y values (i.e. first for row one, then for row two and so on)
+        
         void emplace_back(ulong pStartAddr, ulong pLastAddr)
         {
             ulong lLength = pLastAddr - pStartAddr + 1;
@@ -490,127 +488,46 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
                 pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
 
                 if(lRangeOwner.host != PM_LOCAL_MACHINE)
-                    AddNextSubRow(pPair.first, pPair.second.first, lRangeOwner);
+                    mGlobalFilter.AddNextSubRow(pPair.first, pPair.second.first, lRangeOwner);
             });
-        }
-        
-        void AddNextSubRow(ulong pOffset, ulong pLength, pmAddressSpace::vmRangeOwner& pRangeOwner)
-        {
-            ulong lStartCol = (pOffset - (ulong)mScatteredSubscriptionInfo.offset) % (ulong)mScatteredSubscriptionInfo.step;
-            
-            bool lRangeCombined = false;
-
-            auto lIter = mCurrentBlocks.begin(), lEndIter = mCurrentBlocks.end();
-            while(lIter != lEndIter)
-            {
-                blockData& lData = (*lIter);
-
-                ulong lEndCol1 = lData.startCol + lData.colCount - 1;
-                ulong lEndCol2 = lStartCol + pLength - 1;
-                
-                bool lRemoveCurrentRange = false;
-                
-                if(!(lEndCol2 < lData.startCol || lStartCol > lEndCol1))    // If the ranges overlap
-                {
-                    // Total overlap and to be fetched from same host and there is no gap between rows
-                    if(lData.startCol == lStartCol && lData.colCount == pLength && lData.rangeOwner.host == pRangeOwner.host
-                       && lData.rangeOwner.memIdentifier == pRangeOwner.memIdentifier
-                       && (lData.rangeOwner.hostOffset + lData.subscriptionInfo.count * lData.subscriptionInfo.step == pRangeOwner.hostOffset)
-                       && (lData.subscriptionInfo.offset + lData.subscriptionInfo.count * lData.subscriptionInfo.step == pOffset))
-                    {
-                        ++lData.subscriptionInfo.count; // Combine with previous range
-                        lRangeCombined = true;
-                    }
-                    else
-                    {
-                        lRemoveCurrentRange = true;
-                    }
-                }
-                
-                if(lRemoveCurrentRange)
-                {
-                    mBlocksToBeFetched.emplace_back(lData.subscriptionInfo, lData.rangeOwner);
-                    mCurrentBlocks.erase(lIter++);
-                }
-                else
-                {
-                    ++lIter;
-                }
-            }
-            
-            if(!lRangeCombined)
-                mCurrentBlocks.emplace_back(lStartCol, pLength, pmScatteredSubscriptionInfo(pOffset, pLength, mScatteredSubscriptionInfo.step, 1), pRangeOwner);
-        }
-        
-        const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& GetBlocksToBeFetched()
-        {
-            PromoteCurrentBlocks();
-            
-            return mBlocksToBeFetched;
         }
         
     private:
-        void PromoteCurrentBlocks()
-        {
-            for_each(mCurrentBlocks, [&] (const blockData& pData)
-            {
-                mBlocksToBeFetched.emplace_back(pData.subscriptionInfo, pData.rangeOwner);
-            });
-            
-            mCurrentBlocks.clear();
-        }
-
-        struct blockData
-        {
-            ulong startCol;
-            ulong colCount;
-            pmScatteredSubscriptionInfo subscriptionInfo;
-            pmAddressSpace::vmRangeOwner rangeOwner;
-            
-            blockData(ulong pStartCol, ulong pColCount, const pmScatteredSubscriptionInfo& pSubscriptionInfo, pmAddressSpace::vmRangeOwner& pRangeOwner)
-            : startCol(pStartCol)
-            , colCount(pColCount)
-            , subscriptionInfo(pSubscriptionInfo)
-            , rangeOwner(pRangeOwner)
-            {}
-        };
-
+        pmScatteredSubscriptionFilter& mGlobalFilter;
         pmAddressSpace* mAddressSpace;
-        const pmScatteredSubscriptionInfo& mScatteredSubscriptionInfo;
-        
-        std::list<blockData> mCurrentBlocks;   // computed till last row processed
-        std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>> mBlocksToBeFetched;
         ulong mMem;
     };
-    
+
     EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
 
     using namespace linuxMemManager;
     void* lMem = pAddressSpace->GetMem();
     
-	RegionConsumer lRegionsToBeFetched(pAddressSpace, pScatteredSubscriptionInfo);
+	pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
+    localFilter lLocalFilter(lBlocksFilter, pAddressSpace);
+    
     std::set<pmCommandPtr> lTempCommandSet;
     addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
     pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
 
     FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
-
-    for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
+    
+    auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
     {
         std::vector<pmCommandPtr> lInnerCommandVector;
-        
-        FindRegionsNotInFlight(lMap, lMem, pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lRegionsToBeFetched, lInnerCommandVector);
+
+        FindRegionsNotInFlight(lMap, lMem, pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lLocalFilter, lInnerCommandVector);
 
         // If the range is already in one or more scattered flights, then multiple general entries are put into inFlightMap
         // Having a set ensures that a command is inserted and subsequently waited upon only once
         std::move(lInnerCommandVector.begin(), lInnerCommandVector.end(), std::inserter(lTempCommandSet, lTempCommandSet.begin()));
-    }
-
-    auto lBlocks = lRegionsToBeFetched.GetBlocksToBeFetched();
+    });
     
     for_each(lBlocks, [&] (typename decltype(lBlocks)::value_type& pPair)
     {
+        EXCEPTION_ASSERT(pPair.first.size && pPair.first.step && pPair.first.count);
+
         pmCommandPtr lCommand;
         FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, communicator::TRANSFER_SCATTERED, pPair.first.offset, pPair.first.size, pPair.first.step, pPair.first.count, pPair.second, lMap, lCommand);
 
@@ -620,105 +537,6 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
     
     pCommandVector.insert(pCommandVector.end(), lTempCommandSet.begin(), lTempCommandSet.end());
 }
-
-#else
-
-void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector)
-{
-    EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
-
-    // Check if entire scattered range is in flight or entire scattered range is on one machine (local or remote). Otherwise, split scattered fetch into general fetch.
-    
-    using namespace linuxMemManager;
-    void* lMem = pAddressSpace->GetMem();
-    
-	std::vector<std::pair<ulong, ulong>> lRegionsToBeFetched;	// Start address and last address of sub ranges to be fetched
-    std::set<pmCommandPtr> lTempCommandSet;
-    size_t lTempCommandCount = 0;
-    addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
-    pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
-
-    bool lPartiallyInFlight = false;
-    bool lRangeLiesOnOneMachine = true;
-    
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
-
-        for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
-        {
-            std::vector<pmCommandPtr> lInnerCommandVector;
-            
-            FindRegionsNotInFlight(lMap, lMem, pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lRegionsToBeFetched, lInnerCommandVector);
-            lPartiallyInFlight |= (lInnerCommandVector.size() > 1);
-
-            if(lPartiallyInFlight)
-                break;
-
-            lTempCommandCount += lInnerCommandVector.size();
-
-            // If the range is already in one or more scattered flights, then multiple general entries are put into inFlightMap
-            // Having a set ensures that a command is inserted and subsequently waited upon only once
-            std::move(lInnerCommandVector.begin(), lInnerCommandVector.end(), std::inserter(lTempCommandSet, lTempCommandSet.begin()));
-        }
-
-        if(!lPartiallyInFlight)
-        {
-            if(lTempCommandCount == 0)  // Nothing is in flight
-            {
-                pmAddressSpace::pmMemOwnership lOwnerships;
-                for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
-                    pAddressSpace->GetOwners(pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lOwnerships);
-
-                if(lOwnerships.size() == pScatteredSubscriptionInfo.count)
-                {
-                    const pmMachine* lServingHost = lOwnerships.begin()->second.second.host;
-
-                    for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
-                    {
-                        DEBUG_EXCEPTION_ASSERT(pPair.second.first == pScatteredSubscriptionInfo.size);
-                        
-                        DEBUG_EXCEPTION_ASSERT((pPair.second.second.hostOffset - pScatteredSubscriptionInfo.offset) % pScatteredSubscriptionInfo.step == 0);
-                        
-                        lRangeLiesOnOneMachine &= (lServingHost == pPair.second.second.host);
-                        
-                        if(!lRangeLiesOnOneMachine)
-                            return; // return from functor
-                    });
-                    
-                    if(lRangeLiesOnOneMachine && lServingHost != PM_LOCAL_MACHINE)
-                    {
-                        pmCommandPtr lCommand;
-                        FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, communicator::TRANSFER_SCATTERED, pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.size, pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.count, lOwnerships.begin()->second.second, lMap, lCommand);
-
-                        if(lCommand.get())
-                            pCommandVector.emplace_back(std::move(lCommand));
-                    }
-                }
-                else
-                {
-                    lRangeLiesOnOneMachine = false;
-                }
-            }
-            else if(lTempCommandCount == pScatteredSubscriptionInfo.count)  // Everything is in flight (either scattered or general)
-            {
-                pCommandVector.insert(pCommandVector.end(), lTempCommandSet.begin(), lTempCommandSet.end());
-            }
-            else    // Partially in flight
-            {
-                lPartiallyInFlight = true;
-            }
-        }
-    }
-    
-    if(lPartiallyInFlight || !lRangeLiesOnOneMachine)
-    {
-        for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
-            FetchMemoryRegion(pAddressSpace, pPriority, pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, pCommandVector);
-    }
-}
-#endif
 
 void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector)
 {

@@ -1015,6 +1015,86 @@ pmAddressSpace* pmUserMemHandle::GetAddressSpace()
     return mAddressSpace;
 }
     
+    
+/* class pmScatteredSubscriptionFilter */
+pmScatteredSubscriptionFilter::pmScatteredSubscriptionFilter(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+    : mScatteredSubscriptionInfo(pScatteredSubscriptionInfo)
+{}
+    
+const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& pmScatteredSubscriptionFilter::FilterBlocks(const std::function<void (size_t)>& pRowFunctor)
+{
+    for(size_t i = 0; i < mScatteredSubscriptionInfo.count; ++i)
+        pRowFunctor(i);
+    
+    return GetLeftoverBlocks();
+}
+
+// AddNextSubRow must be called in increasing y first and then increasing x values (i.e. first one or more times with increasing x for row one, then similarly for row two and so on)
+void pmScatteredSubscriptionFilter::AddNextSubRow(ulong pOffset, ulong pLength, pmAddressSpace::vmRangeOwner& pRangeOwner)
+{
+    ulong lStartCol = (pOffset - (ulong)mScatteredSubscriptionInfo.offset) % (ulong)mScatteredSubscriptionInfo.step;
+    
+    bool lRangeCombined = false;
+
+    auto lIter = mCurrentBlocks.begin(), lEndIter = mCurrentBlocks.end();
+    while(lIter != lEndIter)
+    {
+        blockData& lData = (*lIter);
+
+        ulong lEndCol1 = lData.startCol + lData.colCount - 1;
+        ulong lEndCol2 = lStartCol + pLength - 1;
+        
+        bool lRemoveCurrentRange = false;
+        
+        if(!(lEndCol2 < lData.startCol || lStartCol > lEndCol1))    // If the ranges overlap
+        {
+            // Total overlap and to be fetched from same host and there is no gap between rows
+            if(lData.startCol == lStartCol && lData.colCount == pLength && lData.rangeOwner.host == pRangeOwner.host
+               && lData.rangeOwner.memIdentifier == pRangeOwner.memIdentifier
+               && (lData.rangeOwner.hostOffset + lData.subscriptionInfo.count * lData.subscriptionInfo.step == pRangeOwner.hostOffset)
+               && (lData.subscriptionInfo.offset + lData.subscriptionInfo.count * lData.subscriptionInfo.step == pOffset))
+            {
+                ++lData.subscriptionInfo.count; // Combine with previous range
+                lRangeCombined = true;
+            }
+            else
+            {
+                lRemoveCurrentRange = true;
+            }
+        }
+        
+        if(lRemoveCurrentRange)
+        {
+            mBlocksToBeFetched.emplace_back(lData.subscriptionInfo, lData.rangeOwner);
+            mCurrentBlocks.erase(lIter++);
+        }
+        else
+        {
+            ++lIter;
+        }
+    }
+    
+    if(!lRangeCombined)
+        mCurrentBlocks.emplace_back(lStartCol, pLength, pmScatteredSubscriptionInfo(pOffset, pLength, mScatteredSubscriptionInfo.step, 1), pRangeOwner);
+}
+
+const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& pmScatteredSubscriptionFilter::GetLeftoverBlocks()
+{
+    PromoteCurrentBlocks();
+    
+    return mBlocksToBeFetched;
+}
+
+void pmScatteredSubscriptionFilter::PromoteCurrentBlocks()
+{
+    for_each(mCurrentBlocks, [&] (const blockData& pData)
+    {
+        mBlocksToBeFetched.emplace_back(pData.subscriptionInfo, pData.rangeOwner);
+    });
+    
+    mCurrentBlocks.clear();
+}
+    
 };
 
 

@@ -225,6 +225,7 @@ private:
     size_t mCurrentThread;
     
     pmCommunicatorCommandPtr mFileOperationsRecvCommand;
+    pmCommunicatorCommandPtr mMemTransferRequestCommand;
     
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };

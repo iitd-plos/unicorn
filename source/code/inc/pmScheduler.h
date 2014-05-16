@@ -528,7 +528,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmCommunicatorCommandPtr mTaskEventRecvCommand;
 		pmCommunicatorCommandPtr mStealRequestRecvCommand;
 		pmCommunicatorCommandPtr mStealResponseRecvCommand;
-        pmCommunicatorCommandPtr mMemTransferRequestCommand;
         pmCommunicatorCommandPtr mHostFinalizationCommand;
         pmCommunicatorCommandPtr mSubtaskRangeCancelCommand;
         pmCommunicatorCommandPtr mNoReductionReqdCommand;

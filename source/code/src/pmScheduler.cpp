@@ -129,7 +129,6 @@ pmScheduler::pmScheduler()
     mAcknowledgementsSent = 0;
 #endif
 
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_IDENTIFIER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(TASK_MEMORY_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(REMOTE_SUBTASK_ASSIGN_STRUCT);
@@ -141,7 +140,6 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SHADOW_MEM_TRANSFER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SUBTASK_REDUCE_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_TRANSFER_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(REDISTRIBUTION_ORDER_STRUCT);
@@ -156,7 +154,6 @@ pmScheduler::pmScheduler()
 
 pmScheduler::~pmScheduler()
 {
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_IDENTIFIER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(TASK_MEMORY_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REMOTE_TASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REMOTE_SUBTASK_ASSIGN_STRUCT);
@@ -168,7 +165,6 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SHADOW_MEM_TRANSFER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SUBTASK_REDUCE_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_TRANSFER_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REDISTRIBUTION_ORDER_STRUCT);
@@ -202,7 +198,6 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     finalize_ptr<communicator::taskEventStruct> lTaskEventRecvData(new taskEventStruct());
     finalize_ptr<communicator::stealRequestStruct> lStealRequestRecvData(new stealRequestStruct());
     finalize_ptr<communicator::stealResponseStruct> lStealResponseRecvData(new stealResponseStruct());
-    finalize_ptr<communicator::memoryTransferRequest> lMemTransferRequestData(new memoryTransferRequest());
     finalize_ptr<communicator::subtaskRangeCancelStruct> lSubtaskRangeCancelData(new subtaskRangeCancelStruct());
     finalize_ptr<communicator::noReductionReqdStruct> lNoReductionReqdData(new noReductionReqdStruct());
 
@@ -212,7 +207,6 @@ void pmScheduler::SetupPersistentCommunicationCommands()
 	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, taskEventStruct, lTaskEventRecvData);
 	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	stealRequestStruct, lStealRequestRecvData);
 	mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, stealResponseStruct, lStealResponseRecvData);
-	mMemTransferRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_TRANSFER_REQUEST_TAG, MEMORY_TRANSFER_REQUEST_STRUCT, memoryTransferRequest, lMemTransferRequestData);
     mSubtaskRangeCancelCommand = PERSISTENT_RECV_COMMAND(SUBTASK_RANGE_CANCEL_TAG, SUBTASK_RANGE_CANCEL_STRUCT, subtaskRangeCancelStruct, lSubtaskRangeCancelData);
 	mNoReductionReqdCommand = PERSISTENT_RECV_COMMAND(NO_REDUCTION_REQD_TAG, NO_REDUCTION_REQD_STRUCT, noReductionReqdStruct, lNoReductionReqdData);
 
@@ -220,7 +214,6 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     mTaskEventRecvCommand->SetPersistent();
     mStealRequestRecvCommand->SetPersistent();
     mStealResponseRecvCommand->SetPersistent();
-    mMemTransferRequestCommand->SetPersistent();
     mSubtaskRangeCancelCommand->SetPersistent();
     mNoReductionReqdCommand->SetPersistent();
     
@@ -229,7 +222,6 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     lNetwork->InitializePersistentCommand(mTaskEventRecvCommand);
     lNetwork->InitializePersistentCommand(mStealRequestRecvCommand);
     lNetwork->InitializePersistentCommand(mStealResponseRecvCommand);
-    lNetwork->InitializePersistentCommand(mMemTransferRequestCommand);
     lNetwork->InitializePersistentCommand(mSubtaskRangeCancelCommand);
     lNetwork->InitializePersistentCommand(mNoReductionReqdCommand);
 
@@ -237,7 +229,6 @@ void pmScheduler::SetupPersistentCommunicationCommands()
 	pmCommunicator::GetCommunicator()->Receive(mTaskEventRecvCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mStealRequestRecvCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mStealResponseRecvCommand, false);
-	pmCommunicator::GetCommunicator()->Receive(mMemTransferRequestCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mSubtaskRangeCancelCommand, false);
     pmCommunicator::GetCommunicator()->Receive(mNoReductionReqdCommand, false);
 	
@@ -264,7 +255,6 @@ void pmScheduler::DestroyPersistentCommunicationCommands()
     lNetwork->TerminatePersistentCommand(mTaskEventRecvCommand);
     lNetwork->TerminatePersistentCommand(mStealRequestRecvCommand);
     lNetwork->TerminatePersistentCommand(mStealResponseRecvCommand);
-    lNetwork->TerminatePersistentCommand(mMemTransferRequestCommand);
     lNetwork->TerminatePersistentCommand(mSubtaskRangeCancelCommand);
     lNetwork->TerminatePersistentCommand(mNoReductionReqdCommand);
 
@@ -1733,20 +1723,6 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                     EXCEPTION_ASSERT(lAddressSpace);
                 
                     lAddressSpace->ChangeOwnership(lData->transferData);
-
-					break;
-				}
-                
-				case MEMORY_TRANSFER_REQUEST_TAG:
-				{
-					memoryTransferRequest* lData = (memoryTransferRequest*)(lCommunicatorCommand->GetData());
-
-					pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lData->sourceMemIdentifier.memOwnerHost), lData->sourceMemIdentifier.generationNumber);
-
-					if(lAddressSpace)
-                    {
-                        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, (communicator::memoryTransferType)lData->transferType, lData->offset, lData->length, lData->step, lData->count, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, lData->priority, lData->isTaskOriginated, lData->originatingHost, lData->sequenceNumber);
-                    }
 
 					break;
 				}

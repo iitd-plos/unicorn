@@ -89,37 +89,51 @@ pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
     for(size_t i = 0; i < pThreadCount; ++i)
         mThreadVector.emplace_back(new pmHeavyOperationsThread(i));
 
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_IDENTIFIER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_TRANSFER_REQUEST_STRUCT);
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(FILE_OPERATIONS_STRUCT);
+
 	SetupPersistentCommunicationCommands();
 }
 
 pmHeavyOperationsThreadPool::~pmHeavyOperationsThreadPool()
 {
     mThreadVector.clear();
-    
+
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_IDENTIFIER_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_TRANSFER_REQUEST_STRUCT);
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(FILE_OPERATIONS_STRUCT);
+
 	DestroyPersistentCommunicationCommands();
 }
 
 void pmHeavyOperationsThreadPool::SetupPersistentCommunicationCommands()
 {
+    finalize_ptr<communicator::memoryTransferRequest> lMemTransferRequestData(new memoryTransferRequest());
     finalize_ptr<communicator::fileOperationsStruct> lFileOperationsRecvData(new fileOperationsStruct());
 
 #define PERSISTENT_RECV_COMMAND(tag, structType, structEnumType, recvDataPtr) pmCommunicatorCommand<structEnumType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structType, recvDataPtr, 1, HeavyOperationsCommandCompletionCallback)
 
+	mMemTransferRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_TRANSFER_REQUEST_TAG, MEMORY_TRANSFER_REQUEST_STRUCT, memoryTransferRequest, lMemTransferRequestData);
 	mFileOperationsRecvCommand = PERSISTENT_RECV_COMMAND(FILE_OPERATIONS_TAG, FILE_OPERATIONS_STRUCT, fileOperationsStruct, lFileOperationsRecvData);
     
+    mMemTransferRequestCommand->SetPersistent();
     mFileOperationsRecvCommand->SetPersistent();
     
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
+    lNetwork->InitializePersistentCommand(mMemTransferRequestCommand);
     lNetwork->InitializePersistentCommand(mFileOperationsRecvCommand);
 
+	pmCommunicator::GetCommunicator()->Receive(mMemTransferRequestCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mFileOperationsRecvCommand, false);
 }
     
 void pmHeavyOperationsThreadPool::DestroyPersistentCommunicationCommands()
 {
-    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->TerminatePersistentCommand(mFileOperationsRecvCommand);
+    pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
+
+    lNetwork->TerminatePersistentCommand(mMemTransferRequestCommand);
+    lNetwork->TerminatePersistentCommand(mFileOperationsRecvCommand);
 }
 
 void pmHeavyOperationsThreadPool::QueueNetworkRequest(pmCommunicatorCommandPtr& pCommand, heavyOperations::networkRequestType pType)
@@ -388,54 +402,42 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
 
 void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded)
 {
-    pmAddressSpace::pmMemOwnership lOwnerships;
-    
-    for(ulong i = 0 ; i < pCount; ++i)
-        pSrcAddressSpace->GetOwners(pOffset + i * pStep, pLength, lOwnerships);
-
-    EXCEPTION_ASSERT(!lOwnerships.empty());
-    
-    // Check if entire memory (asked for) lives on one host - local or remote. If not convert, the scattered request to multiple general requests
-    bool lCanBeServedScattered = (lOwnerships.size() == pCount);
-    const pmMachine* lServingHost = lOwnerships.begin()->second.second.host;
-
-    if(lCanBeServedScattered)
+    pmScatteredSubscriptionFilter lBlocksFilter(pmScatteredSubscriptionInfo(pOffset, pLength, pStep, pCount));
+    auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
     {
-        for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
-        {
-            DEBUG_EXCEPTION_ASSERT(pPair.second.first == pLength);
-            
-            DEBUG_EXCEPTION_ASSERT((pPair.second.second.hostOffset - pOffset) % pStep == 0);
-            
-            lCanBeServedScattered &= (lServingHost == pPair.second.second.host);
-        });
-    }
-    
-    if(lCanBeServedScattered)
-    {
-        if(lServingHost == PM_LOCAL_MACHINE)
-        {
-            // This function returns pointer to scattered memory for step pScatteredIndex
-            std::function<char* (ulong)> lFunc([&] (ulong pScatteredIndex) -> char*
-            {
-                DEBUG_EXCEPTION_ASSERT(pScatteredIndex < pCount);
-
-                size_t lOffset = pOffset + pStep * pScatteredIndex;
-
-                auto lIter = lOwnerships.find(lOffset);
-                DEBUG_EXCEPTION_ASSERT(lIter != lOwnerships.end());
-                
-                const pmAddressSpace::vmRangeOwner& lRangeOwner = lIter->second.second;
-                pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
-                
-                DEBUG_EXCEPTION_ASSERT(lOwnerAddressSpace);
-
-                return (char*)(lOwnerAddressSpace->GetMem()) + lIter->first;
-            });
-            
-            finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset, pLength, pStep, pCount, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+        pmAddressSpace::pmMemOwnership lOwnerships;
+        pSrcAddressSpace->GetOwners(pOffset + pRow * pStep, pLength, lOwnerships);
         
-            MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength * pCount, (uint)(*pRequestingMachine))
+        for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+        {
+            lBlocksFilter.AddNextSubRow(pPair.first, pPair.second.first, pPair.second.second);
+        });
+    });
+    
+    for_each(lBlocks, [&] (typename decltype(lBlocks)::value_type& pPair)
+    {
+        pmScatteredSubscriptionInfo& lScatteredInfo = pPair.first;
+        pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second;
+        ulong lReceiverOffset = pReceiverOffset + lRangeOwner.hostOffset - pOffset;
+
+        EXCEPTION_ASSERT(lScatteredInfo.size && lScatteredInfo.step && lScatteredInfo.count);
+
+        if(lRangeOwner.host == PM_LOCAL_MACHINE)
+        {
+            pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
+            char* lBeginAddr = (char*)(lOwnerAddressSpace->GetMem());
+
+            // This function returns pointer to scattered memory for step pScatteredIndex
+            std::function<char* (ulong)> lFunc([lBeginAddr, lScatteredInfo, lRangeOwner] (ulong pScatteredIndex) -> char*
+            {
+                DEBUG_EXCEPTION_ASSERT(pScatteredIndex < lScatteredInfo.count);
+
+                return lBeginAddr + lRangeOwner.hostOffset + lScatteredInfo.step * pScatteredIndex;
+            });
+
+            finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, lReceiverOffset, lScatteredInfo.size, lScatteredInfo.step, lScatteredInfo.count, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+        
+            MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, lReceiverOffset, lScatteredInfo.offset, lScatteredInfo.size * lScatteredInfo.count, (uint)(*pRequestingMachine))
 
             pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
 
@@ -445,17 +447,9 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
         {
             DEBUG_EXCEPTION_ASSERT(!pIsForwarded);
 
-            ForwardMemoryRequest(pSrcAddressSpace, lOwnerships.begin()->second.second, lOwnerships.begin()->second.second.memIdentifier, pDestMemIdentifier, TRANSFER_SCATTERED, pReceiverOffset, pOffset, pLength, pStep, pCount, pRequestingMachine, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority);
+            ForwardMemoryRequest(pSrcAddressSpace, lRangeOwner, lRangeOwner.memIdentifier, pDestMemIdentifier, TRANSFER_SCATTERED, lReceiverOffset, lScatteredInfo.offset, lScatteredInfo.size, lScatteredInfo.step, lScatteredInfo.count, pRequestingMachine, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority);
         }
-    }
-    else
-    {
-        // break scattered request into ServeGeneralRequest calls
-        for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
-        {
-            ServeGeneralMemoryRequest(pSrcAddressSpace, pRequestingTask, pRequestingMachine, pPair.first, pPair.second.first, pDestMemIdentifier, pReceiverOffset + pPair.first - pOffset, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority, pIsForwarded);
-        });
-    }
+    });
 }
     
 void pmHeavyOperationsThread::ForwardMemoryRequest(pmAddressSpace* pSrcAddressSpace, const pmAddressSpace::vmRangeOwner& pRangeOwner, const memoryIdentifierStruct& pSrcMemIdentifier, const memoryIdentifierStruct& pDestMemIdentifier, memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pRequestingMachine, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority)
@@ -479,6 +473,20 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
         {
             switch(lCommunicatorCommand->GetTag())
 			{
+				case MEMORY_TRANSFER_REQUEST_TAG:
+				{
+					memoryTransferRequest* lData = (memoryTransferRequest*)(lCommunicatorCommand->GetData());
+
+					pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lData->sourceMemIdentifier.memOwnerHost), lData->sourceMemIdentifier.generationNumber);
+
+					if(lAddressSpace)
+                    {
+                        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, (communicator::memoryTransferType)lData->transferType, lData->offset, lData->length, lData->step, lData->count, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), lData->receiverOffset, lData->isForwarded, lData->priority, lData->isTaskOriginated, lData->originatingHost, lData->sequenceNumber);
+                    }
+
+					break;
+				}
+
                 case FILE_OPERATIONS_TAG:
                 {
                     fileOperationsStruct* lData = (fileOperationsStruct*)(lCommunicatorCommand->GetData());

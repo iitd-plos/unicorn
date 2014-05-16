@@ -1080,15 +1080,16 @@ void pmMPI::SendNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pD
 
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
+    decltype(mRequestCountMap)::iterator lIter = mRequestCountMap.find(pCommand);
+
     // Not all send requests need to break the MPI_Waitany loop in network thread by completing a dummy command.
     // Only commands having the user callback registered need to be added to MPI_Waitany array.
-    if(pCommand->GetCommandCompletionCallback())
+    if(pCommand->GetCommandCompletionCallback() || lIter != mRequestCountMap.end())
     {
         DEBUG_EXCEPTION_ASSERT(mNonBlockingRequestMap.find(lRequest) == mNonBlockingRequestMap.end());
 
-        mNonBlockingRequestMap[lRequest] = pCommand;
+        mNonBlockingRequestMap.emplace(lRequest, pCommand);
         
-        decltype(mRequestCountMap)::iterator lIter = mRequestCountMap.find(pCommand);
         if(lIter == mRequestCountMap.end())
             lIter = mRequestCountMap.emplace(std::piecewise_construct, std::forward_as_tuple(pCommand), std::forward_as_tuple(1)).first;
         else
@@ -1133,7 +1134,7 @@ void pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void*
     
     DEBUG_EXCEPTION_ASSERT(mNonBlockingRequestMap.find(lRequest) == mNonBlockingRequestMap.end());
     
-	mNonBlockingRequestMap[lRequest] = pCommand;
+	mNonBlockingRequestMap.emplace(lRequest, pCommand);
 	
     decltype(mRequestCountMap)::iterator lIter = mRequestCountMap.find(pCommand);
 	if(lIter == mRequestCountMap.end())
@@ -1881,11 +1882,11 @@ void pmMPI::CommandComplete(pmCommunicatorCommandPtr& pCommand, pmStatus pStatus
         DEBUG_EXCEPTION_ASSERT(lRequest != MPI_REQUEST_NULL);
         DEBUG_EXCEPTION_ASSERT(mNonBlockingRequestMap.find(lRequest) == mNonBlockingRequestMap.end());
         
-        mNonBlockingRequestMap[lRequest] = pCommand;
+        mNonBlockingRequestMap.emplace(lRequest, pCommand);
         
         DEBUG_EXCEPTION_ASSERT(mRequestCountMap.find(pCommand) == mRequestCountMap.end());
 
-        mRequestCountMap[pCommand] = 1;
+        mRequestCountMap.emplace(pCommand, 1);
     }
 }
 

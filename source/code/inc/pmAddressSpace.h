@@ -246,6 +246,41 @@ class pmAddressSpace : public pmBase
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mMemProfileLock;
 #endif
 };
+    
+class pmScatteredSubscriptionFilter
+{
+public:
+    pmScatteredSubscriptionFilter(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
+
+    // pRowFunctor should call AddNextSubRow for every range to be kept
+    const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& FilterBlocks(const std::function<void (size_t)>& pRowFunctor);
+    
+    void AddNextSubRow(ulong pOffset, ulong pLength, pmAddressSpace::vmRangeOwner& pRangeOwner);
+    
+private:
+    const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& GetLeftoverBlocks();
+    void PromoteCurrentBlocks();
+
+    struct blockData
+    {
+        ulong startCol;
+        ulong colCount;
+        pmScatteredSubscriptionInfo subscriptionInfo;
+        pmAddressSpace::vmRangeOwner rangeOwner;
+        
+        blockData(ulong pStartCol, ulong pColCount, const pmScatteredSubscriptionInfo& pSubscriptionInfo, pmAddressSpace::vmRangeOwner& pRangeOwner)
+        : startCol(pStartCol)
+        , colCount(pColCount)
+        , subscriptionInfo(pSubscriptionInfo)
+        , rangeOwner(pRangeOwner)
+        {}
+    };
+
+    const pmScatteredSubscriptionInfo& mScatteredSubscriptionInfo;
+    
+    std::list<blockData> mCurrentBlocks;   // computed till last row processed
+    std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>> mBlocksToBeFetched;
+};
 
 } // end namespace pm
 
