@@ -68,11 +68,15 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 	, mTaskConfLength(pTaskConfLength)
 	, mSchedulingModel(pSchedulingModel)
     , mSubscriptionManager(this)
+    , mTaskExecStats(this)
     , mSequenceNumber(0)
     , mTaskFlags(pTaskFlags)
     , mStarted(false)
 #ifdef SUPPORT_SPLIT_SUBTASKS
     , mSubtaskSplitter(this)
+#endif
+#ifdef ENABLE_TASK_PROFILING
+    , mTaskProfiler(this)
 #endif
 	, mSubtasksExecuted(0)
     , mTotalSplitCount(0)
@@ -125,7 +129,7 @@ void pmTask::LockAddressSpaces()
         for_each(mTaskMemVector, [this, &lCountDownCommand] (const pmTaskMemory& pTaskMem)
         {
             pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
-            lAddressSpace->EnqueueForLock(this, pTaskMem.memType, pTaskMem.memDistributionInfo, lCountDownCommand);
+            lAddressSpace->EnqueueForLock(this, pTaskMem.memType, lCountDownCommand);
         });
     }
 }
@@ -218,6 +222,11 @@ bool pmTask::CanSplitGpuSubtasks()
 #else
     return false;
 #endif
+}
+    
+bool pmTask::ShouldSuppressTaskLogs()
+{
+    return (mTaskFlags & TASK_SUPPRESS_LOGS_FLAG_VAL);
 }
     
 bool pmTask::DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() const
@@ -1040,6 +1049,10 @@ const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcess
         }
     #endif
 	}
+    else
+    {
+        lDevicePool->GetAllDevicesOfTypeInCluster(CPU, GetCluster(), lAvailableDevices);
+    }
 
     const pmDeviceSelectionCB* lDeviceSelectionCB = GetCallbackUnit()->GetDeviceSelectionCB();
     if(lDeviceSelectionCB)

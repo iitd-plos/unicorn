@@ -89,29 +89,6 @@ class pmNetwork : public pmBase
 		virtual ~pmNetwork();
 };
     
-struct pmMPITypesAllocatorTraits
-{
-    typedef pmPoolAllocator allocator;
-
-    static const bool alignedAllocations = false;
-    static const size_t maxAllocationsPerPool = 10240;
-    
-    struct creator
-    {
-        std::shared_ptr<pmPoolAllocator> operator()(size_t pSize)
-        {
-            return std::shared_ptr<pmPoolAllocator>(new pmPoolAllocator(sizeof(MPI_Request), maxAllocationsPerPool, false));
-        }
-    };
-    
-    struct destructor
-    {
-        void operator()(const std::shared_ptr<pmPoolAllocator>& pPtr)
-        {
-        }
-    };
-};
-
 class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
 {
     public:
@@ -181,32 +158,35 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
         void SendNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength);
 		void ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength);
 
-		virtual MPI_Request* GetPersistentSendRequest(pmCommunicatorCommandPtr& pCommand);
-		virtual MPI_Request* GetPersistentRecvRequest(pmCommunicatorCommandPtr& pCommand);
+		MPI_Request GetPersistentSendRequest(pmCommunicatorCommandPtr& pCommand);
+		MPI_Request GetPersistentRecvRequest(pmCommunicatorCommandPtr& pCommand);
 
-        virtual MPI_Request* GetPersistentSendRequestInternal(pmCommunicatorCommandPtr& pCommand);
-        virtual MPI_Request* GetPersistentRecvRequestInternal(pmCommunicatorCommandPtr& pCommand);
+        MPI_Request GetPersistentSendRequestInternal(pmCommunicatorCommandPtr& pCommand);
+        MPI_Request GetPersistentRecvRequestInternal(pmCommunicatorCommandPtr& pCommand);
 
 		void SetupDummyRequest();
 		void CancelDummyRequest();
 
         void CommandComplete(pmCommunicatorCommandPtr& pCommand, pmStatus pStatus);
+    
+        void CleanupFinishedSendRequests(bool pTerminating);
 
 		uint mTotalHosts;
 		uint mHostId;
 
-		std::map<MPI_Request*, pmCommunicatorCommandPtr> mNonBlockingRequestMap;	// Map of MPI_Request objects and corresponding pmCommunicatorCommand objects
+        std::list<std::pair<MPI_Request, pmCommunicatorCommandPtr>> mOngoingSendRequests;  // This list exists only to free memory associated with buffers in commandPtr after the send operations complete
+		std::map<MPI_Request, pmCommunicatorCommandPtr> mNonBlockingRequestMap;	// Map of MPI_Request objects and corresponding pmCommunicatorCommand objects
         std::map<pmCommunicatorCommandPtr, size_t> mRequestCountMap;	// Maps MpiCommunicatorCommand object to the number of MPI_Requests issued
 
         bool mDummyRequestInitiated;
-        std::unique_ptr<MPI_Request> mPersistentDummyRecvRequest;
+        MPI_Request mPersistentDummyRecvRequest;
 
-        std::map<pmCommunicatorCommandPtr, MPI_Request*> mPersistentSendRequest;
-        std::map<pmCommunicatorCommandPtr, MPI_Request*> mPersistentRecvRequest;
+        std::map<pmCommunicatorCommandPtr, MPI_Request> mPersistentSendRequest;
+        std::map<pmCommunicatorCommandPtr, MPI_Request> mPersistentRecvRequest;
 
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	   // Resource lock on mDummyRequestInitiated, mPersistentDummyRecvRequest, mNonBlockingRequestMap, mResourceCountMap, mPersistentSendRequest, mPersistentRecvRequest
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	   // Resource lock on mOngoingSendRequests, mDummyRequestInitiated, mPersistentDummyRecvRequest, mNonBlockingRequestMap, mResourceCountMap, mPersistentSendRequest, mPersistentRecvRequest
 
-		std::map<communicator::communicatorDataTypes, MPI_Datatype*> mRegisteredDataTypes;
+		std::map<communicator::communicatorDataTypes, MPI_Datatype> mRegisteredDataTypes;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mDataTypesResourceLock;	   // Resource lock on mRegisteredDataTypes
 
         finalize_ptr<pmSignalWait> mSignalWait;
@@ -214,8 +194,6 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		bool mThreadTerminationFlag;
     
 		pmUnknownLengthReceiveThread* mReceiveThread;
-    
-        pmAllocatorCollection<pmMPITypesAllocatorTraits> mMPITypesAllocator;
 };
 
 } // end namespace pm

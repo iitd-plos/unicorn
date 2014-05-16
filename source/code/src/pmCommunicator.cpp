@@ -140,6 +140,9 @@ remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTask* pLocalTask)
     if(pLocalTask->IsCudaCacheEnabled())
         flags |= TASK_HAS_CUDA_CACHE_ENABLED_FLAG_VAL;
 #endif
+    
+    if(pLocalTask->ShouldSuppressTaskLogs())
+        flags |= TASK_SUPPRESS_LOGS_FLAG_VAL;
 
 	strncpy(callbackKey, pLocalTask->GetCallbackUnit()->GetKey(), MAX_CB_KEY_LEN-1);
 	callbackKey[MAX_CB_KEY_LEN-1] = '\0';
@@ -158,7 +161,7 @@ remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTask* pLocalTask)
         for_each(pLocalTask->GetTaskMemVector(), [&] (const pmTaskMemory& pTaskMemory)
         {
             const pmAddressSpace* lAddressSpace = pTaskMemory.addressSpace;
-            taskMem.emplace_back(memoryIdentifierStruct(*(lAddressSpace->GetMemOwnerHost()), lAddressSpace->GetGenerationNumber()), memoryDistributionStruct(pTaskMemory.memDistributionInfo.distType, pTaskMemory.memDistributionInfo.blockDim, pTaskMemory.memDistributionInfo.matrixWidth, pTaskMemory.memDistributionInfo.matrixHeight, pTaskMemory.memDistributionInfo.randomize), lAddressSpace->GetLength(), pLocalTask->GetMemType(lAddressSpace), pTaskMemory.subscriptionVisibilityType, (ushort)pTaskMemory.disjointReadWritesAcrossSubtasks);
+            taskMem.emplace_back(memoryIdentifierStruct(*(lAddressSpace->GetMemOwnerHost()), lAddressSpace->GetGenerationNumber()), lAddressSpace->GetLength(), pLocalTask->GetMemType(lAddressSpace), pTaskMemory.subscriptionVisibilityType, (ushort)pTaskMemory.disjointReadWritesAcrossSubtasks);
         });
     }
 

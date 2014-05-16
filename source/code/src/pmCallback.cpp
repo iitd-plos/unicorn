@@ -32,8 +32,8 @@ namespace pm
 
 /* class pmDataDistributionCB */
 pmDataDistributionCB::pmDataDistributionCB(pmDataDistributionCallback pCallback)
+	: mCallback(pCallback)
 {
-	mCallback = pCallback;
 }
 
 pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) const
@@ -200,8 +200,8 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo*
 
 /* class pmDataReductionCB */
 pmDataReductionCB::pmDataReductionCB(pmDataReductionCallback pCallback)
+	: mCallback(pCallback)
 {
-	mCallback = pCallback;
 }
 
 pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2) const
@@ -223,8 +223,8 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong
 
 /* class pmDataRedistributionCB */
 pmDataRedistributionCB::pmDataRedistributionCB(pmDataRedistributionCallback pCallback)
+	: mCallback(pCallback)
 {
-	mCallback = pCallback;
 }
 
 pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign) const
@@ -244,8 +244,8 @@ pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, u
 
 /* class pmDeviceSelectionCB */
 pmDeviceSelectionCB::pmDeviceSelectionCB(pmDeviceSelectionCallback pCallback)
+	: mCallback(pCallback)
 {
-	mCallback = pCallback;
 }
 
 bool pmDeviceSelectionCB::Invoke(pmTask* pTask, const pmProcessingElement* pProcessingElement) const
@@ -259,8 +259,8 @@ bool pmDeviceSelectionCB::Invoke(pmTask* pTask, const pmProcessingElement* pProc
 
 /* class pmPreDataTransferCB */
 pmPreDataTransferCB::pmPreDataTransferCB(pmPreDataTransferCallback pCallback)
+	: mCallback(pCallback)
 {
-	mCallback = pCallback;
 }
 
 pmStatus pmPreDataTransferCB::Invoke() const
@@ -275,8 +275,8 @@ pmStatus pmPreDataTransferCB::Invoke() const
 
 /* class pmPostDataTransferCB */
 pmPostDataTransferCB::pmPostDataTransferCB(pmPostDataTransferCallback pCallback)
+	: mCallback(pCallback)
 {
-	mCallback = pCallback;
 }
 
 pmStatus pmPostDataTransferCB::Invoke() const

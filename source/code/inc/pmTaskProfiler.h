@@ -29,6 +29,8 @@
 
 namespace pm
 {
+    
+class pmTask;
 
 /**
  * \brief The task profiler
@@ -37,7 +39,7 @@ namespace pm
 class pmTaskProfiler : public pmBase
 {
 public:
-    pmTaskProfiler();
+    pmTaskProfiler(pmTask* pTask);
     ~pmTaskProfiler();
 
     void RecordProfileEvent(taskProfiler::profileType pProfileType, bool pStart);
@@ -46,6 +48,7 @@ private:
     void RecordProfileEventInternal(taskProfiler::profileType pProfileType, bool pStart);
     void AccountForElapsedTime(taskProfiler::profileType pProfileType);
     
+    pmTask* mTask;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock[taskProfiler::MAX_PROFILE_TYPES];
     TIMER_IMPLEMENTATION_CLASS mTimer[taskProfiler::MAX_PROFILE_TYPES];
     uint mRecursionCount[taskProfiler::MAX_PROFILE_TYPES];

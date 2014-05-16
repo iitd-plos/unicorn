@@ -56,6 +56,7 @@ void readImageMetaData(char* pImagePath)
 	fclose(fp);
 }
 
+// If pInverted is true, the image read in pImageData is inverted otherwise non-inverted
 void readImage(char* pImagePath, void* pImageData, bool pInverted)
 {
 	FILE* fp = fopen(pImagePath, "rb");
@@ -340,7 +341,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     readImage(lImagePath, lRawInputPtr, true);
     
     lTaskMem[INPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_OPTIMAL;
-    lTaskMem[INPUT_MEM_INDEX].memDistributionInfo = pmMemDistributionInfo(DIST_2D_BLOCK, TILE_DIM, (unsigned int)gImageWidth, (unsigned int)gImageHeight, false);
+    
+    DistributeMemory(lTaskMem[INPUT_MEM_INDEX].memHandle, BLOCK_DIST_2D, TILE_DIM, (unsigned int)gImageWidth, (unsigned int)gImageHeight, PIXEL_COUNT, false);
 #else
     if(pmMapFile(lImagePath) != pmSuccess)
         exit(1);

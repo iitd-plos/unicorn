@@ -100,6 +100,7 @@ class pmTask : public pmBase
         bool CanForciblyCancelSubtasks();
         bool CanSplitCpuSubtasks();
         bool CanSplitGpuSubtasks();
+        bool ShouldSuppressTaskLogs();
     
         bool IsReducible(const pmAddressSpace* pAddressSpace) const;
         bool IsRedistributable(const pmAddressSpace* pAddressSpace) const;

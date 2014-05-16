@@ -127,40 +127,9 @@ struct memoryIdentifierStruct
     }
 };
 
-struct memoryDistributionStruct
-{
-    ushort distType;    // enum pmMemDistributionType
-    uint blockDim;
-    uint matrixWidth;
-    uint matrixHeight;
-    ushort randomize;
-
-    typedef enum fieldCount
-    {
-        FIELD_COUNT_VALUE = 5
-    } fieldCount;
-    
-    memoryDistributionStruct()
-    : distType(MAX_MEM_DISTRIBUTION_TYPES)
-    , blockDim(std::numeric_limits<uint>::max())
-    , matrixWidth(std::numeric_limits<uint>::max())
-    , matrixHeight(std::numeric_limits<uint>::max())
-    , randomize(std::numeric_limits<ushort>::max())
-    {}
-    
-    memoryDistributionStruct(pmMemDistributionType pDistType, uint pBlockDim, uint pMatrixDim, uint pElemSize, bool pRandomize)
-    : distType(pDistType)
-    , blockDim(pBlockDim)
-    , matrixWidth(pMatrixDim)
-    , matrixHeight(pElemSize)
-    , randomize(pRandomize)
-    {}
-};
-
 struct taskMemoryStruct
 {
     memoryIdentifierStruct memIdentifier;
-    memoryDistributionStruct distStruct;
     ulong memLength;
     ushort memType;     // enum pmMemType
     ushort subscriptionVisibility;  // enum pmSubscriptionVisibilityType
@@ -168,21 +137,19 @@ struct taskMemoryStruct
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 6
+        FIELD_COUNT_VALUE = 5
     } fieldCount;
     
     taskMemoryStruct()
     : memIdentifier()
-    , distStruct()
     , memLength(0)
     , memType(std::numeric_limits<ushort>::max())
     , subscriptionVisibility(SUBSCRIPTION_NATURAL)
     , flags(0)
     {}
 
-    taskMemoryStruct(const memoryIdentifierStruct& pMemStruct, const memoryDistributionStruct& pDistStruct, ulong pMemLength, pmMemType pMemType, pmSubscriptionVisibilityType pSubscriptionVisibility, ushort pFlags)
+    taskMemoryStruct(const memoryIdentifierStruct& pMemStruct, ulong pMemLength, pmMemType pMemType, pmSubscriptionVisibilityType pSubscriptionVisibility, ushort pFlags)
     : memIdentifier(pMemStruct)
-    , distStruct(pDistStruct)
     , memLength(pMemLength)
     , memType((ushort)pMemType)
     , subscriptionVisibility(pSubscriptionVisibility)

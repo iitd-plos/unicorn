@@ -267,6 +267,9 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
         lTaskFlags |= TASK_HAS_CUDA_CACHE_ENABLED_FLAG_VAL;
 #endif
     
+    if(pTaskDetails.suppressTaskLogs)
+        lTaskFlags |= TASK_SUPPRESS_LOGS_FLAG_VAL;
+    
     lTaskFlags |= TASK_CAN_FORCIBLY_CANCEL_SUBTASKS_FLAG_VAL;
 
     std::vector<pmTaskMemory> lTaskMemVector;
@@ -278,7 +281,7 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
             PMTHROW(pmFatalErrorException());
         
         pmTaskMem& pTaskMem = pTaskDetails.taskMem[i];
-        lTaskMemVector.emplace_back(lAddressSpace, pTaskMem.memType, pTaskMem.subscriptionVisibilityType, pTaskMem.disjointReadWritesAcrossSubtasks, pTaskMem.memDistributionInfo);
+        lTaskMemVector.emplace_back(lAddressSpace, pTaskMem.memType, pTaskMem.subscriptionVisibilityType, pTaskMem.disjointReadWritesAcrossSubtasks);
     }
     
 	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags);

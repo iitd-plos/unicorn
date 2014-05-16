@@ -210,7 +210,7 @@ void pmRedistributor::CreateRedistributedAddressSpace(ulong pGenerationNumber /*
     pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(1, mTask->GetPriority(), 0, NULL);
     lCountDownCommand->MarkExecutionStart();
 
-    mRedistributedAddressSpace->EnqueueForLock(mTask, mTask->GetMemType(lAddressSpace), pmMemDistributionInfo(), lCountDownCommand);
+    mRedistributedAddressSpace->EnqueueForLock(mTask, mTask->GetMemType(lAddressSpace), lCountDownCommand);
     
     lCountDownCommand->WaitForFinish();
 }

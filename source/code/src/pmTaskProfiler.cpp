@@ -21,6 +21,7 @@
 #include "pmTaskProfiler.h"
 #include "pmStubManager.h"
 #include "pmLogger.h"
+#include "pmTask.h"
 
 #include <string>
 #include <sstream>
@@ -48,7 +49,8 @@ static const char* profileName[] =
     (char*)"UNIVERSAL"
 };
 
-pmTaskProfiler::pmTaskProfiler()
+pmTaskProfiler::pmTaskProfiler(pmTask* pTask)
+    : mTask(pTask)
 {
     for(int i = 0; i < MAX_PROFILE_TYPES; ++i)
     {
@@ -77,7 +79,8 @@ pmTaskProfiler::~pmTaskProfiler()
     
     lStream << std::endl;
     
-    pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str());
+    if(!mTask->ShouldSuppressTaskLogs())
+        pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str());
 }
 
 void pmTaskProfiler::AccountForElapsedTime(profileType pProfileType)

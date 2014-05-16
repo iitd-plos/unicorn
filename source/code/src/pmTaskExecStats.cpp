@@ -22,6 +22,7 @@
 #include "pmExecutionStub.h"
 #include "pmHardware.h"
 #include "pmLogger.h"
+#include "pmTask.h"
 
 #ifdef DUMP_TASK_EXEC_STATS
 #include <sstream>
@@ -30,13 +31,17 @@
 namespace pm
 {
 
-pmTaskExecStats::pmTaskExecStats()
-    : mResourceLock __LOCK_NAME__("pmTaskExecStats::mResourceLock")
+pmTaskExecStats::pmTaskExecStats(pmTask* pTask)
+    : mTask(pTask)
+    , mResourceLock __LOCK_NAME__("pmTaskExecStats::mResourceLock")
 {
 }
 
 pmTaskExecStats::~pmTaskExecStats()
 {
+    if(mTask->ShouldSuppressTaskLogs())
+        return;
+    
 #ifdef DUMP_TASK_EXEC_STATS
     std::stringstream lStream;
     lStream << std::endl << "Task Exec Stats [Host " << pmGetHostId() << "] ............ " << std::endl;

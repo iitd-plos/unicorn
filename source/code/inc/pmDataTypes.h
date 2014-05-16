@@ -98,7 +98,6 @@ namespace pm
             MACHINE_POOL_STRUCT,
             DEVICE_POOL_STRUCT,
             MEMORY_IDENTIFIER_STRUCT,
-            MEMORY_DISTRIBUTION_STRUCT,
             TASK_MEMORY_STRUCT,
             REMOTE_TASK_ASSIGN_STRUCT,
             REMOTE_TASK_ASSIGN_PACKED,
@@ -146,14 +145,12 @@ namespace pm
         pmMemType memType;
         pmSubscriptionVisibilityType subscriptionVisibilityType;
         bool disjointReadWritesAcrossSubtasks;
-        pmMemDistributionInfo memDistributionInfo;
 
-        pmTaskMemory(pmAddressSpace* pAddressSpace, pmMemType pMemType, pmSubscriptionVisibilityType pVisibility, bool pDisjointReadWrites, const pmMemDistributionInfo& pMemDistInfo)
+        pmTaskMemory(pmAddressSpace* pAddressSpace, pmMemType pMemType, pmSubscriptionVisibilityType pVisibility, bool pDisjointReadWrites)
         : addressSpace(pAddressSpace)
         , memType(pMemType)
         , subscriptionVisibilityType(pVisibility)
         , disjointReadWritesAcrossSubtasks(pDisjointReadWrites)
-        , memDistributionInfo(pMemDistInfo)
         {}
     };
 

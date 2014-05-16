@@ -129,26 +129,6 @@ namespace pm
         MAX_SUBSCRIPTION_VISBILITY_TYPE
     } pmSubscriptionVisibilityType;
 
-    typedef enum pmMemDistributionType
-    {
-        DIST_1D_BLOCK_ROW,
-        DIST_1D_BLOCK_COL,
-        DIST_2D_BLOCK,
-        MAX_MEM_DISTRIBUTION_TYPES
-    } pmMemDistributionType;
-    
-    typedef struct pmMemDistributionInfo
-    {
-        pmMemDistributionType distType;
-        unsigned int blockDim;
-        unsigned int matrixWidth;
-        unsigned int matrixHeight;
-        bool randomize;
-        
-        pmMemDistributionInfo();
-        pmMemDistributionInfo(pmMemDistributionType, unsigned int, unsigned int, unsigned int, bool);
-    } pmMemDistributionInfo;
-
 	/** Structures for memory subscription */
 	typedef struct pmSubscriptionInfo
 	{
@@ -410,7 +390,6 @@ namespace pm
         pmMemType memType;
         pmSubscriptionVisibilityType subscriptionVisibilityType;    /* By default, this is SUBSCRIPTION_NATURAL */
         bool disjointReadWritesAcrossSubtasks;                      /* By default, this is false. Applies only to RW adress spaces. */
-        pmMemDistributionInfo memDistributionInfo;
         
         pmTaskMem();
         pmTaskMem(pmMemHandle, pmMemType);
@@ -438,10 +417,11 @@ namespace pm
     #ifdef SUPPORT_CUDA
         bool cudaCacheEnabled;                  /* By default, this is true */
     #endif
+        bool suppressTaskLogs;                  /* By default, this is false */
 		pmClusterHandle cluster;                /* Unused */
 
 		pmTaskDetails();
-        pmTaskDetails(void* taskConf, uint taskConfLength, pmTaskMem*, uint taskMemCount, pmCallbackHandle, ulong subtaskCount);
+        pmTaskDetails(void* taskConf, uint taskConfLength, pmTaskMem*, uint taskMemCount, pmCallbackHandle callbackHandle, ulong subtaskCount);
 	} pmTaskDetails;
     
     /* The flag disjointReadWritesAcrossSubtasks should be true (for RW output memories) if the read subscriptions of a subtask do not overlap with write subscriptions of any subtasks other than itself. */

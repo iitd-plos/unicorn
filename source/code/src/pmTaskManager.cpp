@@ -76,10 +76,8 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(communicator::remoteTaskAssignPack
         communicator::taskMemoryStruct& lTaskMemStruct = pRemoteTaskData->taskMem[memIndex];
         const pmMachine* lOwnerHost = pmMachinePool::GetMachinePool()->GetMachine(lTaskMemStruct.memIdentifier.memOwnerHost);
 
-        pmMemDistributionInfo lDistInfo((pmMemDistributionType)lTaskMemStruct.distStruct.distType, lTaskMemStruct.distStruct.blockDim, lTaskMemStruct.distStruct.matrixWidth, lTaskMemStruct.distStruct.matrixHeight, (bool)lTaskMemStruct.distStruct.randomize);
-        
         pmAddressSpace* lAddressSpace = pmAddressSpace::CheckAndCreateAddressSpace(lTaskMemStruct.memLength, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
-        lTaskMemVector.emplace_back(lAddressSpace, (pmMemType)(lTaskMemStruct.memType), (pmSubscriptionVisibilityType)(lTaskMemStruct.subscriptionVisibility), (bool)lTaskMemStruct.flags, lDistInfo);
+        lTaskMemVector.emplace_back(lAddressSpace, (pmMemType)(lTaskMemStruct.memType), (pmSubscriptionVisibilityType)(lTaskMemStruct.subscriptionVisibility), (bool)lTaskMemStruct.flags);
     }
 
     std::vector<const pmProcessingElement*> lDevices;

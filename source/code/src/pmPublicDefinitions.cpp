@@ -568,6 +568,7 @@ pmTaskDetails::pmTaskDetails()
 	, taskConfLength(0)
 	, taskMem(NULL)
     , taskMemCount(0)
+    , callbackHandle(NULL)
 	, subtaskCount(0)
 	, taskId(0)
 	, priority(DEFAULT_PRIORITY_LEVEL)
@@ -580,6 +581,7 @@ pmTaskDetails::pmTaskDetails()
 #ifdef SUPPORT_CUDA
     , cudaCacheEnabled(true)
 #endif
+    , suppressTaskLogs(false)
 	, cluster(NULL)
 {}
 
@@ -588,7 +590,21 @@ pmTaskDetails::pmTaskDetails(void* pTaskConf, uint pTaskConfLength, pmTaskMem* p
 	, taskConfLength(pTaskConfLength)
 	, taskMem(pTaskMem)
     , taskMemCount(pTaskMemCount)
+    , callbackHandle(pCallbackHandle)
 	, subtaskCount(pSubtaskCount)
+	, taskId(0)
+	, priority(DEFAULT_PRIORITY_LEVEL)
+    , policy(SLOW_START)
+    , timeOutInSecs(__MAX(int))
+    , multiAssignEnabled(true)
+    , overlapComputeCommunication(true)
+    , canSplitCpuSubtasks(false)
+    , canSplitGpuSubtasks(false)
+#ifdef SUPPORT_CUDA
+    , cudaCacheEnabled(true)
+#endif
+    , suppressTaskLogs(false)
+	, cluster(NULL)
 {}
 
 pmStatus pmSubmitTask(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)
@@ -674,24 +690,6 @@ pmStatus pmReserveCudaGlobalMem(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice
 	SAFE_EXECUTE_ON_CONTROLLER(ReserveCudaGlobalMem_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pSize);
 }
     
-pmMemDistributionInfo::pmMemDistributionInfo()
-    : distType(MAX_MEM_DISTRIBUTION_TYPES)
-    , blockDim(0)
-    , matrixWidth(0)
-    , matrixHeight(0)
-    , randomize(false)
-{
-}
-
-pmMemDistributionInfo::pmMemDistributionInfo(pmMemDistributionType pType, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pRandomize)
-    : distType(pType)
-    , blockDim(pBlockDim)
-    , matrixWidth(pMatrixWidth)
-    , matrixHeight(pMatrixHeight)
-    , randomize(pRandomize)
-{
-}
-
 pmSubscriptionInfo::pmSubscriptionInfo()
 	: offset(0)
 	, length(0)

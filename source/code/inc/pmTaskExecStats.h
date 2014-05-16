@@ -29,42 +29,45 @@
 namespace pm
 {
 
+class pmTask;
 class pmExecutionStub;
 class pmProcessingElement;
 
 class pmTaskExecStats : public pmBase
 {
-	public:
-		typedef struct stubStats
-		{
-			ulong subtasksExecuted;
-			double executionTime;	  // in secs
-			uint stealAttempts;
-            uint successfulSteals;
-            uint failedSteals;
-            uint consecutiveFailedSteals;   // number of failed steals after the last successful one
+public:
+    typedef struct stubStats
+    {
+        ulong subtasksExecuted;
+        double executionTime;	  // in secs
+        uint stealAttempts;
+        uint successfulSteals;
+        uint failedSteals;
+        uint consecutiveFailedSteals;   // number of failed steals after the last successful one
 
-			stubStats();
-		} stubStats;
+        stubStats();
+    } stubStats;
+
+    pmTaskExecStats(pmTask* pTask);
+    virtual ~pmTaskExecStats();
+
+    pmStatus RecordStubExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs);
+    double GetStubExecutionRate(pmExecutionStub* pStub);
+
+    uint GetStealAttempts(pmExecutionStub* pStub);
+    uint GetSuccessfulStealAttempts(pmExecutionStub* pStub);
+    uint GetFailedStealAttempts(pmExecutionStub* pStub);
+    uint GetFailedStealAttemptsSinceLastSuccessfulAttempt(pmExecutionStub* pStub);
     
-		pmTaskExecStats();
-		virtual ~pmTaskExecStats();
+    pmStatus RecordStealAttempt(pmExecutionStub* pStub);    
+    void RecordSuccessfulStealAttempt(pmExecutionStub* pStub);
+    void RecordFailedStealAttempt(pmExecutionStub* pStub);
 
-		pmStatus RecordStubExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs);
-		double GetStubExecutionRate(pmExecutionStub* pStub);
+private:
+    pmTask* mTask;
 
-		uint GetStealAttempts(pmExecutionStub* pStub);
-        uint GetSuccessfulStealAttempts(pmExecutionStub* pStub);
-        uint GetFailedStealAttempts(pmExecutionStub* pStub);
-        uint GetFailedStealAttemptsSinceLastSuccessfulAttempt(pmExecutionStub* pStub);
-        
-        pmStatus RecordStealAttempt(pmExecutionStub* pStub);    
-        void RecordSuccessfulStealAttempt(pmExecutionStub* pStub);
-        void RecordFailedStealAttempt(pmExecutionStub* pStub);
-    
-	private:
-        std::map<pmExecutionStub*, stubStats> mStats;
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+    std::map<pmExecutionStub*, stubStats> mStats;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 } // end namespace pm

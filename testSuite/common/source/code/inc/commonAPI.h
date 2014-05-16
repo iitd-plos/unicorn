@@ -13,6 +13,14 @@ typedef struct complex
 	float y;
 } complex;
 
+typedef enum memDistributionType
+{
+    BLOCK_DIST_1D_ROW,
+    BLOCK_DIST_1D_COL,
+    BLOCK_DIST_2D,
+    MAX_BLOCK_DISTRIBUTION_TYPES
+} memDistributionType;
+
 bool localDeviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
 double getCurrentTimeInSecs();
 
@@ -65,6 +73,9 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 	compareFunc pCompareFunc, destroyFunc pDestroyFunc, callbackStruct* pCallbacksStruct, size_t pCallbacksCount);
 
 void commonFinish();
+
+// Assumes that the address space has a 2D layout (pMatrixWidth * pMatrixHeight elems) logically divided into square tiles of size pBlockDim * pBlockDim
+void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, bool pRandomize);
 
 void RequestPreSetupCallbackPostMpiInit(preSetupPostMpiInitFunc pFunc);
 

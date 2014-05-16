@@ -5,6 +5,9 @@
 
 #include <string>
 #include <vector>
+#include <set>
+#include <random>
+#include <algorithm>
 
 #include "commonAPI.h"
 
@@ -19,6 +22,12 @@
 #define DEFAULT_SCHEDULING_POLICY 0
 
 std::vector<pmCallbackHandle> gCallbackHandles[6];
+
+pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
+bool memoryDistributionTask_deviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
+
+pmCallbackHandle gMemoryDistributionCallbackHandle;
+pmCallbacks gMemoryDistributionCallbacks(memoryDistributionTask_dataDistributionCallback, (pmSubtaskCallback_CPU)NULL, (pmSubtaskCallback_GPU_CUDA)NULL);
 
 struct Result
 {
@@ -140,6 +149,9 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
         }
     }
     
+    gMemoryDistributionCallbacks.deviceSelection = memoryDistributionTask_deviceSelectionCallback;
+    SAFE_PM_EXEC( pmRegisterCallbacks((char*)"MemoryDistributionCallback", gMemoryDistributionCallbacks, &gMemoryDistributionCallbackHandle) );
+    
     if(lRunMode == 0 || lRunMode == 1)
         RegisterLibraryCallbacks(pCallbacksStruct, pCallbacksCount);
 
@@ -222,6 +234,8 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 
 void commonFinish()
 {
+//    SAFE_PM_EXEC( pmReleaseCallbacks(gMemoryDistributionCallbackHandle) );
+
 	SAFE_PM_EXEC( pmFinalize() );
     
     std::vector<Result>::iterator lIter = gResultVector.begin(), lEndIter = gResultVector.end();
@@ -248,6 +262,194 @@ void commonFinish()
     FreeCublasHandles();
 #endif
 #endif
+}
+
+struct distributeMemoryTaskConf
+{
+    memDistributionType distType;
+    unsigned int blockDim;
+    unsigned int matrixWidth;
+    unsigned int matrixHeight;
+    unsigned int elemSize;
+    // Has appended machines list post elemSize
+};
+
+// Selects one device per host
+bool memoryDistributionTask_deviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo)
+{
+    static std::set<unsigned int> sHostDeviceMap;
+    
+    if(sHostDeviceMap.find(pDeviceInfo.host) != sHostDeviceMap.end())
+        return false;
+
+    sHostDeviceMap.emplace(pDeviceInfo.host);
+    
+    return true;
+}
+
+void Do1DBlockRowDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+{
+    unsigned int lBlockRows = pMatrixHeight / pBlockDim;
+    unsigned int lBlockRowsPerMachine = lBlockRows / pMachinesCount;
+    unsigned int lLeftoverBlockRows = lBlockRows - (lBlockRowsPerMachine * pMachinesCount);
+    unsigned int lRowsPerMachine = lBlockRowsPerMachine * pBlockDim;
+    size_t lLengthPerMachine = lRowsPerMachine * pMatrixWidth * pElemSize;
+
+    unsigned int lMachineIndex = pMachineId;
+    for(uint i = 0; i < pMachinesCount; ++i)
+    {
+        if(pMachinesList[i] == pMachineId)
+        {
+            lMachineIndex = i;
+            break;
+        }
+    }
+    
+    if(pMachinesList[lMachineIndex] != pMachineId)
+        exit(1);
+    
+    size_t lFirstRowOffset = lLengthPerMachine * lMachineIndex + pBlockDim * pMatrixWidth * pElemSize * std::min(lLeftoverBlockRows, lMachineIndex);
+    size_t lTotalLength = ((lLeftoverBlockRows > lMachineIndex) ? (lLengthPerMachine + pBlockDim * pMatrixWidth * pElemSize) : lLengthPerMachine);
+
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmSubscriptionInfo(lFirstRowOffset, lTotalLength));
+}
+
+void Do1DBlockColDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+{
+    unsigned int lBlockCols = pMatrixWidth / pBlockDim;
+    unsigned int lBlockColsPerMachine = lBlockCols / pMachinesCount;
+    unsigned int lLeftoverBlockCols = lBlockCols - (lBlockColsPerMachine * pMachinesCount);
+    unsigned int lColsPerMachine = lBlockColsPerMachine * pBlockDim;
+    size_t lColLengthPerMachine = lColsPerMachine * pElemSize;
+
+    unsigned int lMachineIndex = pMachineId;
+    for(uint i = 0; i < pMachinesCount; ++i)
+    {
+        if(pMachinesList[i] == pMachineId)
+        {
+            lMachineIndex = i;
+            break;
+        }
+    }
+    
+    if(pMachinesList[lMachineIndex] != pMachineId)
+        exit(1);
+
+    size_t lFirstColOffset = lColLengthPerMachine * lMachineIndex + pBlockDim * pElemSize * std::min(lLeftoverBlockCols, lMachineIndex);
+    size_t lTotalColLength = ((lLeftoverBlockCols > lMachineIndex) ? (lColLengthPerMachine + pBlockDim * pElemSize) : lColLengthPerMachine);
+    
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lFirstColOffset, lTotalColLength, pMatrixWidth * pElemSize, pMatrixHeight));
+}
+
+void Do2DBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+{
+    unsigned int lBlockRows = pMatrixHeight / pBlockDim;    // Any left over partial blocks are kept on owner host
+    unsigned int lBlockCols = pMatrixWidth / pBlockDim;
+    unsigned int lTotalBlocks = lBlockRows * lBlockCols;
+    unsigned int lBlocksPerMachine = lTotalBlocks / pMachinesCount;
+    unsigned int lLeftoverBlocks = lTotalBlocks - (lBlocksPerMachine * pMachinesCount);
+    size_t lBlockRowLength = pBlockDim * pElemSize;
+
+    unsigned int lMachineIndex = pMachineId;
+    for(uint i = 0; i < pMachinesCount; ++i)
+    {
+        if(pMachinesList[i] == pMachineId)
+        {
+            lMachineIndex = i;
+            break;
+        }
+    }
+    
+    if(pMachinesList[lMachineIndex] != pMachineId)
+        exit(1);
+
+    unsigned int lFirstBlockId = lBlocksPerMachine * lMachineIndex + std::min(lLeftoverBlocks, lMachineIndex);
+    unsigned int lBlocks = ((lLeftoverBlocks > lMachineIndex) ? (lBlocksPerMachine + 1) : lBlocksPerMachine);
+
+    for(unsigned int j = 0; j < lBlocks; ++j)
+    {
+        unsigned int lBlockId = lFirstBlockId + j;
+        unsigned int lBlockRow = lBlockId / lBlockCols;
+        unsigned int lBlockCol = lBlockId % lBlockCols;
+        
+        size_t lBlockOffset = (lBlockRow * pMatrixWidth + lBlockCol) * pBlockDim * pElemSize;
+
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lBlockRowLength, pMatrixWidth * pElemSize, pBlockDim));
+    }
+}
+
+pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
+{
+    distributeMemoryTaskConf* lTaskConf = (distributeMemoryTaskConf*)(pTaskInfo.taskConf);
+    unsigned int* lMachinesList = (unsigned int*)(((char*)lTaskConf) + sizeof(distributeMemoryTaskConf));
+
+    switch(lTaskConf->distType)
+    {
+        case BLOCK_DIST_1D_ROW:
+            Do1DBlockRowDistribution(pTaskInfo, pDeviceInfo, pSubtaskInfo, lTaskConf->blockDim, lTaskConf->matrixWidth, lTaskConf->matrixHeight, lTaskConf->elemSize, lMachinesList, (unsigned int)pSubtaskInfo.subtaskId, (unsigned int)pTaskInfo.subtaskCount);
+            break;
+
+        case BLOCK_DIST_1D_COL:
+            Do1DBlockColDistribution(pTaskInfo, pDeviceInfo, pSubtaskInfo, lTaskConf->blockDim, lTaskConf->matrixWidth, lTaskConf->matrixHeight, lTaskConf->elemSize, lMachinesList, (unsigned int)pSubtaskInfo.subtaskId, (unsigned int)pTaskInfo.subtaskCount);
+            break;
+        
+        case BLOCK_DIST_2D:
+            Do2DBlockDistribution(pTaskInfo, pDeviceInfo, pSubtaskInfo, lTaskConf->blockDim, lTaskConf->matrixWidth, lTaskConf->matrixHeight, lTaskConf->elemSize, lMachinesList, (unsigned int)pSubtaskInfo.subtaskId, (unsigned int)pTaskInfo.subtaskCount);
+            break;
+            
+        default:
+            exit(1);
+    }
+
+    
+    return pmSuccess;
+}
+
+void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, bool pRandomize)
+{
+    using namespace pm;
+
+    if(pDistType >= MAX_BLOCK_DISTRIBUTION_TYPES || !pMemHandle)
+        exit(1);
+
+    unsigned int lMachines = pmGetHostCount();
+
+    unsigned int lTaskConfLength = sizeof(distributeMemoryTaskConf) + sizeof(unsigned int) * lMachines;
+    std::vector<char> lTaskConf(lTaskConfLength);
+    
+    distributeMemoryTaskConf* distTaskConf = (distributeMemoryTaskConf*)(&lTaskConf[0]);
+    distTaskConf->distType = pDistType;
+    distTaskConf->blockDim = pBlockDim;
+    distTaskConf->matrixWidth = pMatrixWidth;
+    distTaskConf->matrixHeight = pMatrixHeight;
+    distTaskConf->elemSize = pElemSize;
+
+    unsigned int* lMachinesList = (unsigned int*)((char*)(&lTaskConf[0]) + sizeof(distributeMemoryTaskConf));
+
+    unsigned int lFirstMachineIndex = 0;
+    std::generate_n(lMachinesList, lMachines, [lFirstMachineIndex] () mutable {return (lFirstMachineIndex++);});
+
+    if(pRandomize)
+    {
+        std::random_device lRandomDevice;
+        std::mt19937 lGenerator(lRandomDevice());
+    
+        std::shuffle(lMachinesList, lMachinesList + lMachines, lGenerator);
+    }
+
+    pmTaskMem lTaskMem[1] = {{pMemHandle, READ_WRITE, SUBSCRIPTION_NATURAL, true}};
+    pmTaskDetails lTaskDetails(&lTaskConf[0], lTaskConfLength, lTaskMem, 1, gMemoryDistributionCallbackHandle, lMachines);
+    
+	lTaskDetails.policy = EQUAL_STATIC;
+	lTaskDetails.multiAssignEnabled = false;
+    lTaskDetails.overlapComputeCommunication = false;
+    lTaskDetails.suppressTaskLogs = true;
+
+	pmTaskHandle lTaskHandle = NULL;
+
+	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
+    SAFE_PM_EXEC( pmWaitForTaskCompletion(lTaskHandle) );
+    SAFE_PM_EXEC( pmReleaseTask(lTaskHandle) );
 }
 
 void RequestPreSetupCallbackPostMpiInit(preSetupPostMpiInitFunc pFunc)

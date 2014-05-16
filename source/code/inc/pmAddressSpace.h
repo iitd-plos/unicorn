@@ -116,10 +116,6 @@ class pmAddressSpace : public pmBase
 
 		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
 
-        void Do1DBlockRowDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize);
-        void Do1DBlockColDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize);
-        void Do2DBlockDistribution(uint pBlockDim, uint pMatrixWidth, uint pMatrixHeight, bool pRandomize);
-
         static pmAddressSpace* CreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
         static pmAddressSpace* CheckAndCreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
 
@@ -143,7 +139,7 @@ class pmAddressSpace : public pmBase
         void FetchAsync(ushort pPriority, pmCommandPtr pCommand);
         void FetchRange(ushort pPriority, ulong pOffset, ulong pLength);
     
-        void EnqueueForLock(pmTask* pTask, pmMemType pMemType, const pmMemDistributionInfo& pDistInfo, pmCommandPtr& pCountDownCommand);
+        void EnqueueForLock(pmTask* pTask, pmMemType pMemType, pmCommandPtr& pCountDownCommand);
         void Unlock(pmTask* pTask);
         pmTask* GetLockingTask();
     
@@ -190,7 +186,7 @@ class pmAddressSpace : public pmBase
         bool IsWaitingForOwnershipChange();
         void TransferOwnershipImmediate(ulong pOffset, ulong pLength, const pmMachine* pNewOwnerHost);
     
-        void Lock(pmTask* pTask, pmMemType pMemType, const pmMemDistributionInfo& pDistInfo);
+        void Lock(pmTask* pTask, pmMemType pMemType);
         void FetchCompletionCallback(const pmCommandPtr& pCommand);
     
         void ScanLockQueue();
@@ -215,7 +211,7 @@ class pmAddressSpace : public pmBase
         std::string mName;
     
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingTasksLock;
-        std::list<std::pair<std::pair<pmTask*, std::pair<pmMemType, pmMemDistributionInfo>>, pmCommandPtr>> mTasksWaitingForLock;
+        std::list<std::pair<std::pair<pmTask*, pmMemType>, pmCommandPtr>> mTasksWaitingForLock;
 
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mWaitingFetchLock;
         std::map<pmCommandPtr, pmCommandPtr> mCommandsWaitingForFetch;

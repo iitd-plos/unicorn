@@ -190,6 +190,9 @@ void pmSubtaskManager::UpdateExecutionProfile(const pmProcessingElement* pDevice
 #ifdef DUMP_SUBTASK_EXECUTION_PROFILE
 void pmSubtaskManager::PrintExecutionProfile()
 {
+    if(mLocalTask->ShouldSuppressTaskLogs())
+        return;
+
     std::stringstream lStream;
 
     std::vector<ulong> lCpuSubtasks(NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GetTotalHostCount(), 0);
