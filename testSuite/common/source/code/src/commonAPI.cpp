@@ -378,6 +378,27 @@ void Do2DBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSub
     }
 }
 
+void Do2DRandomBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+{
+    unsigned int lBlockRows = (pMatrixHeight / pBlockDim) + ((pMatrixHeight % pBlockDim) ? 1 : 0);
+    unsigned int lBlockCols = (pMatrixWidth / pBlockDim) + ((pMatrixWidth % pBlockDim) ? 1 : 0);
+    unsigned int lTotalBlocks = lBlockRows * lBlockCols;
+    size_t lBlockRowLength = pBlockDim * pElemSize;
+    
+    for(unsigned int i = 0; i < lTotalBlocks; ++i)
+    {
+        if(pMachinesList[i] == pMachineId)
+        {
+            unsigned int lBlockRow = i / lBlockCols;
+            unsigned int lBlockCol = i % lBlockCols;
+            
+            size_t lBlockOffset = (lBlockRow * pMatrixWidth + lBlockCol) * pBlockDim * pElemSize;
+
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lBlockRowLength, pMatrixWidth * pElemSize, pBlockDim));
+        }
+    }
+}
+
 pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
     distributeMemoryTaskConf* lTaskConf = (distributeMemoryTaskConf*)(pTaskInfo.taskConf);
@@ -397,6 +418,10 @@ pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, p
             Do2DBlockDistribution(pTaskInfo, pDeviceInfo, pSubtaskInfo, lTaskConf->blockDim, lTaskConf->matrixWidth, lTaskConf->matrixHeight, lTaskConf->elemSize, lMachinesList, (unsigned int)pSubtaskInfo.subtaskId, (unsigned int)pTaskInfo.subtaskCount);
             break;
             
+        case BLOCK_DIST_2D_RANDOM:
+            Do2DRandomBlockDistribution(pTaskInfo, pDeviceInfo, pSubtaskInfo, lTaskConf->blockDim, lTaskConf->matrixWidth, lTaskConf->matrixHeight, lTaskConf->elemSize, lMachinesList, (unsigned int)pSubtaskInfo.subtaskId, (unsigned int)pTaskInfo.subtaskCount);
+            break;
+            
         default:
             exit(1);
     }
@@ -405,6 +430,7 @@ pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, p
     return pmSuccess;
 }
 
+// pRandomize is ignored when pDistType is BLOCK_DIST_RANDOM
 void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, bool pRandomize)
 {
     using namespace pm;
@@ -413,8 +439,18 @@ void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, uns
         exit(1);
 
     unsigned int lMachines = pmGetHostCount();
-
-    unsigned int lTaskConfLength = sizeof(distributeMemoryTaskConf) + sizeof(unsigned int) * lMachines;
+    unsigned int lTaskConfDynamicEntries = lMachines;
+    
+    if(pDistType == BLOCK_DIST_2D_RANDOM)
+    {
+        unsigned int lBlockRows = (pMatrixHeight / pBlockDim) + ((pMatrixHeight % pBlockDim) ? 1 : 0);
+        unsigned int lBlockCols = (pMatrixWidth / pBlockDim) + ((pMatrixWidth % pBlockDim) ? 1 : 0);
+        unsigned int lTotalBlocks = lBlockRows * lBlockCols;
+        
+        lTaskConfDynamicEntries = lTotalBlocks;
+    }
+    
+    unsigned int lTaskConfLength = sizeof(distributeMemoryTaskConf) + sizeof(unsigned int) * lTaskConfDynamicEntries;
     std::vector<char> lTaskConf(lTaskConfLength);
     
     distributeMemoryTaskConf* distTaskConf = (distributeMemoryTaskConf*)(&lTaskConf[0]);
@@ -425,16 +461,25 @@ void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, uns
     distTaskConf->elemSize = pElemSize;
 
     unsigned int* lMachinesList = (unsigned int*)((char*)(&lTaskConf[0]) + sizeof(distributeMemoryTaskConf));
-
-    unsigned int lFirstMachineIndex = 0;
-    std::generate_n(lMachinesList, lMachines, [lFirstMachineIndex] () mutable {return (lFirstMachineIndex++);});
-
-    if(pRandomize)
+    if(pDistType == BLOCK_DIST_2D_RANDOM)
     {
         std::random_device lRandomDevice;
         std::mt19937 lGenerator(lRandomDevice());
-    
-        std::shuffle(lMachinesList, lMachinesList + lMachines, lGenerator);
+
+        std::generate_n(lMachinesList, lTaskConfDynamicEntries, [&] () {return (lGenerator() % lMachines);});
+    }
+    else
+    {
+        unsigned int lFirstMachineIndex = 0;
+        std::generate_n(lMachinesList, lMachines, [lFirstMachineIndex] () mutable {return (lFirstMachineIndex++);});
+
+        if(pRandomize)
+        {
+            std::random_device lRandomDevice;
+            std::mt19937 lGenerator(lRandomDevice());
+        
+            std::shuffle(lMachinesList, lMachinesList + lMachines, lGenerator);
+        }
     }
 
     pmTaskMem lTaskMem[1] = {{pMemHandle, READ_WRITE, SUBSCRIPTION_NATURAL, true}};

@@ -18,6 +18,7 @@ typedef enum memDistributionType
     BLOCK_DIST_1D_ROW,
     BLOCK_DIST_1D_COL,
     BLOCK_DIST_2D,
+    BLOCK_DIST_2D_RANDOM,
     MAX_BLOCK_DISTRIBUTION_TYPES
 } memDistributionType;
 

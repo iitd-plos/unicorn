@@ -375,6 +375,8 @@ void pmLinuxMemoryManager::CancelUnreferencedRequests(pmAddressSpace* pAddressSp
 template<typename consumer_type>
 void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, consumer_type& pRegionsToBeFetched, std::vector<pmCommandPtr>& pCommandVector)
 {
+    DEBUG_EXCEPTION_ASSERT(pLength);
+
     using namespace linuxMemManager;
     
 	pmInFlightRegions::iterator lStartIter, lEndIter;
@@ -459,7 +461,10 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
                     
                     pmInFlightRegions::iterator lNextIter = lTempIter;
                     ++lNextIter;
-                    pRegionsToBeFetched.emplace_back((ulong)((char*)(lTempIter->first) + lTempIter->second.first), ((ulong)(lNextIter->first))-1);
+
+                    // If there is any gap between the two ranges in flight
+                    if((ulong)((char*)(lTempIter->first) + lTempIter->second.first) != ((ulong)(lNextIter->first)))
+                        pRegionsToBeFetched.emplace_back((ulong)((char*)(lTempIter->first) + lTempIter->second.first), ((ulong)(lNextIter->first))-1);
                 }
             }
         }

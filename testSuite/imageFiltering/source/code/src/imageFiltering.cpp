@@ -341,8 +341,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     readImage(lImagePath, lRawInputPtr, true);
     
     lTaskMem[INPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_OPTIMAL;
-    
-    DistributeMemory(lTaskMem[INPUT_MEM_INDEX].memHandle, BLOCK_DIST_2D, TILE_DIM, (unsigned int)gImageWidth, (unsigned int)gImageHeight, PIXEL_COUNT, false);
+
+    DistributeMemory(lTaskMem[INPUT_MEM_INDEX].memHandle, BLOCK_DIST_2D_RANDOM, TILE_DIM, (unsigned int)gImageWidth, (unsigned int)gImageHeight, PIXEL_COUNT, false);
 #else
     if(pmMapFile(lImagePath) != pmSuccess)
         exit(1);
