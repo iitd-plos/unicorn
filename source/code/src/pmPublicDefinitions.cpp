@@ -273,6 +273,8 @@ pmDeviceInfo::pmDeviceInfo()
     : deviceHandle(NULL)
     , deviceType(MAX_DEVICE_TYPES)
     , host((unsigned int)-1)
+    , deviceIdOnHost((unsigned int)-1)
+    , deviceIdInCluster((unsigned int)-1)
 {
 	name[0] = '\0';
 	description[0] = '\0';

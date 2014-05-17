@@ -235,6 +235,8 @@ namespace pm
 		char description[MAX_DESC_STR_LEN];
 		pmDeviceType deviceType;
 		uint host;
+        uint deviceIdOnHost;
+        uint deviceIdInCluster;
         
         pmDeviceInfo();
 	} pmDeviceInfo;

@@ -95,6 +95,9 @@ void pmProcessingElement::BuildDeviceInfo(const communicator::devicePool* pDevic
 
     mDeviceInfo.deviceType = GetType();
     mDeviceInfo.host = *(GetMachine());
+    
+    mDeviceInfo.deviceIdOnHost = mDeviceIndexInMachine;
+    mDeviceInfo.deviceIdInCluster = mGlobalDeviceIndex;
 }
     
 const pmDeviceInfo& pmProcessingElement::GetDeviceInfo() const

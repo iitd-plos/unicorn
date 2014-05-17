@@ -277,17 +277,10 @@ struct distributeMemoryTaskConf
 // Selects one device per host
 bool memoryDistributionTask_deviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo)
 {
-    static std::set<unsigned int> sHostDeviceMap;
-    
-    if(sHostDeviceMap.find(pDeviceInfo.host) != sHostDeviceMap.end())
-        return false;
-
-    sHostDeviceMap.emplace(pDeviceInfo.host);
-    
-    return true;
+    return (pDeviceInfo.deviceIdOnHost == 0);
 }
 
-void Do1DBlockRowDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+void Do1DBlockRowDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
 {
     unsigned int lBlockRows = pMatrixHeight / pBlockDim;
     unsigned int lBlockRowsPerMachine = lBlockRows / pMachinesCount;
@@ -314,7 +307,7 @@ void Do1DBlockRowDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pm
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmSubscriptionInfo(lFirstRowOffset, lTotalLength));
 }
 
-void Do1DBlockColDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+void Do1DBlockColDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
 {
     unsigned int lBlockCols = pMatrixWidth / pBlockDim;
     unsigned int lBlockColsPerMachine = lBlockCols / pMachinesCount;
@@ -341,7 +334,7 @@ void Do1DBlockColDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pm
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lFirstColOffset, lTotalColLength, pMatrixWidth * pElemSize, pMatrixHeight));
 }
 
-void Do2DBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+void Do2DBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
 {
     unsigned int lBlockRows = pMatrixHeight / pBlockDim;    // Any left over partial blocks are kept on owner host
     unsigned int lBlockCols = pMatrixWidth / pBlockDim;
@@ -378,23 +371,22 @@ void Do2DBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSub
     }
 }
 
-void Do2DRandomBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, bool pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+void Do2DRandomBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
 {
-    unsigned int lBlockRows = (pMatrixHeight / pBlockDim) + ((pMatrixHeight % pBlockDim) ? 1 : 0);
-    unsigned int lBlockCols = (pMatrixWidth / pBlockDim) + ((pMatrixWidth % pBlockDim) ? 1 : 0);
-    unsigned int lTotalBlocks = lBlockRows * lBlockCols;
+    unsigned int lBlockRows = pMatrixHeight / pBlockDim;    // Any left over partial blocks are kept on owner host
+    unsigned int lBlockCols = pMatrixWidth / pBlockDim;
     size_t lBlockRowLength = pBlockDim * pElemSize;
     
-    for(unsigned int i = 0; i < lTotalBlocks; ++i)
+    for(unsigned int i = 0; i < lBlockRows; ++i)
     {
-        if(pMachinesList[i] == pMachineId)
+        for(unsigned int j = 0; j < lBlockCols; ++j)
         {
-            unsigned int lBlockRow = i / lBlockCols;
-            unsigned int lBlockCol = i % lBlockCols;
-            
-            size_t lBlockOffset = (lBlockRow * pMatrixWidth + lBlockCol) * pBlockDim * pElemSize;
+            if(pMachinesList[i] == pMachineId)
+            {
+                size_t lBlockOffset = (i * pMatrixWidth + j) * pBlockDim * pElemSize;
 
-            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lBlockRowLength, pMatrixWidth * pElemSize, pBlockDim));
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lBlockRowLength, pMatrixWidth * pElemSize, pBlockDim));
+            }
         }
     }
 }
@@ -443,8 +435,8 @@ void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, uns
     
     if(pDistType == BLOCK_DIST_2D_RANDOM)
     {
-        unsigned int lBlockRows = (pMatrixHeight / pBlockDim) + ((pMatrixHeight % pBlockDim) ? 1 : 0);
-        unsigned int lBlockCols = (pMatrixWidth / pBlockDim) + ((pMatrixWidth % pBlockDim) ? 1 : 0);
+        unsigned int lBlockRows = pMatrixHeight / pBlockDim;    // Any left over partial blocks are kept on owner host
+        unsigned int lBlockCols = pMatrixWidth / pBlockDim;
         unsigned int lTotalBlocks = lBlockRows * lBlockCols;
         
         lTaskConfDynamicEntries = lTotalBlocks;
