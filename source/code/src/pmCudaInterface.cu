@@ -63,6 +63,7 @@ cudaError_t (*gFuncPtr_cudaHostAlloc)(void** pHost, size_t pSize, unsigned int p
 cudaError_t (*gFuncPtr_cudaFreeHost)(void* pPtr);
 cudaError_t (*gFuncPtr_cudaMemGetInfo)(size_t* pFree, size_t* pTotal);
 cudaError_t (*gFuncPtr_cudaDriverGetVersion)(int* pDriverVersion);
+cudaError_t (*gFuncPtr_cudaDeviceReset)(void);
 
 void* GetCudaSymbol(void* pLibPtr, char* pSymbol)
 {
@@ -399,6 +400,19 @@ pmStatus pmCudaInterface::ExecuteKernel(const pmTaskInfo& pTaskInfo, const pmTas
     }
 
 	return pmSuccess;
+}
+    
+// This method is meant to be called at application exit. So, it does not throw and does not call SAFE_EXECUTE_CUDA
+void pmCudaInterface::ForceResetAllCudaDevices()
+{
+    std::vector<pmCudaDeviceData>& lDeviceVector = GetDeviceVector();
+    
+    std::vector<pmCudaDeviceData>::iterator lIter = lDeviceVector.begin(), lEndIter = lDeviceVector.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        EXECUTE_CUDA_SYMBOL( GetRuntimeHandle(), "cudaSetDevice", gFuncPtr_cudaSetDevice, (*lIter).mHardwareId );
+        EXECUTE_CUDA_SYMBOL( GetRuntimeHandle(), "cudaDeviceReset", gFuncPtr_cudaDeviceReset );
+    }
 }
 
 }

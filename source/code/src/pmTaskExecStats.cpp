@@ -33,19 +33,29 @@ namespace pm
 
 pmTaskExecStats::pmTaskExecStats(pmTask* pTask)
     : mTask(pTask)
+#ifdef ENABLE_MEM_PROFILING
+    , mMemReceived(0)
+    , mMemTransferred(0)
+    , mMemReceiveEvents(0)
+    , mMemTransferEvents(0)
+#endif
     , mResourceLock __LOCK_NAME__("pmTaskExecStats::mResourceLock")
 {
 }
 
 pmTaskExecStats::~pmTaskExecStats()
 {
+#ifdef DUMP_TASK_EXEC_STATS
     if(mTask->ShouldSuppressTaskLogs())
         return;
-    
-#ifdef DUMP_TASK_EXEC_STATS
+
     std::stringstream lStream;
     lStream << std::endl << "Task Exec Stats [Host " << pmGetHostId() << "] ............ " << std::endl;
 
+#ifdef ENABLE_MEM_PROFILING
+    lStream << "Memory Transfers - Received = " << mMemReceived << " bytes; Receive Events = " << mMemReceiveEvents << "; Sent = " << mMemTransferred << " bytes; Send Events = " << mMemTransferEvents << std::endl;
+#endif
+    
 	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.begin(), lEndIter = mStats.end();
     for(; lIter != lEndIter; ++lIter)
     {
@@ -131,6 +141,23 @@ void pmTaskExecStats::RecordFailedStealAttempt(pmExecutionStub* pStub)
     ++(mStats[pStub].failedSteals);
 }
 
+#ifdef ENABLE_MEM_PROFILING
+void pmTaskExecStats::RecordMemReceiveEvent(size_t pMemSize)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    mMemReceived += pMemSize;
+    ++(mMemReceiveEvents);
+}
+    
+void pmTaskExecStats::RecordMemTransferEvent(size_t pMemSize)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    mMemTransferred += pMemSize;
+    ++(mMemTransferEvents);
+}
+#endif
 
 /* struct stubStats */
 pmTaskExecStats::stubStats::stubStats()

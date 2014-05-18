@@ -133,6 +133,8 @@ public:
     
     static void WaitForStreamCompletion(pmCudaStreamAutoPtr& pStream);
 
+    static void ForceResetAllCudaDevices();
+
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     static void* AllocatePinnedBuffer(size_t pSize);
     static void DeallocatePinnedBuffer(const void* pMem);

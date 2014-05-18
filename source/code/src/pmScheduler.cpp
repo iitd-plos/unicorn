@@ -1640,11 +1640,31 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 
                             if(lData->receiveStruct.transferType == TRANSFER_GENERAL)
                             {
+                            #ifdef ENABLE_MEM_PROFILING
+                                if(!lRequestingTask || !lRequestingTask->ShouldSuppressTaskLogs())
+                                {
+                                    lAddressSpace->RecordMemReceive(lData->receiveStruct.length);
+
+                                    if(lRequestingTask)
+                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lData->receiveStruct.length);
+                                }
+                            #endif
+
                                 lMemoryManager->CopyReceivedMemory(lAddressSpace, lData->receiveStruct.offset, lData->receiveStruct.length, lData->mDataReceiver, lRequestingTask);
                             }
                             else    // TRANSFER_SCATTERED
                             {
                                 DEBUG_EXCEPTION_ASSERT(lData->receiveStruct.transferType == TRANSFER_SCATTERED);
+
+                            #ifdef ENABLE_MEM_PROFILING
+                                if(!lRequestingTask || !lRequestingTask->ShouldSuppressTaskLogs())
+                                {
+                                    lAddressSpace->RecordMemReceive(lData->receiveStruct.length * lData->receiveStruct.count);
+
+                                    if(lRequestingTask)
+                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lData->receiveStruct.length * lData->receiveStruct.count);
+                                }
+                            #endif
 
                                 lMemoryManager->CopyReceivedScatteredMemory(lAddressSpace, lData->receiveStruct.offset, lData->receiveStruct.length, lData->receiveStruct.step, lData->receiveStruct.count, lData->mDataReceiver, lRequestingTask);
                             }

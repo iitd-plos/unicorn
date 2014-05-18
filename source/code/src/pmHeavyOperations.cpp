@@ -355,11 +355,7 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
             pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
         
             EXCEPTION_ASSERT(lOwnerAddressSpace);
-        
-        #ifdef ENABLE_MEM_PROFILING
-            pSrcAddressSpace->RecordMemTransfer(lInternalLength);
-        #endif
-        
+            
             if(pRequestingMachine == PM_LOCAL_MACHINE)
             {
                 pmAddressSpace* lDestAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(pDestMemIdentifier.memOwnerHost), pDestMemIdentifier.generationNumber);
@@ -377,6 +373,16 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
             }
             else
             {
+            #ifdef ENABLE_MEM_PROFILING
+                if(!pRequestingTask || !pRequestingTask->ShouldSuppressTaskLogs())
+                {
+                    pSrcAddressSpace->RecordMemTransfer(lInternalLength);
+                    
+                    if(pRequestingTask)
+                        pRequestingTask->GetTaskExecStats().RecordMemTransferEvent(lInternalLength);
+                }
+            #endif
+
                 std::function<char* (ulong)> lFunc([&] (ulong pIndex) -> char*
                 {
                     return static_cast<char*>(lOwnerAddressSpace->GetMem()) + lInternalOffset;
@@ -424,6 +430,16 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
 
         if(lRangeOwner.host == PM_LOCAL_MACHINE)
         {
+        #ifdef ENABLE_MEM_PROFILING
+            if(!pRequestingTask || !pRequestingTask->ShouldSuppressTaskLogs())
+            {
+                pSrcAddressSpace->RecordMemTransfer(lScatteredInfo.size * lScatteredInfo.count);
+
+                if(pRequestingTask)
+                    pRequestingTask->GetTaskExecStats().RecordMemTransferEvent(lScatteredInfo.size * lScatteredInfo.count);
+            }
+        #endif
+
             pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
             char* lBeginAddr = (char*)(lOwnerAddressSpace->GetMem());
 

@@ -62,9 +62,21 @@ public:
     pmStatus RecordStealAttempt(pmExecutionStub* pStub);    
     void RecordSuccessfulStealAttempt(pmExecutionStub* pStub);
     void RecordFailedStealAttempt(pmExecutionStub* pStub);
+    
+#ifdef ENABLE_MEM_PROFILING
+    void RecordMemReceiveEvent(size_t pMemSize);
+    void RecordMemTransferEvent(size_t pMemSize);
+#endif
 
 private:
     pmTask* mTask;
+
+    #ifdef ENABLE_MEM_PROFILING
+        size_t mMemReceived;
+        size_t mMemTransferred;
+        ulong mMemReceiveEvents;
+        ulong mMemTransferEvents;
+    #endif
 
     std::map<pmExecutionStub*, stubStats> mStats;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;

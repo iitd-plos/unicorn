@@ -702,10 +702,6 @@ void pmLinuxMemoryManager::CopyReceivedMemoryInternal(pmAddressSpace* pAddressSp
             pLockingTask->GetTaskProfiler()->RecordProfileEvent(pLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
     #endif
 
-    #ifdef ENABLE_MEM_PROFILING
-        pAddressSpace->RecordMemReceive(pLength);
-    #endif
-
         pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
         lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
 
@@ -754,10 +750,6 @@ void pmLinuxMemoryManager::CopyReceivedMemoryInternal(pmAddressSpace* pAddressSp
         #ifdef ENABLE_TASK_PROFILING
             if(pLockingTask)
                 pAddressSpace->GetLockingTask()->GetTaskProfiler()->RecordProfileEvent(pLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
-        #endif
-
-        #ifdef ENABLE_MEM_PROFILING
-            pAddressSpace->RecordMemReceive(pLength);
         #endif
 
             pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);

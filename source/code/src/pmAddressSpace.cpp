@@ -30,6 +30,10 @@
 #include "pmUtility.h"
 #include "pmHardware.h"
 
+#ifdef ENABLE_MEM_PROFILING
+#include "pmLogger.h"
+#endif
+
 #include <string.h>
 #include <sstream>
 #include <cmath>
@@ -103,18 +107,12 @@ pmAddressSpace::~pmAddressSpace()
 {
 #ifdef ENABLE_MEM_PROFILING
     std::stringstream lStream;
-    if(IsReadOnly())
-        lStream << mMemReceived << " bytes input memory received in " << mMemReceiveEvents << " events";
-    else
-        lStream << mMemReceived << " bytes output memory received in " << mMemReceiveEvents << " events";
-    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
-    
-    lStream.str(std::string()); // clear stream
-    if(IsReadOnly())
-        lStream << mMemTransferred << " bytes input memory transferred in " << mMemTransferEvents << " events";
-    else
-        lStream << mMemTransferred << " bytes output memory transferred in " << mMemTransferEvents << " events";
-    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+
+    lStream << "Address Space [" << (uint)(*mOwner) << ", " << mGenerationNumberOnOwner << "] memory transfer statistics on [Host " << pmGetHostId() << "] ..." << std::endl;
+    lStream << mMemReceived << " bytes memory received in " << mMemReceiveEvents << " events" << std::endl;
+    lStream << mMemTransferred << " bytes memory transferred in " << mMemTransferEvents << " events" << std::endl;
+
+    pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
 #endif    
 
     // Auto lock/unlock scope
@@ -872,10 +870,10 @@ void pmAddressSpace::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)
 #ifdef ENABLE_MEM_PROFILING
     lTimer.Stop();
     
-    char lStr[512];
-    sprintf(lStr, "%s memory Fetch Time = %lfs", (IsReadOnly()?(char*)"Input":(char*)"Output"), lTimer.GetElapsedTimeInSecs());
-    
-    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr, true);
+    std::stringstream lStream;
+    lStream << std::endl << "Address Space [" << (uint)(*mOwner) << ", " << mGenerationNumberOnOwner << "] explicit fetch time on [Host " << pmGetHostId() << "] is " << lTimer.GetElapsedTimeInSecs() << "s" << std::endl;
+
+    pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str(), false);
 #endif
 }
 
