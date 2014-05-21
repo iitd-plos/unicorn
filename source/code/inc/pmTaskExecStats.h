@@ -38,7 +38,12 @@ class pmTaskExecStats : public pmBase
 public:
     typedef struct stubStats
     {
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        double subtasksExecuted;
+    #else
         ulong subtasksExecuted;
+    #endif
+
         double executionTime;	  // in secs
         uint stealAttempts;
         uint successfulSteals;
@@ -49,9 +54,14 @@ public:
     } stubStats;
 
     pmTaskExecStats(pmTask* pTask);
-    virtual ~pmTaskExecStats();
+    ~pmTaskExecStats();
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    pmStatus RecordStubExecutionStats(pmExecutionStub* pStub, double pSubtasksExecuted, double pExecutionTimeInSecs);
+#else
     pmStatus RecordStubExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs);
+#endif
+
     double GetStubExecutionRate(pmExecutionStub* pStub);
 
     uint GetStealAttempts(pmExecutionStub* pStub);

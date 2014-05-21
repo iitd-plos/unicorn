@@ -342,15 +342,36 @@ void pmTask::RandomizeDevices(std::vector<const pmProcessingElement*>& pDevices)
 std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(const pmProcessingElement* pDevice)
 {
     FINALIZE_RESOURCE_PTR(dStealListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealListLock, Lock(), Unlock());
-
-    std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*> >::iterator lIter = mStealListForDevice.find(pDevice);
+    
+    auto lIter = mStealListForDevice.find(pDevice);
     if(lIter == mStealListForDevice.end())
     {
         std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
 
-        std::srand((uint)reinterpret_cast<size_t>(pDevice));
-        lIter = mStealListForDevice.emplace(pDevice, lDevices).first;
-        RandomizeDevices(lIter->second);
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        std::vector<std::vector<const pmProcessingElement*>> lDeviceGroups;
+        std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>*> lQueryMap;
+        ulong lUnsplittedDevices = 0;
+
+        GetSubtaskSplitter().MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
+
+        if(!lDeviceGroups.empty())
+        {
+            std::vector<const pmProcessingElement*> lRepresentativeDevices;
+            for_each(lDeviceGroups, [&] (const std::vector<const pmProcessingElement*>& pVector)
+            {
+                lRepresentativeDevices.emplace_back(pVector[0]);
+            });
+            
+            lIter = mStealListForDevice.emplace(pDevice, lRepresentativeDevices).first;
+            RandomizeDevices(lIter->second);
+        }
+        else
+    #endif
+        {
+            lIter = mStealListForDevice.emplace(pDevice, lDevices).first;
+            RandomizeDevices(lIter->second);
+        }
     }
 
     return lIter->second;

@@ -41,8 +41,8 @@ public:
     pmEventTimeline(const std::string& pName);
     ~pmEventTimeline();
 
-    void RecordEvent(const std::string& pEventName, bool pStart);
-    void RenameEvent(const std::string& pEventName, const std::string& pNewName);
+    void RecordEvent(pmTask* pTask, const std::string& pEventName, bool pStart);
+    void RenameEvent(pmTask* pTask, const std::string& pEventName, const std::string& pNewName);
     
 private:
     std::string mName;

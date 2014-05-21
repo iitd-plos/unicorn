@@ -674,7 +674,7 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
     
     return lStealCount;
 }
-    
+
 void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate)
 {
     bool lStealSuccess = false;
@@ -938,7 +938,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             for(ulong subtaskId = lRange.startSubtask; subtaskId <= lRange.endSubtask; ++subtaskId)
             {
             #ifdef DUMP_EVENT_TIMELINE
-                mEventTimelineAutoPtr->RenameEvent(pmSubtaskRangeExecutionTimelineAutoPtr::GetCancelledEventName(subtaskId, lRange.task), pmSubtaskRangeExecutionTimelineAutoPtr::GetEventName(subtaskId, lRange.task));
+                mEventTimelineAutoPtr->RenameEvent(lRange.task, pmSubtaskRangeExecutionTimelineAutoPtr::GetCancelledEventName(subtaskId, lRange.task), pmSubtaskRangeExecutionTimelineAutoPtr::GetEventName(subtaskId, lRange.task));
             #endif
 
                 CommonPostNegotiationOnCPU(lRange.task, subtaskId, true, NULL);
@@ -1316,14 +1316,14 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
     {
         FINALIZE_RESOURCE_PTR(dPushAckLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mPushAckLock, Lock(), Unlock());
 
-        std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::map<ulong, std::vector<pmExecutionStub*> > > >::iterator lIter = mPushAckHolder.find(pRange.task);
+        std::map<pmTask*, std::pair<std::pair<ulong, ulong>, std::map<ulong, std::vector<pmExecutionStub*>>>>::iterator lIter = mPushAckHolder.find(pRange.task);
 
         if(lIter == mPushAckHolder.end())
             return; // Probably negotiated
 
         DEBUG_EXCEPTION_ASSERT(lIter->second.second.find(pSplitRecord.subtaskId) == lIter->second.second.end());
         
-        std::map<ulong, std::vector<pmExecutionStub*> >::iterator lMapIter = lIter->second.second.emplace(std::piecewise_construct, std::forward_as_tuple(pSplitRecord.subtaskId), std::forward_as_tuple()).first;
+        std::map<ulong, std::vector<pmExecutionStub*>>::iterator lMapIter = lIter->second.second.emplace(std::piecewise_construct, std::forward_as_tuple(pSplitRecord.subtaskId), std::forward_as_tuple()).first;
         lMapIter->second.reserve(pSplitRecord.splitCount);
 
         for(uint i = 0; i < pSplitRecord.splitCount; ++i)
@@ -1335,9 +1335,15 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
 
         if(lIter->second.second.size() != lSubtasks)
             return;
+        
+        ulong lTotalSplitCount = 0;
+        for_each(lIter->second.second, [&] (typename decltype(lIter->second.second)::value_type& pPair)
+        {
+            lTotalSplitCount += pPair.second.size();
+        });
 
         pmSubtaskRange lRange(pRange.task, NULL, lIter->second.first.first, lIter->second.first.second);
-        SendSplitAcknowledgement(lRange, lIter->second.second, pExecStatus);
+        SendSplitAcknowledgement(lRange, lIter->second.second, pExecStatus, lTotalSplitCount);
 
         mPushAckHolder.erase(lIter);
     }
@@ -1351,11 +1357,11 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
         for(uint i = 0; i < pSplitRecord.splitCount; ++i)
             lMapIter->second.push_back(pSplitRecord.assignedStubs[i].first);
 
-        SendSplitAcknowledgement(pRange, lMap, pExecStatus);
+        SendSplitAcknowledgement(pRange, lMap, pExecStatus, pSplitRecord.splitCount);
     }
 }
     
-void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, const std::map<ulong, std::vector<pmExecutionStub*> >& pMap, pmStatus pExecStatus)
+void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, const std::map<ulong, std::vector<pmExecutionStub*>>& pMap, pmStatus pExecStatus, ulong pTotalSplitCount)
 {
     std::vector<communicator::ownershipDataStruct> lOwnershipVector;
     std::vector<uint> lAddressSpaceIndexVector;
@@ -1390,7 +1396,7 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
         });
     }
 
-    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), (pRange.endSubtask - pRange.startSubtask + 1) * pRange.task->GetSubtaskSplitter().GetSplitFactor());
+    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), pTotalSplitCount);
 }
 
 bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)
@@ -1444,7 +1450,7 @@ void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSpl
 #endif
 
     bool lMultiAssign = false, lPrematureTermination = false, lReassigned = false, lForceAckFlag = false;
-    ExecuteSplitSubtask(pSplitSubtaskAutoPtr, pSecondaryOperationsBlocked, lMultiAssign, lPrematureTermination, lReassigned, lForceAckFlag);
+    double lExecTime = ExecuteSplitSubtask(pSplitSubtaskAutoPtr, pSecondaryOperationsBlocked, lMultiAssign, lPrematureTermination, lReassigned, lForceAckFlag);
 
     if(lReassigned)
         return;
@@ -1466,11 +1472,13 @@ void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSpl
     #endif
     }
 
-    pSplitSubtaskAutoPtr->task->GetSubtaskSplitter().FinishedSplitExecution(pSplitSubtaskAutoPtr->subtaskId, pSplitSubtaskAutoPtr->splitId, this, lPrematureTermination);
+    pSplitSubtaskAutoPtr->task->GetSubtaskSplitter().FinishedSplitExecution(pSplitSubtaskAutoPtr->subtaskId, pSplitSubtaskAutoPtr->splitId, this, lPrematureTermination, lExecTime);
 }
     
-void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked, bool pMultiAssign, bool& pPrematureTermination, bool& pReassigned, bool& pForceAckFlag)
+double pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked, bool pMultiAssign, bool& pPrematureTermination, bool& pReassigned, bool& pForceAckFlag)
 {
+    double lExecTime = 0.0;
+
     currentSubtaskRangeTerminus lTerminus(pReassigned, pForceAckFlag, pPrematureTermination, this);
 
     ulong lSubtaskId = pSplitSubtaskAutoPtr->subtaskId;
@@ -1525,8 +1533,9 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>&
         WaitForSubtaskExecutionToFinish(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, &lSplitInfo);
         
         lTimer.Stop();
-
-        pSplitSubtaskAutoPtr->task->GetTaskExecStats().RecordStubExecutionStats(this, 1, lTimer.GetElapsedTimeInSecs());   // Exec time of the split group
+        
+        lExecTime = lTimer.GetElapsedTimeInSecs();
+        pSplitSubtaskAutoPtr->task->GetTaskExecStats().RecordStubExecutionStats(this, (double)1.0/lSplitInfo.splitCount, lExecTime);
     }
     catch(pmPrematureExitException& e)
     {
@@ -1540,6 +1549,8 @@ void pmExecutionStub::ExecuteSplitSubtask(const std::unique_ptr<pmSplitSubtask>&
     }
 
     CleanupPostSubtaskRangeExecution(pSplitSubtaskAutoPtr->task, lSubtaskId, lSubtaskId, lSubtaskId, &lSplitInfo);
+    
+    return lExecTime;
 }
 #endif
 
@@ -3214,7 +3225,7 @@ std::string pmExecutionStub::GetEventTimelineName()
 {
     std::stringstream lStream;
     lStream << "Device " << GetProcessingElement()->GetGlobalDeviceIndex();
-    
+
     return lStream.str();
 }
 #endif

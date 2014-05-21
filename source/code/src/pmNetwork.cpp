@@ -1506,6 +1506,7 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(machinePool, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.cpuCores, lDataCoresMPI, MPI_UNSIGNED, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.gpuCards, lDataCardsMPI, MPI_UNSIGNED, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.cpuNumaDomains, lCpuNumaDomainsMPI, MPI_UNSIGNED, 2, 1);
 
 			break;
 		}
@@ -1515,6 +1516,7 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(devicePool, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.name, lDataNameMPI, MPI_CHAR, 0, MAX_NAME_STR_LEN);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.description, lDataDescMPI, MPI_CHAR, 1, MAX_DESC_STR_LEN);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.numaDomain, lNumaDomainMPI, MPI_UNSIGNED, 2, 1);
 
 			break;
 		}

@@ -113,61 +113,6 @@ bool pmSubtaskManager::execCountSorter::operator() (const pmProcessingElement* p
     return (mDeviceExecutionProfile[lIndex1] < mDeviceExecutionProfile[lIndex2]);
 }
 
-#ifdef SUPPORT_SPLIT_SUBTASKS
-void pmSubtaskManager::MakeDeviceGroups(std::vector<const pmProcessingElement*>& pDevices, std::vector<std::vector<const pmProcessingElement*> >& pDeviceGroups, std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>* >& pQueryMap, ulong& pUnsplittedDevices) const
-{
-    pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
-    pmDeviceType lSplittingType = lSubtaskSplitter.GetSplittingType();
-
-    if(lSplittingType != MAX_DEVICE_TYPES)
-    {
-        size_t lSplitFactor = lSubtaskSplitter.GetSplitFactor();
-        std::map<const pmMachine*, std::vector<const pmProcessingElement*>* > lMachineInfo; // Machine versus pointer to vector of devices which are splitting
-
-        std::vector<const pmProcessingElement*>::iterator lIter = pDevices.begin(), lEndIter = pDevices.end();
-        for(; lIter != lEndIter; ++lIter)
-        {
-            if((*lIter)->GetType() == lSplittingType)
-            {
-                const pmMachine* lMachine = (*lIter)->GetMachine();
-                
-                std::map<const pmMachine*, std::vector<const pmProcessingElement*>* >::iterator lMachineInfoIter = lMachineInfo.find(lMachine);
-                if(lMachineInfoIter == lMachineInfo.end() || lMachineInfoIter->second->size() == lSplitFactor)
-                {
-                    std::vector<const pmProcessingElement*> lDevices;
-                    lDevices.push_back((*lIter));
-                    
-                    pDeviceGroups.push_back(lDevices);
-                    lMachineInfo[lMachine] = &pDeviceGroups.back();
-                }
-                else
-                {
-                    lMachineInfoIter->second->push_back((*lIter));
-                }
-            }
-            else
-            {
-                std::vector<const pmProcessingElement*> lDevices;
-                lDevices.push_back((*lIter));
-
-                pDeviceGroups.push_back(lDevices);
-                ++pUnsplittedDevices;
-            }
-        }
-        
-        std::vector<std::vector<const pmProcessingElement*> >::iterator lGroupIter = pDeviceGroups.begin(), lGroupEndIter = pDeviceGroups.end();
-        for(; lGroupIter != lGroupEndIter; ++lGroupIter)
-        {
-            std::vector<const pmProcessingElement*>* lVectorPtr = &(*lGroupIter);
-
-            std::vector<const pmProcessingElement*>::iterator lInnerGroupIter = (*lGroupIter).begin(), lInnerGroupEndIter = (*lGroupIter).end();
-            for(; lInnerGroupIter != lInnerGroupEndIter; ++lInnerGroupIter)
-                pQueryMap[(*lInnerGroupIter)] = lVectorPtr;
-        }
-    }
-}
-#endif
-
 // This method must only be called from RegisterSubtaskCompletion method of the subclasses as that acquires the lock and ensures synchronization
 void pmSubtaskManager::UpdateExecutionProfile(const pmProcessingElement* pDevice, ulong pSubtaskCount)
 {
@@ -253,7 +198,7 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
     std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>* > lQueryMap;
     ulong lUnsplittedDevices = 0;
 
-    MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
+    mLocalTask->GetSubtaskSplitter().MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
 
     // Initially, make partitions of maximum one subtask per split group. In case, split groups finish there one subtask,
     // they are assigned more subtasks from other partitions as per PUSH scheduling policy
@@ -913,7 +858,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
     ulong lUnsplittedDevices = 0;
 
 	std::vector<const pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
-    MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
+    mLocalTask->GetSubtaskSplitter().MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
 
     // Make partitions of max one subtask per split group
     if(!lDeviceGroups.empty())
@@ -1051,7 +996,7 @@ pmPullSchedulingManager::~pmPullSchedulingManager()
 {
     mSubtaskPartitions.clear();
 }
-
+    
 void pmPullSchedulingManager::AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee)
 {
 #ifdef SUPPORT_SPLIT_SUBTASKS

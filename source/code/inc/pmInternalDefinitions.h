@@ -148,6 +148,7 @@ const double MA_WAIT_FACTOR = 1.2;  // If local stub's exec rate is zero, do not
 //#define ENABLE_TASK_PROFILING
 //#define ENABLE_MEM_PROFILING
 //#define ENABLE_ACCUMULATED_TIMINGS
+#define ENABLE_DYNAMIC_SPLITTING
 //#define DUMP_SHADOW_MEM
 //#define DUMP_NETWORK_STATS
 //#define DUMP_TASK_EXEC_STATS

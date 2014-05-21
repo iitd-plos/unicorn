@@ -63,20 +63,23 @@ struct machinePool
 {
     uint cpuCores;
     uint gpuCards;
+    uint cpuNumaDomains;
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 2
+        FIELD_COUNT_VALUE = 3
     } fieldCount;
 
     machinePool()
     : cpuCores(0)
     , gpuCards(0)
+    , cpuNumaDomains(0)
     {}
     
-    machinePool(uint pCpuCores, uint pGpuCards)
+    machinePool(uint pCpuCores, uint pGpuCards, uint pCpuNumaDomains)
     : cpuCores(pCpuCores)
     , gpuCards(pGpuCards)
+    , cpuNumaDomains(pCpuNumaDomains)
     {}
 };
 
@@ -84,10 +87,11 @@ struct devicePool
 {
     char name[MAX_NAME_STR_LEN];
     char description[MAX_DESC_STR_LEN];
+    uint numaDomain;
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 2
+        FIELD_COUNT_VALUE = 3
     } fieldCount;
 
     devicePool()

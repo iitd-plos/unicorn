@@ -6,7 +6,6 @@
 #include <string>
 #include <vector>
 #include <set>
-#include <random>
 #include <algorithm>
 
 #include "commonAPI.h"
@@ -455,10 +454,8 @@ void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, uns
     unsigned int* lMachinesList = (unsigned int*)((char*)(&lTaskConf[0]) + sizeof(distributeMemoryTaskConf));
     if(pDistType == BLOCK_DIST_2D_RANDOM)
     {
-        std::random_device lRandomDevice;
-        std::mt19937 lGenerator(lRandomDevice());
-
-        std::generate_n(lMachinesList, lTaskConfDynamicEntries, [&] () {return (lGenerator() % lMachines);});
+        std::srand((unsigned int)time(NULL));
+        std::generate_n(lMachinesList, lTaskConfDynamicEntries, [&] () {return (std::rand() % lMachines);});
     }
     else
     {
@@ -467,10 +464,8 @@ void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, uns
 
         if(pRandomize)
         {
-            std::random_device lRandomDevice;
-            std::mt19937 lGenerator(lRandomDevice());
-        
-            std::shuffle(lMachinesList, lMachinesList + lMachines, lGenerator);
+            std::srand((unsigned int)time(NULL));
+            std::random_shuffle(lMachinesList, lMachinesList + lMachines);
         }
     }
 

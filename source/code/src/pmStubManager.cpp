@@ -42,6 +42,10 @@ pmStubManager* pmStubManager::GetStubManager()
 pmStubManager::pmStubManager()
 {
 	CreateExecutionStubs();
+    
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    CreateCpuNumaDomains();
+#endif
 }
 
 pmStubManager::~pmStubManager()
@@ -191,6 +195,39 @@ void pmStubManager::CreateExecutionStubs()
         (*lIter)->ThreadBindEvent(lPhysicalMemory, mStubCount);
         (*lIter)->WaitForQueuedCommands();
     }
+}
+
+void pmStubManager::CreateCpuNumaDomains()
+{
+    // Put all CPU devices in the same NUMA domain for now
+    mCpuNumaDomains.emplace_back(mStubVector.begin(), mStubVector.begin() + mProcessingElementsCPU);
+    
+    std::for_each(mStubVector.begin(), mStubVector.begin() + mProcessingElementsCPU, [&] (pmExecutionStub* pStub)
+    {
+        mCpuNumaDomainsMap.emplace(pStub, 0);
+    });
+}
+
+const std::vector<std::vector<pmExecutionStub*>>& pmStubManager::GetCpuNumaDomains() const
+{
+    return mCpuNumaDomains;
+}
+
+ushort pmStubManager::GetCpuNumaDomainsCount() const
+{
+    return (ushort)mCpuNumaDomains.size();
+}
+    
+const std::vector<pmExecutionStub*>& pmStubManager::GetCpuNumaDomain(ushort pDomainId) const
+{
+    DEBUG_EXCEPTION_ASSERT(pDomainId < mCpuNumaDomains.size());
+
+    return mCpuNumaDomains[(size_t)pDomainId];
+}
+
+ushort pmStubManager::GetNumaDomainIdForCpuDevice(uint pIndex) const
+{
+    return mCpuNumaDomainsMap.find(GetCpuStub(pIndex))->second;
 }
 
 #ifdef SUPPORT_CUDA

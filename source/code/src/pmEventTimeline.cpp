@@ -21,6 +21,7 @@
 #include "pmEventTimeline.h"
 #include "pmNetwork.h"
 #include "pmLogger.h"
+#include "pmTask.h"
 
 #include <sstream>
 
@@ -48,8 +49,11 @@ pmEventTimeline::~pmEventTimeline()
     pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str(), true);
 }
 
-void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)
+void pmEventTimeline::RecordEvent(pmTask* pTask, const std::string& pEventName, bool pStart)
 {
+    if(pTask->ShouldSuppressTaskLogs())
+        return;
+    
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     if(pStart && mEventMap.find(pEventName) != mEventMap.end())
@@ -64,8 +68,11 @@ void pmEventTimeline::RecordEvent(const std::string& pEventName, bool pStart)
         mEventMap[pEventName] = std::make_pair(mEventMap[pEventName].first, GetCurrentTimeInSecs());
 }
     
-void pmEventTimeline::RenameEvent(const std::string& pEventName, const std::string& pNewName)
+void pmEventTimeline::RenameEvent(pmTask* pTask, const std::string& pEventName, const std::string& pNewName)
 {
+    if(pTask->ShouldSuppressTaskLogs())
+        return;
+
     FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     std::map<std::string, std::pair<double, double> >::iterator lIter = mEventMap.find(pEventName);

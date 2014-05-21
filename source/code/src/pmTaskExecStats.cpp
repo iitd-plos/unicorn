@@ -67,7 +67,11 @@ pmTaskExecStats::~pmTaskExecStats()
 #endif
 }
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+pmStatus pmTaskExecStats::RecordStubExecutionStats(pmExecutionStub* pStub, double pSubtasksExecuted, double pExecutionTimeInSecs)
+#else
 pmStatus pmTaskExecStats::RecordStubExecutionStats(pmExecutionStub* pStub, ulong pSubtasksExecuted, double pExecutionTimeInSecs)
+#endif
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 

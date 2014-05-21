@@ -79,7 +79,7 @@ void pmMachinePool::All2AllMachineData(size_t pMachineCount)
 
 	pmStubManager* lManager = pmStubManager::GetStubManager();
     
-	machinePool lSendBuffer((uint)(lManager->GetProcessingElementsCPU()), (uint)(lManager->GetProcessingElementsGPU()));
+	machinePool lSendBuffer((uint)(lManager->GetProcessingElementsCPU()), (uint)(lManager->GetProcessingElementsGPU()), (uint)(lManager->GetCpuNumaDomainsCount()));
     finalize_ptr<all2AllWrapper<machinePool> > lWrapper(new all2AllWrapper<machinePool>(lSendBuffer, pMachineCount));
 
     // lWrapper's ownership is now transferred to lCommand
@@ -93,7 +93,7 @@ void pmMachinePool::All2AllMachineData(size_t pMachineCount)
     mMachineDataVector.reserve(lData->all2AllData.size());
     std::vector<machinePool>::const_iterator lIter = lData->all2AllData.begin(), lEndIter = lData->all2AllData.end();
 	for(; lIter != lEndIter; ++lIter)
-		mMachineDataVector.push_back(pmMachineData((*lIter).cpuCores, (*lIter).gpuCards));
+		mMachineDataVector.emplace_back((*lIter).cpuCores, (*lIter).gpuCards, (*lIter).cpuNumaDomains);
 }
 
 pmMachinePool::pmMachineData& pmMachinePool::GetMachineData(uint pIndex)
@@ -176,6 +176,11 @@ void pmMachinePool::RegisterReceiveCompletion(const pmMachine* pMachine, ulong p
 	mMachineDataVector[lIndex].receiveTime += pReceiveTime;
 	++(mMachineDataVector[lIndex].receiveCount);
 }
+    
+uint pmMachinePool::GetCpuNumaDomainsOnMachine(uint pIndex)
+{
+    return GetMachineData(pIndex).cpuNumaDomains;
+}
 
 
 /* class pmDevicePool */
@@ -190,13 +195,14 @@ void pmDevicePool::CreateMachineDevices(const pmMachine* pMachine, uint pCpuDevi
 	for(uint i = 0; i < pDeviceCount; ++i)
 	{
 		pmDeviceType lDeviceType = CPU;
+
     #ifdef SUPPORT_CUDA
 		if(i >= pCpuDeviceCount)
 			lDeviceType = GPU_CUDA;
     #endif
 
-		mDevicesVector.push_back(pmProcessingElement(pMachine, lDeviceType, i, pGlobalStartingDeviceIndex + i, pDeviceData));
-		mDeviceDataVector.push_back(pmDeviceData(pDeviceData[i].name, pDeviceData[i].description));
+		mDevicesVector.push_back(pmProcessingElement(pMachine, lDeviceType, i, pGlobalStartingDeviceIndex + i, pDeviceData[i].numaDomain, pDeviceData));
+		mDeviceDataVector.emplace_back(pDeviceData[i].name, pDeviceData[i].description);
 	}
 }
 
@@ -210,11 +216,14 @@ void pmDevicePool::BroadcastAndCreateDeviceData(const pmMachine* pMachine, uint 
 		for(uint i = 0; i < pDeviceCount; ++i)
 		{
             devicePool& lDevicePool = (lDevicePoolArray.get_ptr())[i];
-			strncpy(lDevicePool.name, lManager->GetStub(i)->GetDeviceName().c_str(), MAX_NAME_STR_LEN - 1);
-			strncpy(lDevicePool.description, lManager->GetStub(i)->GetDeviceDescription().c_str(), MAX_DESC_STR_LEN - 1);
+
+            pmExecutionStub* lStub = lManager->GetStub(i);
+			strncpy(lDevicePool.name, lStub->GetDeviceName().c_str(), MAX_NAME_STR_LEN - 1);
+			strncpy(lDevicePool.description, lStub->GetDeviceDescription().c_str(), MAX_DESC_STR_LEN - 1);
 
 			lDevicePool.name[MAX_NAME_STR_LEN - 1] = '\0';
 			lDevicePool.description[MAX_DESC_STR_LEN - 1] = '\0';
+            lDevicePool.numaDomain = ((lStub->GetType() == CPU) ? lManager->GetNumaDomainIdForCpuDevice(i) : std::numeric_limits<uint>::max());
 		}
 	}
 

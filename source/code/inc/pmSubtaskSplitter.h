@@ -39,7 +39,7 @@ class pmExecutionStub;
 namespace splitter
 {
 
-struct splitRecord
+struct splitRecord : public pmNonCopyable
 {
     pmExecutionStub* sourceStub; // Stub to which the original unsplitted subtask was assigned
     ulong subtaskId;
@@ -49,16 +49,7 @@ struct splitRecord
     std::vector<std::pair<pmExecutionStub*, bool> > assignedStubs;
     bool reassigned;
     bool prefetched;
-    
-    splitRecord()
-    : sourceStub(NULL)
-    , subtaskId(std::numeric_limits<ulong>::max())
-    , splitCount(0)
-    , splitId(0)
-    , pendingCompletions(0)
-    , reassigned(false)
-    , prefetched(false)
-    {}
+    double subtaskExecTime;
     
     splitRecord(pmExecutionStub* pStub, ulong pSubtaskId, uint pSplitCount)
     : sourceStub(pStub)
@@ -68,6 +59,7 @@ struct splitRecord
     , pendingCompletions(pSplitCount)
     , reassigned(false)
     , prefetched(false)
+    , subtaskExecTime(0)
     {
         assignedStubs.reserve(splitCount);
     }
@@ -77,18 +69,53 @@ struct splitRecord
     
 class pmSubtaskSplitter;
     
-class pmSplitGroup
+class pmSplitFactorCalculator
+{
+public:
+    pmSplitFactorCalculator(uint pMaxSplitFactor)
+    : mMaxSplitFactor(pMaxSplitFactor)
+#ifdef ENABLE_DYNAMIC_SPLITTING
+    , mFirstSplitFactor(pMaxSplitFactor)
+    , mSecondSplitFactor(std::max((uint)1, pMaxSplitFactor/2))
+    , mThirdSplitFactor(0)
+#endif
+    {}
+
+    void RegisterSubtaskCompletion(uint pSplitFactor, double pTime);
+    uint GetNextSplitFactor();
+    
+private:
+#ifdef ENABLE_DYNAMIC_SPLITTING
+    double GetAverageTimeForSplitFactor(uint pSplitFactor);
+#endif
+
+    uint mMaxSplitFactor;
+    
+#ifdef ENABLE_DYNAMIC_SPLITTING
+    uint mFirstSplitFactor;
+    uint mSecondSplitFactor;
+    uint mThirdSplitFactor;
+    
+    std::map<uint, std::pair<double, uint>> mMap;    // splitFactor versus pair of total time across all instances and number of instances
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+#endif
+};
+    
+class pmSplitGroup : public pmBase
 {
     friend class pmSubtaskSplitter;
 
 public:
-    pmSplitGroup(const pmSubtaskSplitter* pSubtaskSplitter)
-    : mDummyEventsFreezed(false)
+    pmSplitGroup(const pmSubtaskSplitter* pSubtaskSplitter, std::vector<pmExecutionStub*>&& pConcernedStubs)
+    : mConcernedStubs(std::move(pConcernedStubs))
+    , mDummyEventsFreezed(false)
+    , mSplitRecordListLock __LOCK_NAME__("pmSplitGroup::mSplitRecordListLock")
     , mSubtaskSplitter(pSubtaskSplitter)
+    , mSplitFactorCalculator((uint)mConcernedStubs.size())
     {}
     
     std::unique_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
-    void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
+    void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination, double pExecTime);
 
     bool Negotiate(ulong pSubtaskId, std::vector<pmExecutionStub*>& pStubsToBeCancelled, pmExecutionStub*& pSourceStub);
     void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
@@ -99,20 +126,21 @@ public:
 private:
     void AddDummyEventToRequiredStubs();
     void AddDummyEventToStub(pmExecutionStub* pStub);
-
+    
     std::vector<pmExecutionStub*> mConcernedStubs;    // Stubs in each split group
 
     bool mDummyEventsFreezed;
     std::set<pmExecutionStub*> mStubsWithDummyEvent;    // SPLIT_SUBTASK_CHECK
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mDummyEventLock;
 
-    std::list<splitter::splitRecord> mSplitRecordList;
-    std::map<ulong, typename std::list<splitter::splitRecord>::iterator> mSplitRecordMap;
+    std::list<std::shared_ptr<splitter::splitRecord>> mSplitRecordList;
+    std::map<ulong, typename std::list<std::shared_ptr<splitter::splitRecord>>::iterator> mSplitRecordMap;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mSplitRecordListLock;
     
     const pmSubtaskSplitter* mSubtaskSplitter;
+    pmSplitFactorCalculator mSplitFactorCalculator;
 };
-    
+
 class pmSubtaskSplitter : public pmBase
 {
     friend class pmSplitGroup;
@@ -122,25 +150,22 @@ public:
 
     pmDeviceType GetSplittingType();
     bool IsSplitting(pmDeviceType pDeviceType);
-    size_t GetSplitFactor();
-    
-    bool IsSplitGroupLeader(pmExecutionStub* pStub);
     
     std::unique_ptr<pmSplitSubtask> GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub);
-    void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination);
+    void FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination, double pExecTime);
     
     bool Negotiate(pmExecutionStub* pStub, ulong pSubtaskId, std::vector<pmExecutionStub*>& pStubsToBeCancelled, pmExecutionStub*& pSourceStub);
     void StubHasProcessedDummyEvent(pmExecutionStub* pStub);
     
     void FreezeDummyEvents();
     void PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
+    
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    void MakeDeviceGroups(const std::vector<const pmProcessingElement*>& pDevices, std::vector<std::vector<const pmProcessingElement*>>& pDeviceGroups, std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>*>& pQueryMap, ulong& pUnsplittedDevices);
+#endif
 
 private:
-    void FindConcernedStubs(pmDeviceType pDeviceType);
-
     pmTask* mTask;
-    uint mSplitFactor;
-    uint mSplitGroups;
     pmDeviceType mSplittingType;
 
     std::vector<pmSplitGroup> mSplitGroupVector;

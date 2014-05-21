@@ -35,40 +35,99 @@ using namespace splitter;
 
 pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
     : mTask(pTask)
-    , mSplitFactor(1)
-    , mSplitGroups(1)
     , mSplittingType(MAX_DEVICE_TYPES)
 {
-    pmDeviceType lDeviceType = MAX_DEVICE_TYPES;
+    pmStubManager* lStubManager = pmStubManager::GetStubManager();
 
-    if(mTask->CanSplitCpuSubtasks())
+    if(mTask->CanSplitCpuSubtasks())    // Create one split group per CPU NUMA domain
     {
-        size_t lMaxCpuDevicesPerHost = pmStubManager::GetStubManager()->GetMaxCpuDevicesPerHostForCpuPlusGpuTasks();
-
-        if(lMaxCpuDevicesPerHost < pmStubManager::GetStubManager()->GetProcessingElementsCPU())
-                mSplitFactor = (uint)lMaxCpuDevicesPerHost / mSplitGroups;
-        else
-            mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsCPU() / mSplitGroups;
-
-        lDeviceType = CPU;
-    }
-    else if(mTask->CanSplitGpuSubtasks())
-    {
-        mSplitFactor = (uint)pmStubManager::GetStubManager()->GetProcessingElementsGPU() / mSplitGroups;
-        lDeviceType = GPU_CUDA;
-    }
-
-    if(mSplitFactor != 1 && lDeviceType != MAX_DEVICE_TYPES)
-    {
-        mSplittingType = lDeviceType;
-
-        for(uint i = 0; i < mSplitGroups; ++i)
+        const auto& lNumaDomainsVector = lStubManager->GetCpuNumaDomains();
+        size_t lNumaDomains = (size_t)lStubManager->GetCpuNumaDomainsCount();
+        size_t lMaxCpuDevicesPerHost = lStubManager->GetMaxCpuDevicesPerHostForCpuPlusGpuTasks();
+        size_t lTotalCpuDevices = lStubManager->GetProcessingElementsCPU();
+        size_t lExcessCpuDevices = ((lMaxCpuDevicesPerHost < lTotalCpuDevices) ? (lTotalCpuDevices - lMaxCpuDevicesPerHost) : 0);
+        size_t lExcessCpuDevicesPerDomain = lExcessCpuDevices / lNumaDomains;
+        size_t lLeftoverExcessCpuDevices = lExcessCpuDevices - lExcessCpuDevicesPerDomain * lNumaDomains;
+        
+        // If max CPU devices to be used are less than the max avaiable, then try to impact all domains equally
+        size_t lStubsProcessed = 0;
+        for_each_with_index(lNumaDomainsVector, [&] (const std::vector<pmExecutionStub*>& pDomain, size_t pIndex)
         {
-            pmSplitGroup lSplitGroup(this);
-            mSplitGroupVector.push_back(lSplitGroup);
+            size_t lDomainStubs = pDomain.size();
+            if(lDomainStubs > lExcessCpuDevicesPerDomain)
+            {
+                size_t lUsableStubs = lDomainStubs - lExcessCpuDevicesPerDomain;
+                if(lLeftoverExcessCpuDevices)
+                {
+                    size_t lRemainingDomains = lNumaDomains - pIndex - 1;
+                    size_t lMinStubsToBeRemoved = (lLeftoverExcessCpuDevices / (lRemainingDomains + 1));
+                    
+                    EXCEPTION_ASSERT(lUsableStubs >= lMinStubsToBeRemoved);
+                    
+                    lUsableStubs -= lMinStubsToBeRemoved;
+                    lLeftoverExcessCpuDevices -= lMinStubsToBeRemoved;
+                    
+                    if(lUsableStubs && lLeftoverExcessCpuDevices)
+                    {
+                        size_t lRemainingStubs = lTotalCpuDevices - lStubsProcessed - lDomainStubs;
+                        EXCEPTION_ASSERT(!lRemainingStubs || lLeftoverExcessCpuDevices <= lRemainingStubs + lUsableStubs);
+                        
+                        if(lRemainingStubs < lLeftoverExcessCpuDevices)
+                        {
+                            size_t lMoreStubsToBeRemoved = lLeftoverExcessCpuDevices - lRemainingStubs;
+                            EXCEPTION_ASSERT(lMoreStubsToBeRemoved <= lUsableStubs);
+                            
+                            lUsableStubs -= lMoreStubsToBeRemoved;
+                            lLeftoverExcessCpuDevices -= lMoreStubsToBeRemoved;
+                        }
+                    }
+                }
+                
+                if(lUsableStubs)
+                {
+                    size_t lSplitGroupIndex = mSplitGroupVector.size();
+
+                    mSplitGroupVector.emplace_back(this, std::vector<pmExecutionStub*>(pDomain.begin(), pDomain.begin() + lUsableStubs));
+                    
+                    std::for_each(pDomain.begin(), pDomain.begin() + lUsableStubs, [&] (pmExecutionStub* pStub)
+                    {
+                        mSplitGroupMap.emplace(pStub, lSplitGroupIndex);
+                    });
+                }
+            }
+            else if(lDomainStubs < lExcessCpuDevicesPerDomain)
+            {
+                lLeftoverExcessCpuDevices += lExcessCpuDevicesPerDomain - lDomainStubs;
+            }
+            
+            lStubsProcessed += lDomainStubs;
+        });
+        
+        mSplittingType = CPU;
+    }
+    else if(mTask->CanSplitGpuSubtasks())   // All GPUs are added to the same split group
+    {
+        size_t lCount = lStubManager->GetProcessingElementsGPU();
+        
+        if(lCount)
+        {
+            std::vector<pmExecutionStub*> lDomainStubs;
+            lDomainStubs.reserve(lCount);
+            
+            size_t lSplitGroupIndex = mSplitGroupVector.size();
+
+            for(size_t i = 0; i < lCount; ++i)
+            {
+                pmExecutionStub* lStub = lStubManager->GetGpuStub((uint)i);
+
+                lDomainStubs.emplace_back(lStub);
+                mSplitGroupMap.emplace(lStub, lSplitGroupIndex);
+            }
+            
+            mSplitGroupVector.emplace_back(this, std::move(lDomainStubs));
+
+            mSplittingType = GPU_CUDA;
         }
-    
-        FindConcernedStubs(lDeviceType);
     }
 }
 
@@ -76,66 +135,10 @@ pmDeviceType pmSubtaskSplitter::GetSplittingType()
 {
     return mSplittingType;
 }
-    
-size_t pmSubtaskSplitter::GetSplitFactor()
-{
-    return mSplitFactor;
-}
 
 bool pmSubtaskSplitter::IsSplitting(pmDeviceType pDeviceType)
 {
     return (mSplittingType == pDeviceType);
-}
-    
-bool pmSubtaskSplitter::IsSplitGroupLeader(pmExecutionStub* pStub)
-{
-    return (mSplitGroupVector[mSplitGroupMap[pStub]].mConcernedStubs[0] == pStub);
-}
-
-void pmSubtaskSplitter::FindConcernedStubs(pmDeviceType pDeviceType)
-{
-    pmStubManager* lStubManager = pmStubManager::GetStubManager();
-    
-    switch(pDeviceType)
-    {
-        case CPU:
-        {
-            size_t lMaxCpuDevicesPerHost = pmStubManager::GetStubManager()->GetMaxCpuDevicesPerHostForCpuPlusGpuTasks();
-            size_t lCount = lStubManager->GetProcessingElementsCPU();
-            
-            if(lMaxCpuDevicesPerHost < lCount)
-                lCount = lMaxCpuDevicesPerHost;
-            
-            for(uint i = 0; i < lCount; ++i)
-            {
-                pmExecutionStub* lStub = lStubManager->GetCpuStub(i);
-                uint lSplitGroupIndex = (uint)(i / mSplitFactor);
-                
-                mSplitGroupVector[lSplitGroupIndex].mConcernedStubs.push_back(lStub);
-                mSplitGroupMap[lStub] = lSplitGroupIndex;
-            }
-            
-            break;
-        }
-            
-        case GPU_CUDA:
-        {
-            size_t lCount = lStubManager->GetProcessingElementsGPU();
-            for(uint i = 0; i < lCount; ++i)
-            {
-                pmExecutionStub* lStub = lStubManager->GetGpuStub(i);
-                uint lSplitGroupIndex = (uint)(i / mSplitFactor);
-                
-                mSplitGroupVector[lSplitGroupIndex].mConcernedStubs.push_back(lStub);
-                mSplitGroupMap[lStub] = lSplitGroupIndex;
-            }
-
-            break;
-        }
-            
-        default:
-            PMTHROW(pmFatalErrorException());
-    }
 }
     
 std::unique_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
@@ -143,9 +146,9 @@ std::unique_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubta
     return mSplitGroupVector[mSplitGroupMap[pSourceStub]].GetPendingSplit(pSubtaskId, pSourceStub);
 }
     
-void pmSubtaskSplitter::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination)
+void pmSubtaskSplitter::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination, double pExecTime)
 {
-    mSplitGroupVector[mSplitGroupMap[pStub]].FinishedSplitExecution(pSubtaskId, pSplitId, pStub, pPrematureTermination);
+    mSplitGroupVector[mSplitGroupMap[pStub]].FinishedSplitExecution(pSubtaskId, pSplitId, pStub, pPrematureTermination, pExecTime);
 }
 
 bool pmSubtaskSplitter::Negotiate(pmExecutionStub* pStub, ulong pSubtaskId, std::vector<pmExecutionStub*>& pStubsToBeCancelled, pmExecutionStub*& pSourceStub)
@@ -160,10 +163,10 @@ void pmSubtaskSplitter::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
 
 void pmSubtaskSplitter::FreezeDummyEvents()
 {
-    std::vector<pmSplitGroup>::iterator lIter = mSplitGroupVector.begin(), lEndIter = mSplitGroupVector.end();
-    
-    for(; lIter != lEndIter; ++lIter)
-        (*lIter).FreezeDummyEvents();
+    for_each(mSplitGroupVector, [] (pmSplitGroup& pSplitGroup)
+    {
+        pSplitGroup.FreezeDummyEvents();
+    });
 }
     
 void pmSubtaskSplitter::PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
@@ -171,36 +174,91 @@ void pmSubtaskSplitter::PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStu
     mSplitGroupVector[mSplitGroupMap[pStub]].PrefetchSubscriptionsForUnsplittedSubtask(pStub, pSubtaskId);
 }
 
-    
+void pmSubtaskSplitter::MakeDeviceGroups(const std::vector<const pmProcessingElement*>& pDevices, std::vector<std::vector<const pmProcessingElement*>>& pDeviceGroups, std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>*>& pQueryMap, ulong& pUnsplittedDevices)
+{
+    pmDeviceType lSplittingType = GetSplittingType();
+
+    if(lSplittingType != MAX_DEVICE_TYPES)
+    {
+        struct mapKey
+        {
+            const pmMachine* machine;
+            pmDeviceType type;
+            ushort numaDomain;
+            
+            bool operator<(const mapKey& pKey) const
+            {
+                return std::tie(machine, type, numaDomain) < std::tie(pKey.machine, pKey.type, pKey.numaDomain);
+            }
+        };
+        
+        std::map<mapKey, std::vector<const pmProcessingElement*>*> lMachineInfo;
+
+        for_each(pDevices, [&] (const pmProcessingElement* pProcessingElement)
+        {
+            pmDeviceType lDeviceType = pProcessingElement->GetType();
+            if(lDeviceType == lSplittingType)
+            {
+                mapKey lKey{pProcessingElement->GetMachine(), lDeviceType, pProcessingElement->GetNumaDomainId()};
+                
+                auto lMachineInfoIter = lMachineInfo.find(lKey);
+                if(lMachineInfoIter == lMachineInfo.end())
+                {
+                    pDeviceGroups.emplace_back(1, pProcessingElement);
+                    lMachineInfo.emplace(lKey, &pDeviceGroups.back());
+                }
+                else
+                {
+                    lMachineInfoIter->second->emplace_back(pProcessingElement);
+                }
+            }
+            else
+            {
+                pDeviceGroups.emplace_back(1, pProcessingElement);
+                ++pUnsplittedDevices;
+            }
+        });
+        
+        for_each(pDeviceGroups, [&] (std::vector<const pmProcessingElement*>& pGroup)
+        {
+            for_each(pGroup, [&] (const pmProcessingElement* pProcessingElement)
+            {
+                pQueryMap.emplace(pProcessingElement, &pGroup);
+            });
+        });
+    }
+}
+
+
 /* class pmSplitGroup */
 std::unique_ptr<pmSplitSubtask> pmSplitGroup::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
 {
-    const splitRecord* lSplitRecord = NULL;
+    std::shared_ptr<splitRecord> lSplitRecord;
     uint lSplitId = std::numeric_limits<uint>::max();
 
     // Auto lock/unlock scope
     {
-        splitRecord* lModifiableSplitRecord = NULL;
+        std::shared_ptr<splitRecord> lModifiableSplitRecord;
 
         FINALIZE_RESOURCE_PTR(dSplitRecordListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSplitRecordListLock, Lock(), Unlock());
      
         if(!mSplitRecordList.empty())
         {
-            lModifiableSplitRecord = &mSplitRecordList.back();
+            lModifiableSplitRecord = mSplitRecordList.back();
             
             if(lModifiableSplitRecord->splitId == lModifiableSplitRecord->splitCount || lModifiableSplitRecord->reassigned)
-                lModifiableSplitRecord = NULL;
+                lModifiableSplitRecord.reset();
         }
         
-        if(!lModifiableSplitRecord)
+        if(!lModifiableSplitRecord.get())
         {
             if(!pSubtaskId)
                 return std::unique_ptr<pmSplitSubtask>();
          
-            mSplitRecordList.emplace_back(pSourceStub, *pSubtaskId, mSubtaskSplitter->mSplitFactor);
+            mSplitRecordList.emplace_back(std::make_shared<splitRecord>(pSourceStub, *pSubtaskId, mSplitFactorCalculator.GetNextSplitFactor()));
             mSplitRecordMap.emplace(std::piecewise_construct, std::forward_as_tuple(*pSubtaskId), std::forward_as_tuple(--mSplitRecordList.end()));
             
-            lModifiableSplitRecord = &mSplitRecordList.back();
+            lModifiableSplitRecord = mSplitRecordList.back();
         }
         
         lSplitId = lModifiableSplitRecord->splitId;
@@ -216,10 +274,10 @@ std::unique_ptr<pmSplitSubtask> pmSplitGroup::GetPendingSplit(ulong* pSubtaskId,
     return std::unique_ptr<pmSplitSubtask>(new pmSplitSubtask(mSubtaskSplitter->mTask, lSplitRecord->sourceStub, lSplitRecord->subtaskId, lSplitId, lSplitRecord->splitCount));
 }
     
-void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination)
+void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination, double pExecTime)
 {
     bool lCompleted = false;
-    splitter::splitRecord lSplitRecord;
+    std::shared_ptr<splitter::splitRecord> lSplitRecord;
 
     // Auto lock/unlock scope
     {
@@ -229,23 +287,27 @@ void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExe
         
         EXCEPTION_ASSERT(lMapIter != mSplitRecordMap.end());
 
-        const std::list<splitRecord>::iterator lIter = lMapIter->second;
+        const std::list<std::shared_ptr<splitRecord>>::iterator lIter = lMapIter->second;
         
-        EXCEPTION_ASSERT(lIter != mSplitRecordList.end() && lIter->pendingCompletions);
-        EXCEPTION_ASSERT(lIter->assignedStubs[pSplitId].first == pStub);
+        EXCEPTION_ASSERT(lIter != mSplitRecordList.end() && (*lIter)->pendingCompletions);
+        EXCEPTION_ASSERT((*lIter)->assignedStubs[pSplitId].first == pStub);
 
-        --lIter->pendingCompletions;
-        lIter->assignedStubs[pSplitId].second = true;
+        --((*lIter)->pendingCompletions);
+        (*lIter)->assignedStubs[pSplitId].second = true;
+        
+        (*lIter)->subtaskExecTime += pExecTime;
         
         if(pPrematureTermination)
-            lIter->reassigned = true;
+            (*lIter)->reassigned = true;
 
-        if(lIter->pendingCompletions == 0)
+        if((*lIter)->pendingCompletions == 0)
         {
-            if(!lIter->reassigned)
+            if(!(*lIter)->reassigned)
             {
                 lSplitRecord = *lIter;
                 lCompleted = true;
+                
+                mSplitFactorCalculator.RegisterSubtaskCompletion(lSplitRecord->splitCount, pExecTime);
             }
             
             mSplitRecordList.erase(lIter);
@@ -255,14 +317,14 @@ void pmSplitGroup::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExe
     
     if(lCompleted)
     {
-        for_each_with_index(lSplitRecord.assignedStubs, [&] (const std::pair<pmExecutionStub*, bool>& pPair, size_t pIndex)
+        for_each_with_index(lSplitRecord->assignedStubs, [&] (const std::pair<pmExecutionStub*, bool>& pPair, size_t pIndex)
         {
-            pmSplitInfo lSplitInfo(pIndex, lSplitRecord.splitCount);
+            pmSplitInfo lSplitInfo((uint)pIndex, lSplitRecord->splitCount);
 
             pPair.first->CommonPostNegotiationOnCPU(mSubtaskSplitter->mTask, pSubtaskId, false, &lSplitInfo);
         });
         
-        lSplitRecord.sourceStub->HandleSplitSubtaskExecutionCompletion(mSubtaskSplitter->mTask, lSplitRecord, pmSuccess);
+        lSplitRecord->sourceStub->HandleSplitSubtaskExecutionCompletion(mSubtaskSplitter->mTask, *lSplitRecord.get(), pmSuccess);
     }
 }
 
@@ -343,17 +405,17 @@ bool pmSplitGroup::Negotiate(ulong pSubtaskId, std::vector<pmExecutionStub*>& pS
         
         if(lMapIter != mSplitRecordMap.end())
         {
-            const std::list<splitRecord>::iterator lIter = lMapIter->second;
+            const std::list<std::shared_ptr<splitRecord>>::iterator lIter = lMapIter->second;
             
             EXCEPTION_ASSERT(lIter != mSplitRecordList.end());
             
-            DEBUG_EXCEPTION_ASSERT(lIter->subtaskId == pSubtaskId);
+            DEBUG_EXCEPTION_ASSERT((*lIter)->subtaskId == pSubtaskId);
 
-            if(!lIter->reassigned)
+            if(!(*lIter)->reassigned)
             {
-                pSourceStub = lIter->sourceStub;
-                lStubVector = lIter->assignedStubs;
-                lIter->reassigned = true;
+                pSourceStub = (*lIter)->sourceStub;
+                lStubVector = (*lIter)->assignedStubs;
+                (*lIter)->reassigned = true;
                 lRetVal = true;
             }
         }
@@ -379,22 +441,91 @@ void pmSplitGroup::PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pS
     
     EXCEPTION_ASSERT(lMapIter != mSplitRecordMap.end());
     
-    const std::list<splitRecord>::iterator lIter = lMapIter->second;
+    auto lIter = lMapIter->second;
     
     EXCEPTION_ASSERT(lIter != mSplitRecordList.end());
 
-    DEBUG_EXCEPTION_ASSERT(lIter->subtaskId == pSubtaskId);
+    DEBUG_EXCEPTION_ASSERT((*lIter)->subtaskId == pSubtaskId);
 
-    if(!lIter->prefetched)
+    if(!(*lIter)->prefetched)
     {
         pmSubscriptionManager& lSubscriptionManager = mSubtaskSplitter->mTask->GetSubscriptionManager();
         
         lSubscriptionManager.FindSubtaskMemDependencies(pStub, pSubtaskId, NULL);
         lSubscriptionManager.FetchSubtaskSubscriptions(pStub, pSubtaskId, NULL, pStub->GetType(), true);
         
-        lIter->prefetched = true;
+        (*lIter)->prefetched = true;
     }
 }
+
+
+/* class mSplitFactorCalculator */
+void pmSplitFactorCalculator::RegisterSubtaskCompletion(uint pSplitFactor, double pTime)
+{
+#ifdef ENABLE_DYNAMIC_SPLITTING
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    auto lIter = mMap.find(pSplitFactor);
+    if(lIter == mMap.end())
+    {
+        mMap.emplace(std::piecewise_construct, std::forward_as_tuple(pSplitFactor), std::forward_as_tuple(pTime, 1));
+    }
+    else
+    {
+        lIter->second.first += pTime;
+        ++lIter->second.second;
+    }
+#else
+#endif
+}
+    
+uint pmSplitFactorCalculator::GetNextSplitFactor()
+{
+#ifdef ENABLE_DYNAMIC_SPLITTING
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    size_t lSize = mMap.size();
+
+    if(lSize == 0)
+        return mFirstSplitFactor;
+    else if(lSize == 1)
+        return mSecondSplitFactor;
+    
+    double lFirstTime = GetAverageTimeForSplitFactor(mFirstSplitFactor);
+    double lSecondTime = GetAverageTimeForSplitFactor(mSecondSplitFactor);
+    
+    if(lFirstTime <= lSecondTime)
+        std::swap(mSecondSplitFactor, mThirdSplitFactor);
+    else
+        std::swap(mSecondSplitFactor, mFirstSplitFactor);
+    
+    mSecondSplitFactor = std::max((uint)1, (mFirstSplitFactor + mThirdSplitFactor)/2);
+    if(mSecondSplitFactor % 2 != 0 && mSecondSplitFactor + 1 <= mMaxSplitFactor)
+    {
+        double lTime1 = GetAverageTimeForSplitFactor(mSecondSplitFactor + 1);
+        double lTime2 = GetAverageTimeForSplitFactor(mSecondSplitFactor);
+        
+        if(lTime1 < lTime2 && lTime1 != std::numeric_limits<double>::max() && lTime2 != std::numeric_limits<double>::max())
+            ++mSecondSplitFactor;
+    }
+    
+    return mSecondSplitFactor;
+#else
+    return mMaxSplitFactor;
+#endif
+}
+
+#ifdef ENABLE_DYNAMIC_SPLITTING
+// This method must be called with mResourceLock acquired
+double pmSplitFactorCalculator::GetAverageTimeForSplitFactor(uint pSplitFactor)
+{
+    auto lIter = mMap.find(pSplitFactor);
+    if(lIter == mMap.end())
+        return std::numeric_limits<double>::max();
+    
+    return (lIter->second.first / (double)lIter->second.second);
+}
+#endif
 
 }
 

@@ -41,11 +41,12 @@ pmMachine::operator uint() const
 
 
 /* class pmProcessingElement */
-pmProcessingElement::pmProcessingElement(const pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex, const communicator::devicePool* pDevicePool)
+pmProcessingElement::pmProcessingElement(const pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex, ushort pNumaDomainId, const communicator::devicePool* pDevicePool)
 	: mMachine(pMachine)
     , mDeviceIndexInMachine(pDeviceIndexInMachine)
 	, mGlobalDeviceIndex(pGlobalDeviceIndex)
 	, mDeviceType(pDeviceType)
+    , mNumaDomainId(pNumaDomainId)
 {
     BuildDeviceInfo(pDevicePool);
 }
@@ -70,6 +71,11 @@ pmDeviceType pmProcessingElement::GetType() const
 	return mDeviceType;
 }
 
+ushort pmProcessingElement::GetNumaDomainId() const
+{
+    return mNumaDomainId;
+}
+    
 pmExecutionStub* pmProcessingElement::GetLocalExecutionStub() const
 {
 	if(GetMachine() != PM_LOCAL_MACHINE)

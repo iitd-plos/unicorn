@@ -65,6 +65,7 @@ class pmProcessingElement : public pmHardware
 		uint GetDeviceIndexInMachine() const;
 		uint GetGlobalDeviceIndex() const;
 		pmDeviceType GetType() const;
+        ushort GetNumaDomainId() const;
 
 		pmExecutionStub* GetLocalExecutionStub() const;
 		const pmDeviceInfo& GetDeviceInfo() const;
@@ -73,7 +74,7 @@ class pmProcessingElement : public pmHardware
 		static void GetMachines(std::vector<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines);
 
 	private:
-		pmProcessingElement(const pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex, const communicator::devicePool* pDevicePool);
+		pmProcessingElement(const pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex, ushort pNumaDomainId, const communicator::devicePool* pDevicePool);
     
         void BuildDeviceInfo(const communicator::devicePool* pDevicePool);
 
@@ -82,6 +83,7 @@ class pmProcessingElement : public pmHardware
 		uint mDeviceIndexInMachine;
 		uint mGlobalDeviceIndex;
 		pmDeviceType mDeviceType;
+        ushort mNumaDomainId;   // Only valid for CPU processing elements
 };
 
 } // end namespace pm

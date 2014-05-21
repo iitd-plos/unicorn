@@ -134,19 +134,19 @@ pmSplitSubtaskExecutionTimelineAutoPtr::pmSplitSubtaskExecutionTimelineAutoPtr(p
     , mSplitCount(pSplitCount)
     , mCancelledOrException(true)
 {
-    mEventTimeline->RecordEvent(GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), true);
+    mEventTimeline->RecordEvent(mTask, GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), true);
 }
 
 pmSplitSubtaskExecutionTimelineAutoPtr::~pmSplitSubtaskExecutionTimelineAutoPtr()
 {
     if(mCancelledOrException)
     {
-        mEventTimeline->RenameEvent(GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), GetCancelledEventName(mSubtaskId, mSplitId, mSplitCount, mTask));
-        mEventTimeline->RecordEvent(GetCancelledEventName(mSubtaskId, mSplitId, mSplitCount, mTask), false);
+        mEventTimeline->RenameEvent(mTask, GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), GetCancelledEventName(mSubtaskId, mSplitId, mSplitCount, mTask));
+        mEventTimeline->RecordEvent(mTask, GetCancelledEventName(mSubtaskId, mSplitId, mSplitCount, mTask), false);
     }
     else
     {
-        mEventTimeline->RecordEvent(GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), false);
+        mEventTimeline->RecordEvent(mTask, GetEventName(mSubtaskId, mSplitId, mSplitCount, mTask), false);
     }
 }
 
@@ -189,14 +189,14 @@ pmSubtaskRangeExecutionTimelineAutoPtr::~pmSubtaskRangeExecutionTimelineAutoPtr(
     {
         for(ulong i = 0; i < mSubtasksInitialized; ++i)
         {
-            mEventTimeline->RenameEvent(GetEventName(mStartSubtask + i, mTask), GetCancelledEventName(mStartSubtask + i, mTask));
-            mEventTimeline->RecordEvent(GetCancelledEventName(mStartSubtask + i, mTask), false);
+            mEventTimeline->RenameEvent(mTask, GetEventName(mStartSubtask + i, mTask), GetCancelledEventName(mStartSubtask + i, mTask));
+            mEventTimeline->RecordEvent(mTask, GetCancelledEventName(mStartSubtask + i, mTask), false);
         }
     }
     else
     {
         for(ulong i = 0; i < mSubtasksInitialized; ++i)
-            mEventTimeline->RecordEvent(GetEventName(mStartSubtask + i, mTask), false);
+            mEventTimeline->RecordEvent(mTask, GetEventName(mStartSubtask + i, mTask), false);
     }
 }
     
@@ -207,7 +207,7 @@ void pmSubtaskRangeExecutionTimelineAutoPtr::ResetEndSubtask(ulong pEndSubtask)
     
 void pmSubtaskRangeExecutionTimelineAutoPtr::InitializeNextSubtask()
 {
-    mEventTimeline->RecordEvent(GetEventName(mStartSubtask + mSubtasksInitialized, mTask), true);
+    mEventTimeline->RecordEvent(mTask, GetEventName(mStartSubtask + mSubtasksInitialized, mTask), true);
     ++mSubtasksInitialized;
 }
 

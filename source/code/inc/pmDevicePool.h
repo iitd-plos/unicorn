@@ -57,6 +57,7 @@ class pmMachinePool : public pmBase
 		{
 			uint cpuCores;
 			uint gpuCards;
+            uint cpuNumaDomains;    // Top level domains only
 			ulong  dataSent;
 			ulong dataReceived;
 			double sendTime;
@@ -64,9 +65,10 @@ class pmMachinePool : public pmBase
 			ulong sendCount;
 			ulong receiveCount;
             
-            pmMachineData(uint pCpuCores, uint pGpuCards)
+            pmMachineData(uint pCpuCores, uint pGpuCards, uint pCpuNumaDomains)
             : cpuCores(pCpuCores)
             , gpuCards(pGpuCards)
+            , cpuNumaDomains(pCpuNumaDomains)
             , dataSent(0)
             , dataReceived(0)
             , sendTime(0)
@@ -90,6 +92,8 @@ class pmMachinePool : public pmBase
 
 		void RegisterSendCompletion(const pmMachine* pMachine, ulong pDataSent, double pSendTime);
 		void RegisterReceiveCompletion(const pmMachine* pMachine, ulong pDataReceived, double pReceiveTime);
+    
+        uint GetCpuNumaDomainsOnMachine(uint pIndex);
 
 	private:
 		pmMachinePool();
@@ -99,7 +103,7 @@ class pmMachinePool : public pmBase
 		std::vector<uint> mFirstDeviceIndexOnMachine;
 		std::vector<pmMachine> mMachinesVector;
 		std::vector<pmMachineData> mMachineDataVector;
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;	/* For dynamically updating parameters */
+		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
 class pmDevicePool : public pmBase

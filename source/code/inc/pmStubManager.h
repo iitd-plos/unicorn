@@ -55,16 +55,23 @@ class pmStubManager : public pmBase
         void PurgeAddressSpaceEntriesFromGpuCaches(const pmAddressSpace* pAddressSpace);
     #endif
 
+        ushort GetCpuNumaDomainsCount() const;
+        const std::vector<std::vector<pmExecutionStub*>>& GetCpuNumaDomains() const;
+        const std::vector<pmExecutionStub*>& GetCpuNumaDomain(ushort pDomainId) const;
+        ushort GetNumaDomainIdForCpuDevice(uint pIndex) const;
+
         void WaitForAllStubsToFinish();
 
 	private:
 		pmStubManager();
-		virtual ~pmStubManager();
+		~pmStubManager();
 
         void GetCpuIdInfo(uint pRegA, uint pRegC, uint& pEAX, uint& pEBX, uint& pECX, uint& pEDX);
     
 		void CreateExecutionStubs();
 		void DestroyExecutionStubs();
+    
+        void CreateCpuNumaDomains();
 
 		pmStatus CountAndProbeProcessingElements();
 
@@ -72,7 +79,9 @@ class pmStubManager : public pmBase
 		void FreeGpuResources();
     #endif
 
-		std::vector<pmExecutionStub*> mStubVector;
+		std::vector<pmExecutionStub*> mStubVector;    
+        std::vector<std::vector<pmExecutionStub*>> mCpuNumaDomains;
+        std::map<pmExecutionStub*, ushort> mCpuNumaDomainsMap;    // stub versus NUMA domain id
 		
 		size_t mProcessingElementsCPU;
 		size_t mProcessingElementsGPU;

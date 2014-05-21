@@ -69,11 +69,7 @@ class pmSubtaskManager : public pmBase
 		pmSubtaskManager(pmLocalTask* pLocalTask);
 
         void UpdateExecutionProfile(const pmProcessingElement* pDevice, ulong pSubtaskCount);
-    
-    #ifdef SUPPORT_SPLIT_SUBTASKS
-        void MakeDeviceGroups(std::vector<const pmProcessingElement*>& pDevices, std::vector<std::vector<const pmProcessingElement*> >& pDeviceGroups, std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>* >& pQueryMap, ulong& pUnsplittedDevices) const;
-    #endif
-    
+
     #ifdef DUMP_SUBTASK_EXECUTION_PROFILE
         void PrintExecutionProfile();
     #endif
@@ -164,8 +160,8 @@ class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager
 		virtual ~pmPullSchedulingManager();	
 
 		virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
-
-	private:
+    
+    private:
     #ifdef SUPPORT_SPLIT_SUBTASKS
         std::set<pmUnfinishedPartitionPtr> mSplittedGroupSubtaskPartitions;		// Collection of partitions to be assigned to splitting devices
 		std::set<pmUnfinishedPartitionPtr>::iterator mSplittedGroupIter;
