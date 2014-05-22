@@ -146,13 +146,15 @@ struct stealProcessEvent : public schedulerEvent
 	const pmProcessingElement* targetDevice;
 	pmTask* task;
 	double stealingDeviceExecutionRate;
+    bool shouldMultiAssign;
     
-    stealProcessEvent(eventIdentifier pEventId, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pStealingDeviceExecutionRate)
+    stealProcessEvent(eventIdentifier pEventId, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pStealingDeviceExecutionRate, bool pShouldMultiAssign)
     : schedulerEvent(pEventId)
     , stealingDevice(pStealingDevice)
     , targetDevice(pTargetDevice)
     , task(pTask)
     , stealingDeviceExecutionRate(pStealingDeviceExecutionRate)
+    , shouldMultiAssign(pShouldMultiAssign)
     {}
 };
 
@@ -446,7 +448,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void SubmitTaskEvent(pmLocalTask* pLocalTask);
 		void PushEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange);		// subtask range execution event
 		void StealRequestEvent(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate);
-		void StealProcessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate);
+		void StealProcessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate, bool pMultiAssign);
 		void StealSuccessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 		void StealFailedEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
 		void StealSuccessReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
@@ -510,10 +512,16 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 
 		void PushToStub(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange);
 
-		const pmProcessingElement* RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask);
+    #ifdef ENABLE_TWO_LEVEL_STEALING
+		const pmMachine* RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign);
+        const pmProcessingElement* RandomlySelectSecondLevelStealTarget();
+    #else
+		const pmProcessingElement* RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign);
+    #endif
+
 		void StealSubtasks(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate);
 
-		void ServeStealRequest(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate);
+		void ServeStealRequest(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate, bool pShouldMultiAssign);
 		void ReceiveFailedStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
 		void ReceiveStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 

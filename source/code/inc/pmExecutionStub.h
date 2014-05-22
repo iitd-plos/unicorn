@@ -274,7 +274,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void InitializeEventTimeline();
     #endif
 		void ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
-		void StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate);
+		void StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate, bool pShouldMultiAssign);
 		void CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation);
         void CancelSubtaskRange(const pmSubtaskRange& pRange);
         void ProcessNegotiatedRange(const pmSubtaskRange& pRange);

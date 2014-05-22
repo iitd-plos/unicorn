@@ -331,15 +331,40 @@ pmTaskExecStats& pmTask::GetTaskExecStats()
 	return mTaskExecStats;
 }
 
-void pmTask::RandomizeDevices(std::vector<const pmProcessingElement*>& pDevices)
+template<typename T>
+void pmTask::RandomizeData(T& pData)
 {
     std::random_device lRandomDevice;
     std::mt19937 lGenerator(lRandomDevice());
     
-	std::shuffle(pDevices.begin(), pDevices.end(), lGenerator);
+	std::shuffle(pData.begin(), pData.end(), lGenerator);
 }
 
-std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(const pmProcessingElement* pDevice)
+#ifdef ENABLE_TWO_LEVEL_STEALING
+const std::vector<const pmMachine*>& pmTask::GetStealListForDevice(const pmProcessingElement* pDevice)
+{
+    FINALIZE_RESOURCE_PTR(dStealListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealListLock, Lock(), Unlock());
+
+    auto lIter = mStealListForDevice.find(pDevice);
+    if(lIter == mStealListForDevice.end())
+    {
+        std::set<const pmMachine*> lMachines;
+        std::vector<const pmMachine*> lMachinesVector;
+
+        std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
+        pmProcessingElement::GetMachines(lDevices, lMachines);
+
+        lMachinesVector.resize(lMachines.size());
+        std::copy(lMachines.begin(), lMachines.end(), std::back_inserter(lMachinesVector));
+        
+        lIter = mStealListForDevice.emplace(pDevice, lMachinesVector).first;
+        RandomizeData(lIter->second);
+    }
+    
+    return lIter->second;
+}
+#else
+const std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(const pmProcessingElement* pDevice)
 {
     FINALIZE_RESOURCE_PTR(dStealListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealListLock, Lock(), Unlock());
     
@@ -364,18 +389,19 @@ std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(const pmP
             });
             
             lIter = mStealListForDevice.emplace(pDevice, lRepresentativeDevices).first;
-            RandomizeDevices(lIter->second);
+            RandomizeData(lIter->second);
         }
         else
     #endif
         {
             lIter = mStealListForDevice.emplace(pDevice, lDevices).first;
-            RandomizeDevices(lIter->second);
+            RandomizeData(lIter->second);
         }
     }
 
     return lIter->second;
 }
+#endif
 
 void pmTask::BuildTaskInfo()
 {

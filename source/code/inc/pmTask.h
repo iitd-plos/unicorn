@@ -126,7 +126,11 @@ class pmTask : public pmBase
         void LockAddressSpaces();
         void UnlockMemories();
     
-        std::vector<const pmProcessingElement*>& GetStealListForDevice(const pmProcessingElement* pDevice);
+    #ifdef ENABLE_TWO_LEVEL_STEALING
+        const std::vector<const pmMachine*>& GetStealListForDevice(const pmProcessingElement* pDevice);
+    #else
+        const std::vector<const pmProcessingElement*>& GetStealListForDevice(const pmProcessingElement* pDevice);
+    #endif
     
         ulong GetSequenceNumber();
         void SetSequenceNumber(ulong pSequenceNumber);
@@ -167,7 +171,9 @@ class pmTask : public pmBase
 	private:
 		void BuildTaskInfo();
         void BuildPreSubscriptionSubtaskInfo();
-        void RandomizeDevices(std::vector<const pmProcessingElement*>& pDevices);
+    
+        template<typename T>
+        void RandomizeData(T& pData);
     
         void Start();
     
@@ -217,7 +223,12 @@ class pmTask : public pmBase
         ulong mOutstandingStubsForCancellationMessages, mOutstandingStubsForShadowMemCommitMessages;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mTaskCompletionLock;
 
-        std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*> > mStealListForDevice;
+    #ifdef ENABLE_TWO_LEVEL_STEALING
+        std::map<const pmProcessingElement*, std::vector<const pmMachine*>> mStealListForDevice;
+    #else
+        std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>> mStealListForDevice;
+    #endif
+
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mStealListLock;
     
         std::vector<pmMemInfo> mPreSubscriptionMemInfoForSubtasks;  // Used for lazy memory

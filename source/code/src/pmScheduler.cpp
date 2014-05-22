@@ -288,11 +288,11 @@ void pmScheduler::StealRequestEvent(const pmProcessingElement* pStealingDevice, 
 #ifdef ENABLE_TASK_PROFILING
     pTask->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_WAIT, true);
 #endif
-    
+
 	SwitchThread(std::shared_ptr<schedulerEvent>(new stealRequestEvent(STEAL_REQUEST_STEALER, pStealingDevice, pTask, pExecutionRate)), pTask->GetPriority());
 }
 
-void pmScheduler::StealProcessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate)
+void pmScheduler::StealProcessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate, bool pShouldMultiAssign)
 {
     if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
         return;
@@ -301,7 +301,7 @@ void pmScheduler::StealProcessEvent(const pmProcessingElement* pStealingDevice, 
     pTask->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_SERVE, true);
 #endif
     
-	SwitchThread(std::shared_ptr<schedulerEvent>(new stealProcessEvent(STEAL_PROCESS_TARGET, pStealingDevice, pTargetDevice, pTask, pExecutionRate)), pTask->GetPriority());
+	SwitchThread(std::shared_ptr<schedulerEvent>(new stealProcessEvent(STEAL_PROCESS_TARGET, pStealingDevice, pTargetDevice, pTask, pExecutionRate, pShouldMultiAssign)), pTask->GetPriority());
 }
 
 void pmScheduler::StealSuccessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange)
@@ -489,7 +489,7 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             stealProcessEvent& lEventDetails = static_cast<stealProcessEvent&>(pEvent);
 
             if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.task))
-                ServeStealRequest(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task, lEventDetails.stealingDeviceExecutionRate);
+                ServeStealRequest(lEventDetails.stealingDevice, lEventDetails.targetDevice, lEventDetails.task, lEventDetails.stealingDeviceExecutionRate, lEventDetails.shouldMultiAssign);
             
             break;
         }
@@ -1187,31 +1187,67 @@ void pmScheduler::PushToStub(const pmProcessingElement* pDevice, const pmSubtask
 	lStub->Push(pRange);
 }
 
-const pmProcessingElement* pmScheduler::RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask)
+#ifdef ENABLE_TWO_LEVEL_STEALING
+const pmMachine* pmScheduler::RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign)
+#else
+const pmProcessingElement* pmScheduler::RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign)
+#endif
 {
 	pmStubManager* lManager = pmStubManager::GetStubManager();
 	pmExecutionStub* lStub = lManager->GetStub(pStealingDevice);
 
-	if(!lStub)
-		PMTHROW(pmFatalErrorException());
+	EXCEPTION_ASSERT(lStub);
 
 	pmTaskExecStats& lTaskExecStats = pTask->GetTaskExecStats();
 
 	uint lAttempts = lTaskExecStats.GetStealAttempts(lStub);
-    uint lDevices = pTask->GetAssignedDeviceCount();
-	if((lAttempts >= lDevices * MAX_STEAL_CYCLES_PER_DEVICE) || (lTaskExecStats.GetFailedStealAttemptsSinceLastSuccessfulAttempt(lStub) >= lDevices))
+    
+    const auto& lStealList = pTask->GetStealListForDevice(pStealingDevice);
+    size_t lTargets = lStealList.size();
+    
+    uint lConsecutiveFailures = lTaskExecStats.GetFailedStealAttemptsSinceLastSuccessfulAttempt(lStub);
+	if((lAttempts >= lTargets * MAX_STEAL_CYCLES_PER_DEVICE) || (lConsecutiveFailures >= lTargets))
 		return NULL;
+
+    // This device will only process a multi-assigned subtask in case it has not got anything in
+    // consecutive lTargets/2 requests or if this device is too agressive like GPUs
+    pShouldMultiAssign = ((lConsecutiveFailures >= lTargets/2) || (pStealingDevice->GetType() != CPU));
 
 	lTaskExecStats.RecordStealAttempt(lStub);
 
-    return (pTask->GetStealListForDevice(pStealingDevice))[lAttempts % lDevices];
+    return lStealList[lAttempts % lTargets];
 }
 
 void pmScheduler::StealSubtasks(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate)
 {
-	const pmProcessingElement* lTargetDevice = RandomlySelectStealTarget(pStealingDevice, pTask);
+    bool lShouldMultiAssign = true;
+
+#ifdef ENABLE_TWO_LEVEL_STEALING
+	const pmMachine* lTargetMachine = RandomlySelectStealTarget(pStealingDevice, pTask, lShouldMultiAssign);
+
+    if(lTargetMachine)
+    {
+        STEAL_REQUEST_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*(lTargetDevice->GetMachine())), pStealingDevice->GetGlobalDeviceIndex(), std::numeric_limits<uint>::max(), pExecutionRate);
+
+		if(lTargetMachine == PM_LOCAL_MACHINE)
+		{
+            StealProcessEvent(pStealingDevice, NULL, pTask, pExecutionRate, lShouldMultiAssign);
+		}
+		else
+		{
+			const pmMachine* lOriginatingHost = pTask->GetOriginatingHost();
+
+			finalize_ptr<stealRequestStruct> lStealRequestData(new stealRequestStruct(pStealingDevice->GetGlobalDeviceIndex(), *lOriginatingHost, pTask->GetSequenceNumber(), pExecutionRate, lShouldMultiAssign));
+
+			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<stealRequestStruct>::CreateSharedPtr(pTask->GetPriority(), SEND, STEAL_REQUEST_TAG, lTargetMachine, STEAL_REQUEST_STRUCT, lStealRequestData, 1);
+
+			pmCommunicator::GetCommunicator()->Send(lCommand, false);
+		}
+    }
+#else
+	const pmProcessingElement* lTargetDevice = RandomlySelectStealTarget(pStealingDevice, pTask, lShouldMultiAssign);
     if(lTargetDevice == pStealingDevice)
-        lTargetDevice = RandomlySelectStealTarget(pStealingDevice, pTask);
+        lTargetDevice = RandomlySelectStealTarget(pStealingDevice, pTask, lShouldMultiAssign);
 
 	if(lTargetDevice)
 	{
@@ -1224,24 +1260,31 @@ void pmScheduler::StealSubtasks(const pmProcessingElement* pStealingDevice, pmTa
             if(lTargetDevice == pStealingDevice)
                 StealFailedReturnEvent(pStealingDevice, lTargetDevice, pTask);
             else
-                StealProcessEvent(pStealingDevice, lTargetDevice, pTask, pExecutionRate);
+                StealProcessEvent(pStealingDevice, lTargetDevice, pTask, pExecutionRate, lShouldMultiAssign);
 		}
 		else
 		{
 			const pmMachine* lOriginatingHost = pTask->GetOriginatingHost();
 
-			finalize_ptr<stealRequestStruct> lStealRequestData(new stealRequestStruct(pStealingDevice->GetGlobalDeviceIndex(), lTargetDevice->GetGlobalDeviceIndex(), *lOriginatingHost, pTask->GetSequenceNumber(), pExecutionRate));
+			finalize_ptr<stealRequestStruct> lStealRequestData(new stealRequestStruct(pStealingDevice->GetGlobalDeviceIndex(), lTargetDevice->GetGlobalDeviceIndex(), *lOriginatingHost, pTask->GetSequenceNumber(), pExecutionRate, lShouldMultiAssign));
 
 			pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<stealRequestStruct>::CreateSharedPtr(pTask->GetPriority(), SEND, STEAL_REQUEST_TAG, lTargetMachine, STEAL_REQUEST_STRUCT, lStealRequestData, 1);
 
 			pmCommunicator::GetCommunicator()->Send(lCommand, false);
 		}
 	}
+#endif
 }
 
-void pmScheduler::ServeStealRequest(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate)
+void pmScheduler::ServeStealRequest(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate, bool pShouldMultiAssign)
 {
-	pTargetDevice->GetLocalExecutionStub()->StealSubtasks(pTask, pStealingDevice, pExecutionRate);
+#ifdef ENABLE_TWO_LEVEL_STEALING
+    EXCEPTION_ASSERT(!pTargetDevice);
+
+    pTargetDevice = RandomlySelectSecondLevelStealTarget();
+#endif
+
+	pTargetDevice->GetLocalExecutionStub()->StealSubtasks(pTask, pStealingDevice, pExecutionRate, pShouldMultiAssign);
 }
 
 void pmScheduler::SendStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange)
@@ -1380,6 +1423,18 @@ void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const 
 		return StealRequestEvent(pDevice, pRange.task, lTaskExecStats.GetStubExecutionRate(lStub));
 	}
 }
+
+#ifdef ENABLE_TWO_LEVEL_STEALING
+const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget()
+{
+    pmStubManager* lStubManager = pmStubManager::GetStubManager();
+
+    size_t lStubCount = lStubManager->GetStubCount();
+    std::srand((unsigned int)time(NULL));
+
+    return lStubManager->GetStub(std::rand() % lStubCount)->GetProcessingElement();
+}
+#endif
     
 void pmScheduler::ClearPendingTaskCommands(pmTask* pTask)
 {
@@ -1679,14 +1734,19 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 					stealRequestStruct* lData = (stealRequestStruct*)(lCommunicatorCommand->GetData());
 
 					const pmProcessingElement* lStealingDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->stealingDeviceGlobalIndex);
+                    
+                #ifdef ENABLE_TWO_LEVEL_STEALING
+					const pmProcessingElement* lTargetDevice = NULL;
+                #else
 					const pmProcessingElement* lTargetDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->targetDeviceGlobalIndex);
+                #endif
 
 					const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
                     
                     if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lOriginatingHost, lData->sequenceNumber))
                     {
                         pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
-                        StealProcessEvent(lStealingDevice, lTargetDevice, lTask, lData->stealingDeviceExecutionRate);
+                        StealProcessEvent(lStealingDevice, lTargetDevice, lTask, lData->stealingDeviceExecutionRate, (bool)lData->shouldMultiAssign);
                     }
                     
 					break;

@@ -1622,11 +1622,21 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 		case STEAL_REQUEST_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(stealRequestStruct, lData, lDataMPI);
+            
+        #ifdef ENABLE_TWO_LEVEL_STEALING
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.stealingDeviceGlobalIndex, lStealingDeviceGlobalIndexMPI, MPI_UNSIGNED, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.stealingDeviceExecutionRate, lStealingDeviceExecutionRateMPI, MPI_DOUBLE, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.shouldMultiAssign, lShouldMultiAssignMPI, MPI_UNSIGNED_SHORT, 4, 1);
+        #else
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.stealingDeviceGlobalIndex, lStealingDeviceGlobalIndexMPI, MPI_UNSIGNED, 0, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.targetDeviceGlobalIndex, lTargetDeviceGlobalIndexMPI, MPI_UNSIGNED, 1, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 2, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 3, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.stealingDeviceExecutionRate, lStealingDeviceExecutionRateMPI, MPI_DOUBLE, 4, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.shouldMultiAssign, lShouldMultiAssignMPI, MPI_UNSIGNED_SHORT, 5, 1);
+        #endif
 
 			break;
 		}

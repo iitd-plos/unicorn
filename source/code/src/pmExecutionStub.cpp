@@ -675,7 +675,7 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
     return lStealCount;
 }
 
-void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate)
+void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate, bool pShouldMultiAssign)
 {
     bool lStealSuccess = false;
     ushort lPriority = pTask->GetPriority();
@@ -740,7 +740,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
             SwitchThread(std::move(lTaskEvent), lPriority);
         }
     }
-    else if(pTask->IsMultiAssignEnabled())
+    else if(pTask->IsMultiAssignEnabled() && pShouldMultiAssign)
     {
         if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned)
         {

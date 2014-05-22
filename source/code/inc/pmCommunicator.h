@@ -364,13 +364,14 @@ struct taskEventStruct
     {}
 };
 
+#ifdef ENABLE_TWO_LEVEL_STEALING
 struct stealRequestStruct
 {
     uint stealingDeviceGlobalIndex;
-    uint targetDeviceGlobalIndex;
     uint originatingHost;
     ulong sequenceNumber;	// sequence number of local task object (on originating host)
     double stealingDeviceExecutionRate;
+    ushort shouldMultiAssign;
 
     typedef enum fieldCount
     {
@@ -379,20 +380,54 @@ struct stealRequestStruct
 
     stealRequestStruct()
     : stealingDeviceGlobalIndex(std::numeric_limits<uint>::max())
+    , originatingHost(std::numeric_limits<uint>::max())
+    , sequenceNumber(std::numeric_limits<ulong>::max())
+    , stealingDeviceExecutionRate(0)
+    , shouldMultiAssign(1)
+    {}
+    
+    stealRequestStruct(uint pStealingDeviceGlobalIndex, uint pOriginatingHost, ulong pSequenceNumber, double pStealingDeviceExecutionRate, bool pShouldMultiAssign)
+    : stealingDeviceGlobalIndex(pStealingDeviceGlobalIndex)
+    , originatingHost(pOriginatingHost)
+    , sequenceNumber(pSequenceNumber)
+    , stealingDeviceExecutionRate(pStealingDeviceExecutionRate)
+    , shouldMultiAssign(pShouldMultiAssign)
+    {}
+};
+#else
+struct stealRequestStruct
+{
+    uint stealingDeviceGlobalIndex;
+    uint targetDeviceGlobalIndex;
+    uint originatingHost;
+    ulong sequenceNumber;	// sequence number of local task object (on originating host)
+    double stealingDeviceExecutionRate;
+    ushort shouldMultiAssign;
+
+    typedef enum fieldCount
+    {
+        FIELD_COUNT_VALUE = 6
+    } fieldCount;
+
+    stealRequestStruct()
+    : stealingDeviceGlobalIndex(std::numeric_limits<uint>::max())
     , targetDeviceGlobalIndex(std::numeric_limits<uint>::max())
     , originatingHost(std::numeric_limits<uint>::max())
     , sequenceNumber(std::numeric_limits<ulong>::max())
     , stealingDeviceExecutionRate(0)
+    , shouldMultiAssign(1)
     {}
     
-    stealRequestStruct(uint pStealingDeviceGlobalIndex, uint pTargetDeviceGlobalIndex, uint pOriginatingHost, ulong pSequenceNumber, double pStealingDeviceExecutionRate)
+    stealRequestStruct(uint pStealingDeviceGlobalIndex, uint pTargetDeviceGlobalIndex, uint pOriginatingHost, ulong pSequenceNumber, double pStealingDeviceExecutionRate, bool pShouldMultiAssign)
     : stealingDeviceGlobalIndex(pStealingDeviceGlobalIndex)
     , targetDeviceGlobalIndex(pTargetDeviceGlobalIndex)
     , originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
     , stealingDeviceExecutionRate(pStealingDeviceExecutionRate)
+    , shouldMultiAssign(pShouldMultiAssign)
     {}
 };
+#endif
 
 enum stealResponseType
 {
