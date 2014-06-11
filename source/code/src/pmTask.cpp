@@ -354,7 +354,7 @@ const std::vector<const pmMachine*>& pmTask::GetStealListForDevice(const pmProce
         std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
         pmProcessingElement::GetMachines(lDevices, lMachines);
 
-        lMachinesVector.resize(lMachines.size());
+        lMachinesVector.reserve(lMachines.size());
         std::copy(lMachines.begin(), lMachines.end(), std::back_inserter(lMachinesVector));
         
         lIter = mStealListForDevice.emplace(pDevice, lMachinesVector).first;
