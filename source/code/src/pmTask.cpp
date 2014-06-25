@@ -748,7 +748,7 @@ void pmTask::MarkLocalStubsFreeOfShadowMemCommits()
 {
 }
 
-ulong pmTask::GetSequenceNumber()
+ulong pmTask::GetSequenceNumber() const
 {
     return mSequenceNumber;
 }

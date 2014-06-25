@@ -583,10 +583,10 @@ class pmStubCUDA : public pmStubGPU
 };
 #endif
 
-bool execEventMatchFunc(const execStub::stubEvent& pEvent, void* pCriterion);
+bool execEventMatchFunc(const execStub::stubEvent& pEvent, const void* pCriterion);
     
 #ifdef SUPPORT_SPLIT_SUBTASKS
-bool splitSubtaskCheckEventMatchFunc(const execStub::stubEvent& pEvent, void* pCriterion);
+bool splitSubtaskCheckEventMatchFunc(const execStub::stubEvent& pEvent, const void* pCriterion);
 #endif
     
 } // end namespace pm

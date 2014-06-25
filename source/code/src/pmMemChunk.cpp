@@ -179,7 +179,7 @@ size_t pmMemChunk::GetSize() const
     return mSize;
 }
 
-};
+}
 
 
 

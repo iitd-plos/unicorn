@@ -1088,6 +1088,30 @@ namespace pm
         return std::for_each(__container.begin(), __container.end(), __f);
     }
 
+    template<typename _InputIterator, typename _Command_Function>
+    _Command_Function for_each_with_lookahead(_InputIterator __first, _InputIterator __last, _Command_Function __f)
+    {
+        if(__first == __last)   // no lookahead available
+            std::move(__f);
+        
+        for(; __first != __last; ++__first)
+        {
+            _InputIterator __next = __first + 1;
+            if(__next == __last)
+                break;
+
+            __f(*__first, *__next);
+        }
+
+        return std::move(__f);
+    }
+
+    template<typename _Container, typename _Command_Function>
+    _Command_Function for_each_with_lookahead(_Container& __container, _Command_Function __f)
+    {
+        return for_each_with_lookahead(__container.begin(), __container.end(), __f);
+    }
+
     template<typename _LockType, typename _Container, typename _Command_Function>
     _Command_Function for_each_while_locked(_LockType& __l, _Container& __container, _Command_Function __f)
     {

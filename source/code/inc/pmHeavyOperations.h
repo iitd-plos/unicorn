@@ -230,7 +230,7 @@ private:
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 
-bool taskMemTransferEventsMatchFunc(const heavyOperations::heavyOperationsEvent& pEvent, void* pCriterion);
+bool taskMemTransferEventsMatchFunc(const heavyOperations::heavyOperationsEvent& pEvent, const void* pCriterion);
     
 }
 

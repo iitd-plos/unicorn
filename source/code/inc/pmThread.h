@@ -106,9 +106,10 @@ class pmThread : public pmBase
         virtual void WaitForQueuedCommands() = 0;
         virtual void WaitIfCurrentCommandMatches(typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion) = 0;
 
-        virtual void UnblockSecondaryCommands();
-        virtual pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion, std::shared_ptr<T>& pCommand, bool pTemporarilyUnblockSecondaryCommands = false);
-        virtual void DeleteMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion);
+        void UnblockSecondaryCommands();
+        pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::shared_ptr<T>& pCommand, bool pTemporarilyUnblockSecondaryCommands = false);
+        void DeleteAndGetAllMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::vector<std::shared_ptr<T>>& pCommands, bool pTemporarilyUnblockSecondaryCommands = false);
+        void DeleteMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion);
     
 		/* To be implemented by client */
         virtual void ThreadSwitchCallback(std::shared_ptr<T>& pCommand) = 0;

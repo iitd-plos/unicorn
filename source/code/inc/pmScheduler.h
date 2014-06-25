@@ -547,7 +547,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
     #endif
 };
 
-bool taskClearMatchFunc(const scheduler::schedulerEvent& pEvent, void* pCriterion);
+bool taskClearMatchFunc(const scheduler::schedulerEvent& pEvent, const void* pCriterion);
 
 } // end namespace pm
 

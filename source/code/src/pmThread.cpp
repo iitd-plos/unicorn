@@ -143,13 +143,19 @@ void pmPThread<T, P>::SubmitCommand(const std::shared_ptr<T>& pInternalCommand, 
 }
 
 template<typename T, typename P>
-pmStatus pmThread<T, P>::DeleteAndGetFirstMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion, std::shared_ptr<T>& pCommand, bool pTemporarilyUnblockSecondaryCommands /* = false */)
+pmStatus pmThread<T, P>::DeleteAndGetFirstMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::shared_ptr<T>& pCommand, bool pTemporarilyUnblockSecondaryCommands /* = false */)
 {
 	return this->mSafePQ.DeleteAndGetFirstMatchingItem(pPriority, pMatchFunc, pMatchCriterion, pCommand, pTemporarilyUnblockSecondaryCommands);
 }
 
 template<typename T, typename P>
-void pmThread<T, P>::DeleteMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, void* pMatchCriterion)
+void pmThread<T, P>::DeleteAndGetAllMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::vector<std::shared_ptr<T>>& pCommands, bool pTemporarilyUnblockSecondaryCommands /* = false */)
+{
+	this->mSafePQ.DeleteAndGetAllMatchingItems(pPriority, pMatchFunc, pMatchCriterion, pCommands, pTemporarilyUnblockSecondaryCommands);
+}
+
+template<typename T, typename P>
+void pmThread<T, P>::DeleteMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion)
 {
 	this->mSafePQ.DeleteMatchingItems(pPriority, pMatchFunc, pMatchCriterion);
 }

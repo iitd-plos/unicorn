@@ -184,7 +184,7 @@ void pmSafePQ<T, P>::WaitForCurrentItem()
 }
 
 template<typename T, typename P>
-void pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion)
+void pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion)
 {
     while(1)
     {
@@ -221,7 +221,7 @@ void pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, v
 }
 
 template<typename T, typename P>
-pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, std::shared_ptr<T>& pItem, bool pTemporarilyUnblockSecondaryOperations)
+pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::shared_ptr<T>& pItem, bool pTemporarilyUnblockSecondaryOperations)
 {
     while(1)
     {
@@ -266,4 +266,44 @@ pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr
 	return pmOk;
 }
 
+template<typename T, typename P>
+void pmSafePQ<T, P>::DeleteAndGetAllMatchingItems(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::vector<std::shared_ptr<T>>& pItems, bool pTemporarilyUnblockSecondaryOperations)
+{
+    while(1)
+    {
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+        
+            EXCEPTION_ASSERT(!pTemporarilyUnblockSecondaryOperations || mSecondaryOperationsBlocked);
+
+            if(!mSecondaryOperationsBlocked || pTemporarilyUnblockSecondaryOperations)
+            {
+                typename priorityQueueType::iterator lIter = mQueue.find(pPriority);
+                if(lIter == mQueue.end())
+                    return;
+
+                typename std::list<std::shared_ptr<T>>& lInternalList = lIter->second;
+                
+                typename std::list<std::shared_ptr<T>>::iterator lListIter = lInternalList.begin();
+                while(lListIter != lInternalList.end())
+                {
+                    if(pMatchFunc(*lListIter->get(), pMatchCriterion))
+                    {
+                        pItems.emplace_back(std::move(*lListIter));
+                        lInternalList.erase(lListIter);
+
+                        if(lInternalList.empty())
+                            mQueue.erase(lIter);
+                    }
+                    
+                    ++lListIter;
+                }
+            }
+        }
+
+        mSecondaryOperationsWait.Wait();
+    }
+}
+    
 }

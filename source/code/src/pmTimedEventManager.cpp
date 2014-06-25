@@ -99,7 +99,7 @@ void pmTimedEventManager::ThreadSwitchCallback(std::shared_ptr<timedEvent>& pEve
     }
 }
 
-bool timeOutClearMatchFunc(const timed::timedEvent& pEvent, void* pCriterion)
+bool timeOutClearMatchFunc(const timed::timedEvent& pEvent, const void* pCriterion)
 {
     switch(pEvent.eventId)
     {
@@ -107,7 +107,7 @@ bool timeOutClearMatchFunc(const timed::timedEvent& pEvent, void* pCriterion)
         {
             const taskTimeOutEvent& lEvent = static_cast<const taskTimeOutEvent&>(pEvent);
 
-            if(lEvent.mLocalTask == (pmTask*)pCriterion)
+            if(lEvent.mLocalTask == static_cast<const pmTask*>(pCriterion))
                 return true;
 
             break;

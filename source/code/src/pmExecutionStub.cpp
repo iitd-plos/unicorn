@@ -3170,12 +3170,12 @@ void pmStubCUDA::TerminateUserModeExecution()
 #endif
 
 
-bool execEventMatchFunc(const stubEvent& pEvent, void* pCriterion)
+bool execEventMatchFunc(const stubEvent& pEvent, const void* pCriterion)
 {
 	if(pEvent.eventId == SUBTASK_EXEC)
     {
         const subtaskExecEvent& lEvent = static_cast<const subtaskExecEvent&>(pEvent);
-        if(lEvent.range.task == (pmTask*)pCriterion)
+        if(lEvent.range.task == static_cast<const pmTask*>(pCriterion))
             return true;
     }
 
@@ -3183,12 +3183,12 @@ bool execEventMatchFunc(const stubEvent& pEvent, void* pCriterion)
 }
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
-bool splitSubtaskCheckEventMatchFunc(const stubEvent& pEvent, void* pCriterion)
+bool splitSubtaskCheckEventMatchFunc(const stubEvent& pEvent, const void* pCriterion)
 {
 	if(pEvent.eventId == SPLIT_SUBTASK_CHECK)
     {
         const splitSubtaskCheckEvent& lEvent = static_cast<const splitSubtaskCheckEvent&>(pEvent);
-        if(lEvent.task == (pmTask*)pCriterion)
+        if(lEvent.task == static_cast<const pmTask*>(pCriterion))
             return true;
     }
 

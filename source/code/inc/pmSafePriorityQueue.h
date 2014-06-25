@@ -43,7 +43,7 @@ template<typename T, typename P = ushort>
 class pmSafePQ : public pmBase
 {
 	public:
-		typedef bool (*matchFuncPtr)(const T& pItem, void* pMatchCriterion);
+		typedef bool (*matchFuncPtr)(const T& pItem, const void* pMatchCriterion);
 
 		pmSafePQ();
 
@@ -55,8 +55,9 @@ class pmSafePQ : public pmBase
 
         void WaitForCurrentItem();
         void WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, void* pMatchCriterion);
-        pmStatus DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion, std::shared_ptr<T>& pItem, bool pTemporarilyUnblockSecondaryOperations);
-		void DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, void* pMatchCriterion);
+        pmStatus DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::shared_ptr<T>& pItem, bool pTemporarilyUnblockSecondaryOperations);
+        void DeleteAndGetAllMatchingItems(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::vector<std::shared_ptr<T>>& pItems, bool pTemporarilyUnblockSecondaryOperations);
+		void DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion);
 
 		bool IsHighPriorityElementPresent(P pPriority);
 

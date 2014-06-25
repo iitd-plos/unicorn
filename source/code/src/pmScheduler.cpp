@@ -1902,14 +1902,14 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 	}
 }
     
-bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
+bool taskClearMatchFunc(const schedulerEvent& pEvent, const void* pCriterion)
 {
     switch(pEvent.eventId)
     {
         case SUBTASK_EXECUTION:
         {
             const subtaskExecEvent& lEvent = static_cast<const subtaskExecEvent&>(pEvent);
-            if(lEvent.range.task == (pmTask*)pCriterion)
+            if(lEvent.range.task == static_cast<const pmTask*>(pCriterion))
                 return true;
         
             break;
@@ -1918,7 +1918,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case STEAL_REQUEST_STEALER:
         {
             const stealRequestEvent& lEvent = static_cast<const stealRequestEvent&>(pEvent);
-            if(lEvent.task == (pmTask*)pCriterion)
+            if(lEvent.task == static_cast<const pmTask*>(pCriterion))
                 return true;
             
             break;
@@ -1927,7 +1927,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case STEAL_PROCESS_TARGET:
         {
             const stealProcessEvent& lEvent = static_cast<const stealProcessEvent&>(pEvent);
-            if(lEvent.task == (pmTask*)pCriterion)
+            if(lEvent.task == static_cast<const pmTask*>(pCriterion))
                 return true;
 
             break;
@@ -1936,7 +1936,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case STEAL_SUCCESS_TARGET:
         {
             const stealSuccessTargetEvent& lEvent = static_cast<const stealSuccessTargetEvent&>(pEvent);
-            if(lEvent.range.task == (pmTask*)pCriterion)
+            if(lEvent.range.task == static_cast<const pmTask*>(pCriterion))
                 return true;
 
             break;
@@ -1945,7 +1945,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case STEAL_FAIL_TARGET:
         {
             const stealFailTargetEvent& lEvent = static_cast<const stealFailTargetEvent&>(pEvent);
-            if(lEvent.task == (pmTask*)pCriterion)
+            if(lEvent.task == static_cast<const pmTask*>(pCriterion))
                 return true;
 
             break;
@@ -1954,7 +1954,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case STEAL_SUCCESS_STEALER:
         {
             const stealSuccessStealerEvent& lEvent = static_cast<const stealSuccessStealerEvent&>(pEvent);
-            if(lEvent.range.task == (pmTask*)pCriterion)
+            if(lEvent.range.task == static_cast<const pmTask*>(pCriterion))
                 return true;
 
             break;
@@ -1963,7 +1963,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case STEAL_FAIL_STEALER:
         {
             const stealFailStealerEvent& lEvent = static_cast<const stealFailStealerEvent&>(pEvent);
-            if(lEvent.task == (pmTask*)pCriterion)
+            if(lEvent.task == static_cast<const pmTask*>(pCriterion))
                 return true;
 
             break;
@@ -1972,7 +1972,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case SUBTASK_RANGE_CANCEL:
         {
             const subtaskRangeCancelEvent& lEvent = static_cast<const subtaskRangeCancelEvent&>(pEvent);
-            if(lEvent.range.task == (pmTask*)pCriterion)
+            if(lEvent.range.task == static_cast<const pmTask*>(pCriterion))
                 return true;
             
             break;        
@@ -1981,7 +1981,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case RANGE_NEGOTIATION_EVENT:
         {
             const rangeNegotiationEvent& lEvent = static_cast<const rangeNegotiationEvent&>(pEvent);
-            if(lEvent.range.task == (pmTask*)pCriterion)
+            if(lEvent.range.task == static_cast<const pmTask*>(pCriterion))
                 return true;
             
             break;        
@@ -1990,7 +1990,7 @@ bool taskClearMatchFunc(const schedulerEvent& pEvent, void* pCriterion)
         case RANGE_NEGOTIATION_SUCCESS_EVENT:
         {
             const rangeNegotiationSuccessEvent& lEvent = static_cast<const rangeNegotiationSuccessEvent&>(pEvent);
-            if(lEvent.negotiatedRange.task == (pmTask*)pCriterion)
+            if(lEvent.negotiatedRange.task == static_cast<const pmTask*>(pCriterion))
                 return true;
             
             break;        

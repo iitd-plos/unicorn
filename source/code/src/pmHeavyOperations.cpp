@@ -555,7 +555,7 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
     }
 }
     
-bool taskMemTransferEventsMatchFunc(const heavyOperationsEvent& pEvent, void* pCriterion)
+bool taskMemTransferEventsMatchFunc(const heavyOperationsEvent& pEvent, const void* pCriterion)
 {
     switch(pEvent.eventId)
     {
@@ -563,7 +563,9 @@ bool taskMemTransferEventsMatchFunc(const heavyOperationsEvent& pEvent, void* pC
         {
             const memTransferEvent& lEventDetails = static_cast<const memTransferEvent&>(pEvent);
 
-            if(lEventDetails.isTaskOriginated && lEventDetails.taskOriginatingHost == (uint)(*((pmTask*)pCriterion)->GetOriginatingHost()) && lEventDetails.taskSequenceNumber == ((pmTask*)pCriterion)->GetSequenceNumber())
+            if(lEventDetails.isTaskOriginated
+               && lEventDetails.taskOriginatingHost == (uint)(*(static_cast<const pmTask*>(pCriterion))->GetOriginatingHost())
+               && lEventDetails.taskSequenceNumber == (static_cast<const pmTask*>(pCriterion))->GetSequenceNumber())
                 return true;
         
             break;

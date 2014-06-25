@@ -92,7 +92,7 @@ private:
     SIGNAL_WAIT_IMPLEMENTATION_CLASS mSignalWait;
 };
     
-bool timeOutClearMatchFunc(const timed::timedEvent& pEvent, void* pCriterion);
+bool timeOutClearMatchFunc(const timed::timedEvent& pEvent, const void* pCriterion);
     
 } // end namespace pm
 

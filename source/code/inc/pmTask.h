@@ -132,7 +132,7 @@ class pmTask : public pmBase
         const std::vector<const pmProcessingElement*>& GetStealListForDevice(const pmProcessingElement* pDevice);
     #endif
     
-        ulong GetSequenceNumber();
+        ulong GetSequenceNumber() const;
         void SetSequenceNumber(ulong pSequenceNumber);
     
         void FlushMemoryOwnerships();
