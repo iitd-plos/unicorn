@@ -163,6 +163,17 @@ namespace pm
             pmNonCopyable(const pmNonCopyable&) = delete;
             pmNonCopyable& operator=(const pmNonCopyable&) = delete;
     };
+    
+    struct naturalSorter : std::binary_function<const std::string, const std::string, bool>
+    {
+        std::string GetNextBlock(const std::string& pStr, size_t& pIndex) const;
+        bool operator() (const std::string& pStr1, const std::string& pStr2) const;
+    };
+
+    struct stubSorter : std::binary_function<const pmExecutionStub*, const pmExecutionStub*, bool>
+    {
+        bool operator() (const pmExecutionStub* pStub1, const pmExecutionStub* pStub2) const;
+    };
 
     /* Comparison operators for pmSubscriptionInfo */
     bool operator==(const pmSubscriptionInfo& pSubscription1, const pmSubscriptionInfo& pSubscription2);

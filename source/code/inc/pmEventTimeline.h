@@ -38,12 +38,6 @@ namespace pm
     
 class pmEventTimeline : public pmBase
 {
-    struct naturalSorter : std::binary_function<const std::string, const std::string, bool>
-    {
-        std::string GetNextBlock(const std::string& pStr, size_t& pIndex) const;
-        bool operator() (const std::string& pStr1, const std::string& pStr2) const;
-    };
-
 public:
     pmEventTimeline(const std::string& pName);
     ~pmEventTimeline();

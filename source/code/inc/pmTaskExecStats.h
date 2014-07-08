@@ -88,7 +88,7 @@ private:
         ulong mMemTransferEvents;
     #endif
 
-    std::map<pmExecutionStub*, stubStats> mStats;
+    std::map<pmExecutionStub*, stubStats, stubSorter> mStats;
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 

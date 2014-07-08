@@ -1435,11 +1435,31 @@ const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget(con
     std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(pTask) != NULL) ? (((pmLocalTask*)pTask)->GetAssignedDevices()) : (((pmRemoteTask*)pTask)->GetAssignedDevices());
 
     std::vector<const pmProcessingElement*> lLocalDevices;
-    filtered_for_each(lDevices, [&] (const pmProcessingElement* pDevice) {return (pDevice->GetMachine() == PM_LOCAL_MACHINE && pStealingDevice != pDevice);}, [&] (const pmProcessingElement* pDevice)
-    {
-        lLocalDevices.emplace_back(pDevice);
-    });
 
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    std::vector<std::vector<const pmProcessingElement*>> lDeviceGroups;
+    std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>*> lQueryMap;
+    ulong lUnsplittedDevices = 0;
+
+    pTask->GetSubtaskSplitter().MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
+
+    if(!lDeviceGroups.empty())
+    {
+        filtered_for_each(lDeviceGroups, [&] (const std::vector<const pmProcessingElement*>& pVector) {return (pVector[0]->GetMachine() == PM_LOCAL_MACHINE && pStealingDevice != pVector[0]);},
+        [&] (const std::vector<const pmProcessingElement*>& pVector)
+        {
+            lLocalDevices.emplace_back(pVector[0]);
+        });
+    }
+    else
+#endif
+    {
+        filtered_for_each(lDevices, [&] (const pmProcessingElement* pDevice) {return (pDevice->GetMachine() == PM_LOCAL_MACHINE && pStealingDevice != pDevice);}, [&] (const pmProcessingElement* pDevice)
+        {
+            lLocalDevices.emplace_back(pDevice);
+        });
+    }
+        
     if(lLocalDevices.empty())
     {
         EXCEPTION_ASSERT(pStealingDevice->GetMachine() == PM_LOCAL_MACHINE);    // The stealer is the only device on the machine

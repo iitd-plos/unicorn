@@ -541,5 +541,74 @@ bool operator<(const pmSplitInfo& pInfo1, const pmSplitInfo& pInfo2)
 }
 #endif
 
+
+/* struct naturalSorter */
+std::string naturalSorter::GetNextBlock(const std::string& pStr, size_t& pIndex) const
+{
+    size_t lLength = pStr.length();
+    if(pIndex >= lLength)
+        return std::string();
+    
+    std::stringstream lBlock;
+    lBlock << pStr[pIndex];
+    
+    ++pIndex;
+    for(size_t i = pIndex; i < lLength; ++i, ++pIndex)
+    {
+        bool lDigit1 = std::isdigit(pStr[i]);
+        bool lDigit2 = std::isdigit(pStr[i - 1]);
+        
+        if(lDigit1 == lDigit2)
+            lBlock << pStr[i];
+        else
+            break;
+    }
+    
+    return lBlock.str();
+}
+
+bool naturalSorter::operator() (const std::string& pStr1, const std::string& pStr2) const
+{
+    size_t pIndex1 = 0;
+    size_t pIndex2 = 0;
+    size_t lLength1 = pStr1.length();
+    size_t lLength2 = pStr2.length();
+    
+    while(pIndex1 < lLength1 || pIndex2 < lLength2)
+    {
+        std::string lStr1 = GetNextBlock(pStr1, pIndex1);
+        std::string lStr2 = GetNextBlock(pStr2, pIndex2);
+        
+        bool lIsDigit1 = (!lStr1.empty() && std::isdigit(lStr1[0]));
+        bool lIsDigit2 = (!lStr2.empty() && std::isdigit(lStr2[0]));
+        
+        if(lIsDigit1 && lIsDigit2)
+        {
+            uint lNum1 = atoi(lStr1.c_str());
+            uint lNum2 = atoi(lStr2.c_str());
+            
+            if(lNum1 != lNum2)
+                return (lNum1 < lNum2);
+        }
+        else
+        {
+            int lResult = lStr1.compare(lStr2);
+            
+            if(lResult)
+                return (lResult < 0);
+        }
+    }
+    
+    return false;
+}
+
+
+/* struct stubSorter */
+bool stubSorter::operator() (const pmExecutionStub* pStub1, const pmExecutionStub* pStub2) const
+{
+    return (pStub1->GetProcessingElement()->GetGlobalDeviceIndex() < pStub2->GetProcessingElement()->GetGlobalDeviceIndex());
+}
+
+
 }   // end namespace pm
 

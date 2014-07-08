@@ -56,7 +56,7 @@ pmTaskExecStats::~pmTaskExecStats()
     lStream << "Memory Transfers - Received = " << mMemReceived << " bytes; Receive Events = " << mMemReceiveEvents << "; Sent = " << mMemTransferred << " bytes; Send Events = " << mMemTransferEvents << std::endl;
 #endif
     
-	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.begin(), lEndIter = mStats.end();
+	auto lIter = mStats.begin(), lEndIter = mStats.end();
     for(; lIter != lEndIter; ++lIter)
     {
         const pmProcessingElement* lDevice = lIter->first->GetProcessingElement();
@@ -85,7 +85,7 @@ double pmTaskExecStats::GetStubExecutionRate(pmExecutionStub* pStub)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-	std::map<pmExecutionStub*, stubStats>::iterator lIter = mStats.find(pStub);
+	auto lIter = mStats.find(pStub);
 	if(lIter == mStats.end())
 		return (double)0;
 
