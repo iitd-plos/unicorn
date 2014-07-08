@@ -107,8 +107,8 @@ const unsigned int SCRATCH_CHUNK_SIZE_MULTIPLIER_PER_GB = (32 * 1024 * 1024); //
 const unsigned int MIN_UNALLOCATED_CUDA_MEM_SIZE = (4 * 1024 * 1024);  // in bytes
 #endif
 
-const double STEAL_WAIT_FACTOR = 1.2; // If local stub's exec rate is zero, do not allow steal till it has executed the subtask for 20% more time than requestor
 const double MA_WAIT_FACTOR = 1.2;  // If local stub's exec rate is zero, do not allow multi-assign till it has executed the subtask for 20% more time than requestor
+const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for steal/multi-assign
 
 #define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
 
@@ -130,6 +130,10 @@ const double MA_WAIT_FACTOR = 1.2;  // If local stub's exec rate is zero, do not
 
 #define SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
 #define SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+
+//#define PRE_DETERMINE_MAX_COLLECTIVELY_EXECUTABLE_CUDA_SUBTASKS
+//#define BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
+#define PROACTIVE_STEAL_REQUESTS
 
 #define PROPORTIONAL_SCHEDULING_CONF_FILE "propSchedConf.txt"
 

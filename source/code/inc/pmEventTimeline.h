@@ -26,6 +26,7 @@
 #include "pmResourceLock.h"
 
 #include <map>
+#include <sstream>
 
 #ifdef DUMP_EVENT_TIMELINE
 
@@ -37,18 +38,26 @@ namespace pm
     
 class pmEventTimeline : public pmBase
 {
+    struct naturalSorter : std::binary_function<const std::string, const std::string, bool>
+    {
+        std::string GetNextBlock(const std::string& pStr, size_t& pIndex) const;
+        bool operator() (const std::string& pStr1, const std::string& pStr2) const;
+    };
+
 public:
     pmEventTimeline(const std::string& pName);
     ~pmEventTimeline();
 
     void RecordEvent(pmTask* pTask, const std::string& pEventName, bool pStart);
     void RenameEvent(pmTask* pTask, const std::string& pEventName, const std::string& pNewName);
-    
+    void DropEvent(pmTask* pTask, const std::string& pEventName);
+    void StopEventIfRequired(pmTask* pTask, const std::string& pEventName);
+
 private:
     std::string mName;
     uint mHostId;
     double mZeroTime;
-    std::map<std::string, std::pair<double, double> > mEventMap;   // Event name versus start and end time
+    std::map<std::string, std::pair<double, double>, naturalSorter> mEventMap;   // Event name versus start and end time
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
     

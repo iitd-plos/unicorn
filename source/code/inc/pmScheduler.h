@@ -514,7 +514,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 
     #ifdef ENABLE_TWO_LEVEL_STEALING
 		const pmMachine* RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign);
-        const pmProcessingElement* RandomlySelectSecondLevelStealTarget();
+        const pmProcessingElement* RandomlySelectSecondLevelStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask);
     #else
 		const pmProcessingElement* RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign);
     #endif

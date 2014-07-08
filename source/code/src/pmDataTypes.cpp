@@ -182,7 +182,7 @@ pmSubtaskRangeExecutionTimelineAutoPtr::pmSubtaskRangeExecutionTimelineAutoPtr(p
     , mRangeCancelledOrException(true)
     , mSubtasksInitialized(0)
 {}
-    
+
 pmSubtaskRangeExecutionTimelineAutoPtr::~pmSubtaskRangeExecutionTimelineAutoPtr()
 {
     if(mRangeCancelledOrException)
@@ -190,18 +190,20 @@ pmSubtaskRangeExecutionTimelineAutoPtr::~pmSubtaskRangeExecutionTimelineAutoPtr(
         for(ulong i = 0; i < mSubtasksInitialized; ++i)
         {
             mEventTimeline->RenameEvent(mTask, GetEventName(mStartSubtask + i, mTask), GetCancelledEventName(mStartSubtask + i, mTask));
-            mEventTimeline->RecordEvent(mTask, GetCancelledEventName(mStartSubtask + i, mTask), false);
+            mEventTimeline->StopEventIfRequired(mTask, GetCancelledEventName(mStartSubtask + i, mTask));
         }
-    }
-    else
-    {
-        for(ulong i = 0; i < mSubtasksInitialized; ++i)
-            mEventTimeline->RecordEvent(mTask, GetEventName(mStartSubtask + i, mTask), false);
     }
 }
     
 void pmSubtaskRangeExecutionTimelineAutoPtr::ResetEndSubtask(ulong pEndSubtask)
 {
+    if(mStartSubtask + mSubtasksInitialized > pEndSubtask + 1)
+    {
+        for(ulong i = pEndSubtask + 1; i < mStartSubtask + mSubtasksInitialized; ++i)
+            mEventTimeline->DropEvent(mTask, GetEventName(i, mTask));
+    }
+
+    mSubtasksInitialized -= std::max<long>(0, mStartSubtask + mSubtasksInitialized - 1 - pEndSubtask);
     mEndSubtask = pEndSubtask;
 }
     
@@ -209,6 +211,11 @@ void pmSubtaskRangeExecutionTimelineAutoPtr::InitializeNextSubtask()
 {
     mEventTimeline->RecordEvent(mTask, GetEventName(mStartSubtask + mSubtasksInitialized, mTask), true);
     ++mSubtasksInitialized;
+}
+
+void pmSubtaskRangeExecutionTimelineAutoPtr::FinishSubtask(ulong pSubtaskId)
+{
+    mEventTimeline->RecordEvent(mTask, GetEventName(pSubtaskId, mTask), false);
 }
 
 void pmSubtaskRangeExecutionTimelineAutoPtr::SetGracefulCompletion()

@@ -462,6 +462,8 @@ namespace pm
             void InitializeNextSubtask();
             void SetGracefulCompletion();
         
+            void FinishSubtask(ulong pSubtaskId);
+        
             static std::string GetEventName(ulong pSubtaskId, pmTask* pTask);
             static std::string GetCancelledEventName(ulong pSubtaskId, pmTask* pTask);
 
@@ -925,6 +927,77 @@ namespace pm
 
             G* mGuard;
             T** mPtr;
+    };
+    
+    template<typename functor>
+    class scope_exit
+    {
+        public:
+            scope_exit(functor& pFunctor)
+            : mFunctor(pFunctor)
+            {}
+            
+            ~scope_exit()
+            {
+                mFunctor();
+            }
+            
+        private:
+            functor& mFunctor;
+    };
+    
+    template<typename G, typename T>
+    class guarded_swapper
+    {
+        public:
+            guarded_swapper(G* pGuard, T* pPtr, T pNewValue, T pOldValue)
+            : mGuard(pGuard)
+            , mPtr(pPtr)
+            , mOldValue(pOldValue)
+            {
+                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+
+                *mPtr = pNewValue;
+            }
+        
+            ~guarded_swapper()
+            {
+                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+                
+                *mPtr = mOldValue;
+            }
+        
+        private:
+            G* mGuard;
+            T* mPtr;
+            T mOldValue;
+    };
+
+    template<typename G, typename functor1, typename functor2>
+    class guarded_scope_functors
+    {
+        public:
+            guarded_scope_functors(G* pGuard, const functor1& pFunctor1, const functor2& pFunctor2)
+            : mGuard(pGuard)
+            , mFunctor1(pFunctor1)
+            , mFunctor2(pFunctor2)
+            {
+                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+
+                mFunctor1();
+            }
+        
+            ~guarded_scope_functors()
+            {
+                FINALIZE_RESOURCE_PTR(dGuard, G, mGuard, Lock(), Unlock());
+                
+                mFunctor2();
+            }
+        
+        private:
+            G* mGuard;
+            const functor1& mFunctor1;
+            const functor2& mFunctor2;
     };
 
 	class selective_finalize_base

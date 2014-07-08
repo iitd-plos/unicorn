@@ -51,7 +51,9 @@ class pmSafePQ : public pmBase
         pmStatus GetTopItem(std::shared_ptr<T>& pItem);
 
         void MarkProcessingFinished();
+    
         void UnblockSecondaryOperations();
+        void BlockSecondaryOperations();
 
         void WaitForCurrentItem();
         void WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, void* pMatchCriterion);

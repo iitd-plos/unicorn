@@ -101,6 +101,16 @@ void pmSafePQ<T, P>::UnblockSecondaryOperations()
 }
 
 template<typename T, typename P>
+void pmSafePQ<T, P>::BlockSecondaryOperations()
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    EXCEPTION_ASSERT(!mSecondaryOperationsBlocked);
+    
+    mSecondaryOperationsBlocked = true;
+}
+
+template<typename T, typename P>
 bool pmSafePQ<T, P>::IsHighPriorityElementPresent(P pPriority)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());

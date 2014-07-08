@@ -1281,10 +1281,11 @@ void pmScheduler::ServeStealRequest(const pmProcessingElement* pStealingDevice, 
 #ifdef ENABLE_TWO_LEVEL_STEALING
     EXCEPTION_ASSERT(!pTargetDevice);
 
-    pTargetDevice = RandomlySelectSecondLevelStealTarget();
+    pTargetDevice = RandomlySelectSecondLevelStealTarget(pStealingDevice, pTask);
 #endif
 
-	pTargetDevice->GetLocalExecutionStub()->StealSubtasks(pTask, pStealingDevice, pExecutionRate, pShouldMultiAssign);
+    if(pTargetDevice)
+        pTargetDevice->GetLocalExecutionStub()->StealSubtasks(pTask, pStealingDevice, pExecutionRate, pShouldMultiAssign);
 }
 
 void pmScheduler::SendStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange)
@@ -1412,7 +1413,11 @@ void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const 
 
 	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, std::move(pOwnershipVector), std::move(pAddressSpaceIndexVector), pTotalSplitCount);
 
+#ifdef PROACTIVE_STEAL_REQUESTS
+    if(pTotalSplitCount != 0 && pRange.task->GetSchedulingModel() == PULL)  // For splitted subtasks, continue with the old approach
+#else
 	if(pRange.task->GetSchedulingModel() == PULL)
+#endif
 	{
 		pmStubManager* lManager = pmStubManager::GetStubManager();
 		pmExecutionStub* lStub = lManager->GetStub(pDevice);
@@ -1425,14 +1430,28 @@ void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const 
 }
 
 #ifdef ENABLE_TWO_LEVEL_STEALING
-const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget()
+const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask)
 {
-    pmStubManager* lStubManager = pmStubManager::GetStubManager();
+    std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(pTask) != NULL) ? (((pmLocalTask*)pTask)->GetAssignedDevices()) : (((pmRemoteTask*)pTask)->GetAssignedDevices());
 
-    size_t lStubCount = lStubManager->GetStubCount();
+    std::vector<const pmProcessingElement*> lLocalDevices;
+    filtered_for_each(lDevices, [&] (const pmProcessingElement* pDevice) {return (pDevice->GetMachine() == PM_LOCAL_MACHINE && pStealingDevice != pDevice);}, [&] (const pmProcessingElement* pDevice)
+    {
+        lLocalDevices.emplace_back(pDevice);
+    });
+
+    if(lLocalDevices.empty())
+    {
+        EXCEPTION_ASSERT(pStealingDevice->GetMachine() == PM_LOCAL_MACHINE);    // The stealer is the only device on the machine
+
+        pmScheduler::GetScheduler()->StealFailedEvent(pStealingDevice, pStealingDevice, pTask);
+        
+        return NULL;
+    }
+
     std::srand((unsigned int)time(NULL));
 
-    return lStubManager->GetStub(std::rand() % lStubCount)->GetProcessingElement();
+    return lLocalDevices[std::rand() % lLocalDevices.size()];;
 }
 #endif
     

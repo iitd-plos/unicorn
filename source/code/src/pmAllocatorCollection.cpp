@@ -133,8 +133,10 @@ void* pmAllocatorCollection<__allocator_traits>::AllocateNoThrow(size_t pSize)
 template<typename __allocator_traits>
 inline void pmAllocatorCollection<__allocator_traits>::Deallocate(void* pPtr)
 {
-	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    EXCEPTION_ASSERT(pPtr);
 
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
     typename decltype(mAllocatedPtrs)::iterator lIter = mAllocatedPtrs.find(pPtr);
     EXCEPTION_ASSERT(lIter != mAllocatedPtrs.end());
 

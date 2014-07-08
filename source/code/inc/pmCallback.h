@@ -33,6 +33,7 @@ namespace pm
 class pmTask;
 class pmProcessingElement;
 class pmExecutionStub;
+struct pmCudaMemcpyCommand;
 
 class pmCallback : public pmBase
 {
@@ -63,7 +64,11 @@ class pmSubtaskCB : public pmCallback
 		pmSubtaskCB(pmSubtaskCallback_CPU pCallback_CPU, pmSubtaskCallback_GPU_CUDA pCallback_GPU_CUDA, pmSubtaskCallback_GPU_Custom pCallback_GPU_Custom);
     #endif
 
-		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, void* pStreamPtr = NULL) const;
+    #ifdef SUPPORT_CUDA
+		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, std::vector<pmCudaMemcpyCommand>* pHostToDeviceCommands = NULL, std::vector<pmCudaMemcpyCommand>* pDeviceToHostCommands = NULL, void* pStreamPtr = NULL) const;
+    #else
+		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo) const;
+    #endif
 
 		bool IsCallbackDefinedForDevice(pmDeviceType pDeviceType) const;
         bool HasCustomGpuCallback() const;

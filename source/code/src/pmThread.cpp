@@ -165,7 +165,13 @@ void pmThread<T, P>::UnblockSecondaryCommands()
 {
     this->mSafePQ.UnblockSecondaryOperations();
 }
-    
+
+template<typename T, typename P>
+void pmThread<T, P>::BlockSecondaryCommands()
+{
+    this->mSafePQ.BlockSecondaryOperations();
+}
+
 template<typename T, typename P>
 void pmPThread<T, P>::SetProcessorAffinity(int pProcessorId)
 {

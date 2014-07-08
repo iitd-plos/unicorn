@@ -133,7 +133,7 @@ pmDispatcherCUDA::~pmDispatcherCUDA()
 	}
 }
 
-pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, pmCudaStreamAutoPtr& pStreamPtr)
+pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmSubtaskInfo& pSubtaskInfo, pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, pmCudaStreamAutoPtr& pStreamPtr, const std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, const std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands)
 {
     void* lDeviceInfoCudaPtr = pStub->GetDeviceInfoCudaPtr();
 
@@ -193,7 +193,7 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const 
     DEBUG_EXCEPTION_ASSERT(lSubtaskSecondaryBuffers.statusCudaPtr);
     pmStatus* lStatusCudaPtr = (pmStatus*)lSubtaskSecondaryBuffers.statusCudaPtr;
 
-	return pmCudaInterface::InvokeKernel(pStub, pTaskInfo, pTaskInfoCuda, pStub->GetProcessingElement()->GetDeviceInfo(), lDeviceInfoCudaPtr, lSubtaskInfoCuda, pCudaLaunchConf, pKernelPtr, pCustomKernelPtr, ((pmStubCUDA*)pStub)->mHostToDeviceCommands, ((pmStubCUDA*)pStub)->mDeviceToHostCommands, lStatusCudaPtr, pStreamPtr);
+	return pmCudaInterface::InvokeKernel(pStub, pTaskInfo, pTaskInfoCuda, pStub->GetProcessingElement()->GetDeviceInfo(), lDeviceInfoCudaPtr, lSubtaskInfoCuda, pCudaLaunchConf, pKernelPtr, pCustomKernelPtr, pHostToDeviceCommands, pDeviceToHostCommands, lStatusCudaPtr, pStreamPtr);
 }
     
 void* pmDispatcherCUDA::GetRuntimeHandle()
