@@ -434,6 +434,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
 	memcpy(lRawInputPtr, (lInplace ? gParallelOutput : gSampleInput), lMemSize);
 
+    DistributeMemory(lInputMemHandle, BLOCK_DIST_1D_ROW, ROWS_PER_FFT_SUBTASK, (unsigned int)lElemsY, (unsigned int)lElemsX, sizeof(FFT_DATA_TYPE), true);
+    
 	fftTaskConf lTaskConf;
     lTaskConf.elemsX = lElemsX;
     lTaskConf.elemsY = lElemsY;

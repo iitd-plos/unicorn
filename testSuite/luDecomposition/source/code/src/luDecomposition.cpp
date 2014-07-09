@@ -429,6 +429,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
 	memcpy(lRawMemPtr, gParallelOutput, lMemSize);
     
+    DistributeMemory(lMemHandle, BLOCK_DIST_2D_RANDOM, BLOCK_DIM, (unsigned int)lMatrixDim, (unsigned int)lMatrixDim, sizeof(MATRIX_DATA_TYPE), false);
+
 	double lStartTime = getCurrentTimeInSecs();
 
     size_t lBlocksPerDim = (lMatrixDim / BLOCK_DIM);
