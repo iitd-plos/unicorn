@@ -35,6 +35,10 @@
 #include "pmReducer.h"
 #include "pmRedistributor.h"
 
+#ifdef USE_STEAL_AGENT_PER_NODE
+    #include "pmStealAgent.h"
+#endif
+
 #include <memory>
 #include <string>
 #include <sstream>
@@ -149,8 +153,21 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange)
         }
     }
 #endif
-    
-	SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pRange, false, 0)), pRange.task->GetPriority());
+
+	AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pRange, false, 0)));
+}
+
+void pmExecutionStub::AddSubtaskRangeToExecutionQueue(const std::shared_ptr<stubEvent>& pSharedPtr)
+{
+    const subtaskExecEvent& lExecEvent = static_cast<const subtaskExecEvent&>(*pSharedPtr.get());
+    const pmSubtaskRange& lRange = lExecEvent.range;
+
+	SwitchThread(pSharedPtr, lRange.task->GetPriority());
+
+#ifdef USE_STEAL_AGENT_PER_NODE
+    if(lRange.task->GetSchedulingModel() == scheduler::PULL)
+        lRange.task->GetStealAgent()->RegisterPendingSubtasks(this, lRange.endSubtask - lRange.startSubtask + 1);
+#endif
 }
 
 void pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2)
@@ -777,6 +794,10 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
 
             lStealSuccess = true;
             pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
+
+        #ifdef USE_STEAL_AGENT_PER_NODE
+            pTask->GetStealAgent()->DeregisterExecutingSubtasks(this, lStealCount);
+        #endif
         }
     }
     else if(pTask->IsMultiAssignEnabled() && pShouldMultiAssign && mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned
@@ -912,6 +933,11 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 		case SUBTASK_EXEC:	/* Comes from scheduler thread */
 		{
             subtaskExecEvent& lEvent = static_cast<subtaskExecEvent&>(pEvent);
+
+        #ifdef USE_STEAL_AGENT_PER_NODE
+            if(lEvent.range.task->GetSchedulingModel() == scheduler::PULL)
+                lEvent.range.task->GetStealAgent()->DeregisterPendingSubtasks(this, lEvent.range.endSubtask - lEvent.range.startSubtask + 1);
+        #endif
 
         #ifdef SUPPORT_SPLIT_SUBTASKS
             if(CheckSplittedExecution(lEvent))
@@ -1146,6 +1172,11 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
 
     DEBUG_EXCEPTION_ASSERT(lCurrentRange.startSubtask <= lCurrentRange.endSubtask);
 
+#ifdef USE_STEAL_AGENT_PER_NODE
+    if(lRange.task->GetSchedulingModel() == scheduler::PULL)
+        lRange.task->GetStealAgent()->SetStubMultiAssignment(this, true);
+#endif
+
     /* Premature Termination occurs when a subtask range gets cancelled
      * Reassignment means a secondary allottee has already executed and negotiated the subtask range
      * Force Ack means entire range has not got negotiated but only what is beyond the currently
@@ -1170,7 +1201,7 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
 #endif
 
     DEBUG_EXCEPTION_ASSERT(lCurrentRange.startSubtask <= lCurrentRange.endSubtask);
-
+    
     if(lReassigned) // A secondary allottee has finished and negotiated this subtask range and added a POST_HANDLE_EXEC_COMPLETION for the rest of the range
         return;
 
@@ -1206,6 +1237,14 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
         if(lCurrentRange.endSubtask == lRange.endSubtask)
             HandleRangeExecutionCompletion(lRange, lExecStatus);
     }
+
+#ifdef USE_STEAL_AGENT_PER_NODE
+    if(lRange.task->GetSchedulingModel() == scheduler::PULL)
+    {
+        lRange.task->GetStealAgent()->SetStubMultiAssignment(this, false);
+        lRange.task->GetStealAgent()->ClearExecutingSubtasks(this);
+    }
+#endif
 }
 
 void pmExecutionStub::ClearSecondaryAllotteeMap(pmSubtaskRange& pRange)
@@ -1453,13 +1492,11 @@ bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)
         }
         
         if(lSubtaskId < lRange.endSubtask)
-        {
-            SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pmSubtaskRange(pEvent.range.task, pEvent.range.originalAllottee, lSubtaskId + 1, pEvent.range.endSubtask), false, 0)), lRange.task->GetPriority());
-        }
+            AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pmSubtaskRange(pEvent.range.task, pEvent.range.originalAllottee, lSubtaskId + 1, pEvent.range.endSubtask), false, 0)));
     }
     else    // Push back current event in the queue as some other split subtask has been assigned
     {
-        SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pEvent.range, pEvent.rangeExecutedOnce, pEvent.lastExecutedSubtaskId)), lRange.task->GetPriority());
+        AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pEvent.range, pEvent.rangeExecutedOnce, pEvent.lastExecutedSubtaskId)));
     }
     
     ExecutePendingSplit(std::move(lSplitSubtaskAutoPtr), true);
@@ -1471,6 +1508,11 @@ void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSpl
 {
     if(!pSplitSubtaskAutoPtr.get())
         return;
+
+#ifdef USE_STEAL_AGENT_PER_NODE
+    if(pSplitSubtaskAutoPtr->task->GetSchedulingModel() == scheduler::PULL)
+        pSplitSubtaskAutoPtr->task->GetStealAgent()->SetStubMultiAssignment(this, true);
+#endif
 
 #ifdef DUMP_EVENT_TIMELINE
     pmSplitSubtaskExecutionTimelineAutoPtr lExecTimelineAutoPtr(pSplitSubtaskAutoPtr->task, mEventTimelineAutoPtr.get(), pSplitSubtaskAutoPtr->subtaskId, pSplitSubtaskAutoPtr->splitId, pSplitSubtaskAutoPtr->splitCount);
@@ -1498,6 +1540,11 @@ void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSpl
         std::cout << "[Host " << pmGetHostId() << "]: Executed split subtask " << pSplitSubtaskAutoPtr->subtaskId << " (Split " << pSplitSubtaskAutoPtr->splitId << " of " << pSplitSubtaskAutoPtr->splitCount << ")" << std::endl;
     #endif
     }
+
+#ifdef USE_STEAL_AGENT_PER_NODE
+    if(pSplitSubtaskAutoPtr->task->GetSchedulingModel() == scheduler::PULL)
+        pSplitSubtaskAutoPtr->task->GetStealAgent()->SetStubMultiAssignment(this, false);
+#endif
 
     pSplitSubtaskAutoPtr->task->GetSubtaskSplitter().FinishedSplitExecution(pSplitSubtaskAutoPtr->subtaskId, pSplitSubtaskAutoPtr->splitId, this, lPrematureTermination, lExecTime);
 }
@@ -1766,8 +1813,17 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
             lWaitForNextSubtaskCompletionLambda(pCommonTimePerSubtask);
     };
     
-    bool lRangePartiallyAddedBack = false;
+    #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
+    #ifdef BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
+    #else
+        #define CONTINUE_PIPELINE_ACROSS_RANGES
+    #endif
+    #endif
     
+#ifdef CONTINUE_PIPELINE_ACROSS_RANGES
+    bool lRangePartiallyAddedBack = false;
+#endif
+
     try
     {
         TIMER_IMPLEMENTATION_CLASS lCommonTimer;
@@ -1789,9 +1845,17 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 
         if(lEndSubtask != lParentRange.endSubtask)
         {
+        #ifdef CONTINUE_PIPELINE_ACROSS_RANGES
             lRangePartiallyAddedBack = true;
-            SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pEvent.range, true, lEndSubtask)), lParentRange.task->GetPriority());
+        #endif
+
+            AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pEvent.range, true, lEndSubtask)));
         }
+        
+    #ifdef USE_STEAL_AGENT_PER_NODE
+        if(lParentRange.task->GetSchedulingModel() == scheduler::PULL)
+            lParentRange.task->GetStealAgent()->RegisterExecutingSubtasks(this, lEndSubtask - lStartSubtask + 1);
+    #endif
 
         UnblockSecondaryCommands(); // Allow external operations (steal & range negotiation) on priority queue
 
@@ -1799,11 +1863,11 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 
         ulong lSubtaskCount = (lEndSubtask - lStartSubtask + 1);
         ulong lCommonTimePerSubtask = (lCommonTimer.GetElapsedTimeInSecs() / lSubtaskCount);
-        
+
         for(ulong lSubtaskId = lStartSubtask; lSubtaskId <= lEndSubtask; ++lSubtaskId)
         {
         #ifdef PROACTIVE_STEAL_REQUESTS
-            if(lParentRange.task->GetSchedulingModel() == scheduler::PULL && lSubtaskId == lParentRange.endSubtask)
+            if(lParentRange.task->GetSchedulingModel() == scheduler::PULL && lSubtaskId == lEndSubtask)
                 pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), lParentRange.task, lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this));
         #endif
 
@@ -1830,7 +1894,12 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 mCurrentSubtaskRangeStats->currentSubtaskInPostDataFetchStage = false;
             }
 
-            TIMER_IMPLEMENTATION_CLASS& lTimer = mCurrentSubtaskTimersMap[lSubtaskId];
+        #ifdef USE_STEAL_AGENT_PER_NODE
+            if(lParentRange.task->GetSchedulingModel() == scheduler::PULL)
+                lParentRange.task->GetStealAgent()->DeregisterExecutingSubtasks(this, 1);
+        #endif
+
+            TIMER_IMPLEMENTATION_CLASS lTimer;
             lTimer.Start();
             
             TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &lSubtaskId);
@@ -1855,38 +1924,40 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 lPrefetchSubtaskIdPtr = NULL;
             }
         #endif
+            
+            bool lOOMException = false;
 
         #ifdef BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
             try
             {
                 Execute(pCurrentRange.task, lSubtaskId, pIsMultiAssign, lPrefetchSubtaskIdPtr, NULL);
-                mCurrentSubtaskQueue.push(lSubtaskId);
             }
             catch(pmOutOfMemoryException&)
             {
+                lOOMException = true;
+
                 EXCEPTION_ASSERT(lSubtaskId != lStartSubtask);  // Not enough memory to run even one subtask
                     
                 FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
                 
-                pmSubtaskRange lSubtaskRange(pEvent.range);
+                pmSubtaskRange lSubtaskRange(pEvent.range.task, pEvent.range.originalAllottee, pEvent.range.startSubtask, lEndSubtask);
                 
                 if(pEvent.range.task->GetSchedulingModel() == scheduler::PULL && lEndSubtask != mCurrentSubtaskRangeStats->endSubtaskId)  // some subtasks have been stolen and forceAck has been set on the current range
                 {
-                    lSubtaskRange.startSubtask = lSubtaskId - 1;
                     lSubtaskRange.endSubtask = mCurrentSubtaskRangeStats->endSubtaskId;
                     
-                    EXCEPTION_ASSERT(lSubtaskRange.startSubtask >= lSubtaskRange.endSubtask);
+                    EXCEPTION_ASSERT(lSubtaskRange.startSubtask <= lSubtaskRange.endSubtask);
                 }
 
-                lCleanupEndSubtask = lEndSubtask = lSubtaskId - 1;
-                mCurrentSubtaskRangeStats->endSubtaskId = lEndSubtask;
+                mCurrentSubtaskRangeStats->endSubtaskId = lCleanupEndSubtask = lEndSubtask = lSubtaskId - 1;
+                mCurrentSubtaskRangeStats->forceAckFlag = false;    // A force ack is not required as some subtasks have not got executed
                 
             #ifdef DUMP_EVENT_TIMELINE
                 pRangeExecTimelineAutoPtr.ResetEndSubtask(lEndSubtask);
             #endif
 
                 // Add the remaining subtasks to the stub queue and terminate the current loop
-                SwitchThread(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, lSubtaskRange, true, lEndSubtask)), lParentRange.task->GetPriority());
+                AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, lSubtaskRange, true, lEndSubtask)));
             }
         #else
             while(1)
@@ -1894,11 +1965,11 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 try
                 {
                     Execute(pCurrentRange.task, lSubtaskId, pIsMultiAssign, lPrefetchSubtaskIdPtr, NULL);
-                    mCurrentSubtaskQueue.push(lSubtaskId);
                     break;
                 }
                 catch(pmOutOfMemoryException&)
                 {
+                    EXCEPTION_ASSERT(!mCurrentSubtaskQueue.empty());    // Not enough memory to run even one subtask
                     lWaitForNextSubtaskCompletionLambda(lCommonTimePerSubtask);
                 }
             }
@@ -1907,12 +1978,16 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
             TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);
 
             lTimer.Pause();
+            
+            if(!lOOMException)
+            {
+                mCurrentSubtaskTimersMap[lSubtaskId] = lTimer;
+                mCurrentSubtaskQueue.push(lSubtaskId);
+            }
         }
         
         // Continue the pipeline by pulling off next subtask range from the stub queue
-    #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
-    #ifdef BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
-    #else
+    #ifdef CONTINUE_PIPELINE_ACROSS_RANGES
         if(!lRangePartiallyAddedBack)
         {
             BlockSecondaryCommands();
@@ -1933,7 +2008,6 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 UnblockSecondaryCommands();
             }
         }
-    #endif
     #endif
 
         lWaitForAllSubtasksCompletionLambda(lCommonTimePerSubtask);

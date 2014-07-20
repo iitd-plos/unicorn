@@ -37,6 +37,10 @@
 #include "pmHeavyOperations.h"
 #include "pmUtility.h"
 
+#ifdef USE_STEAL_AGENT_PER_NODE
+    #include "pmStealAgent.h"
+#endif
+
 namespace pm
 {
 
@@ -1215,6 +1219,13 @@ const pmProcessingElement* pmScheduler::RandomlySelectStealTarget(const pmProces
 
 	lTaskExecStats.RecordStealAttempt(lStub);
 
+#ifdef ENABLE_TWO_LEVEL_STEALING
+#ifdef USE_STEAL_AGENT_PER_NODE
+    if(pTask->GetStealAgent()->HasAnotherStubToStealFrom(pStealingDevice->GetLocalExecutionStub(), pShouldMultiAssign))
+        return PM_LOCAL_MACHINE;
+#endif
+#endif
+
     return lStealList[lAttempts % lTargets];
 }
 
@@ -1227,7 +1238,7 @@ void pmScheduler::StealSubtasks(const pmProcessingElement* pStealingDevice, pmTa
 
     if(lTargetMachine)
     {
-        STEAL_REQUEST_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*(lTargetDevice->GetMachine())), pStealingDevice->GetGlobalDeviceIndex(), std::numeric_limits<uint>::max(), pExecutionRate);
+        STEAL_REQUEST_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*lTargetMachine), pStealingDevice->GetGlobalDeviceIndex(), std::numeric_limits<uint>::max(), pExecutionRate);
 
 		if(lTargetMachine == PM_LOCAL_MACHINE)
 		{
@@ -1281,7 +1292,7 @@ void pmScheduler::ServeStealRequest(const pmProcessingElement* pStealingDevice, 
 #ifdef ENABLE_TWO_LEVEL_STEALING
     EXCEPTION_ASSERT(!pTargetDevice);
 
-    pTargetDevice = RandomlySelectSecondLevelStealTarget(pStealingDevice, pTask);
+    pTargetDevice = RandomlySelectSecondLevelStealTarget(pStealingDevice, pTask, pShouldMultiAssign);
 #endif
 
     if(pTargetDevice)
@@ -1430,8 +1441,18 @@ void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const 
 }
 
 #ifdef ENABLE_TWO_LEVEL_STEALING
-const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask)
+const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool pShouldMultiAssign)
 {
+#ifdef USE_STEAL_AGENT_PER_NODE
+    pmExecutionStub* lStub = pTask->GetStealAgent()->GetStubWithMaxStealLikelihood(pShouldMultiAssign);
+    if(!lStub)
+    {
+        pmScheduler::GetScheduler()->StealFailedEvent(pStealingDevice, pStealingDevice, pTask);
+        return NULL;
+    }
+    
+    return lStub->GetProcessingElement();
+#else
     std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(pTask) != NULL) ? (((pmLocalTask*)pTask)->GetAssignedDevices()) : (((pmRemoteTask*)pTask)->GetAssignedDevices());
 
     std::vector<const pmProcessingElement*> lLocalDevices;
@@ -1471,7 +1492,8 @@ const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget(con
 
     std::srand((unsigned int)time(NULL));
 
-    return lLocalDevices[std::rand() % lLocalDevices.size()];;
+    return lLocalDevices[std::rand() % lLocalDevices.size()];
+#endif
 }
 #endif
     

@@ -37,6 +37,10 @@
 #include "pmExecutionStub.h"
 #include "pmUtility.h"
 
+#ifdef USE_STEAL_AGENT_PER_NODE
+#include "pmStealAgent.h"
+#endif
+
 #include <vector>
 #include <algorithm>
 #include <random>
@@ -94,6 +98,9 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
     , mPoolAllocatorMapLock __LOCK_NAME__("pmTask::mPoolAllocatorMapLock")
     , mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions(false)
     , mTaskMemVector(std::move(pTaskMemVector))
+#ifdef USE_STEAL_AGENT_PER_NODE
+    , mStealAgentPtr(((mSchedulingModel == scheduler::PULL) ? new pmStealAgent(this) : NULL))
+#endif
 	, mAssignedDeviceCount(pAssignedDeviceCount)
     , mLastReductionScratchBuffer(NULL)
 {
@@ -551,6 +558,13 @@ bool pmTask::IsRedistributable(const pmAddressSpace* pAddressSpace) const
     
     return true;
 }
+    
+#ifdef USE_STEAL_AGENT_PER_NODE
+pmStealAgent* pmTask::GetStealAgent()
+{
+    return mStealAgentPtr.get();
+}
+#endif
     
 #ifdef ENABLE_TASK_PROFILING
 pmTaskProfiler* pmTask::GetTaskProfiler()

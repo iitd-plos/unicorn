@@ -326,6 +326,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 	private:
         void CheckTermination();
+        void AddSubtaskRangeToExecutionQueue(const std::shared_ptr<execStub::stubEvent>& pSharedPtr);
 
         typedef struct currentSubtaskRangeStats
         {

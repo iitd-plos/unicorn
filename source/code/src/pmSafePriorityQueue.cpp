@@ -255,15 +255,17 @@ pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr
                     if(pMatchFunc(*lListIter->get(), pMatchCriterion))
                     {
                         pItem = *lListIter;
-                        lInternalList.erase(lListIter);
+                        lInternalList.erase(lListIter++);
 
                         if(lInternalList.empty())
                             mQueue.erase(lIter);
                         
                         return pmSuccess;
                     }
-                    
-                    ++lListIter;
+                    else
+                    {
+                        ++lListIter;
+                    }
                 }
             
                 return pmOk;
@@ -284,7 +286,7 @@ void pmSafePQ<T, P>::DeleteAndGetAllMatchingItems(P pPriority, matchFuncPtr pMat
         // Auto lock/unlock scope
         {
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
-        
+
             EXCEPTION_ASSERT(!pTemporarilyUnblockSecondaryOperations || mSecondaryOperationsBlocked);
 
             if(!mSecondaryOperationsBlocked || pTemporarilyUnblockSecondaryOperations)
@@ -301,13 +303,15 @@ void pmSafePQ<T, P>::DeleteAndGetAllMatchingItems(P pPriority, matchFuncPtr pMat
                     if(pMatchFunc(*lListIter->get(), pMatchCriterion))
                     {
                         pItems.emplace_back(std::move(*lListIter));
-                        lInternalList.erase(lListIter);
+                        lInternalList.erase(lListIter++);
 
                         if(lInternalList.empty())
                             mQueue.erase(lIter);
                     }
-                    
-                    ++lListIter;
+                    else
+                    {
+                        ++lListIter;
+                    }
                 }
             }
         }

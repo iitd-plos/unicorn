@@ -86,6 +86,7 @@ OBJECTS= $(OUTDIR)/pmAddressSpace.o \
 	$(OUTDIR)/pmMemChunk.o \
 	$(OUTDIR)/pmMemoryManager.o \
 	$(OUTDIR)/pmOpenCLManager.o \
+	$(OUTDIR)/pmStealAgent.o \
 	$(OUTDIR)/pmNetwork.o \
 	$(OUTDIR)/pmReducer.o \
 	$(OUTDIR)/pmRedistributor.o \

@@ -47,6 +47,10 @@ class pmCluster;
 class pmReducer;
 class pmRedistributor;
 
+#ifdef USE_STEAL_AGENT_PER_NODE
+    class pmStealAgent;
+#endif
+
 extern pmMachine* PM_LOCAL_MACHINE;
 extern pmCluster* PM_GLOBAL_CLUSTER;
 
@@ -168,7 +172,11 @@ class pmTask : public pmBase
         pmTaskProfiler* GetTaskProfiler();
     #endif
     
-	private:
+    #ifdef USE_STEAL_AGENT_PER_NODE
+        pmStealAgent* GetStealAgent();
+    #endif
+
+    private:
 		void BuildTaskInfo();
         void BuildPreSubscriptionSubtaskInfo();
     
@@ -178,7 +186,7 @@ class pmTask : public pmBase
         void Start();
     
         pmPoolAllocator& GetPoolAllocator(uint pAddressSpaceIndex, size_t pIndividualAllocationSize, size_t pMaxAllocations);
-
+    
 		/* Constant properties -- no updates, locking not required */
 		ulong mTaskId;
 		const pmCallbackUnit* mCallbackUnit;
@@ -242,6 +250,10 @@ class pmTask : public pmBase
         std::vector<pmAddressSpace*> mAddressSpaces;
         std::map<const pmAddressSpace*, size_t> mAddressSpaceTaskMemIndexMap;
 
+    #ifdef USE_STEAL_AGENT_PER_NODE
+        std::unique_ptr<pmStealAgent> mStealAgentPtr;
+    #endif
+    
     protected:
         void CreateReducerAndRedistributors();
         bool DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() const;
