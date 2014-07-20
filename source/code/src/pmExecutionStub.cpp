@@ -1997,6 +1997,8 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 
             if(lFound)
             {
+                lParentRange.task->GetTaskExecStats().RegisterPipelineContinuationAcrossRanges(this);
+                
                 guarded_swapper<RESOURCE_LOCK_IMPLEMENTATION_CLASS, currentSubtaskRangeStats*> lSwapper(&mCurrentSubtaskRangeLock, &mCurrentSubtaskRangeStats, NULL, mCurrentSubtaskRangeStats);
 
                 subtaskExecEvent& lExecEvent = static_cast<subtaskExecEvent&>(*lNextTaskEvent.get());

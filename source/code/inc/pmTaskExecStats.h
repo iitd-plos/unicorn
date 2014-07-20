@@ -49,6 +49,8 @@ public:
         uint successfulSteals;
         uint failedSteals;
         uint consecutiveFailedSteals;   // number of failed steals after the last successful one
+        
+        uint pipelineContinuationAcrossRanges;
 
         stubStats();
     } stubStats;
@@ -72,6 +74,9 @@ public:
     pmStatus RecordStealAttempt(pmExecutionStub* pStub);    
     void RecordSuccessfulStealAttempt(pmExecutionStub* pStub);
     void RecordFailedStealAttempt(pmExecutionStub* pStub);
+    
+    void RegisterPipelineContinuationAcrossRanges(pmExecutionStub* pStub);
+    uint GetPipelineContinuationAcrossRanges(pmExecutionStub* pStub);
     
 #ifdef ENABLE_MEM_PROFILING
     void RecordMemReceiveEvent(size_t pMemSize);

@@ -60,7 +60,7 @@ pmTaskExecStats::~pmTaskExecStats()
     for(; lIter != lEndIter; ++lIter)
     {
         const pmProcessingElement* lDevice = lIter->first->GetProcessingElement();
-        lStream << "Device " << lDevice->GetGlobalDeviceIndex() << " - Subtask execution rate = " << GetStubExecutionRate(lIter->first) << "; Steal attemps = " << GetStealAttempts(lIter->first) << "; Successful steals = " << GetSuccessfulStealAttempts(lIter->first) << "; Failed steals = " << GetFailedStealAttempts(lIter->first) << std::endl;
+        lStream << "Device " << lDevice->GetGlobalDeviceIndex() << " - Subtask execution rate = " << GetStubExecutionRate(lIter->first) << "; Steal attemps = " << GetStealAttempts(lIter->first) << "; Successful steals = " << GetSuccessfulStealAttempts(lIter->first) << "; Failed steals = " << GetFailedStealAttempts(lIter->first) << "; Pipelines across ranges = " << GetPipelineContinuationAcrossRanges(lIter->first) << std::endl;
     }
 
     pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str());
@@ -144,6 +144,20 @@ void pmTaskExecStats::RecordFailedStealAttempt(pmExecutionStub* pStub)
     ++(mStats[pStub].consecutiveFailedSteals);
     ++(mStats[pStub].failedSteals);
 }
+    
+void pmTaskExecStats::RegisterPipelineContinuationAcrossRanges(pmExecutionStub* pStub)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    ++(mStats[pStub].pipelineContinuationAcrossRanges);
+}
+    
+uint pmTaskExecStats::GetPipelineContinuationAcrossRanges(pmExecutionStub* pStub)
+{
+	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    return mStats[pStub].pipelineContinuationAcrossRanges;
+}
 
 #ifdef ENABLE_MEM_PROFILING
 void pmTaskExecStats::RecordMemReceiveEvent(size_t pMemSize)
@@ -171,6 +185,7 @@ pmTaskExecStats::stubStats::stubStats()
     , successfulSteals(0)
     , failedSteals(0)
     , consecutiveFailedSteals(0)
+    , pipelineContinuationAcrossRanges(0)
 {
 }
 
