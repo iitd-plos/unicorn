@@ -360,7 +360,7 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
         // splitted subtasks. For PUSH model, the entire subtask range is multi-assigned by the owner host.
         if(pRange.task->GetSchedulingModel() == scheduler::PULL)
         {
-            DEBUG_EXCEPTION_ASSERT(pRange.startSubtask == pRange.endSubtask);
+            EXCEPTION_ASSERT(pRange.startSubtask == pRange.endSubtask);
             
             FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
             
@@ -677,12 +677,17 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
 
             double lTotalExecutionTimeRequired = pAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
             double lLocalExecutionTimeForAllSubtasks = pAvailableSubtasks / pLocalExecutionRate;	// if all subtasks are executed locally, how much time it will take
-            double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired * SUBTASK_TRANSFER_OVERHEAD;
+            double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired * ((pRequestingDevice->GetMachine() != PM_LOCAL_MACHINE) ? SUBTASK_TRANSFER_OVERHEAD : 1.0);
             
             if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
             {
                 double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
                 lStealCount = (ulong)(lTimeDiff * pLocalExecutionRate);
+                
+                // Minimum unit of steal is a subtask. Since it can't be divided any further, so a perfect balance can't be achieved.
+                // Instead, check whether it is beneficial to assign one more subtask to the requesting device or not.
+                if(lStealCount < pAvailableSubtasks && (lStealCount + 1) / pRequestingDeviceExecutionRate < (pAvailableSubtasks - lStealCount) / pLocalExecutionRate)
+                    ++lStealCount;
             }
         }
     }
@@ -764,6 +769,10 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 
                 lStealSuccess = true;
                 pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
+
+            #ifdef USE_STEAL_AGENT_PER_NODE
+                pTask->GetStealAgent()->DeregisterPendingSubtasks(this, lStealCount);
+            #endif
             }
             else
             {
@@ -804,7 +813,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
             && !(pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() == GetType()))
     {
         pmExecutionStub* lSecondaryAllotteeMapStub = this;
-        
+
     #ifdef SUPPORT_SPLIT_SUBTASKS
         if(mCurrentSubtaskRangeStats->splitData.valid)
         {
@@ -1319,6 +1328,12 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
     }
 
     pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), 0);
+
+#ifdef PROACTIVE_STEAL_REQUESTS
+#else
+	if(pRange.task->GetSchedulingModel() == scheduler::PULL)
+		pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), pRange.task, pRange.task->GetTaskExecStats().GetStubExecutionRate(this));
+#endif
 }
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -1463,6 +1478,10 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
     }
 
     pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), pTotalSplitCount);
+
+    // Even if PROACTIVE_STEAL_REQUESTS is defined, a steal request is generated only if there is no more pending subtask in the stub queue
+	if(pRange.task->GetSchedulingModel() == scheduler::PULL && !HasMatchingCommand(pRange.task->GetPriority(), execEventMatchFunc, pRange.task))
+		pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), pRange.task, pRange.task->GetTaskExecStats().GetStubExecutionRate(this));
 }
 
 bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)
@@ -1812,17 +1831,6 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         while(!mCurrentSubtaskQueue.empty())
             lWaitForNextSubtaskCompletionLambda(pCommonTimePerSubtask);
     };
-    
-    #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
-    #ifdef BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
-    #else
-        #define CONTINUE_PIPELINE_ACROSS_RANGES
-    #endif
-    #endif
-    
-#ifdef CONTINUE_PIPELINE_ACROSS_RANGES
-    bool lRangePartiallyAddedBack = false;
-#endif
 
     try
     {
@@ -1843,14 +1851,9 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
             mCurrentSubtaskRangeStats->ResetEndSubtaskId(lEndSubtask);
         }
 
-        if(lEndSubtask != lParentRange.endSubtask)
-        {
-        #ifdef CONTINUE_PIPELINE_ACROSS_RANGES
-            lRangePartiallyAddedBack = true;
-        #endif
-
+        bool lRangePartiallyAddedBack = (lEndSubtask != lParentRange.endSubtask);
+        if(lRangePartiallyAddedBack)
             AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pEvent.range, true, lEndSubtask)));
-        }
         
     #ifdef USE_STEAL_AGENT_PER_NODE
         if(lParentRange.task->GetSchedulingModel() == scheduler::PULL)
@@ -1867,8 +1870,15 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         for(ulong lSubtaskId = lStartSubtask; lSubtaskId <= lEndSubtask; ++lSubtaskId)
         {
         #ifdef PROACTIVE_STEAL_REQUESTS
-            if(lParentRange.task->GetSchedulingModel() == scheduler::PULL && lSubtaskId == lEndSubtask)
-                pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), lParentRange.task, lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this));
+            if(lParentRange.task->GetSchedulingModel() == scheduler::PULL && !lRangePartiallyAddedBack && lSubtaskId == lEndSubtask)
+            {
+                // Wait for stub's execution rate to be determined before sending steal request
+                if(lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this) == (double)0 && !mCurrentSubtaskQueue.empty())
+                    lWaitForNextSubtaskCompletionLambda(lCommonTimePerSubtask);
+
+                if(lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this) != (double)0)
+                    pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), lParentRange.task, lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this));
+            }
         #endif
 
             // Auto lock/unlock scope
@@ -1986,8 +1996,10 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
             }
         }
         
+    #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
+    #ifdef BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
+    #else
         // Continue the pipeline by pulling off next subtask range from the stub queue
-    #ifdef CONTINUE_PIPELINE_ACROSS_RANGES
         if(!lRangePartiallyAddedBack)
         {
             BlockSecondaryCommands();
@@ -2010,6 +2022,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 UnblockSecondaryCommands();
             }
         }
+    #endif
     #endif
 
         lWaitForAllSubtasksCompletionLambda(lCommonTimePerSubtask);

@@ -1423,28 +1423,15 @@ void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const 
         RegisterPostTaskCompletionOwnershipTransfers(pDevice, pRange, pOwnershipVector, pAddressSpaceIndexVector);
 
 	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, std::move(pOwnershipVector), std::move(pAddressSpaceIndexVector), pTotalSplitCount);
-
-#ifdef PROACTIVE_STEAL_REQUESTS
-    if(pTotalSplitCount != 0 && pRange.task->GetSchedulingModel() == PULL)  // For splitted subtasks, continue with the old approach
-#else
-	if(pRange.task->GetSchedulingModel() == PULL)
-#endif
-	{
-		pmStubManager* lManager = pmStubManager::GetStubManager();
-		pmExecutionStub* lStub = lManager->GetStub(pDevice);
-
-        DEBUG_EXCEPTION_ASSERT(lStub);
-
-		pmTaskExecStats& lTaskExecStats = pRange.task->GetTaskExecStats();
-		return StealRequestEvent(pDevice, pRange.task, lTaskExecStats.GetStubExecutionRate(lStub));
-	}
 }
 
 #ifdef ENABLE_TWO_LEVEL_STEALING
 const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool pShouldMultiAssign)
 {
 #ifdef USE_STEAL_AGENT_PER_NODE
-    pmExecutionStub* lStub = pTask->GetStealAgent()->GetStubWithMaxStealLikelihood(pShouldMultiAssign);
+    pmExecutionStub* lRequestingStub = ((pStealingDevice->GetMachine() == PM_LOCAL_MACHINE) ? pStealingDevice->GetLocalExecutionStub() : NULL);
+    pmExecutionStub* lStub = pTask->GetStealAgent()->GetStubWithMaxStealLikelihood(pShouldMultiAssign, lRequestingStub);
+
     if(!lStub)
     {
         pmScheduler::GetScheduler()->StealFailedEvent(pStealingDevice, pStealingDevice, pTask);

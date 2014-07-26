@@ -107,38 +107,55 @@ const unsigned int SCRATCH_CHUNK_SIZE_MULTIPLIER_PER_GB = (32 * 1024 * 1024); //
 const unsigned int MIN_UNALLOCATED_CUDA_MEM_SIZE = (4 * 1024 * 1024);  // in bytes
 #endif
 
-const double MA_WAIT_FACTOR = 1.2;  // If local stub's exec rate is zero, do not allow multi-assign till it has executed the subtask for 20% more time than requestor
-const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for steal/multi-assign
-
-#define DEFAULT_SCHEDULING_MODEL scheduler::PUSH
+#define DEFAULT_SCHEDULING_MODEL scheduler::PULL
 
 #define SLOW_START_SCHEDULING_INITIAL_SUBTASK_COUNT 1	 // must be a power of 2
 #define SLOW_START_SCHEDULING_UPPER_LIMIT_EXEC_TIME_PER_ALLOCATION 15	// in seconds
 #define SLOW_START_SCHEDULING_LOWER_LIMIT_EXEC_TIME_PER_ALLOCATION 8	// in seconds
+
+const double MA_WAIT_FACTOR = 1.05;  // If local stub's exec rate is zero, do not allow multi-assign till it has executed the subtask for 20% more time than requestor
+const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for steal/multi-assign
 
 #define MAX_SUBTASK_MULTI_ASSIGN_COUNT 2    // Max no. of devices to which a subtask may be assigned at any given time
 #define MAX_STEAL_CYCLES_PER_DEVICE 5   // Max no. of steal attempts from a device to any other device
 
 #define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (memAddr % pageSize))
 
-//#define SUPPORT_LAZY_MEMORY
-#define SUPPORT_SPLIT_SUBTASKS
 
+/* Lazy address space controls */
+//#define SUPPORT_LAZY_MEMORY
 #ifdef SUPPORT_LAZY_MEMORY
     #define LAZY_FORWARD_PREFETCH_PAGE_COUNT 5
 #endif
 
+
+/* Subtask splitting controls */
+#define SUPPORT_SPLIT_SUBTASKS
+#define ENABLE_DYNAMIC_SPLITTING
+//#define FORCE_START_WITH_ONE_SUBTASK_PER_SPLIT_GROUP
+
+
+/* Pipelining controls */
 #define SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
 #define SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-
 //#define PRE_DETERMINE_MAX_COLLECTIVELY_EXECUTABLE_CUDA_SUBTASKS
 //#define BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
+
+
+/* Stealing controls */
 #define PROACTIVE_STEAL_REQUESTS
-#define USE_STEAL_AGENT_PER_NODE
+#define ENABLE_TWO_LEVEL_STEALING
+#ifdef ENABLE_TWO_LEVEL_STEALING
+    #define USE_STEAL_AGENT_PER_NODE
+#endif
+
+
+/* Utility controls */
+#define BUILD_FOR_PMLIB_ANALYZER
+
 
 #define PROPORTIONAL_SCHEDULING_CONF_FILE "propSchedConf.txt"
 
-#define BUILD_FOR_PMLIB_ANALYZER
 
 /* Diagnostics */
 //#define RECORD_LOCK_ACQUISITIONS
@@ -153,8 +170,6 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 //#define ENABLE_TASK_PROFILING
 //#define ENABLE_MEM_PROFILING
 //#define ENABLE_ACCUMULATED_TIMINGS
-#define ENABLE_TWO_LEVEL_STEALING
-#define ENABLE_DYNAMIC_SPLITTING
 //#define DUMP_SHADOW_MEM
 //#define DUMP_NETWORK_STATS
 //#define DUMP_TASK_EXEC_STATS

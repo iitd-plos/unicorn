@@ -187,111 +187,29 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lDeviceCount = mLocalTask->GetAssignedDeviceCount();
 
-	if(lSubtaskCount == 0 || lDeviceCount == 0)
-		PMTHROW(pmFatalErrorException());
+	EXCEPTION_ASSERT(lSubtaskCount != 0 && lDeviceCount != 0);
+
+    auto lLambda = [&] (pmSubtaskManager::pmUnfinishedPartitionPtr pUnfinishedPartitionPtr, const pmProcessingElement* pDevice)
+    {
+        mSortedUnassignedPartitions.emplace(pUnfinishedPartitionPtr, pDevice);
+        mAllottedUnassignedPartition.emplace(std::piecewise_construct, std::forward_as_tuple(pDevice), std::forward_as_tuple(pUnfinishedPartitionPtr, (ulong)0));
+
+        mExecTimeStats.emplace(std::piecewise_construct, std::forward_as_tuple(pDevice), std::forward_as_tuple((double)0, (ulong)0));
     
-	ulong lFirstSubtask = 0, lLastSubtask = 0;
-	std::vector<const pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
+        UpdateExecutionProfile(pDevice, 0);
+    };
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
-    std::vector<std::vector<const pmProcessingElement*> > lDeviceGroups;
-    std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>* > lQueryMap;
-    ulong lUnsplittedDevices = 0;
+    const std::vector<std::pair<std::vector<const pmProcessingElement*>, std::pair<ulong, ulong>>>& lAllotmentData = mLocalTask->GetSubtaskSplitter().MakeInitialSchedulingAllotments(pLocalTask);
 
-    mLocalTask->GetSubtaskSplitter().MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
-
-    // Initially, make partitions of maximum one subtask per split group. In case, split groups finish there one subtask,
-    // they are assigned more subtasks from other partitions as per PUSH scheduling policy
-    if(!lDeviceGroups.empty())
+    if(!lAllotmentData.empty())
     {
-        ulong lUnsplittedGroups = lUnsplittedDevices;
-        ulong lSplittedGroups = lDeviceGroups.size() - lUnsplittedGroups;
-        
-        ulong lSplittedGroupSubtasks = 0, lUnsplittedGroupSubtasks = 0;
-        
-        if(lSubtaskCount < lUnsplittedGroups)
+        for_each(lAllotmentData, [&] (const std::pair<std::vector<const pmProcessingElement*>, std::pair<ulong, ulong>>& pPair)
         {
-            lUnsplittedGroupSubtasks = lSubtaskCount;
-        }
-        else
-        {
-            if(lSubtaskCount > lDeviceGroups.size())
-            {
-                lSplittedGroupSubtasks = lSplittedGroups;
-                lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
-            }
-            else
-            {
-                lUnsplittedGroupSubtasks = lUnsplittedGroups;
-                lSplittedGroupSubtasks = lSubtaskCount - lUnsplittedGroupSubtasks;
-            }
-        }
-        
-        ulong lSplittedPartitionSize = lSplittedGroupSubtasks / lSplittedGroups;
-        ulong lUnsplittedPartitionSize = lUnsplittedGroupSubtasks / lUnsplittedGroups;
-        
-        ulong lSplittedLeftoverSubtasks = lSplittedGroupSubtasks - lSplittedPartitionSize * lSplittedGroups;
-        ulong lUnsplittedLeftoverSubtasks = lUnsplittedGroupSubtasks - lUnsplittedPartitionSize * lUnsplittedGroups;
+            pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(pPair.second.first, pPair.second.second));
 
-        std::vector<std::vector<const pmProcessingElement*> >::iterator lGroupIter = lDeviceGroups.begin(), lGroupEndIter = lDeviceGroups.end();
-        for(; lGroupIter != lGroupEndIter; ++lGroupIter)
-        {
-            size_t lCount = 0;
-            const pmProcessingElement* lDevice = (*lGroupIter)[0];
-
-            if((*lGroupIter).size() > 1)   // Splitting Group
-            {
-                if(!lSplittedGroupSubtasks)
-                    continue;
-                
-                lCount = lSplittedPartitionSize;
-                if(lSplittedLeftoverSubtasks)
-                {
-                    ++lCount;
-                    --lSplittedLeftoverSubtasks;
-                }
-                
-                if(lSplittedGroupSubtasks < lCount)
-                    lCount = lSplittedGroupSubtasks;
-
-                lSplittedGroupSubtasks -= lCount;
-            }
-            else    // Unsplitting Group
-            {
-                if(!lUnsplittedGroupSubtasks)
-                    continue;
-
-                lCount = lUnsplittedPartitionSize;
-                if(lUnsplittedLeftoverSubtasks)
-                {
-                    ++lCount;
-                    --lUnsplittedLeftoverSubtasks;
-                }
-                
-                if(lUnsplittedGroupSubtasks < lCount)
-                    lCount = lUnsplittedGroupSubtasks;
-
-                lUnsplittedGroupSubtasks -= lCount;
-            }
-            
-            if(!lCount)
-                continue;
-
-            lLastSubtask = lFirstSubtask + lCount - 1;
-
-            pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
-
-            mSortedUnassignedPartitions[lUnfinishedPartitionPtr] = lDevice;
-            mAllottedUnassignedPartition[lDevice] = std::make_pair(lUnfinishedPartitionPtr, (ulong)0);
-
-            mExecTimeStats[lDevice] = std::pair<double, ulong>(0, 0);
-        
-            UpdateExecutionProfile(lDevice, 0);
-
-            lFirstSubtask = lLastSubtask + 1;
-        }
-        
-        EXCEPTION_ASSERT(!lSplittedGroupSubtasks && !lUnsplittedGroupSubtasks);
+            lLambda(lUnfinishedPartitionPtr, pPair.first[0]);
+        });
     }
     else
 #endif
@@ -299,6 +217,9 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
         ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
         ulong lPartitionSize = lSubtaskCount / lPartitionCount;
         ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
+        ulong lFirstSubtask = 0, lLastSubtask = 0;
+
+        std::vector<const pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
 
         std::vector<const pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
         for(ulong i = 0; i < lPartitionCount; ++i, ++lIter)
@@ -308,16 +229,11 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
 
             pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
 
-            mSortedUnassignedPartitions[lUnfinishedPartitionPtr] = *lIter;
-            mAllottedUnassignedPartition[*lIter] = std::make_pair(lUnfinishedPartitionPtr, (ulong)0);
-
-            mExecTimeStats[*lIter] = std::pair<double, ulong>(0, 0);
-        
-            UpdateExecutionProfile((*lIter), 0);
+            lLambda(lUnfinishedPartitionPtr, *lIter);
 
             lFirstSubtask = lLastSubtask + 1;
 
-            assert(lIter != lEndIter);
+            EXCEPTION_ASSERT(lIter != lEndIter);
         }
     }
 }
@@ -497,10 +413,7 @@ pmSubtaskManager::pmUnfinishedPartitionPtr pmPushSchedulingManager::FetchNewSubP
     
     ulong lSlowestDeviceCount = mAllottedUnassignedPartition[lSlowestDevice].second;
 
-#ifdef _DEBUG
-    if(mSortedUnassignedPartitions.find(lMaxPendingPartitionPtr) == mSortedUnassignedPartitions.end())
-        PMTHROW(pmFatalErrorException());
-#endif
+    DEBUG_EXCEPTION_ASSERT(mSortedUnassignedPartitions.find(lMaxPendingPartitionPtr) != mSortedUnassignedPartitions.end());
 
     mAllottedUnassignedPartition.erase(lSlowestDevice);
     mSortedUnassignedPartitions.erase(lMaxPendingPartitionPtr);
@@ -847,123 +760,29 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lDeviceCount = mLocalTask->GetAssignedDeviceCount();
 
-	if(lSubtaskCount == 0 || lDeviceCount == 0)
-		PMTHROW(pmFatalErrorException());
-    
-    ulong lFirstSubtask = 0, lLastSubtask = 0;
-    
+	EXCEPTION_ASSERT(lSubtaskCount != 0 && lDeviceCount != 0);
+
 #ifdef SUPPORT_SPLIT_SUBTASKS
-    std::vector<std::vector<const pmProcessingElement*> > lDeviceGroups;
-    std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>* > lQueryMap;
-    ulong lUnsplittedDevices = 0;
+    const std::vector<std::pair<std::vector<const pmProcessingElement*>, std::pair<ulong, ulong>>>& lAllotmentData = mLocalTask->GetSubtaskSplitter().MakeInitialSchedulingAllotments(pLocalTask);
 
-	std::vector<const pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
-    mLocalTask->GetSubtaskSplitter().MakeDeviceGroups(lDevices, lDeviceGroups, lQueryMap, lUnsplittedDevices);
-
-    // Make partitions of max one subtask per split group
-    if(!lDeviceGroups.empty())
+    if(!lAllotmentData.empty())
     {
         mUseSplits = true;
 
-        filtered_for_each(lDeviceGroups, [] (const std::vector<const pmProcessingElement*>& pVector) { return (pVector.size() > 1); },
-        [&] (const std::vector<const pmProcessingElement*>& pVector)
+        for_each(lAllotmentData, [&] (const std::pair<std::vector<const pmProcessingElement*>, std::pair<ulong, ulong>>& pPair)
         {
-            mSplitGroupLeaders.insert(pVector[0]);
-        });
-        
-        ulong lUnsplittedGroups = lUnsplittedDevices;
-        ulong lSplittedGroups = lDeviceGroups.size() - lUnsplittedGroups;
-        
-        ulong lSplittedGroupSubtasks = 0, lUnsplittedGroupSubtasks = 0;
-        if(pLocalTask->GetSchedulingModel() == scheduler::STATIC_EQUAL)
-        {
-            lSplittedGroupSubtasks = lSubtaskCount / 2;
-            lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
-        }
-        else
-        {
-            if(lSubtaskCount < lUnsplittedGroups)
-            {
-                lUnsplittedGroupSubtasks = lSubtaskCount;
-            }
-            else
-            {
-                if(lSubtaskCount > lDeviceGroups.size())
-                {
-                    lSplittedGroupSubtasks = lSplittedGroups;
-                    lUnsplittedGroupSubtasks = lSubtaskCount - lSplittedGroupSubtasks;
-                }
-                else
-                {
-                    lUnsplittedGroupSubtasks = lUnsplittedGroups;
-                    lSplittedGroupSubtasks = lSubtaskCount - lUnsplittedGroupSubtasks;
-                }
-            }
-        }
-        
-        ulong lSplittedPartitionSize = lSplittedGroupSubtasks / lSplittedGroups;
-        ulong lUnsplittedPartitionSize = lUnsplittedGroupSubtasks / lUnsplittedGroups;
-        
-        ulong lSplittedLeftoverSubtasks = lSplittedGroupSubtasks - lSplittedPartitionSize * lSplittedGroups;
-        ulong lUnsplittedLeftoverSubtasks = lUnsplittedGroupSubtasks - lUnsplittedPartitionSize * lUnsplittedGroups;
-
-        std::vector<std::vector<const pmProcessingElement*> >::iterator lGroupIter = lDeviceGroups.begin(), lGroupEndIter = lDeviceGroups.end();
-        for(; lGroupIter != lGroupEndIter; ++lGroupIter)
-        {
-            size_t lCount = 0;
-
-            if((*lGroupIter).size() > 1)   // Splitting Group
-            {
-                if(!lSplittedGroupSubtasks)
-                    continue;
-                
-                lCount = lSplittedPartitionSize;
-                if(lSplittedLeftoverSubtasks)
-                {
-                    ++lCount;
-                    --lSplittedLeftoverSubtasks;
-                }
-                
-                if(lSplittedGroupSubtasks < lCount)
-                    lCount = lSplittedGroupSubtasks;
-
-                lSplittedGroupSubtasks -= lCount;
-            }
-            else    // Unsplitting Group
-            {
-                if(!lUnsplittedGroupSubtasks)
-                    continue;
-
-                lCount = lUnsplittedPartitionSize;
-                if(lUnsplittedLeftoverSubtasks)
-                {
-                    ++lCount;
-                    --lUnsplittedLeftoverSubtasks;
-                }
-                
-                if(lUnsplittedGroupSubtasks < lCount)
-                    lCount = lUnsplittedGroupSubtasks;
-
-                lUnsplittedGroupSubtasks -= lCount;
-            }
+            pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(pPair.second.first, pPair.second.second));
             
-            if(!lCount)
-                continue;
-
-            lLastSubtask = lFirstSubtask + lCount - 1;
-
-            pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
-            
-            if((*lGroupIter).size() > 1)    // Splitting Group
+            if(pPair.first.size() > 1)    // Splitting Group
+            {
+                mSplitGroupLeaders.insert(pPair.first[0]);
                 mSplittedGroupSubtaskPartitions.insert(lUnfinishedPartitionPtr);
+            }
             else    // Unsplitting Group
+            {
                 mSubtaskPartitions.insert(lUnfinishedPartitionPtr);
-
-            lFirstSubtask = lLastSubtask + 1;
-        }
-        
-        if(lSplittedGroupSubtasks || lUnsplittedGroupSubtasks)
-            PMTHROW(pmFatalErrorException());
+            }
+        });
 
         mSplittedGroupIter = mSplittedGroupSubtaskPartitions.begin();
         mIter = mSubtaskPartitions.begin();
@@ -974,6 +793,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
         ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
         ulong lPartitionSize = lSubtaskCount/lPartitionCount;
         ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
+        ulong lFirstSubtask = 0, lLastSubtask = 0;
         
         for(ulong i = 0; i < lPartitionCount; ++i)
         {				

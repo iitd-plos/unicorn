@@ -32,32 +32,45 @@ using namespace stealAgent;
     
 pmStealAgent::pmStealAgent(pmTask* pTask)
 : mTask(pTask)
-, mLockFreeStubSink(pmStubManager::GetStubManager()->GetStubCount())
+, mStubSink(pmStubManager::GetStubManager()->GetStubCount())
 {
     DEBUG_EXCEPTION_ASSERT(mTask->GetSchedulingModel() == scheduler::PULL);
 }
 
 void pmStealAgent::RegisterPendingSubtasks(pmExecutionStub* pStub, ulong pPendingSubtasks)
 {
-    mLockFreeStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()].subtasksPendingInStubQueue = pPendingSubtasks;
+    auto& lStubData = mStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lStubData.stubLock, Lock(), Unlock());
+
+    lStubData.subtasksPendingInStubQueue = pPendingSubtasks;
 }
 
 void pmStealAgent::DeregisterPendingSubtasks(pmExecutionStub* pStub, ulong pSubtasks)
 {
-    auto& lStubData = mLockFreeStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+    auto& lStubData = mStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
 
-    EXCEPTION_ASSERT(pSubtasks && lStubData.subtasksPendingInStubQueue >= pSubtasks);
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lStubData.stubLock, Lock(), Unlock());
+
+    EXCEPTION_ASSERT(pSubtasks);
+    EXCEPTION_ASSERT(lStubData.subtasksPendingInStubQueue >= pSubtasks);
     lStubData.subtasksPendingInStubQueue -= pSubtasks;
 }
 
 void pmStealAgent::RegisterExecutingSubtasks(pmExecutionStub* pStub, ulong pExecutingSubtasks)
 {
-    mLockFreeStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()].subtasksPendingInPipeline = pExecutingSubtasks;
+    auto& lStubData = mStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lStubData.stubLock, Lock(), Unlock());
+
+    lStubData.subtasksPendingInPipeline = pExecutingSubtasks;
 }
 
 void pmStealAgent::DeregisterExecutingSubtasks(pmExecutionStub* pStub, ulong pSubtasks)
 {
-    auto& lStubData = mLockFreeStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+    auto& lStubData = mStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lStubData.stubLock, Lock(), Unlock());
 
     EXCEPTION_ASSERT(pSubtasks && lStubData.subtasksPendingInPipeline >= pSubtasks);
     lStubData.subtasksPendingInPipeline -= pSubtasks;
@@ -65,20 +78,29 @@ void pmStealAgent::DeregisterExecutingSubtasks(pmExecutionStub* pStub, ulong pSu
 
 void pmStealAgent::ClearExecutingSubtasks(pmExecutionStub* pStub)
 {
-    mLockFreeStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()].subtasksPendingInStubQueue = 0;
+    auto& lStubData = mStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lStubData.stubLock, Lock(), Unlock());
+
+    lStubData.subtasksPendingInPipeline = 0;
 }
 
 void pmStealAgent::SetStubMultiAssignment(pmExecutionStub* pStub, bool pCanMultiAssign)
 {
-    mLockFreeStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()].isMultiAssigning = pCanMultiAssign;
+    auto& lStubData = mStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lStubData.stubLock, Lock(), Unlock());
+
+    lStubData.isMultiAssigning = pCanMultiAssign;
 }
 
+// This method operates without lock, so may work with stale data. But that is fine here.
 pmExecutionStub* pmStealAgent::GetStubWithMaxStealLikelihood(bool pConsiderMultiAssign, pmExecutionStub* pIgnoreStub /* = NULL */)
 {
     size_t lIgnoreStubIndex = pIgnoreStub ? pIgnoreStub->GetProcessingElement()->GetDeviceIndexInMachine() : 0;
 
     std::map<ulong, size_t> lSubtasksMap;   // subtasks versus stub
-    for_each_with_index(mLockFreeStubSink, [&] (stubData& pData, size_t pStubIndex)
+    for_each_with_index(mStubSink, [&] (stubData& pData, size_t pStubIndex)
     {
         if(pData.subtasksPendingInStubQueue && (!pIgnoreStub || lIgnoreStubIndex != pStubIndex))
             lSubtasksMap.emplace(pData.subtasksPendingInStubQueue, pStubIndex);
@@ -87,7 +109,7 @@ pmExecutionStub* pmStealAgent::GetStubWithMaxStealLikelihood(bool pConsiderMulti
     if(!lSubtasksMap.empty())
         return pmStubManager::GetStubManager()->GetStub((uint)lSubtasksMap.rbegin()->second);
     
-    for_each_with_index(mLockFreeStubSink, [&] (stubData& pData, size_t pStubIndex)
+    for_each_with_index(mStubSink, [&] (stubData& pData, size_t pStubIndex)
     {
         if(pData.subtasksPendingInPipeline && (!pIgnoreStub || lIgnoreStubIndex != pStubIndex))
             lSubtasksMap.emplace(pData.subtasksPendingInPipeline, pStubIndex);
@@ -99,9 +121,9 @@ pmExecutionStub* pmStealAgent::GetStubWithMaxStealLikelihood(bool pConsiderMulti
     if(pConsiderMultiAssign)
     {
         std::vector<size_t> lMultiAssigningStubs;
-        lMultiAssigningStubs.reserve(mLockFreeStubSink.size());
+        lMultiAssigningStubs.reserve(mStubSink.size());
 
-        for_each_with_index(mLockFreeStubSink, [&] (stubData& pData, size_t pStubIndex)
+        for_each_with_index(mStubSink, [&] (stubData& pData, size_t pStubIndex)
         {
             if(pData.isMultiAssigning && (!pIgnoreStub || lIgnoreStubIndex != pStubIndex))
                 lMultiAssigningStubs.emplace_back(pStubIndex);

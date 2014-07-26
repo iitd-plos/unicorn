@@ -57,9 +57,11 @@ class pmSafePQ : public pmBase
 
         void WaitForCurrentItem();
         void WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, void* pMatchCriterion);
+    
         pmStatus DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::shared_ptr<T>& pItem, bool pTemporarilyUnblockSecondaryOperations);
         void DeleteAndGetAllMatchingItems(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::vector<std::shared_ptr<T>>& pItems, bool pTemporarilyUnblockSecondaryOperations);
 		void DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion);
+        bool HasMatchingItem(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion);
 
 		bool IsHighPriorityElementPresent(P pPriority);
 

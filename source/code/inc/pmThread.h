@@ -112,6 +112,7 @@ class pmThread : public pmBase
         pmStatus DeleteAndGetFirstMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::shared_ptr<T>& pCommand, bool pTemporarilyUnblockSecondaryCommands = false);
         void DeleteAndGetAllMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::vector<std::shared_ptr<T>>& pCommands, bool pTemporarilyUnblockSecondaryCommands = false);
         void DeleteMatchingCommands(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion);
+        bool HasMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion);
     
 		/* To be implemented by client */
         virtual void ThreadSwitchCallback(std::shared_ptr<T>& pCommand) = 0;

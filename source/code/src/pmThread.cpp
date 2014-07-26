@@ -161,6 +161,12 @@ void pmThread<T, P>::DeleteMatchingCommands(P pPriority, typename pmSafePQ<T, P>
 }
 
 template<typename T, typename P>
+bool pmThread<T, P>::HasMatchingCommand(P pPriority, typename pmSafePQ<T, P>::matchFuncPtr pMatchFunc, const void* pMatchCriterion)
+{
+	return this->mSafePQ.HasMatchingItem(pPriority, pMatchFunc, pMatchCriterion);
+}
+
+template<typename T, typename P>
 void pmThread<T, P>::UnblockSecondaryCommands()
 {
     this->mSafePQ.UnblockSecondaryOperations();

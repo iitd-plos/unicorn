@@ -24,10 +24,6 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 
-#include <list>
-#include <set>
-#include <map>
-
 #ifdef USE_STEAL_AGENT_PER_NODE
 
 namespace pm
@@ -43,11 +39,13 @@ namespace stealAgent
         ulong subtasksPendingInStubQueue;
         ulong subtasksPendingInPipeline;
         bool isMultiAssigning;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS stubLock;
         
         stubData()
         : subtasksPendingInStubQueue(0)
         , subtasksPendingInPipeline(0)
         , isMultiAssigning(false)
+        , stubLock __LOCK_NAME__("stealAgent::stubData::stubLock")
         {}
     };
 }
@@ -73,7 +71,7 @@ public:
 
 private:
     pmTask* mTask;
-    std::vector<stealAgent::stubData> mLockFreeStubSink;
+    std::vector<stealAgent::stubData> mStubSink;
 };
     
 } // end namespace pm

@@ -231,6 +231,42 @@ void pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, c
 }
 
 template<typename T, typename P>
+bool pmSafePQ<T, P>::HasMatchingItem(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion)
+{
+    while(1)
+    {
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+            if(!mSecondaryOperationsBlocked)
+            {
+                typename priorityQueueType::iterator lIter = mQueue.find(pPriority);
+                if(lIter == mQueue.end())
+                    return false;
+
+                typename std::list<std::shared_ptr<T>>& lInternalList = lIter->second;
+
+                typename std::list<std::shared_ptr<T>>::iterator lListIter = lInternalList.begin();
+                while(lListIter != lInternalList.end())
+                {
+                    if(pMatchFunc(*lListIter->get(), pMatchCriterion))
+                        return true;
+                    else
+                        ++lListIter;
+                }
+                
+                return false;
+            }
+        }
+
+        mSecondaryOperationsWait.Wait();
+    }
+
+    return false;
+}
+
+template<typename T, typename P>
 pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr pMatchFunc, const void* pMatchCriterion, std::shared_ptr<T>& pItem, bool pTemporarilyUnblockSecondaryOperations)
 {
     while(1)
