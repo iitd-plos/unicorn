@@ -107,6 +107,10 @@ template<typename T, typename P = ushort>
 class pmThread : public pmBase
 {
 	public:
+        pmThread()
+        : mSafePQ(this)
+        {}
+    
 		virtual ~pmThread() {}
         virtual void SwitchThread(const std::shared_ptr<T>& pCommand, P pPriority) = 0;
 

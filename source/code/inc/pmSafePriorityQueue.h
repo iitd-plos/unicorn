@@ -45,7 +45,7 @@ class pmSafePQ : public pmBase
 	public:
 		typedef bool (*matchFuncPtr)(const T& pItem, const void* pMatchCriterion);
 
-		pmSafePQ();
+		pmSafePQ(void* pEventNotificationIdentifier);
 
         void InsertItem(const std::shared_ptr<T>& pItem, P pPriority);
         pmStatus GetTopItem(std::shared_ptr<T>& pItem);
@@ -71,6 +71,7 @@ class pmSafePQ : public pmBase
 	private:
         typedef std::map<P, typename std::list<std::shared_ptr<T>>> priorityQueueType;
 
+        void* mEventNotificationIdentifier;
         priorityQueueType mQueue;
         std::shared_ptr<T> mCurrentItem;
         std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS> mCurrentSignalWait;
