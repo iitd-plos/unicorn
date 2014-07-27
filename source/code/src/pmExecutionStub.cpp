@@ -3460,10 +3460,13 @@ bool execStub::stubEvent::BlocksSecondaryOperations()
 // pSubmitted false means notification just after removal from the queue
 void execStub::subtaskExecEvent::EventNotification(void* pThreadQueue, bool pSubmitted)
 {
-    if(pSubmitted)
-        range.task->GetStealAgent()->RegisterPendingSubtasks(reinterpret_cast<pmExecutionStub*>(pThreadQueue), range.endSubtask - range.startSubtask + 1);
-    else
-        range.task->GetStealAgent()->DeregisterPendingSubtasks(reinterpret_cast<pmExecutionStub*>(pThreadQueue), range.endSubtask - range.startSubtask + 1);
+    if(range.task->GetSchedulingModel() == scheduler::PULL)
+    {
+        if(pSubmitted)
+            range.task->GetStealAgent()->RegisterPendingSubtasks(reinterpret_cast<pmExecutionStub*>(pThreadQueue), range.endSubtask - range.startSubtask + 1);
+        else
+            range.task->GetStealAgent()->DeregisterPendingSubtasks(reinterpret_cast<pmExecutionStub*>(pThreadQueue), range.endSubtask - range.startSubtask + 1);
+    }
 }
 #endif
     
