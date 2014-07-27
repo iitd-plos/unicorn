@@ -39,6 +39,7 @@ void pmSafePQ<T, P>::InsertItem(const std::shared_ptr<T>& pItem, P pPriority)
     if(lIter == mQueue.end())
         lIter = mQueue.emplace(pPriority, std::list<std::shared_ptr<T>>()).first;
 
+    pItem->EventNotification(this, true);
     lIter->second.push_front(pItem);
 }
 
@@ -65,6 +66,7 @@ pmStatus pmSafePQ<T, P>::GetTopItem(std::shared_ptr<T>& pItem)
 	if(lInternalList.empty())
 		mQueue.erase(lIter);
 
+    pItem->EventNotification(this, false);
 	return pmSuccess;
 }
     
@@ -214,9 +216,14 @@ void pmSafePQ<T, P>::DeleteMatchingItems(P pPriority, matchFuncPtr pMatchFunc, c
                 while(lListIter != lInternalList.end())
                 {
                     if(pMatchFunc(*lListIter->get(), pMatchCriterion))
+                    {
+                        (*lListIter)->EventNotification(this, false);
                         lListIter = lInternalList.erase(lListIter);
+                    }
                     else
+                    {
                         ++lListIter;
+                    }
                 }
                 
                 if(lInternalList.empty())
@@ -291,6 +298,8 @@ pmStatus pmSafePQ<T, P>::DeleteAndGetFirstMatchingItem(P pPriority, matchFuncPtr
                     if(pMatchFunc(*lListIter->get(), pMatchCriterion))
                     {
                         pItem = *lListIter;
+                        pItem->EventNotification(this, false);
+                        
                         lInternalList.erase(lListIter++);
 
                         if(lInternalList.empty())
@@ -338,6 +347,7 @@ void pmSafePQ<T, P>::DeleteAndGetAllMatchingItems(P pPriority, matchFuncPtr pMat
                 {
                     if(pMatchFunc(*lListIter->get(), pMatchCriterion))
                     {
+                        (*lListIter)->EventNotification(this, false);
                         pItems.emplace_back(std::move(*lListIter));
                         lInternalList.erase(lListIter++);
 

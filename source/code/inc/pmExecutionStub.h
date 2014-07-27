@@ -114,6 +114,10 @@ struct subtaskExecEvent : public stubEvent
     , rangeExecutedOnce(pRangeExecutedOnce)
     , lastExecutedSubtaskId(pLastExecutedSubtaskId)
     {}
+
+#ifdef USE_STEAL_AGENT_PER_NODE
+    virtual void EventNotification(void* pThreadQueue, bool pSubmitted);
+#endif
 };
 
 struct subtaskReduceEvent : public stubEvent

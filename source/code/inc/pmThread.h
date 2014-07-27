@@ -77,6 +77,12 @@ public:
         return false;
     }
 
+    // pSubmitted true means notification just before submitting to the queue
+    // pSubmitted false means notification just after removal from the queue
+    void EventNotification(void* pThreadQueue, bool pSubmitted)
+    {
+    }
+
 private:
     thread::internalMessage msg;
 } pmBasicThreadEvent;
@@ -89,6 +95,10 @@ typedef struct pmBasicBlockableThreadEvent : public pmBasicThreadEvent
     }
     
     virtual ~pmBasicBlockableThreadEvent() {}
+
+    // pSubmitted true means notification just before submitting to the queue
+    // pSubmitted false means notification just after removal from the queue
+    virtual void EventNotification(void* pThreadQueue, bool pSubmitted) {}
     
 } pmBasicBlockableThreadEvent;
 

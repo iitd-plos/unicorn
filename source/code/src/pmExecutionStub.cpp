@@ -163,11 +163,6 @@ void pmExecutionStub::AddSubtaskRangeToExecutionQueue(const std::shared_ptr<stub
     const pmSubtaskRange& lRange = lExecEvent.range;
 
 	SwitchThread(pSharedPtr, lRange.task->GetPriority());
-
-#ifdef USE_STEAL_AGENT_PER_NODE
-    if(lRange.task->GetSchedulingModel() == scheduler::PULL)
-        lRange.task->GetStealAgent()->RegisterPendingSubtasks(this, lRange.endSubtask - lRange.startSubtask + 1);
-#endif
 }
 
 void pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2)
@@ -769,10 +764,6 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 
                 lStealSuccess = true;
                 pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
-
-            #ifdef USE_STEAL_AGENT_PER_NODE
-                pTask->GetStealAgent()->DeregisterPendingSubtasks(this, lStealCount);
-            #endif
             }
             else
             {
@@ -942,11 +933,6 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 		case SUBTASK_EXEC:	/* Comes from scheduler thread */
 		{
             subtaskExecEvent& lEvent = static_cast<subtaskExecEvent&>(pEvent);
-
-        #ifdef USE_STEAL_AGENT_PER_NODE
-            if(lEvent.range.task->GetSchedulingModel() == scheduler::PULL)
-                lEvent.range.task->GetStealAgent()->DeregisterPendingSubtasks(this, lEvent.range.endSubtask - lEvent.range.startSubtask + 1);
-        #endif
 
         #ifdef SUPPORT_SPLIT_SUBTASKS
             if(CheckSplittedExecution(lEvent))
@@ -3466,6 +3452,20 @@ bool execStub::stubEvent::BlocksSecondaryOperations()
 {
     return (eventId == SUBTASK_EXEC);
 }
+
+
+/* struct subtaskExecEvent */
+#ifdef USE_STEAL_AGENT_PER_NODE
+// pSubmitted true means notification just before submitting to the queue
+// pSubmitted false means notification just after removal from the queue
+void execStub::subtaskExecEvent::EventNotification(void* pThreadQueue, bool pSubmitted)
+{
+    if(pSubmitted)
+        range.task->GetStealAgent()->RegisterPendingSubtasks(reinterpret_cast<pmExecutionStub*>(pThreadQueue), range.endSubtask - range.startSubtask + 1);
+    else
+        range.task->GetStealAgent()->DeregisterPendingSubtasks(reinterpret_cast<pmExecutionStub*>(pThreadQueue), range.endSubtask - range.startSubtask + 1);
+}
+#endif
     
 }
 
