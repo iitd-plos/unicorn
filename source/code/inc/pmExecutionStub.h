@@ -264,7 +264,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 		virtual void BindToProcessingElement() = 0;
 
-		void Push(const pmSubtaskRange& pRange);
+		void Push(const pmSubtaskRange& pRange, bool pIsStealResponse);
     
 		virtual void ThreadSwitchCallback(std::shared_ptr<execStub::stubEvent>& pEvent);
 
@@ -405,6 +405,8 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void ClearSecondaryAllotteeMap(pmSubtaskRange& pRange);
         void SendSplitAcknowledgement(const pmSubtaskRange& pRange, const std::map<ulong, std::vector<pmExecutionStub*>>& pMap, pmStatus pExecStatus, ulong pTotalSplitCount);
     
+        void IssueStealRequestIfRequired(pmTask* pTask);
+    
     #ifdef DUMP_EVENT_TIMELINE
         std::string GetEventTimelineName();
     #endif
@@ -436,6 +438,10 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     
     #ifdef SUPPORT_OPENCL
         void* mOpenCLDevice;    // cl_device_id
+    #endif
+    
+    #ifdef PROACTIVE_STEAL_REQUESTS
+        std::map<pmTask*, bool> mStealRequestIssuedMap;
     #endif
 };
 

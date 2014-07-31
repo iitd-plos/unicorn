@@ -118,11 +118,13 @@ struct subtaskExecEvent : public schedulerEvent
 {
 	const pmProcessingElement* device;
 	const pmSubtaskRange range;
+    bool isStealResponse;
     
-    subtaskExecEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange)
+    subtaskExecEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, bool pIsStealResponse)
     : schedulerEvent(pEventId)
     , device(pDevice)
     , range(pRange)
+    , isStealResponse(pIsStealResponse)
     {}
 };
 
@@ -446,7 +448,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void SendStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 
 		void SubmitTaskEvent(pmLocalTask* pLocalTask);
-		void PushEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange);		// subtask range execution event
+		void PushEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, bool pIsStealResponse);		// subtask range execution event
 		void StealRequestEvent(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate);
 		void StealProcessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate, bool pMultiAssign);
 		void StealSuccessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
@@ -510,7 +512,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 
 		pmStatus StartLocalTaskExecution(pmLocalTask* pLocalTask);
 
-		void PushToStub(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange);
+		void PushToStub(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, bool pIsStealResponse);
 
     #ifdef ENABLE_TWO_LEVEL_STEALING
 		const pmMachine* RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign);

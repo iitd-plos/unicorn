@@ -122,7 +122,7 @@ void pmExecutionStub::InitializeEventTimeline()
 }
 #endif
 
-void pmExecutionStub::Push(const pmSubtaskRange& pRange)
+void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
 {
 	DEBUG_EXCEPTION_ASSERT(pRange.endSubtask >= pRange.startSubtask);
 
@@ -151,6 +151,16 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange)
             std::map<ulong, std::vector<pmExecutionStub*>> lMap;
             lIter->second.emplace_back(std::make_pair(pRange.startSubtask, pRange.endSubtask), lMap);
         }
+    }
+#endif
+    
+#ifdef PROACTIVE_STEAL_REQUESTS
+    if(pRange.task->GetSchedulingModel() == scheduler::PULL && pIsStealResponse)
+    {
+        auto lIter = mStealRequestIssuedMap.find(pRange.task);
+        EXCEPTION_ASSERT(lIter != mStealRequestIssuedMap.end() && lIter->second);
+        
+        lIter->second = false;
     }
 #endif
 
@@ -250,6 +260,11 @@ void pmExecutionStub::FreeGpuResources()
     
 void pmExecutionStub::FreeTaskResources(pmTask* pTask)
 {
+#ifdef PROACTIVE_STEAL_REQUESTS
+    if(pTask->GetSchedulingModel() == scheduler::PULL)
+        mStealRequestIssuedMap.erase(pTask);
+#endif
+
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(pTask->GetSchedulingModel() == scheduler::PUSH && pTask->GetSubtaskSplitter().IsSplitting(GetType()))
     {
@@ -1315,11 +1330,8 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
 
     pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), 0);
 
-#ifdef PROACTIVE_STEAL_REQUESTS
-#else
 	if(pRange.task->GetSchedulingModel() == scheduler::PULL)
-		pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), pRange.task, pRange.task->GetTaskExecStats().GetStubExecutionRate(this));
-#endif
+        IssueStealRequestIfRequired(pRange.task);
 }
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -1465,9 +1477,9 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
 
     pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), pTotalSplitCount);
 
-    // Even if PROACTIVE_STEAL_REQUESTS is defined, a steal request is generated only if there is no more pending subtask in the stub queue
+    // A steal request is generated only if there is no more pending subtask in the stub queue
 	if(pRange.task->GetSchedulingModel() == scheduler::PULL && !HasMatchingCommand(pRange.task->GetPriority(), execEventMatchFunc, pRange.task))
-		pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), pRange.task, pRange.task->GetTaskExecStats().GetStubExecutionRate(this));
+        IssueStealRequestIfRequired(pRange.task);
 }
 
 bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)
@@ -1863,7 +1875,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                     lWaitForNextSubtaskCompletionLambda(lCommonTimePerSubtask);
 
                 if(lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this) != (double)0)
-                    pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), lParentRange.task, lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this));
+                    IssueStealRequestIfRequired(lParentRange.task);
             }
         #endif
 
@@ -2119,6 +2131,22 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
     
     if(lStatus == pmSuccess)
         pTask->GetReducer()->AddSubtask(this, pSubtaskId1, pSplitInfo1);
+}
+    
+void pmExecutionStub::IssueStealRequestIfRequired(pmTask* pTask)
+{
+    DEBUG_EXCEPTION_ASSERT(pTask->GetSchedulingModel() == scheduler::PULL);
+    
+#ifdef PROACTIVE_STEAL_REQUESTS
+    auto lIter = mStealRequestIssuedMap.find(pTask);
+    if(lIter == mStealRequestIssuedMap.end() || !lIter->second)
+    {
+        mStealRequestIssuedMap[pTask] = true;
+        pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), pTask, pTask->GetTaskExecStats().GetStubExecutionRate(this));
+    }
+#else
+    pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), pTask, pTask->GetTaskExecStats().GetStubExecutionRate(this));
+#endif
 }
     
 #ifdef SUPPORT_OPENCL

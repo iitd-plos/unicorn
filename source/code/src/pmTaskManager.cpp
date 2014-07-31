@@ -225,7 +225,7 @@ void pmTaskManager::ScheduleEnqueuedRemoteSubtasksForExecution(pmRemoteTask* pRe
         {
             std::pair<pmSubtaskRange, const pmProcessingElement*>& lValuePair = *lBegin;
             lValuePair.first.task = pRemoteTask;
-            pmScheduler::GetScheduler()->PushEvent(lValuePair.second, lValuePair.first);
+            pmScheduler::GetScheduler()->PushEvent(lValuePair.second, lValuePair.first, false);
         }
         
         lEnqueuedRemoteSubtasksMap.erase(lPair);

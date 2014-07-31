@@ -271,7 +271,7 @@ void pmScheduler::SubmitTaskEvent(pmLocalTask* pLocalTask)
 	SwitchThread(std::shared_ptr<schedulerEvent>(new taskSubmissionEvent(NEW_SUBMISSION, pLocalTask)), pLocalTask->GetPriority());
 }
 
-void pmScheduler::PushEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange)
+void pmScheduler::PushEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, bool pIsStealResponse)
 {
 #ifdef TRACK_SUBTASK_EXECUTION
     // Auto lock/unlock scope
@@ -281,7 +281,7 @@ void pmScheduler::PushEvent(const pmProcessingElement* pDevice, const pmSubtaskR
     }
 #endif
 
-	SwitchThread(std::shared_ptr<schedulerEvent>(new subtaskExecEvent(SUBTASK_EXECUTION, pDevice, pRange)), pRange.task->GetPriority());
+	SwitchThread(std::shared_ptr<schedulerEvent>(new subtaskExecEvent(SUBTASK_EXECUTION, pDevice, pRange, pIsStealResponse)), pRange.task->GetPriority());
 }
 
 void pmScheduler::StealRequestEvent(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate)
@@ -473,7 +473,7 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             subtaskExecEvent& lEvent = static_cast<subtaskExecEvent&>(pEvent);
 
             if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEvent.range.task))
-                PushToStub(lEvent.device, lEvent.range);
+                PushToStub(lEvent.device, lEvent.range, lEvent.isStealResponse);
             
             break;
         }
@@ -979,7 +979,7 @@ void pmScheduler::AssignSubtasksToDevice(const pmProcessingElement* pDevice, pmL
 	if(lMachine == PM_LOCAL_MACHINE)
 	{
 		pmSubtaskRange lRange(pLocalTask, lOriginalAllottee, lStartingSubtask, lStartingSubtask + lSubtaskCount - 1);
-		PushEvent(pDevice, lRange);
+		PushEvent(pDevice, lRange, false);
 	}
 	else
 	{
@@ -1180,15 +1180,9 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 	return pmSuccess;
 }
 
-void pmScheduler::PushToStub(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange)
+void pmScheduler::PushToStub(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, bool pIsStealResponse)
 {
-	pmStubManager* lManager = pmStubManager::GetStubManager();
-	pmExecutionStub* lStub = lManager->GetStub(pDevice);
-
-	if(!lStub)
-		PMTHROW(pmFatalErrorException());
-
-	lStub->Push(pRange);
+    pDevice->GetLocalExecutionStub()->Push(pRange, pIsStealResponse);
 }
 
 #ifdef ENABLE_TWO_LEVEL_STEALING
@@ -1326,7 +1320,7 @@ void pmScheduler::ReceiveStealResponse(const pmProcessingElement* pStealingDevic
 	pmTaskExecStats& lTaskExecStats = pRange.task->GetTaskExecStats();
 	lTaskExecStats.RecordSuccessfulStealAttempt(pmStubManager::GetStubManager()->GetStub(pStealingDevice));
 
-	PushEvent(pStealingDevice, pRange);
+	PushEvent(pStealingDevice, pRange, true);
 }
 
 void pmScheduler::SendFailedStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask)
@@ -1552,7 +1546,7 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 
                         // Handling for out of order message receive (task received after subtask reception)
                         if(pmTaskManager::GetTaskManager()->GetRemoteTaskOrEnqueueSubtasks(lRange, lTargetDevice, lOriginatingHost, lData->sequenceNumber))
-                            PushEvent(lTargetDevice, lRange);
+                            PushEvent(lTargetDevice, lRange, false);
                     }
                     else if(lData->assignmentType == RANGE_NEGOTIATION)
                     {
