@@ -46,6 +46,9 @@ static const char* profileName[] =
     (char*)"SUBTASK_STEAL_WAIT",
     (char*)"SUBTASK_STEAL_SERVE",
     (char*)"STUB_WAIT_ON_NETWORK",
+    (char*)"COPY_TO_PINNED_MEMORY",
+    (char*)"COPY_FROM_PINNED_MEMORY",
+    (char*)"CUDA_COMMAND_PREPARATION",
     (char*)"UNIVERSAL"
 };
 

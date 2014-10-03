@@ -2847,6 +2847,10 @@ void* pmStubCUDA::GetDeviceInfoCudaPtr()
 
 void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo, std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::CUDA_COMMAND_PREPARATION);
+#endif
+
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
     std::vector<pmCudaSubtaskMemoryStruct>& lVector = mSubtaskPointersMap[pSubtaskId];
@@ -3128,6 +3132,10 @@ const std::map<ulong, pmCudaSubtaskSecondaryBuffersStruct>& pmStubCUDA::GetSubta
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
 void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::COPY_TO_PINNED_MEMORY);
+#endif
+
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
     uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
@@ -3217,6 +3225,10 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
     
 pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::COPY_FROM_PINNED_MEMORY);
+#endif
+
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
     
     uint lAddressSpaceCount = pTask->GetAddressSpaceCount();

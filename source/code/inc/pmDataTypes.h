@@ -420,6 +420,9 @@ namespace pm
             SUBTASK_STEAL_WAIT,
             SUBTASK_STEAL_SERVE,
             STUB_WAIT_ON_NETWORK,
+            COPY_TO_PINNED_MEMORY,
+            COPY_FROM_PINNED_MEMORY,
+            CUDA_COMMAND_PREPARATION,
             UNIVERSAL, /* For internal use only */
             MAX_PROFILE_TYPES
         };

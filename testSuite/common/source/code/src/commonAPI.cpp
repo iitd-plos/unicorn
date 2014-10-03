@@ -421,7 +421,7 @@ pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, p
     return pmSuccess;
 }
 
-// pRandomize is ignored when pDistType is BLOCK_DIST_RANDOM
+// pRandomize is ignored when pDistType is BLOCK_DIST_2D_RANDOM
 void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, bool pRandomize)
 {
     using namespace pm;
