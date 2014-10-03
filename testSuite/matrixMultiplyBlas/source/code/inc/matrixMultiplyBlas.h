@@ -2,7 +2,7 @@
 namespace matrixMultiplyBlas
 {
 
-#define DEFAULT_POW_MATRIX_DIM 12
+#define DEFAULT_MATRIX_DIM 4096
 
 #define MATRIX_DATA_TYPE_FLOAT
 //#define MATRIX_DATA_TYPE_DOUBLE

@@ -101,9 +101,8 @@ pmStatus matrixMultiply_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
 }
 
 #define READ_NON_COMMON_ARGS \
-	size_t lPowMatrixDim = DEFAULT_POW_MATRIX_DIM; \
-	FETCH_INT_ARG(lPowMatrixDim, pCommonArgs, argc, argv); \
-    size_t lMatrixDim = (1 << lPowMatrixDim); \
+    size_t lMatrixDim = DEFAULT_MATRIX_DIM; \
+    FETCH_INT_ARG(lMatrixDim, pCommonArgs, argc, argv); \
 	size_t lMatrixElems = lMatrixDim * lMatrixDim; \
     lMatrixElems = lMatrixElems;        // Supress unused variable warning
 
