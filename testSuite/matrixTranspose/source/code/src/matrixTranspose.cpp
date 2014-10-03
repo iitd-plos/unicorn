@@ -323,7 +323,7 @@ pmStatus matrixTranspose_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 	return pmSuccess;
 }
 
-double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemType pInputMemType, pmMemType pOutputMemType)
+double parallelMatrixTranspose(size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemType pInputMemType, pmMemType pOutputMemType)
 {
     bool lInplace = (pInputMemHandle == pOutputMemHandle);
     
@@ -449,7 +449,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
 	memcpy(lRawInputPtr, (lInplace ? gParallelOutput : gSampleInput), lMemSize);
 
-    double lTime = parallelMatrixTranspose(lPowRows, lPowCols, lMatrixDimRows, lMatrixDimCols, lInputMemHandle, lOutputMemHandle, pCallbackHandle[0], pSchedulingPolicy, READ_ONLY, (lInplace ? READ_WRITE : WRITE_ONLY));
+    double lTime = parallelMatrixTranspose(lMatrixDimRows, lMatrixDimCols, lInputMemHandle, lOutputMemHandle, pCallbackHandle[0], pSchedulingPolicy, READ_ONLY, (lInplace ? READ_WRITE : WRITE_ONLY));
     
     if(lTime != -1.0 && pFetchBack)
     {

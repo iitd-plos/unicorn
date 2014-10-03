@@ -5,10 +5,10 @@ namespace fft
 #define USE_SQUARE_MATRIX
 #define NO_MATRIX_TRANSPOSE
 
-#define DEFAULT_POW_X 12
+#define DEFAULT_DIM_X 4096
     
 #ifndef USE_SQUARE_MATRIX
-#define DEFAULT_POW_Y 11
+#define DEFAULT_DIM_Y 2048
 #endif
 
 #define DEFAULT_INPLACE_VALUE 0
@@ -55,8 +55,6 @@ typedef struct fftTaskConf
 {
 	size_t elemsX;  // rows
     size_t elemsY;  // cols
-    size_t powX;
-    size_t powY;
     bool rowPlanner;
     bool inplace;
 } fftTaskConf;
@@ -80,7 +78,7 @@ namespace matrixTranspose
 
     pmStatus matrixTranspose_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
 
-    double parallelMatrixTranspose(size_t pPowRows, size_t pPowCols, size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemType pInputMemType, pmMemType pOutputMemType);
+    double parallelMatrixTranspose(size_t pMatrixDimRows, size_t pMatrixDimCols, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemType pInputMemType, pmMemType pOutputMemType);
 
 #ifdef BUILD_CUDA
     pmStatus matrixTranspose_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, void* pCudaStream);

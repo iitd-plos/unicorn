@@ -172,7 +172,7 @@ pmStatus fft_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSu
 }
 
 // Returns 0 on success; non-zero on failure
-int fftSingleGpu2D(bool inplace, complex* inputData, complex* outputData, size_t powx, size_t nx, size_t powy, size_t ny, int dir)
+int fftSingleGpu2D(bool inplace, complex* inputData, complex* outputData, size_t nx, size_t ny, int dir)
 {
     void* lInputData = (inplace ? outputData : inputData);
     

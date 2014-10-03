@@ -316,9 +316,8 @@ pmStatus diagComp_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskI
 }
 
 #define READ_NON_COMMON_ARGS \
-    size_t lPowDim = DEFAULT_POW_DIM; \
-    FETCH_INT_ARG(lPowDim, pCommonArgs, argc, argv); \
-    size_t lMatrixDim = 1 << lPowDim;
+    size_t lMatrixDim = DEFAULT_MATRIX_DIM; \
+    FETCH_INT_ARG(lMatrixDim, pCommonArgs, argc, argv);
 
 // Returns execution time on success; 0 on error
 double DoSerialProcess(int argc, char** argv, int pCommonArgs)

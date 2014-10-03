@@ -2,7 +2,7 @@
 namespace luDecomposition
 {
 
-#define DEFAULT_POW_DIM 12
+#define DEFAULT_MATRIX_DIM 4096
 const size_t BLOCK_DIM = 2048;   // Must be a power of 2
 
 #define MATRIX_DATA_TYPE_FLOAT

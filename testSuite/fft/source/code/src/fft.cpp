@@ -77,7 +77,7 @@ fftwPlanner gRowPlanner(true);
     #endif
 #endif
 
-void fftSerial(complex* input, complex* output, size_t powx, size_t nx, size_t powy, size_t ny, int dir)
+void fftSerial(complex* input, complex* output, size_t nx, size_t ny, int dir)
 {
 #if 1   //ndef NO_MATRIX_TRANSPOSE
 
@@ -274,23 +274,19 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
 
 #ifdef USE_SQUARE_MATRIX
 #define READ_NON_COMMON_ARGS \
-    int lPowX = DEFAULT_POW_X; \
+    int lElemsX = DEFAULT_DIM_X; \
     bool lInplace = (bool)DEFAULT_INPLACE_VALUE; \
-    FETCH_INT_ARG(lPowX, pCommonArgs, argc, argv); \
+    FETCH_INT_ARG(lElemsX, pCommonArgs, argc, argv); \
     FETCH_BOOL_ARG(lInplace, pCommonArgs + 1, argc, argv); \
-    int lPowY = lPowX; \
-    size_t lElemsX = 1 << lPowX; \
     size_t lElemsY = lElemsX;
 #else
 #define READ_NON_COMMON_ARGS \
-    int lPowX = DEFAULT_POW_X; \
-    int lPowY = DEFAULT_POW_Y; \
+    int lElemsX = DEFAULT_ELEMS_X; \
+    int lElemsY = DEFAULT_ELEMS_Y; \
     bool lInplace = (bool)DEFAULT_INPLACE_VALUE; \
-    FETCH_INT_ARG(lPowX, pCommonArgs, argc, argv); \
-    FETCH_INT_ARG(lPowY, pCommonArgs + 1, argc, argv); \
-    FETCH_BOOL_ARG(lInplace, pCommonArgs + 2, argc, argv); \
-    size_t lElemsX = 1 << lPowX; \
-    size_t lElemsY = 1 << lPowY;
+    FETCH_INT_ARG(lElemsX, pCommonArgs, argc, argv); \
+    FETCH_INT_ARG(lElemsY, pCommonArgs + 1, argc, argv); \
+    FETCH_BOOL_ARG(lInplace, pCommonArgs + 2, argc, argv);
 #endif
 
 // Returns execution time on success; 0 on error
@@ -313,9 +309,9 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
     double lStartTime = getCurrentTimeInSecs();
 
 #ifdef FFT_2D
-	fftSerial((lInplace ? gSerialOutput : lInputCopy), gSerialOutput, lPowX, lElemsX, lPowY, lElemsY, FORWARD_TRANSFORM_DIRECTION);
+	fftSerial((lInplace ? gSerialOutput : lInputCopy), gSerialOutput, lElemsX, lElemsY, FORWARD_TRANSFORM_DIRECTION);
 #else
-	fftSerial((lInplace ? gSerialOutput : gSampleInput), gSerialOutput, lPowX, lElemsX, lPowY, lElemsY, FORWARD_TRANSFORM_DIRECTION);
+	fftSerial((lInplace ? gSerialOutput : gSampleInput), gSerialOutput, lElemsX, lElemsY, FORWARD_TRANSFORM_DIRECTION);
 #endif
 
 	double lEndTime = getCurrentTimeInSecs();
@@ -338,7 +334,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 
     double lStartTime = getCurrentTimeInSecs();
     
-	if(fftSingleGpu2D(lInplace, gSampleInput, gParallelOutput, lPowX, lElemsX, lPowY, lElemsY, FORWARD_TRANSFORM_DIRECTION) != 0)
+	if(fftSingleGpu2D(lInplace, gSampleInput, gParallelOutput, lElemsX, lElemsY, FORWARD_TRANSFORM_DIRECTION) != 0)
         return 0;
     
 	double lEndTime = getCurrentTimeInSecs();
@@ -404,7 +400,7 @@ bool Parallel_FFT_1D(pmMemHandle pInputMemHandle, pmMemType pInputMemType, pmMem
 #ifdef FFT_2D
 bool Parallel_Transpose(void* pInputMemHandle, pmMemType pInputMemType, void* pOutputMemHandle, pmMemType pOutputMemType, fftTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
-    if(matrixTranspose::parallelMatrixTranspose(pTaskConf->powX, pTaskConf->powY, pTaskConf->elemsX, pTaskConf->elemsY, pInputMemHandle, pOutputMemHandle, pCallbackHandle, pSchedulingPolicy, pInputMemType, pOutputMemType) == -1.0)
+    if(matrixTranspose::parallelMatrixTranspose(pTaskConf->elemsX, pTaskConf->elemsY, pInputMemHandle, pOutputMemHandle, pCallbackHandle, pSchedulingPolicy, pInputMemType, pOutputMemType) == -1.0)
         return false;
 
 	return true;
@@ -439,8 +435,6 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	fftTaskConf lTaskConf;
     lTaskConf.elemsX = lElemsX;
     lTaskConf.elemsY = lElemsY;
-    lTaskConf.powX = lPowX;
-    lTaskConf.powY = lPowY;
     lTaskConf.rowPlanner = true;
     lTaskConf.inplace = lInplace;
 
