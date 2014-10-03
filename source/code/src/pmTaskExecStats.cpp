@@ -54,6 +54,7 @@ pmTaskExecStats::~pmTaskExecStats()
 
 #ifdef ENABLE_MEM_PROFILING
     lStream << "Memory Transfers - Received = " << mMemReceived << " bytes; Receive Events = " << mMemReceiveEvents << "; Sent = " << mMemTransferred << " bytes; Send Events = " << mMemTransferEvents << std::endl;
+    lStream << "Scattered Memory Transfers - Received = " << mScatteredMemReceived << " bytes; Receive Events = " << mScatteredMemReceiveEvents << "; Sent = " << mScatteredMemTransferred << " bytes; Send Events = " << mScatteredMemTransferEvents << std::endl;
 #endif
     
 	auto lIter = mStats.begin(), lEndIter = mStats.end();
@@ -160,20 +161,32 @@ uint pmTaskExecStats::GetPipelineContinuationAcrossRanges(pmExecutionStub* pStub
 }
 
 #ifdef ENABLE_MEM_PROFILING
-void pmTaskExecStats::RecordMemReceiveEvent(size_t pMemSize)
+void pmTaskExecStats::RecordMemReceiveEvent(size_t pMemSize, bool pIsScattered)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     mMemReceived += pMemSize;
     ++(mMemReceiveEvents);
+
+    if(pIsScattered)
+    {
+        mScatteredMemReceived += pMemSize;
+        ++(mScatteredMemReceiveEvents);
+    }
 }
     
-void pmTaskExecStats::RecordMemTransferEvent(size_t pMemSize)
+void pmTaskExecStats::RecordMemTransferEvent(size_t pMemSize, bool pIsScattered)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     mMemTransferred += pMemSize;
     ++(mMemTransferEvents);
+
+    if(pIsScattered)
+    {
+        mScatteredMemTransferred += pMemSize;
+        ++(mScatteredMemTransferEvents);
+    }
 }
 #endif
 

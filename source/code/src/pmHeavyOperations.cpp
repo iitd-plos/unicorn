@@ -379,7 +379,7 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
                     pSrcAddressSpace->RecordMemTransfer(lInternalLength);
                     
                     if(pRequestingTask)
-                        pRequestingTask->GetTaskExecStats().RecordMemTransferEvent(lInternalLength);
+                        pRequestingTask->GetTaskExecStats().RecordMemTransferEvent(lInternalLength, false);
                 }
             #endif
 
@@ -436,7 +436,7 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
                 pSrcAddressSpace->RecordMemTransfer(lScatteredInfo.size * lScatteredInfo.count);
 
                 if(pRequestingTask)
-                    pRequestingTask->GetTaskExecStats().RecordMemTransferEvent(lScatteredInfo.size * lScatteredInfo.count);
+                    pRequestingTask->GetTaskExecStats().RecordMemTransferEvent(lScatteredInfo.size * lScatteredInfo.count, true);
             }
         #endif
 

@@ -79,18 +79,22 @@ public:
     uint GetPipelineContinuationAcrossRanges(pmExecutionStub* pStub);
     
 #ifdef ENABLE_MEM_PROFILING
-    void RecordMemReceiveEvent(size_t pMemSize);
-    void RecordMemTransferEvent(size_t pMemSize);
+    void RecordMemReceiveEvent(size_t pMemSize, bool pIsScattered);    // Scattered + General
+    void RecordMemTransferEvent(size_t pMemSize, bool pIsScattered);    // Scattered + General
 #endif
 
 private:
     pmTask* mTask;
 
     #ifdef ENABLE_MEM_PROFILING
-        size_t mMemReceived;
-        size_t mMemTransferred;
-        ulong mMemReceiveEvents;
-        ulong mMemTransferEvents;
+        size_t mMemReceived;    // Scattered + General
+        size_t mMemTransferred;    // Scattered + General
+        ulong mMemReceiveEvents;    // Scattered + General
+        ulong mMemTransferEvents;    // Scattered + General
+        size_t mScatteredMemReceived;
+        size_t mScatteredMemTransferred;
+        ulong mScatteredMemReceiveEvents;
+        ulong mScatteredMemTransferEvents;
     #endif
 
     std::map<pmExecutionStub*, stubStats, stubSorter> mStats;

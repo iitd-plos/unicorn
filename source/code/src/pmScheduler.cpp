@@ -1743,7 +1743,7 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                                     lAddressSpace->RecordMemReceive(lData->receiveStruct.length);
 
                                     if(lRequestingTask)
-                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lData->receiveStruct.length);
+                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lData->receiveStruct.length, false);
                                 }
                             #endif
 
@@ -1759,7 +1759,7 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                                     lAddressSpace->RecordMemReceive(lData->receiveStruct.length * lData->receiveStruct.count);
 
                                     if(lRequestingTask)
-                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lData->receiveStruct.length * lData->receiveStruct.count);
+                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lData->receiveStruct.length * lData->receiveStruct.count, true);
                                 }
                             #endif
 
