@@ -957,9 +957,22 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             EXCEPTION_ASSERT(mCurrentSubtaskQueue.empty());
             EXCEPTION_ASSERT(mCurrentSubtaskTimersMap.empty());
 
+        #ifdef USE_STEAL_AGENT_PER_NODE
+            if(lEvent.range.task->GetSchedulingModel() == scheduler::PULL)
+                lEvent.range.task->GetStealAgent()->SetStubMultiAssignment(this, true);
+        #endif
+
             ExecuteSubtaskRange(lEvent);
 
-			break;
+        #ifdef USE_STEAL_AGENT_PER_NODE
+            if(lEvent.range.task->GetSchedulingModel() == scheduler::PULL)
+            {
+                lEvent.range.task->GetStealAgent()->SetStubMultiAssignment(this, false);
+                lEvent.range.task->GetStealAgent()->ClearExecutingSubtasks(this);
+            }
+        #endif
+
+            break;
 		}
 
 		case SUBTASK_REDUCE:
@@ -1182,11 +1195,6 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
 
     DEBUG_EXCEPTION_ASSERT(lCurrentRange.startSubtask <= lCurrentRange.endSubtask);
 
-#ifdef USE_STEAL_AGENT_PER_NODE
-    if(lRange.task->GetSchedulingModel() == scheduler::PULL)
-        lRange.task->GetStealAgent()->SetStubMultiAssignment(this, true);
-#endif
-
     /* Premature Termination occurs when a subtask range gets cancelled
      * Reassignment means a secondary allottee has already executed and negotiated the subtask range
      * Force Ack means entire range has not got negotiated but only what is beyond the currently
@@ -1247,14 +1255,6 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
         if(lCurrentRange.endSubtask == lRange.endSubtask)
             HandleRangeExecutionCompletion(lRange, lExecStatus);
     }
-
-#ifdef USE_STEAL_AGENT_PER_NODE
-    if(lRange.task->GetSchedulingModel() == scheduler::PULL)
-    {
-        lRange.task->GetStealAgent()->SetStubMultiAssignment(this, false);
-        lRange.task->GetStealAgent()->ClearExecutingSubtasks(this);
-    }
-#endif
 }
 
 void pmExecutionStub::ClearSecondaryAllotteeMap(pmSubtaskRange& pRange)
@@ -1810,8 +1810,9 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 
         TIMER_IMPLEMENTATION_CLASS& lTimer = lIter->second;
         lTimer.Resume();
-        
-        WaitForSubtaskExecutionToFinish(pCurrentRange.task, lSubtaskId, NULL);
+
+        if(!pPrematureTermination)
+            WaitForSubtaskExecutionToFinish(pCurrentRange.task, lSubtaskId, NULL);
 
     #ifdef DUMP_EVENT_TIMELINE
         pRangeExecTimelineAutoPtr.FinishSubtask(lSubtaskId);
