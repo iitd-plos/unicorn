@@ -38,6 +38,10 @@ pmTaskExecStats::pmTaskExecStats(pmTask* pTask)
     , mMemTransferred(0)
     , mMemReceiveEvents(0)
     , mMemTransferEvents(0)
+    , mScatteredMemReceived(0)
+    , mScatteredMemTransferred(0)
+    , mScatteredMemReceiveEvents(0)
+    , mScatteredMemTransferEvents(0)
 #endif
     , mResourceLock __LOCK_NAME__("pmTaskExecStats::mResourceLock")
 {
