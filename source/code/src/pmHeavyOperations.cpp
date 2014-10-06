@@ -383,18 +383,29 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
                 }
             #endif
 
-                std::function<char* (ulong)> lFunc([&] (ulong pIndex) -> char*
+                // If the memory request is too large than what MPI can handle in a single transport, then break the request into multiple ones
+                ulong lMaxTransport = __MAX_SIGNED(int) - MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+                ulong lSteps = (lInternalLength / lMaxTransport) + ((lInternalLength % lMaxTransport) ? 1 : 0);
+
+                for(ulong step = 0; step < lSteps; ++step)
                 {
-                    return static_cast<char*>(lOwnerAddressSpace->GetMem()) + lInternalOffset;
-                });
-                
-                finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset + lInternalOffset - pOffset, lInternalLength, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
-            
-                MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lInternalLength, (uint)(*pRequestingMachine))
+                    ulong lStepLength = ((step == lSteps - 1) ? (lInternalLength % lMaxTransport) : lMaxTransport);
 
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
+                    std::function<char* (ulong)> lFunc([&] (ulong pIndex) -> char*
+                    {
+                        return static_cast<char*>(lOwnerAddressSpace->GetMem()) + lInternalOffset;
+                    });
 
-                pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
+                    finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset + lInternalOffset - pOffset, lStepLength, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+
+                    MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lStepLength, (uint)(*pRequestingMachine))
+
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
+
+                    pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
+
+                    lInternalOffset += lStepLength;
+                }
             }
         }
         else
@@ -443,21 +454,40 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
             pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
             char* lBeginAddr = (char*)(lOwnerAddressSpace->GetMem());
 
-            // This function returns pointer to scattered memory for step pScatteredIndex
-            std::function<char* (ulong)> lFunc([lBeginAddr, lScatteredInfo, lRangeOwner] (ulong pScatteredIndex) -> char*
+            // If the memory request is too large than what MPI can handle in a single transport, then break the request into multiple ones
+            // To maintain scattered transfers, we keep the lScatteredInfo.size unchanged but adjust lScatteredInfo.count
+            ulong lMaxTransport = __MAX_SIGNED(int) - MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+            ulong lMaxCounts = lMaxTransport / lScatteredInfo.size;    // How many scattered counts can be transported once?
+            
+            EXCEPTION_ASSERT(lMaxCounts);   // Atleast one count must be transferrable (otherwise, the request must be broken down into general request --- not implemented yet)
+            ulong lSteps = (lScatteredInfo.count / lMaxCounts) + ((lScatteredInfo.count % lMaxCounts) ? 1 : 0);
+
+            ulong lInternalStepOffset = 0;
+
+            for(ulong step = 0; step < lSteps; ++step)
             {
-                DEBUG_EXCEPTION_ASSERT(pScatteredIndex < lScatteredInfo.count);
+                ulong lStepCounts = ((step == lSteps - 1) ? (lScatteredInfo.count % lMaxCounts) : lMaxCounts);
+                
+                pmScatteredSubscriptionInfo lStepScatteredInfo(lScatteredInfo.offset + lInternalStepOffset, lScatteredInfo.size, lScatteredInfo.step, lStepCounts);
 
-                return lBeginAddr + lRangeOwner.hostOffset + lScatteredInfo.step * pScatteredIndex;
-            });
+                // This function returns pointer to scattered memory for step pScatteredIndex
+                std::function<char* (ulong)> lFunc([lBeginAddr, lStepScatteredInfo, lRangeOwner, lInternalStepOffset] (ulong pScatteredIndex) -> char*
+                {
+                    DEBUG_EXCEPTION_ASSERT(pScatteredIndex < lStepScatteredInfo.count);
 
-            finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, lReceiverOffset, lScatteredInfo.size, lScatteredInfo.step, lScatteredInfo.count, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
-        
-            MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, lReceiverOffset, lScatteredInfo.offset, lScatteredInfo.size * lScatteredInfo.count, (uint)(*pRequestingMachine))
+                    return lBeginAddr + lRangeOwner.hostOffset + lInternalStepOffset + lStepScatteredInfo.step * pScatteredIndex;
+                });
 
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
+                finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.size, lStepScatteredInfo.step, lStepScatteredInfo.count, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+            
+                MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.offset, lStepScatteredInfo.size * lStepScatteredInfo.count, (uint)(*pRequestingMachine))
 
-            pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
+
+                pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
+                
+                lInternalStepOffset += lStepCounts * lScatteredInfo.step;
+            }
         }
         else
         {

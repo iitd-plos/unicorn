@@ -166,8 +166,8 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	memcpy(lRawInputPtr1, gSampleInput, lMatrixSize);
 	memcpy(lRawInputPtr2, gSampleInput + lMatrixElems, lMatrixSize);
     
-    DistributeMemory(lInputMem1, BLOCK_DIST_2D_RANDOM, BLOCK_DIM, (unsigned int)lMatrixDim, (unsigned int)lMatrixDim, sizeof(MATRIX_DATA_TYPE), false);
-    DistributeMemory(lInputMem2, BLOCK_DIST_2D_RANDOM, BLOCK_DIM, (unsigned int)lMatrixDim, (unsigned int)lMatrixDim, sizeof(MATRIX_DATA_TYPE), false);
+    DistributeMemory(lInputMem1, BLOCK_DIST_1D_ROW, BLOCK_DIM, (unsigned int)lMatrixDim, (unsigned int)lMatrixDim, sizeof(MATRIX_DATA_TYPE), true);
+    DistributeMemory(lInputMem2, BLOCK_DIST_1D_COL, BLOCK_DIM, (unsigned int)lMatrixDim, (unsigned int)lMatrixDim, sizeof(MATRIX_DATA_TYPE), true);
 
     pmTaskMem lTaskMem[MAX_MEM_INDICES];
     lTaskMem[INPUT_MATRIX1_MEM_INDEX] = {lInputMem1, READ_ONLY, SUBSCRIPTION_OPTIMAL};
