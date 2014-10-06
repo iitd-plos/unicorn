@@ -1811,8 +1811,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         TIMER_IMPLEMENTATION_CLASS& lTimer = lIter->second;
         lTimer.Resume();
 
-        if(!pPrematureTermination)
-            WaitForSubtaskExecutionToFinish(pCurrentRange.task, lSubtaskId, NULL);
+        WaitForSubtaskExecutionToFinish(pCurrentRange.task, lSubtaskId, NULL);
 
     #ifdef DUMP_EVENT_TIMELINE
         pRangeExecTimelineAutoPtr.FinishSubtask(lSubtaskId);
@@ -1830,6 +1829,8 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         while(!mCurrentSubtaskQueue.empty())
             lWaitForNextSubtaskCompletionLambda(pCommonTimePerSubtask);
     };
+    
+    ulong lCommonTimePerSubtask = 0;
 
     try
     {
@@ -1864,7 +1865,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         lCommonTimer.Stop();
 
         ulong lSubtaskCount = (lEndSubtask - lStartSubtask + 1);
-        ulong lCommonTimePerSubtask = (lCommonTimer.GetElapsedTimeInSecs() / lSubtaskCount);
+        lCommonTimePerSubtask = (lCommonTimer.GetElapsedTimeInSecs() / lSubtaskCount);
 
         for(ulong lSubtaskId = lStartSubtask; lSubtaskId <= lEndSubtask; ++lSubtaskId)
         {
@@ -2023,14 +2024,17 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         }
     #endif
     #endif
-
-        lWaitForAllSubtasksCompletionLambda(lCommonTimePerSubtask);
     }
     catch(pmPrematureExitException& e)
     {
         if(e.IsSubtaskLockAcquired())
             lScopedPtr.SetLockAcquired();
     }
+
+    // Even if there is pmPrematureExitException, we must wait for all subtasks to complete before returning from this function.
+    // Otherwise, the cleanup lambda (scope_exit declared above) would clean all resources of all subtasks before their completion.
+    // This leads to a hang/crash sometimes.
+    lWaitForAllSubtasksCompletionLambda(lCommonTimePerSubtask);
 
     return lEndSubtask;
 }
@@ -3317,6 +3321,8 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
 
 void pmStubCUDA::WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
+    EXCEPTION_ASSERT(mCudaStreams.find(pSubtaskId) != mCudaStreams.end());
+
     pmCudaInterface::WaitForStreamCompletion(*mCudaStreams[pSubtaskId].get());
     
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
@@ -3376,6 +3382,8 @@ void pmStubCUDA::CleanupPostSubtaskExecution(pmTask* pTask, ulong pSubtaskId, pm
     
     mPreventCachePurgeMap.erase(pSubtaskId);
     mCacheKeys.erase(pSubtaskId);
+
+    mCudaStreams.erase(pSubtaskId);
 }
 
 void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSubtaskId, ulong pEndSubtaskId, ulong pCleanupEndSubtaskId, pmSplitInfo* pSplitInfo)
