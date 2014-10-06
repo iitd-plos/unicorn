@@ -389,7 +389,7 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
 
                 for(ulong step = 0; step < lSteps; ++step)
                 {
-                    ulong lStepLength = ((step == lSteps - 1) ? (lInternalLength % lMaxTransport) : lMaxTransport);
+                    ulong lStepLength = ((step == lSteps - 1) ? (lInternalLength - lMaxTransport * step) : lMaxTransport);
 
                     std::function<char* (ulong)> lFunc([&] (ulong pIndex) -> char*
                     {
@@ -466,7 +466,7 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
 
             for(ulong step = 0; step < lSteps; ++step)
             {
-                ulong lStepCounts = ((step == lSteps - 1) ? (lScatteredInfo.count % lMaxCounts) : lMaxCounts);
+                ulong lStepCounts = ((step == lSteps - 1) ? (lScatteredInfo.count - lMaxCounts * step) : lMaxCounts);
                 
                 pmScatteredSubscriptionInfo lStepScatteredInfo(lScatteredInfo.offset + lInternalStepOffset, lScatteredInfo.size, lScatteredInfo.step, lStepCounts);
 
