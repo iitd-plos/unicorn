@@ -43,7 +43,7 @@ void pmStealAgent::RegisterPendingSubtasks(pmExecutionStub* pStub, ulong pPendin
 
     FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lStubData.stubLock, Lock(), Unlock());
 
-    lStubData.subtasksPendingInStubQueue = pPendingSubtasks;
+    lStubData.subtasksPendingInStubQueue += pPendingSubtasks;
 }
 
 void pmStealAgent::DeregisterPendingSubtasks(pmExecutionStub* pStub, ulong pSubtasks)
@@ -63,7 +63,7 @@ void pmStealAgent::RegisterExecutingSubtasks(pmExecutionStub* pStub, ulong pExec
 
     FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lStubData.stubLock, Lock(), Unlock());
 
-    lStubData.subtasksPendingInPipeline = pExecutingSubtasks;
+    lStubData.subtasksPendingInPipeline += pExecutingSubtasks;
 }
 
 void pmStealAgent::DeregisterExecutingSubtasks(pmExecutionStub* pStub, ulong pSubtasks)
