@@ -8,10 +8,13 @@
 #include <fftw3.h>
 #include <math.h>
 
+#include <vector>
+
 namespace fft
 {
-    
-size_t gDevicesPerSplitGroup = 6;   // Temporarily hardcoding
+
+#define MAX_CPU_CORES 12
+#define MAX_SPLIT_GROUP_CONFIGURATIONS (MAX_CPU_CORES - 1)   // Split groups are created for all sizes from 2 cpu cores to MAX_CPU_CORES (inclusive)
     
 FFT_DATA_TYPE* gSampleInput;
 FFT_DATA_TYPE* gSerialOutput;
@@ -68,12 +71,12 @@ fftwPlanner gRowPlanner(true);
 #endif
     
 #ifdef NO_MATRIX_TRANSPOSE
-    fftwPlanner gSplitRowPlanner(true);
-    fftwPlanner gSplitLastRowPlanner(true);
+    std::vector<fftwPlanner> gSplitRowPlanner(MAX_SPLIT_GROUP_CONFIGURATIONS, fftwPlanner(true));
+    std::vector<fftwPlanner> gSplitLastRowPlanner(MAX_SPLIT_GROUP_CONFIGURATIONS, fftwPlanner(true));
 
     #ifdef FFT_2D
-        fftwPlanner gSplitColPlanner(false);
-        fftwPlanner gSplitLastColPlanner(false);
+        std::vector<fftwPlanner> gSplitColPlanner(MAX_SPLIT_GROUP_CONFIGURATIONS, fftwPlanner(false));
+        std::vector<fftwPlanner> gSplitLastColPlanner(MAX_SPLIT_GROUP_CONFIGURATIONS, fftwPlanner(false));
     #endif
 #endif
 
@@ -126,9 +129,9 @@ pmStatus fftDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmS
 #ifdef NO_MATRIX_TRANSPOSE
     if(pSubtaskInfo.splitInfo.splitCount)
     {
-        if(pSubtaskInfo.splitInfo.splitCount != gDevicesPerSplitGroup)
+        if(pSubtaskInfo.splitInfo.splitCount > MAX_CPU_CORES)
         {
-            std::cout << "FFT currently configured for " << gDevicesPerSplitGroup << " and not " << pSubtaskInfo.splitInfo.splitCount << " devices per split group" << std::endl;
+            std::cout << "FFT currently configured for " << MAX_CPU_CORES << " cpu cores max and not for " << pSubtaskInfo.splitInfo.splitCount << std::endl;
             exit(1);
         }
         
@@ -242,14 +245,14 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
     if(lTaskConf->rowPlanner)
     {
         if(pSubtaskInfo.splitInfo.splitCount)
-            lPlanner = (pSubtaskInfo.splitInfo.splitId == pSubtaskInfo.splitInfo.splitCount - 1) ? gSplitLastRowPlanner.mPlan : gSplitRowPlanner.mPlan;
+            lPlanner = (pSubtaskInfo.splitInfo.splitId == pSubtaskInfo.splitInfo.splitCount - 1) ? gSplitLastRowPlanner[pSubtaskInfo.splitInfo.splitCount - 2].mPlan : gSplitRowPlanner[pSubtaskInfo.splitInfo.splitCount - 2].mPlan;
         else
             lPlanner = gRowPlanner.mPlan;
     }
     else
     {
         if(pSubtaskInfo.splitInfo.splitCount)
-            lPlanner = (pSubtaskInfo.splitInfo.splitId == pSubtaskInfo.splitInfo.splitCount - 1) ? gSplitLastColPlanner.mPlan : gSplitColPlanner.mPlan;
+            lPlanner = (pSubtaskInfo.splitInfo.splitId == pSubtaskInfo.splitInfo.splitCount - 1) ? gSplitLastColPlanner[pSubtaskInfo.splitInfo.splitCount - 2].mPlan : gSplitColPlanner[pSubtaskInfo.splitInfo.splitCount - 2].mPlan;
         else
             lPlanner = gColPlanner.mPlan;
     }
@@ -630,13 +633,18 @@ int DoPreSetupPostMpiInit(int argc, char** argv, int pCommonArgs)
 #endif
     
 #ifdef NO_MATRIX_TRANSPOSE
-    gSplitRowPlanner.CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lElemsY, lElemsX, ROWS_PER_FFT_SUBTASK / gDevicesPerSplitGroup);
-    gSplitLastRowPlanner.CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lElemsY, lElemsX, ROWS_PER_FFT_SUBTASK - (gDevicesPerSplitGroup - 1) * (ROWS_PER_FFT_SUBTASK / gDevicesPerSplitGroup));
+    for(size_t i = 0; i < MAX_SPLIT_GROUP_CONFIGURATIONS; ++i)
+    {
+        size_t lSplitGroupDevices = i + 2;
 
-#ifdef FFT_2D
-    gSplitColPlanner.CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lElemsX, lElemsY, ROWS_PER_FFT_SUBTASK / gDevicesPerSplitGroup);
-    gSplitLastColPlanner.CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lElemsX, lElemsY, ROWS_PER_FFT_SUBTASK - (gDevicesPerSplitGroup - 1) * (ROWS_PER_FFT_SUBTASK / gDevicesPerSplitGroup));
-#endif
+        gSplitRowPlanner[i].CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lElemsY, lElemsX, ROWS_PER_FFT_SUBTASK / lSplitGroupDevices);
+        gSplitLastRowPlanner[i].CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lElemsY, lElemsX, ROWS_PER_FFT_SUBTASK - (lSplitGroupDevices - 1) * (ROWS_PER_FFT_SUBTASK / lSplitGroupDevices));
+
+    #ifdef FFT_2D
+        gSplitColPlanner[i].CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lElemsX, lElemsY, ROWS_PER_FFT_SUBTASK / lSplitGroupDevices);
+        gSplitLastColPlanner[i].CreateDummyPlan(false, FORWARD_TRANSFORM_DIRECTION, lElemsX, lElemsY, ROWS_PER_FFT_SUBTASK - (lSplitGroupDevices - 1) * (ROWS_PER_FFT_SUBTASK / lSplitGroupDevices));
+    #endif
+    }
 #endif
     
     return 0;
