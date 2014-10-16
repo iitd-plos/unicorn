@@ -876,7 +876,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
                 #else
                     #ifdef SUPPORT_CUDA
-                        const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType() && GetType() == GPU_CUDA) ? MA_WAIT_FACTOR_LENIENT : MA_WAIT_FACTOR);
+                        const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType() && pRequestingDevice->GetType() == GPU_CUDA) ? MA_WAIT_FACTOR_LENIENT : MA_WAIT_FACTOR);
                     #else
                         const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
                     #endif
