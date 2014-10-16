@@ -873,12 +873,12 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 #ifdef PROACTIVE_STEAL_REQUESTS
                 #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
                 #ifdef BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
-                    float lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
+                    const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
                 #else
                     #ifdef SUPPORT_CUDA
-                        float lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType() && GetType() == GPU_CUDA) ? MA_WAIT_FACTOR_LENIENT : MA_WAIT_FACTOR);
+                        const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType() && GetType() == GPU_CUDA) ? MA_WAIT_FACTOR_LENIENT : MA_WAIT_FACTOR);
                     #else
-                        float lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
+                        const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
                     #endif
                 #endif
                 #endif
