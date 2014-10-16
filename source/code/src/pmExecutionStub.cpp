@@ -868,7 +868,23 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 double lExpectedRemoteTimeToExecute = (lMultiAssignSubtaskCount/pRequestingDeviceExecutionRate);
                 double lExpectedLocalTimeToFinish = (lLocalRateZero ? 0.0 : ((lMultiAssignSubtaskCount/lLocalRate) - lElapsedTime));
             
-                lShouldMultiAssign = (lLocalRateZero ? (lElapsedTime >= (1.0 / pRequestingDeviceExecutionRate) * MA_WAIT_FACTOR) : (lExpectedRemoteTimeToExecute * SUBTASK_TRANSFER_OVERHEAD < lExpectedLocalTimeToFinish));
+                // Be more lineant to multi-assign to different device type on the same node
+                // Be extremely lineant if pipelining continuation is a possibility (i.e. CPU to GPU multi-assignment on same node)
+                #ifdef PROACTIVE_STEAL_REQUESTS
+                #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
+                #ifdef BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
+                    float lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
+                #else
+                    #ifdef SUPPORT_CUDA
+                        float lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType() && GetType() == GPU_CUDA) ? MA_WAIT_FACTOR_LINEANT : MA_WAIT_FACTOR);
+                    #else
+                        float lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
+                    #endif
+                #endif
+                #endif
+                #endif
+
+                lShouldMultiAssign = (lLocalRateZero ? (lElapsedTime >= (1.0 / pRequestingDeviceExecutionRate) * lFactor) : (lExpectedRemoteTimeToExecute * SUBTASK_TRANSFER_OVERHEAD < lExpectedLocalTimeToFinish));
                     
                 if(lShouldMultiAssign)
                 {

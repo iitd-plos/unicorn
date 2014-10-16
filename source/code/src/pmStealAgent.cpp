@@ -123,11 +123,23 @@ pmExecutionStub* pmStealAgent::GetStubWithMaxStealLikelihood(bool pConsiderMulti
         std::vector<size_t> lMultiAssigningStubs;
         lMultiAssigningStubs.reserve(mStubSink.size());
 
+        std::vector<size_t> lPreferredMultiAssigningStubs;
+        lPreferredMultiAssigningStubs.reserve(mStubSink.size());
+
         for_each_with_index(mStubSink, [&] (stubData& pData, size_t pStubIndex)
         {
             if(pData.isMultiAssigning && (!pIgnoreStub || lIgnoreStubIndex != pStubIndex))
-                lMultiAssigningStubs.emplace_back(pStubIndex);
+            {
+                // For local requests (i.e. pIgnoreStub != NULL), multi-assign from a stub of different type preferrably
+                if(!pIgnoreStub || pIgnoreStub->GetType() == pmStubManager::GetStubManager()->GetStub((uint)pStubIndex)->GetType())
+                    lMultiAssigningStubs.emplace_back(pStubIndex);
+                else
+                    lPreferredMultiAssigningStubs.emplace_back(pStubIndex);
+            }
         });
+
+        if(!lPreferredMultiAssigningStubs.empty())
+            return pmStubManager::GetStubManager()->GetStub((uint)lPreferredMultiAssigningStubs[rand() % lPreferredMultiAssigningStubs.size()]);
 
         if(!lMultiAssigningStubs.empty())
             return pmStubManager::GetStubManager()->GetStub((uint)lMultiAssigningStubs[rand() % lMultiAssigningStubs.size()]);
