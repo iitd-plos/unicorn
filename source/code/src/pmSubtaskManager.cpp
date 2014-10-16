@@ -755,6 +755,9 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
 #ifdef SUPPORT_SPLIT_SUBTASKS
     , mUseSplits(false)
 #endif
+    , mMachineCount(0)
+    , mPartitionsPerMachine(0)
+    , mLeftoverMachinePartitions(0)
     , mAssignmentResourceLock __LOCK_NAME__("pmPullSchedulingManager::mAssignmentResourceLock")
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
@@ -806,6 +809,17 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
             mSubtaskPartitions.insert(lUnfinishedPartitionPtr);
             
             lFirstSubtask = lLastSubtask + 1;
+        }
+
+        // If there are not enough partitions as devices, then assign same number of partitions to all machines
+        if(lPartitionCount < lDeviceCount)
+        {
+            std::set<const pmMachine*> lMachinesSet;
+            pmProcessingElement::GetMachines(mLocalTask->GetAssignedDevices(), lMachinesSet);
+
+            mMachineCount = lMachinesSet.size();
+            mPartitionsPerMachine = mSubtaskPartitions.size() / mMachineCount;
+            mLeftoverMachinePartitions = mSubtaskPartitions.size() - mPartitionsPerMachine * mMachineCount;
         }
 
         mIter = mSubtaskPartitions.begin();
@@ -869,7 +883,32 @@ void pmPullSchedulingManager::AssignSubtasksToDevice(const pmProcessingElement* 
             pSubtaskCount = 0;
             return;
         }
-        
+
+        if(mPartitionsPerMachine)
+        {
+            EXCEPTION_ASSERT(mMachineCount);
+
+            const pmMachine* lMachine = pDevice->GetMachine();
+
+            size_t lPartitionsForCurrentMachine = mPartitionsPerMachine;
+            if((uint)mLeftoverMachinePartitions > (uint)(*lMachine))
+                ++lPartitionsForCurrentMachine;
+
+            auto lMapIter = mPartitionsAssignedToMachinesMap.find(lMachine);
+
+            if(lMapIter == mPartitionsAssignedToMachinesMap.end())
+            {
+                lMapIter = mPartitionsAssignedToMachinesMap.emplace(lMachine, 0).first;
+            }
+            else if(lMapIter->second >= lPartitionsForCurrentMachine)
+            {
+                pSubtaskCount = 0;
+                return;
+            }
+
+            ++lMapIter->second;
+        }
+
         pmUnfinishedPartitionPtr lPartition = *mIter;
 
         pStartingSubtask = lPartition->firstSubtaskIndex;

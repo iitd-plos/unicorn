@@ -36,6 +36,7 @@ namespace pm
 class pmLocalTask;
 class pmSubtaskRangeCommand;
 class pmProcessingElement;
+class pmMachine;
 
 class pmSubtaskManager : public pmBase
 {
@@ -171,6 +172,11 @@ class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager
 
         std::set<pmUnfinishedPartitionPtr> mSubtaskPartitions;		// Collection of partitions to be assigned to devices
 		std::set<pmUnfinishedPartitionPtr>::iterator mIter;
+    
+        std::map<const pmMachine*, size_t> mPartitionsAssignedToMachinesMap;
+        size_t mMachineCount;
+        size_t mPartitionsPerMachine;
+        size_t mLeftoverMachinePartitions;
 
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mAssignmentResourceLock;
 };
@@ -207,3 +213,4 @@ private:
 } // end namespace pm
 
 #endif
+
