@@ -114,7 +114,7 @@ const unsigned int MIN_UNALLOCATED_CUDA_MEM_SIZE = (4 * 1024 * 1024);  // in byt
 #define SLOW_START_SCHEDULING_LOWER_LIMIT_EXEC_TIME_PER_ALLOCATION 8	// in seconds
 
 const double MA_WAIT_FACTOR = 1.05;  // If local stub's exec rate is zero, do not allow multi-assign till it has executed the subtask for 5% more time than requestor
-const double MA_WAIT_FACTOR_LINEANT = 0.95;  // If local stub's exec rate is zero, do not allow multi-assign till it has executed the subtask for 95% time as requestor (less than 100% is reqd. for pipeline continuation of GPUs)
+const double MA_WAIT_FACTOR_LENIENT = 0.95;  // If local stub's exec rate is zero, do not allow multi-assign till it has executed the subtask for 95% time as requestor (less than 100% is reqd. for pipeline continuation of GPUs)
 const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for steal/multi-assign
 
 #define MAX_SUBTASK_MULTI_ASSIGN_COUNT 2    // Max no. of devices to which a subtask may be assigned at any given time
