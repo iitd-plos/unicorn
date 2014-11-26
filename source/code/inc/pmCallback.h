@@ -49,7 +49,8 @@ class pmDataDistributionCB : public pmCallback
 	public:
 		pmDataDistributionCB(pmDataDistributionCallback pCallback);
 
-		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) const;
+        pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) const;
+        pmStatus InvokeDirect(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) const;
 
 	private:
 		pmDataDistributionCallback mCallback;
@@ -135,6 +136,19 @@ class pmPostDataTransferCB : public pmCallback
 
 	private:
 		pmPostDataTransferCallback mCallback;
+};
+
+class pmTaskCompletionCB : public pmCallback
+{
+	public:
+		pmTaskCompletionCB(pmTaskCompletionCallback pCallback);
+
+		pmStatus Invoke(pmTask* pTask) const;
+    
+        pmTaskCompletionCallback GetCallback() const;
+
+	private:
+		pmTaskCompletionCallback mCallback;
 };
 
 } // end namespace pm

@@ -876,6 +876,21 @@ void pmAddressSpace::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)
     pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str(), false);
 #endif
 }
+    
+ulong pmAddressSpace::FindLocalDataSize(ulong pOffset, ulong pLength)
+{
+    pmAddressSpace::pmMemOwnership lOwners;
+    GetOwners(pOffset, pLength, lOwners);
+    
+    ulong lLocalDataSize = 0;
+    for_each(lOwners, [&] (const typename decltype(lOwners)::value_type& pPair)
+    {
+        if(pPair.second.second.host == PM_LOCAL_MACHINE)
+            lLocalDataSize += pPair.second.first;
+    });
+    
+    return lLocalDataSize;
+}
 
 bool pmAddressSpace::IsRegionLocallyOwned(ulong pOffset, ulong pLength)
 {

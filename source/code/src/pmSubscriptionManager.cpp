@@ -247,8 +247,8 @@ void pmSubscriptionManager::InitializeSubtaskDefaults(pmExecutionStub* pStub, ul
         lPair.first.emplace(pSubtaskId, pmSubtask(mTask));
     }
 }
-
-void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+    
+void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pNoJmpBuf /* = false */)
 {
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(pSplitInfo)
@@ -271,7 +271,12 @@ void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, u
         
         const pmDataDistributionCB* lCallback = mTask->GetCallbackUnit()->GetDataDistributionCB();
         if(lCallback)
-            lCallback->Invoke(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
+        {
+            if(pNoJmpBuf)
+                lCallback->InvokeDirect(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
+            else
+                lCallback->Invoke(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
+        }
         
         // Auto lock/unlock scope
         {
@@ -299,7 +304,12 @@ void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, u
         
         const pmDataDistributionCB* lCallback = mTask->GetCallbackUnit()->GetDataDistributionCB();
         if(lCallback)
-            lCallback->Invoke(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
+        {
+            if(pNoJmpBuf)
+                lCallback->InvokeDirect(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
+            else
+                lCallback->Invoke(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
+        }
 
         // Auto lock/unlock scope
         {
@@ -867,6 +877,54 @@ bool pmSubscriptionManager::SubtasksHaveMatchingSubscriptionsInternal(const pmSu
     
     return true;
 }
+    
+float pmSubscriptionManager::FindPercentLocalInputDataForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
+
+    ulong lTotalInputSubscriptionSize = 0;
+    ulong lLocalDataSize = 0;
+
+    filtered_for_each_with_index(mTask->GetAddressSpaces(), [&] (pmAddressSpace* pAddressSpace) { return mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace); },
+    [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pFilteredIndex)
+    {
+        uint lMemIndex = (uint)pAddressSpaceIndex;
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        GetNonConsolidatedReadSubscriptionsInternal(lSubtask, lMemIndex, lBeginIter, lEndIter);
+        
+        for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+        {
+            lTotalInputSubscriptionSize += lIter->second.first;
+            lLocalDataSize += pAddressSpace->FindLocalDataSize(lIter->first, lIter->second.first);
+        }
+    });
+
+    EXCEPTION_ASSERT(lLocalDataSize <= lTotalInputSubscriptionSize);
+    return ((float)lLocalDataSize / (float)lTotalInputSubscriptionSize * 100.0);
+}
+    
+ulong pmSubscriptionManager::FindLocalInputDataSizeForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
+
+    ulong lLocalDataSize = 0;
+
+    filtered_for_each_with_index(mTask->GetAddressSpaces(), [&] (pmAddressSpace* pAddressSpace) { return mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace); },
+    [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pFilteredIndex)
+    {
+        uint lMemIndex = (uint)pAddressSpaceIndex;
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        GetNonConsolidatedReadSubscriptionsInternal(lSubtask, lMemIndex, lBeginIter, lEndIter);
+        
+        for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+            lLocalDataSize += pAddressSpace->FindLocalDataSize(lIter->first, lIter->second.first);
+    });
+
+    return lLocalDataSize;
+}
+
     
 /* Must be called with mSubtaskMapVector stub's lock acquired for both subtasks */
 bool pmSubscriptionManager::AddressSpacesHaveMatchingSubscriptionsInternal(const pmSubtaskAddressSpaceData& pAddressSpaceData1, const pmSubtaskAddressSpaceData& pAddressSpaceData2) const
@@ -1495,7 +1553,7 @@ const pmSubtaskInfo& pmSubscriptionManager::GetSubtaskInfo(pmExecutionStub* pStu
             lSubtask.mMemInfo.push_back(lMemInfo);
         });
         
-        lSubtask.mSubtaskInfo.reset(new pmSubtaskInfo(pSubtaskId, &lSubtask.mMemInfo[0], (uint)(lSubtask.mMemInfo.size())));
+        lSubtask.mSubtaskInfo.reset(new pmSubtaskInfo(mTask->GetPhysicalSubtaskId(pSubtaskId), &lSubtask.mMemInfo[0], (uint)(lSubtask.mMemInfo.size())));
     }
         
     lSubtask.mSubtaskInfo->gpuContext.scratchBuffer = NULL;

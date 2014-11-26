@@ -26,7 +26,7 @@ namespace pm
 STATIC_ACCESSOR(pmCallbackUnit::keyMapType, pmCallbackUnit, GetKeyMap)
 STATIC_ACCESSOR_ARG(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("pmCallbackUnit::mResourceLock"), pmCallbackUnit, GetResourceLock)
 
-pmCallbackUnit::pmCallbackUnit(const char* pKey, finalize_ptr<pmDataDistributionCB>&& pDataDistributionCB, finalize_ptr<pmSubtaskCB>&& pSubtaskCB, finalize_ptr<pmDataReductionCB>&& pDataReductionCB, finalize_ptr<pmDeviceSelectionCB>&& pDeviceSelectionCB, finalize_ptr<pmDataRedistributionCB>&& pDataRedistributionCB, finalize_ptr<pmPreDataTransferCB>&& pPreDataTransferCB, finalize_ptr<pmPostDataTransferCB>&& pPostDataTransferCB)
+pmCallbackUnit::pmCallbackUnit(const char* pKey, finalize_ptr<pmDataDistributionCB>&& pDataDistributionCB, finalize_ptr<pmSubtaskCB>&& pSubtaskCB, finalize_ptr<pmDataReductionCB>&& pDataReductionCB, finalize_ptr<pmDeviceSelectionCB>&& pDeviceSelectionCB, finalize_ptr<pmDataRedistributionCB>&& pDataRedistributionCB, finalize_ptr<pmPreDataTransferCB>&& pPreDataTransferCB, finalize_ptr<pmPostDataTransferCB>&& pPostDataTransferCB, finalize_ptr<pmTaskCompletionCB>&& pTaskCompletionCB)
     : mDataDistributionCB(std::move(pDataDistributionCB))
 	, mSubtaskCB(std::move(pSubtaskCB))
 	, mDataReductionCB(std::move(pDataReductionCB))
@@ -34,6 +34,7 @@ pmCallbackUnit::pmCallbackUnit(const char* pKey, finalize_ptr<pmDataDistribution
 	, mDeviceSelectionCB(std::move(pDeviceSelectionCB))
 	, mPreDataTransferCB(std::move(pPreDataTransferCB))
 	, mPostDataTransferCB(std::move(pPostDataTransferCB))
+    , mTaskCompletionCB(std::move(pTaskCompletionCB))
 	, mKey(pKey)
 {
     keyMapType& lKeyMap = GetKeyMap();
@@ -86,6 +87,16 @@ const pmPreDataTransferCB* pmCallbackUnit::GetPreDataTransferCB() const
 const pmPostDataTransferCB* pmCallbackUnit::GetPostDataTransferCB() const
 {
 	return mPostDataTransferCB.get_ptr();
+}
+    
+const pmTaskCompletionCB* pmCallbackUnit::GetTaskCompletionCB() const
+{
+    return mTaskCompletionCB.get_ptr();
+}
+    
+void pmCallbackUnit::SetTaskCompletionCB(finalize_ptr<pmTaskCompletionCB>&& pTaskCompletionCB)
+{
+    mTaskCompletionCB = std::move(pTaskCompletionCB);
 }
 
 const char* pmCallbackUnit::GetKey() const

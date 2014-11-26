@@ -244,7 +244,8 @@ namespace pm
     typedef enum pmSchedulingPolicy
     {
         SLOW_START,
-        RANDOM_STEAL,
+        RANDOM_STEAL,   /* default policy */
+        RANDOM_STEAL_WITH_AFFINITY,
         EQUAL_STATIC,
         PROPORTIONAL_STATIC
     } pmSchedulingPolicy;
@@ -277,7 +278,8 @@ namespace pm
 	typedef pmStatus (*pmDataRedistributionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo);
 	typedef bool     (*pmDeviceSelectionCallback)(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo);
 	typedef pmStatus (*pmPreDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
-	typedef pmStatus (*pmPostDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
+    typedef pmStatus (*pmPostDataTransferCallback)(pmTaskInfo pTaskInfo, pmDataTransferInfo pDataTransferInfo);
+    typedef pmStatus (*pmTaskCompletionCallback)(pmTaskInfo pTaskInfo);
 
 	/** Unified callback structure */
 	typedef struct pmCallbacks
@@ -292,6 +294,7 @@ namespace pm
 			pmDeviceSelectionCallback deviceSelection;
 			pmPreDataTransferCallback preDataTransfer;
 			pmPostDataTransferCallback postDataTransfer;
+            pmTaskCompletionCallback taskCompletionCallback;
             const char* subtask_opencl;
 
 			pmCallbacks();

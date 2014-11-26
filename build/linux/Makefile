@@ -68,6 +68,7 @@ else
 endif
 
 OBJECTS= $(OUTDIR)/pmAddressSpace.o \
+	$(OUTDIR)/pmAffinityTable.o \
 	$(OUTDIR)/pmBase.o \
 	$(OUTDIR)/pmCallback.o \
 	$(OUTDIR)/pmCallbackUnit.o \
@@ -91,6 +92,7 @@ OBJECTS= $(OUTDIR)/pmAddressSpace.o \
 	$(OUTDIR)/pmReducer.o \
 	$(OUTDIR)/pmRedistributor.o \
 	$(OUTDIR)/pmPoolAllocator.o \
+	$(OUTDIR)/pmPreprocessorTask.o \
 	$(OUTDIR)/pmPublicDefinitions.o \
 	$(OUTDIR)/pmResourceLock.o \
 	$(OUTDIR)/pmScheduler.o \

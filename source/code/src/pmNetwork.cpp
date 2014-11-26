@@ -589,6 +589,41 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
             
             break;
         }
+            
+        case AFFINITY_DATA_TRANSFER_PACKED:
+        {
+			affinityDataTransferPacked* lData = (affinityDataTransferPacked*)(pCommand->GetData());
+            EXCEPTION_ASSERT(lData);
+            
+            EXCEPTION_ASSERT(lData->transferDataElements);
+            
+			lLength += 2 * sizeof(uint) + sizeof(ulong) + lData->transferDataElements * sizeof(ulong);
+            
+			if(lLength > __MAX_SIGNED(int))
+				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
+            
+            lPackedDataAutoPtr.reset(new char[lLength]);
+			char* lPackedData = lPackedDataAutoPtr.get_ptr();
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->originatingHost, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->transferDataElements, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->logicalToPhysicalSubtaskMapping.get_ptr(), lData->transferDataElements, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+            lLength = lPos;
+            
+            break;
+        }
 
 		default:
 			PMTHROW(pmFatalErrorException());
@@ -641,6 +676,10 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
         
         case MULTI_FILE_OPERATIONS_TAG:
             lDataType = MULTI_FILE_OPERATIONS_PACKED;
+            break;
+
+        case AFFINITY_DATA_TRANSFER_TAG:
+            lDataType = AFFINITY_DATA_TRANSFER_PACKED;
             break;
 
         default:
@@ -897,6 +936,31 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
         
             break;
         }
+            
+        case AFFINITY_DATA_TRANSFER_PACKED:
+        {
+            finalize_ptr<affinityDataTransferPacked> lPackedData(new affinityDataTransferPacked());
+
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->originatingHost, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+        
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->transferDataElements, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            EXCEPTION_ASSERT(lPackedData->transferDataElements);
+            
+            lPackedData->logicalToPhysicalSubtaskMapping.reset(new ulong[lPackedData->transferDataElements]);
+            
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, lPackedData->logicalToPhysicalSubtaskMapping.get_ptr(), lPackedData->transferDataElements, MPI_UNSIGNED_LONG, lCommunicator) != MPI_SUCCESS)) )
+                PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            
+            lCommand = pmCommunicatorCommand<affinityDataTransferPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, lCompletionCallback);
+            
+            break;
+        }
         
 		default:
 			PMTHROW(pmFatalErrorException());
@@ -914,7 +978,8 @@ bool pmMPI::IsUnknownLengthTag(communicatorCommandTags pTag)
             pTag == REDISTRIBUTION_OFFSETS_TAG ||
             pTag == SEND_ACKNOWLEDGEMENT_TAG ||
             pTag == OWNERSHIP_TRANSFER_TAG ||
-            pTag == MULTI_FILE_OPERATIONS_TAG);
+            pTag == MULTI_FILE_OPERATIONS_TAG ||
+            pTag == AFFINITY_DATA_TRANSFER_TAG);
 }
 
 void pmMPI::SendNonBlocking(pmCommunicatorCommandPtr& pCommand)
@@ -1298,6 +1363,7 @@ MPI_Datatype pmMPI::GetDataTypeMPI(communicatorDataTypes pDataType)
         case SEND_ACKNOWLEDGEMENT_PACKED:
         case OWNERSHIP_TRANSFER_PACKED:
         case MULTI_FILE_OPERATIONS_PACKED:
+        case AFFINITY_DATA_TRANSFER_PACKED:
 			return MPI_PACKED;
 			break;
 

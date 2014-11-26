@@ -370,6 +370,7 @@ pmCallbacks::pmCallbacks()
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(NULL)
 {
 }
@@ -384,6 +385,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(NULL)
 {}
 
@@ -397,6 +399,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(NULL)
 {}
 
@@ -410,6 +413,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(NULL)
 {}
 
@@ -423,6 +427,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(NULL)
 {}
 
@@ -436,6 +441,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(NULL)
 {}
 
@@ -449,6 +455,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, p
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(NULL)
 {}
 
@@ -462,6 +469,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, c
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(pSubtask_opencl)
 {}
 
@@ -475,6 +483,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, c
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(pSubtask_opencl)
 {}
     
@@ -488,6 +497,7 @@ pmCallbacks::pmCallbacks(pmDataDistributionCallback pDataDistributionCallback, c
 	, deviceSelection(NULL)
 	, preDataTransfer(NULL)
 	, postDataTransfer(NULL)
+    , taskCompletionCallback(NULL)
     , subtask_opencl(pSubtask_opencl)
 {}
 

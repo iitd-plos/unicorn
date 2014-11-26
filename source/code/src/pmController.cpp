@@ -38,6 +38,7 @@
 #include "pmUtility.h"
 #include "pmReducer.h"
 #include "pmOpenCLManager.h"
+#include "pmPreprocessorTask.h"
 
 namespace pm
 {
@@ -81,6 +82,8 @@ pmController* pmController::GetController()
     {
         NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();
         lFirstCall = false;
+
+        pmPreprocessorTask::GetPreprocessorTask();
     }
 
     return &lController;
@@ -163,9 +166,10 @@ void pmController::RegisterCallbacks_Public(const char* pKey, pmCallbacks pCallb
 	finalize_ptr<pmDeviceSelectionCB> lDeviceSelection(pCallbacks.deviceSelection ? new pmDeviceSelectionCB(pCallbacks.deviceSelection) : NULL);
 	finalize_ptr<pmDataRedistributionCB> lDataRedistributionCB(pCallbacks.dataRedistribution ? new pmDataRedistributionCB(pCallbacks.dataRedistribution) : NULL);
 	finalize_ptr<pmPreDataTransferCB> lPreDataTransfer(pCallbacks.preDataTransfer ? new pmPreDataTransferCB(pCallbacks.preDataTransfer) : NULL);
-	finalize_ptr<pmPostDataTransferCB> lPostDataTransfer(pCallbacks.postDataTransfer ? new pmPostDataTransferCB(pCallbacks.postDataTransfer) : NULL);
+    finalize_ptr<pmPostDataTransferCB> lPostDataTransfer(pCallbacks.postDataTransfer ? new pmPostDataTransferCB(pCallbacks.postDataTransfer) : NULL);
+    finalize_ptr<pmTaskCompletionCB> lTaskCompletion(pCallbacks.taskCompletionCallback ? new pmTaskCompletionCB(pCallbacks.taskCompletionCallback) : NULL);
 
-	*pCallbackHandle = new pmCallbackUnit(pKey, std::move(lDataDistribution), std::move(lSubtask), std::move(lDataReduction), std::move(lDeviceSelection), std::move(lDataRedistributionCB), std::move(lPreDataTransfer), std::move(lPostDataTransfer));
+    *pCallbackHandle = new pmCallbackUnit(pKey, std::move(lDataDistribution), std::move(lSubtask), std::move(lDataReduction), std::move(lDeviceSelection), std::move(lDataRedistributionCB), std::move(lPreDataTransfer), std::move(lPostDataTransfer), std::move(lTaskCompletion));
 
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->GlobalBarrier();
 }
@@ -240,6 +244,8 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
     {
         if(pTaskDetails.policy == RANDOM_STEAL)
             lModel = scheduler::PULL;
+        else if(pTaskDetails.policy == RANDOM_STEAL_WITH_AFFINITY)
+            lModel = scheduler::PULL_WITH_AFFINITY;
         else if(pTaskDetails.policy == EQUAL_STATIC)
             lModel = scheduler::STATIC_EQUAL;
         else if(pTaskDetails.policy == PROPORTIONAL_STATIC)
@@ -287,7 +293,7 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
 	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags);
 
     pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
-	static_cast<pmLocalTask*>(*pTaskHandle)->LockAddressSpaces();
+    static_cast<pmLocalTask*>(*pTaskHandle)->LockAddressSpaces();
 }
 
 void pmController::WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle)
@@ -319,14 +325,16 @@ void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHa
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
-    (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, pSubscriptionInfo);
+    pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
+    lTask->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), lTask->GetLogicalSubtaskId(pSubtaskId), pSplitInfo, pMemIndex, pSubscriptionType, pSubscriptionInfo);
 }
 
 void pmController::SubscribeToMemory_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
-    (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, pScatteredSubscriptionInfo);
+    pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
+    lTask->GetSubscriptionManager().RegisterSubscription(static_cast<pmExecutionStub*>(pDeviceHandle), lTask->GetLogicalSubtaskId(pSubtaskId), pSplitInfo, pMemIndex, pSubscriptionType, pScatteredSubscriptionInfo);
 }
 
 void pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, size_t pOffset, size_t pLength, uint pOrder)
@@ -334,21 +342,23 @@ void pmController::RedistributeData_Public(pmTaskHandle pTaskHandle, pmDeviceHan
     pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
     const pmAddressSpace* lAddressSpace = lTask->GetAddressSpace(pMemIndex);
     
-    (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().RegisterRedistribution(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, *lTask->GetRedistributor(lAddressSpace), pOffset, pLength, pOrder);
+    lTask->GetSubscriptionManager().RegisterRedistribution(static_cast<pmExecutionStub*>(pDeviceHandle), lTask->GetLogicalSubtaskId(pSubtaskId), pSplitInfo, *lTask->GetRedistributor(lAddressSpace), pOffset, pLength, pOrder);
 }
     
 void pmController::SetCudaLaunchConf_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmCudaLaunchConf& pCudaLaunchConf)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
-	(static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().SetCudaLaunchConf(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pCudaLaunchConf);
+    pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
+    lTask->GetSubscriptionManager().SetCudaLaunchConf(static_cast<pmExecutionStub*>(pDeviceHandle), lTask->GetLogicalSubtaskId(pSubtaskId), pSplitInfo, pCudaLaunchConf);
 }
 
 void pmController::ReserveCudaGlobalMem_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t pSize)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
 
-	(static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().ReserveCudaGlobalMem(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pSize);
+    pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
+    lTask->GetSubscriptionManager().ReserveCudaGlobalMem(static_cast<pmExecutionStub*>(pDeviceHandle), lTask->GetLogicalSubtaskId(pSubtaskId), pSplitInfo, pSize);
 }
 
 uint pmController::GetHostId_Public()
@@ -371,16 +381,16 @@ void* pmController::GetScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHa
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
     
-    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pScratchBufferType, pBufferSize);
-    
-    return NULL;
+    pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
+    return lTask->GetSubscriptionManager().GetScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), lTask->GetLogicalSubtaskId(pSubtaskId), pSplitInfo, pScratchBufferType, pBufferSize);
 }
 
 void pmController::ReleaseScratchBuffer_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType)
 {
     pmSubtaskTerminationCheckPointAutoPtr lSubtaskTerminationCheckPointAutoPtr(static_cast<pmExecutionStub*>(pDeviceHandle));
     
-    return (static_cast<pmTask*>(pTaskHandle))->GetSubscriptionManager().DeleteScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), pSubtaskId, pSplitInfo, pScratchBufferType);
+    pmTask* lTask = static_cast<pmTask*>(pTaskHandle);
+    lTask->GetSubscriptionManager().DeleteScratchBuffer(static_cast<pmExecutionStub*>(pDeviceHandle), lTask->GetLogicalSubtaskId(pSubtaskId), pSplitInfo, pScratchBufferType);
 }
 
 void* pmController::GetLastReductionScratchBuffer_Public(pmTaskHandle pTaskHandle)

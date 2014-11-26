@@ -43,6 +43,7 @@ enum schedulingModel
 {
 	PUSH,	/* subtasks are pushed from originating task manager to all schedulers to all stubs */
 	PULL,	/* subtasks are pulled by stubs from their scheduler which pull from originating task manager */
+    PULL_WITH_AFFINITY, /* subtasks are pulled by stubs from their scheduler which pull from originating task manager (but the initial distribution is affinity based) */
     STATIC_EQUAL,  /* subtasks are equally and statically divided among all stubs */
     STATIC_PROPORTIONAL  /* subtasks are proportionally (as defined in configuration file STATIC_PROP_CONF_FILE) and statically divided among all stubs */
 };
@@ -92,6 +93,7 @@ enum eventIdentifier
     RANGE_NEGOTIATION_SUCCESS_EVENT,
     TERMINATE_TASK,
     REDUCTION_TERMINATION_EVENT,
+    AFFINITY_TRANSFER_EVENT,
     MAX_SCHEDULER_EVENTS
 };
 
@@ -423,6 +425,20 @@ struct reductionTerminationEvent : public schedulerEvent
     , localTask(pLocalTask)
     {}
 };
+    
+struct affinityTransferEvent : public schedulerEvent
+{
+    pmLocalTask* localTask;
+    std::set<const pmMachine*> machines;
+    const std::vector<ulong>* logicalToPhysicalSubtaskMapping;
+    
+    affinityTransferEvent(eventIdentifier pEventId, pmLocalTask* pLocalTask, std::set<const pmMachine*>&& pMachines, const std::vector<ulong>* pLogicalToPhysicalSubtaskMapping)
+    : schedulerEvent(pEventId)
+    , localTask(pLocalTask)
+    , machines(pMachines)
+    , logicalToPhysicalSubtaskMapping(pLogicalToPhysicalSubtaskMapping)
+    {}
+};
 
 }
 
@@ -472,6 +488,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void RangeNegotiationSuccessEvent(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pNegotiatedRange);
         void TerminateTaskEvent(pmTask* pTask);
         void ReductionTerminationEvent(pmLocalTask* pLocalTask);
+        void AffinityTransferEvent(pmLocalTask* pLocalTask, std::set<const pmMachine*>&& pMachines, const std::vector<ulong>* pLogicalToPhysicalSubtaskMapping);
 
         void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> >& pChangeData);
         void SendSubtaskRangeCancellationMessage(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
@@ -496,6 +513,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void SendRedistributionOffsets(pmTask* pTask, uint pAddressSpaceIndex, std::vector<ulong>* pOffsetsData, pmAddressSpace* pRedistributedAddressSpace, uint pDestHostId);
 
         void SendTaskCompleteToTaskOwner(pmTask* pTask);
+    
+        void AssignSubtasksToDevices(pmLocalTask* pLocalTask);
 
     private:
 		pmScheduler();
@@ -508,7 +527,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<const pmMachine*>& pMachines);
 
 		void AssignSubtasksToDevice(const pmProcessingElement* pDevice, pmLocalTask* pLocalTask);
-		void AssignSubtasksToDevices(pmLocalTask* pLocalTask);
 
 		pmStatus StartLocalTaskExecution(pmLocalTask* pLocalTask);
 
@@ -533,6 +551,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void SendTaskFinishToMachines(pmLocalTask* pLocalTask);
     
         void SendReductionTerminationToMachines(pmLocalTask* pLocalTask);
+    
+        void SendAffinityDataToMachines(pmLocalTask* pLocalTask, const std::set<const pmMachine*>& pMachines, const std::vector<ulong>& pLogicalToPhysicalSubtaskMappings);
 
         pmCommunicatorCommandPtr mRemoteSubtaskRecvCommand;
 		pmCommunicatorCommandPtr mTaskEventRecvCommand;

@@ -178,11 +178,8 @@ bool pmTaskManager::GetRemoteTaskOrEnqueueSubtasks(pmSubtaskRange& pRange, const
 
     pmRemoteTask* lRemoteTask = FindRemoteTask_Internal(pOriginatingHost, pSequenceNumber);
     
-    if(lRemoteTask)
+    if(lRemoteTask && lRemoteTask->HasStarted())
     {
-        if(!lRemoteTask->HasStarted())
-            return false;
-
         pRange.task = lRemoteTask;
         return true;
     }

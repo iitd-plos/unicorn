@@ -13,7 +13,7 @@
 /** Common Arguments:
  *	1. Run Mode - [0: Don't compare to sequential execution; 1: Compare to sequential execution (default); 2: Only run sequential; 3: Only run single GPU; 4: Compare Single GPU to sequential]
  *	2. Parallel Task Mode - [0: All; 1: Local CPU; 2: Local GPU; 3: Local CPU + GPU; 4: Global CPU; 5: Global GPU; 6: Global CPU + GPU (default); 7: (4, 5, 6)]
- *	3. Scheduling Policy - [0: Push (default); 1: Pull; 2: Equal_Static; 3: Proportional_Static, 4: All]
+ *	3. Scheduling Policy - [0: Push; 1: Pull; 2: Equal_Static; 3: Proportional_Static, 4: Pull_With_Affinity (default), 5: All]
  */
 #define COMMON_ARGS 3
 #define DEFAULT_RUN_MODE 1
@@ -132,7 +132,7 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 	if(lParallelMode < 0 || lParallelMode > 7)
 		lParallelMode = DEFAULT_PARALLEL_MODE;
 
-	if(lSchedulingPolicy < 0 || lSchedulingPolicy > 4)
+	if(lSchedulingPolicy < 0 || lSchedulingPolicy > 5)
 		lSchedulingPolicy = DEFAULT_SCHEDULING_POLICY;
     
     gSerialResultsCompared = (lRunMode == 1);
@@ -187,9 +187,9 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
 
 		if(lRunMode == 0 || lRunMode == 1)
 		{
-            for(int policy = 0; policy <= 2; ++policy)
+            for(int policy = 0; policy <= 4; ++policy)
             {
-                if(lSchedulingPolicy == policy || lSchedulingPolicy == 4)
+                if(lSchedulingPolicy == policy || lSchedulingPolicy == 5)
                 {
                     pmSchedulingPolicy lPolicy = SLOW_START;
                     if(policy == 1)
@@ -198,6 +198,8 @@ void commonStart(int argc, char** argv, initFunc pInitFunc, serialProcessFunc pS
                         lPolicy = EQUAL_STATIC;
                     else if(policy == 3)
                         lPolicy = PROPORTIONAL_STATIC;
+                    else if(policy == 4)
+                        lPolicy = RANDOM_STEAL_WITH_AFFINITY;
 
                     // Six Parallel Execution Modes
                     for(int i = 1; i <= 6; ++i)
@@ -416,7 +418,6 @@ pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, p
         default:
             exit(1);
     }
-
     
     return pmSuccess;
 }

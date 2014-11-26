@@ -36,6 +36,7 @@
 #include "pmCallbackUnit.h"
 #include "pmHeavyOperations.h"
 #include "pmUtility.h"
+#include "pmPreprocessorTask.h"
 
 #ifdef USE_STEAL_AGENT_PER_NODE
     #include "pmStealAgent.h"
@@ -426,6 +427,11 @@ void pmScheduler::ReductionTerminationEvent(pmLocalTask* pLocalTask)
 {
 	SwitchThread(std::shared_ptr<schedulerEvent>(new reductionTerminationEvent(REDUCTION_TERMINATION_EVENT, pLocalTask)), pLocalTask->GetPriority());
 }
+
+void pmScheduler::AffinityTransferEvent(pmLocalTask* pLocalTask, std::set<const pmMachine*>&& pMachines, const std::vector<ulong>* pLogicalToPhysicalSubtaskMapping)
+{
+    SwitchThread(std::shared_ptr<schedulerEvent>(new affinityTransferEvent(AFFINITY_TRANSFER_EVENT, pLocalTask, std::move(pMachines), pLogicalToPhysicalSubtaskMapping)), pLocalTask->GetPriority());
+}
     
 void pmScheduler::SendFinalizationSignal()
 {
@@ -802,6 +808,14 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
             break;
         }
+            
+        case AFFINITY_TRANSFER_EVENT:
+        {
+            affinityTransferEvent& lEventDetails = static_cast<affinityTransferEvent&>(pEvent);
+            SendAffinityDataToMachines(lEventDetails.localTask, lEventDetails.machines, *lEventDetails.logicalToPhysicalSubtaskMapping);
+            
+            break;
+        }
 
         default:
             PMTHROW(pmFatalErrorException());
@@ -1031,6 +1045,24 @@ void pmScheduler::AssignSubtasksToDevices(pmLocalTask* pLocalTask)
              });
 }
 
+void pmScheduler::SendAffinityDataToMachines(pmLocalTask* pLocalTask, const std::set<const pmMachine*>& pMachines, const std::vector<ulong>& pLogicalToPhysicalSubtaskMappings)
+{
+    ulong* lData = const_cast<ulong*>(&pLogicalToPhysicalSubtaskMappings[0]);
+
+    for_each(pMachines, [&] (const pmMachine* pMachine)
+    {
+		if(pMachine != PM_LOCAL_MACHINE)
+		{
+            finalize_ptr<ulong, deleteArrayDeallocator<ulong>> lDataPtr(lData, false);
+            finalize_ptr<affinityDataTransferPacked> lPackedData(new affinityDataTransferPacked((uint)(*(pLocalTask->GetOriginatingHost())), pLocalTask->GetSequenceNumber(), (uint)pLogicalToPhysicalSubtaskMappings.size(), std::move(lDataPtr)));
+
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<affinityDataTransferPacked>::CreateSharedPtr(pLocalTask->GetPriority(), SEND, AFFINITY_DATA_TRANSFER_TAG, pMachine, AFFINITY_DATA_TRANSFER_PACKED, lPackedData, 1);
+
+            pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
+		}
+    });
+}
+
 void pmScheduler::AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<const pmMachine*>& pMachines)
 {
 	std::set<const pmMachine*>::const_iterator lIter;
@@ -1166,8 +1198,6 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
         return pmNoCompatibleDevice;
     }
 
-	pLocalTask->InitializeSubtaskManager(pLocalTask->GetSchedulingModel());
-
 	std::set<const pmMachine*> lMachines;
     pmProcessingElement::GetMachines(lDevices, lMachines);
 
@@ -1175,7 +1205,10 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
      must also be sent in task definition */
 	AssignTaskToMachines(pLocalTask, lMachines);
 
-	AssignSubtasksToDevices(pLocalTask);
+    if(pLocalTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY && pLocalTask->GetCallbackUnit()->GetDataDistributionCB() && !pLocalTask->HasReadOnlyLazyAddressSpace())
+        pmPreprocessorTask::GetPreprocessorTask()->DeduceAffinity(pLocalTask);
+    else
+        pLocalTask->StartScheduling();
 
 	return pmSuccess;
 }
@@ -1929,6 +1962,21 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                             PMTHROW(pmFatalErrorException());
                     }
                 
+                    break;
+                }
+                    
+                case AFFINITY_DATA_TRANSFER_TAG:
+                {
+                    affinityDataTransferPacked* lData = (affinityDataTransferPacked*)(lCommunicatorCommand->GetData());
+                    const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+
+                    pmRemoteTask* lRemoteTask = dynamic_cast<pmRemoteTask*>(pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber));
+                    
+                    EXCEPTION_ASSERT(lRemoteTask);
+
+                    std::vector<ulong> lLogicalToPhysicalSubtaskMapping(lData->logicalToPhysicalSubtaskMapping.get_ptr(), lData->logicalToPhysicalSubtaskMapping.get_ptr() + lData->transferDataElements);
+                    lRemoteTask->ReceiveAffinityData(std::move(lLogicalToPhysicalSubtaskMapping));
+                    
                     break;
                 }
 

@@ -36,6 +36,7 @@
 #include "pmHeavyOperations.h"
 #include "pmExecutionStub.h"
 #include "pmUtility.h"
+#include "pmAffinityTable.h"
 
 #ifdef USE_STEAL_AGENT_PER_NODE
 #include "pmStealAgent.h"
@@ -68,7 +69,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
     , mOriginatingHost(pOriginatingHost)
     , mCluster(pCluster)
     , mPriority((pPriority < MAX_PRIORITY_LEVEL) ? MAX_PRIORITY_LEVEL : pPriority)
-	, mTaskConf(pTaskConf)
+	, mTaskConf(NULL)
 	, mTaskConfLength(pTaskConfLength)
 	, mSchedulingModel(pSchedulingModel)
     , mSubscriptionManager(this)
@@ -104,6 +105,12 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 	, mAssignedDeviceCount(pAssignedDeviceCount)
     , mLastReductionScratchBuffer(NULL)
 {
+    if(mTaskConfLength)
+    {
+        mTaskConf = malloc(mTaskConfLength);
+        memcpy(mTaskConf, pTaskConf, mTaskConfLength);
+    }
+
     mAddressSpaces.reserve(mTaskMemVector.size());
 
     for_each_with_index(mTaskMemVector, [this] (const pmTaskMemory& pTaskMem, size_t pMemIndex)
@@ -119,6 +126,9 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 
 pmTask::~pmTask()
 {
+    if(mTaskConf)
+        free(mTaskConf);
+
     mSubscriptionManager.DropAllSubscriptions();
 }
     
@@ -130,7 +140,10 @@ void pmTask::LockAddressSpaces()
     }
     else
     {
-        pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(mTaskMemVector.size(), GetPriority(), 0, AddressSpacesLockCallback, this);
+        // For remote task with affinity, we need to additionally wait for affinity data (logical to physical subtask mapping) to arrive before starting the user task
+        bool lRemoteTaskAffinityWait = (mSchedulingModel == scheduler::PULL_WITH_AFFINITY && dynamic_cast<pmRemoteTask*>(this));
+        
+        pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(mTaskMemVector.size() + (lRemoteTaskAffinityWait ? 1 : 0), GetPriority(), 0, AddressSpacesLockCallback, this);
         lCountDownCommand->MarkExecutionStart();
 
         for_each(mTaskMemVector, [this, &lCountDownCommand] (const pmTaskMemory& pTaskMem)
@@ -138,6 +151,9 @@ void pmTask::LockAddressSpaces()
             pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
             lAddressSpace->EnqueueForLock(this, pTaskMem.memType, lCountDownCommand);
         });
+        
+        if(lRemoteTaskAffinityWait)
+            static_cast<pmRemoteTask*>(this)->RegisterAffinityDataReceiveCompletionCommand(lCountDownCommand);
     }
 }
     
@@ -172,6 +188,21 @@ void pmTask::Start()
         pmTaskManager::GetTaskManager()->StartTask(static_cast<pmLocalTask*>(this));
     else
         pmTaskManager::GetTaskManager()->StartTask(static_cast<pmRemoteTask*>(this));
+}
+    
+bool pmTask::HasReadOnlyLazyAddressSpace() const
+{
+#ifdef SUPPORT_LAZY_MEMORY
+    for_each_with_index(mTaskMemVector, [this] (const pmTaskMemory& pTaskMem, size_t pMemIndex)
+    {
+        pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
+
+        if(IsReadOnly(lAddressSpace) && IsLazy(lAddressSpace))
+            return true;
+    });
+#endif
+    
+    return false;
 }
     
 bool pmTask::HasStarted()
@@ -439,7 +470,7 @@ void pmTask::BuildPreSubscriptionSubtaskInfo()
 pmSubtaskInfo pmTask::GetPreSubscriptionSubtaskInfo(ulong pSubtaskId, pmSplitInfo* pSplitInfo) const
 {
     pmSubtaskInfo lSubtaskInfo = mPreSubscriptionSubtaskInfo;
-    lSubtaskInfo.subtaskId = pSubtaskId;
+    lSubtaskInfo.subtaskId = GetPhysicalSubtaskId(pSubtaskId);
     
     if(pSplitInfo)
         lSubtaskInfo.splitInfo = *pSplitInfo;
@@ -801,6 +832,35 @@ pmMemType pmTask::GetMemType(const pmAddressSpace* pAddressSpace) const
     return mTaskMemVector[mAddressSpaceTaskMemIndexMap.find(pAddressSpace)->second].memType;
 }
     
+void pmTask::SetAffinityMappings(std::vector<ulong>&& pLogicalToPhysical, std::vector<ulong>&& pPhysicalToLogical)
+{
+    EXCEPTION_ASSERT(pLogicalToPhysical.size() == pPhysicalToLogical.size() && pPhysicalToLogical.size() == GetSubtaskCount());
+    
+    mLogicalToPhysicalSubtaskMappings = std::move(pLogicalToPhysical);
+    mPhysicalToLogicalSubtaskMappings = std::move(pPhysicalToLogical);
+}
+    
+ulong pmTask::GetPhysicalSubtaskId(ulong pLogicalSubtaskId) const
+{
+    if(mLogicalToPhysicalSubtaskMappings.empty())
+        return pLogicalSubtaskId;
+    else
+        return mLogicalToPhysicalSubtaskMappings[pLogicalSubtaskId];
+}
+
+ulong pmTask::GetLogicalSubtaskId(ulong pPhysicalSubtaskId) const
+{
+    if(mPhysicalToLogicalSubtaskMappings.empty())
+        return pPhysicalSubtaskId;
+    else
+        return mPhysicalToLogicalSubtaskMappings[pPhysicalSubtaskId];
+}
+
+const std::vector<ulong>& pmTask::GetLogicalToPhysicalSubtaskMappings() const
+{
+    return mLogicalToPhysicalSubtaskMappings;
+}
+
 bool pmTask::IsReadOnly(const pmAddressSpace* pAddressSpace) const
 {
     pmMemType lMemType = GetMemType(pAddressSpace);
@@ -858,6 +918,7 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, s
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)
     , mCompletionLock __LOCK_NAME__("pmLocalTask::mCompletionLock")
+    , mPreprocessorTask(NULL)
 {
     ulong lCurrentTime = GetIntegralCurrentTimeInSecs();
     ulong lTaskTimeOutTriggerTime = lCurrentTime + pTaskTimeOutInSecs;
@@ -960,6 +1021,42 @@ void pmLocalTask::UserDeleteTask()
     TerminateTask();
 }
     
+void pmLocalTask::SetPreprocessorTask(pmLocalTask* pLocalTask)
+{
+    EXCEPTION_ASSERT(!mPreprocessorTask);
+    
+    mPreprocessorTask = pLocalTask;
+}
+
+const pmLocalTask* pmLocalTask::GetPreprocessorTask() const
+{
+    return mPreprocessorTask;
+}
+    
+void pmLocalTask::FetchAndComputeAffinityData(pmAddressSpace* pAffinityAddressSpace)
+{
+    pAffinityAddressSpace->Fetch(GetPriority());
+
+    std::set<const pmMachine*> lMachinesSet;
+    pmProcessingElement::GetMachines(GetAssignedDevices(), lMachinesSet);
+
+    EXCEPTION_ASSERT(!mAffinityTable.get_ptr());
+    
+    mAffinityTable.reset(new pmAffinityTable(this));
+    mAffinityTable->PopulateAffinityTable(pAffinityAddressSpace, lMachinesSet);
+}
+
+void pmLocalTask::StartScheduling()
+{
+    InitializeSubtaskManager(GetSchedulingModel());
+    pmScheduler::GetScheduler()->AssignSubtasksToDevices(this);
+}
+
+void pmLocalTask::SetTaskCompletionCallback(pmTaskCompletionCallback pCallback)
+{
+    (const_cast<pmCallbackUnit*>(GetCallbackUnit()))->SetTaskCompletionCB(new pmTaskCompletionCB(pCallback));
+}
+    
 void pmLocalTask::SaveFinalReducedOutput(pmExecutionStub* pStub, pmAddressSpace* pAddressSpace, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
     DEBUG_EXCEPTION_ASSERT(DoSubtasksNeedShadowMemory(pAddressSpace));
@@ -995,7 +1092,7 @@ void pmLocalTask::AllReductionsDone(pmExecutionStub* pLastStub, ulong pLastSubta
     
     ((pmLocalTask*)this)->MarkUserSideTaskCompletion();
 }
-
+    
 pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel)
 {
 	switch(pSchedulingModel)
@@ -1004,7 +1101,39 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
 			mSubtaskManager.reset(new pmPushSchedulingManager(this));
 			break;
 
-		case scheduler::PULL:
+        case scheduler::PULL:
+        case scheduler::PULL_WITH_AFFINITY:
+        {
+            uint lMaxPercentVariation = 0;
+
+            const char* lVal = getenv("PMLIB_MAX_FIXED_ALLOTMENT_VARIATION_FOR_PULL");
+            if(lVal)
+            {
+                uint lValue = (uint)atoi(lVal);
+
+                if(lValue != 0 && lValue <= 100)
+                    lMaxPercentVariation = lValue;
+            }
+            
+			mSubtaskManager.reset(new pmPullSchedulingManager(this, lMaxPercentVariation));
+            
+            if(pSchedulingModel == scheduler::PULL_WITH_AFFINITY)
+            {
+                mAffinityTable->CreateSubtaskMappings();
+
+                const std::vector<ulong>& lLogicalToPhysicalSubtaskMappings = GetLogicalToPhysicalSubtaskMappings();
+                
+                std::set<const pmMachine*> lMachines;
+                pmProcessingElement::GetMachines(GetAssignedDevices(), lMachines);
+                
+                lMachines.erase(PM_LOCAL_MACHINE);
+                
+                pmScheduler::GetScheduler()->AffinityTransferEvent(this, std::move(lMachines), &lLogicalToPhysicalSubtaskMappings);
+            }
+            
+            break;
+        }
+
 		case scheduler::STATIC_EQUAL:
 			mSubtaskManager.reset(new pmPullSchedulingManager(this));
 			break;
@@ -1048,6 +1177,10 @@ void pmLocalTask::MarkTaskStart()
 void pmLocalTask::MarkTaskEnd(pmStatus pStatus)
 {
 	mTaskCommand->MarkExecutionEnd(pStatus, mTaskCommand);
+
+    const pmTaskCompletionCB* lTaskCompletionCB = GetCallbackUnit()->GetTaskCompletionCB();
+    if(lTaskCompletionCB)
+        lTaskCompletionCB->Invoke(this);
 }
 
 pmStatus pmLocalTask::GetStatus()
@@ -1251,7 +1384,26 @@ void pmRemoteTask::MarkSubtaskExecutionFinished()
     // If no subtask is executed on this machine, then signal the send to machine to continue with reduction
     if(lCallbackUnit->GetDataReductionCB() && GetSubtasksExecuted() == 0)
         GetReducer()->SignalSendToMachineAboutNoLocalReduction();
-}   
+}
+
+void pmRemoteTask::RegisterAffinityDataReceiveCompletionCommand(pmCommandPtr& pAffinityReceiveCompletionCommandPtr)
+{
+    mAffinityReceiveCompletionCommandPtr = pAffinityReceiveCompletionCommandPtr;
+}
+    
+void pmRemoteTask::ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSubtaskMapping)
+{
+    ulong lSubtaskCount = GetSubtaskCount();
+    EXCEPTION_ASSERT(pLogicalToPhysicalSubtaskMapping.size() == lSubtaskCount);
+    
+    std::vector<ulong> lPhysicalToLogicalSubtaskMapping(lSubtaskCount);
+    for(ulong i = 0; i < lSubtaskCount; ++i)
+        lPhysicalToLogicalSubtaskMapping[pLogicalToPhysicalSubtaskMapping[i]] = i;
+
+    SetAffinityMappings(std::move(pLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
+    
+    mAffinityReceiveCompletionCommandPtr->MarkExecutionEnd(pmSuccess, mAffinityReceiveCompletionCommandPtr);
+}
 
 };
 

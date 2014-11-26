@@ -46,6 +46,7 @@ class pmMachine;
 class pmCluster;
 class pmReducer;
 class pmRedistributor;
+class pmAffinityTable;
 
 #ifdef USE_STEAL_AGENT_PER_NODE
     class pmStealAgent;
@@ -168,6 +169,8 @@ class pmTask : public pmBase
 
         bool IsOpenCLTask() const;
     
+        bool HasReadOnlyLazyAddressSpace() const;
+    
     #ifdef ENABLE_TASK_PROFILING
         pmTaskProfiler* GetTaskProfiler();
     #endif
@@ -175,6 +178,10 @@ class pmTask : public pmBase
     #ifdef USE_STEAL_AGENT_PER_NODE
         pmStealAgent* GetStealAgent();
     #endif
+
+        void SetAffinityMappings(std::vector<ulong>&& pLogicalToPhysical, std::vector<ulong>&& pPhysicalToLogical);
+        ulong GetPhysicalSubtaskId(ulong pLogicalSubtaskId) const;
+        ulong GetLogicalSubtaskId(ulong pPhysicalSubtaskId) const;
 
     private:
 		void BuildTaskInfo();
@@ -254,11 +261,14 @@ class pmTask : public pmBase
         std::unique_ptr<pmStealAgent> mStealAgentPtr;
     #endif
     
+        std::vector<ulong> mLogicalToPhysicalSubtaskMappings, mPhysicalToLogicalSubtaskMappings;
+    
     protected:
         void CreateReducerAndRedistributors();
         bool DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() const;
         bool RegisterRedistributionCompletion();    // Returns true when all address spaces finish redistribution
         void ReplaceTaskAddressSpace(uint pAddressSpaceIndex, pmAddressSpace* pNewAddressSpace);
+        const std::vector<ulong>& GetLogicalToPhysicalSubtaskMappings() const;
     
 		uint mAssignedDeviceCount;
         void* mLastReductionScratchBuffer;
@@ -294,6 +304,14 @@ class pmLocalTask : public pmTask
         void RegisterInternalTaskCompletionMessage();
         void UserDeleteTask();
     
+        void SetPreprocessorTask(pmLocalTask* pLocalTask);
+        const pmLocalTask* GetPreprocessorTask() const;
+    
+        void FetchAndComputeAffinityData(pmAddressSpace* pAffinityAddressSpace);
+        void StartScheduling();
+    
+        void SetTaskCompletionCallback(pmTaskCompletionCallback pCallback);
+    
 		pmStatus GetStatus();
 
 		std::vector<const pmProcessingElement*>& GetAssignedDevices();
@@ -306,6 +324,7 @@ class pmLocalTask : public pmTask
 	private:
         pmCommandPtr mTaskCommand;
 		finalize_ptr<pmSubtaskManager> mSubtaskManager;
+        finalize_ptr<pmAffinityTable> mAffinityTable;
 		std::vector<const pmProcessingElement*> mDevices;
         ulong mTaskTimeOutTriggerTime;
 
@@ -313,6 +332,8 @@ class pmLocalTask : public pmTask
         bool mUserSideTaskCompleted;
         bool mLocalStubsFreeOfCancellations, mLocalStubsFreeOfShadowMemCommits;
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
+    
+        pmLocalTask* mPreprocessorTask;
     
         static ulong& GetSequenceId();   // Task number at the originating host
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetSequenceLock();
@@ -335,7 +356,10 @@ class pmRemoteTask : public pmTask
         void DoPostInternalCompletion();
         virtual void MarkUserSideTaskCompletion();
         void MarkReductionFinished();
-
+    
+        void RegisterAffinityDataReceiveCompletionCommand(pmCommandPtr& pAffinityReceiveCompletionCommandPtr);
+        void ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSubtaskMapping);
+    
 	private:
         finalize_ptr<char, deleteArrayDeallocator<char>> mTaskConfAutoPtr;
         bool mUserSideTaskCompleted;
@@ -343,6 +367,7 @@ class pmRemoteTask : public pmTask
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
 
         std::vector<const pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined
+        pmCommandPtr mAffinityReceiveCompletionCommandPtr;
 };
 
 } // end namespace pm

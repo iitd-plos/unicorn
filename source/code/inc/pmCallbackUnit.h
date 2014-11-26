@@ -39,7 +39,7 @@ class pmCallbackUnit : public pmBase
     typedef std::map<std::string, const pmCallbackUnit*> keyMapType;
 
 	public:
-		pmCallbackUnit(const char* pKey, finalize_ptr<pmDataDistributionCB>&& pDataDistributionCB, finalize_ptr<pmSubtaskCB>&& pSubtaskCB, finalize_ptr<pmDataReductionCB>&& pDataReductionCB, finalize_ptr<pmDeviceSelectionCB>&& pDeviceSelectionCB, finalize_ptr<pmDataRedistributionCB>&& pDataRedistributionCB, finalize_ptr<pmPreDataTransferCB>&& pPreDataTransferCB, finalize_ptr<pmPostDataTransferCB>&& pPostDataTransferCB);
+		pmCallbackUnit(const char* pKey, finalize_ptr<pmDataDistributionCB>&& pDataDistributionCB, finalize_ptr<pmSubtaskCB>&& pSubtaskCB, finalize_ptr<pmDataReductionCB>&& pDataReductionCB, finalize_ptr<pmDeviceSelectionCB>&& pDeviceSelectionCB, finalize_ptr<pmDataRedistributionCB>&& pDataRedistributionCB, finalize_ptr<pmPreDataTransferCB>&& pPreDataTransferCB, finalize_ptr<pmPostDataTransferCB>&& pPostDataTransferCB, finalize_ptr<pmTaskCompletionCB>&& pTaskCompletionCB);
 
 		~pmCallbackUnit();
 
@@ -50,6 +50,9 @@ class pmCallbackUnit : public pmBase
 		const pmDeviceSelectionCB* GetDeviceSelectionCB() const;
 		const pmPreDataTransferCB* GetPreDataTransferCB() const;
 		const pmPostDataTransferCB* GetPostDataTransferCB() const;
+        const pmTaskCompletionCB* GetTaskCompletionCB() const;
+    
+        void SetTaskCompletionCB(finalize_ptr<pmTaskCompletionCB>&& pTaskCompletionCB);
 
 		const char* GetKey() const;
 
@@ -63,6 +66,7 @@ class pmCallbackUnit : public pmBase
 		finalize_ptr<pmDeviceSelectionCB> mDeviceSelectionCB;
 		finalize_ptr<pmPreDataTransferCB> mPreDataTransferCB;
 		finalize_ptr<pmPostDataTransferCB> mPostDataTransferCB;
+        finalize_ptr<pmTaskCompletionCB> mTaskCompletionCB;
 
 		const std::string mKey;
 

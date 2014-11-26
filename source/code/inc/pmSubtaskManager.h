@@ -157,28 +157,22 @@ private:
 class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager
 {
 	public:
-		pmPullSchedulingManager(pmLocalTask* pLocalTask);
-		virtual ~pmPullSchedulingManager();	
+		pmPullSchedulingManager(pmLocalTask* pLocalTask, uint pMaxPercentVariationFromFixedAllotment = 0);
 
 		virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
     
+        std::map<uint, std::pair<ulong, ulong>> ComputeMachineVersusInitialSubtaskCountMap();   // Returns a map of machine id versus pair of starting logical subtask id and subtask count on that machine
+    
     private:
+        void VaryFixedAllotments(std::vector<pmUnfinishedPartitionPtr>& pVector, uint pMaxPercentVariationFromFixedAllotment);
+    
     #ifdef SUPPORT_SPLIT_SUBTASKS
-        std::set<pmUnfinishedPartitionPtr> mSplittedGroupSubtaskPartitions;		// Collection of partitions to be assigned to splitting devices
-		std::set<pmUnfinishedPartitionPtr>::iterator mSplittedGroupIter;
+        std::vector<pmUnfinishedPartitionPtr> mSplittedGroupAllotmentVaryHelper;
         std::set<const pmProcessingElement*> mSplitGroupLeaders;
         bool mUseSplits;
     #endif
 
-        std::set<pmUnfinishedPartitionPtr> mSubtaskPartitions;		// Collection of partitions to be assigned to devices
-		std::set<pmUnfinishedPartitionPtr>::iterator mIter;
-    
-        std::map<const pmMachine*, size_t> mPartitionsAssignedToMachinesMap;
-        size_t mMachineCount;
-        size_t mPartitionsPerMachine;
-        size_t mLeftoverMachinePartitions;
-
-		RESOURCE_LOCK_IMPLEMENTATION_CLASS mAssignmentResourceLock;
+        std::map<const pmProcessingElement*, pmUnfinishedPartitionPtr> mAllottedPartitions;
 };
 
 class pmProportionalSchedulingManager : public pmSingleAssignmentSchedulingManager

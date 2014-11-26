@@ -67,6 +67,14 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
     return lStatus;
 }
 
+pmStatus pmDataDistributionCB::InvokeDirect(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) const
+{
+	if(!mCallback)
+		return pmSuccess;
+
+    return mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), pTask->GetPreSubscriptionSubtaskInfo(pSubtaskId, pSplitInfo));
+}
+
 
 /* class pmSubtaskCB */
 #ifdef SUPPORT_OPENCL
@@ -289,6 +297,26 @@ pmStatus pmPostDataTransferCB::Invoke() const
 
 	return pmSuccess;
 	//return mCallback();
+}
+
+
+/* class pmTaskCompletionCB */
+pmTaskCompletionCB::pmTaskCompletionCB(pmTaskCompletionCallback pCallback)
+	: mCallback(pCallback)
+{
+}
+
+pmStatus pmTaskCompletionCB::Invoke(pmTask* pTask) const
+{
+	if(!mCallback)
+		return pmSuccess;
+
+	return mCallback(pTask->GetTaskInfo());
+}
+    
+pmTaskCompletionCallback pmTaskCompletionCB::GetCallback() const
+{
+    return mCallback;
 }
 
 };

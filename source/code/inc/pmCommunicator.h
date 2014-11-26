@@ -1006,6 +1006,27 @@ struct multiFileOperationsPacked
     {}
 };
     
+struct affinityDataTransferPacked
+{
+    uint originatingHost;
+    ulong sequenceNumber;	// sequence number of local task object (on originating host)
+    uint transferDataElements;
+    finalize_ptr<ulong, deleteArrayDeallocator<ulong>> logicalToPhysicalSubtaskMapping;
+
+    affinityDataTransferPacked()
+    : originatingHost(std::numeric_limits<uint>::max())
+    , sequenceNumber(std::numeric_limits<ulong>::max())
+    , transferDataElements(0)
+    {}
+    
+    affinityDataTransferPacked(uint pOriginatingHost, ulong pSequenceNumber, uint pElementCount, finalize_ptr<ulong, deleteArrayDeallocator<ulong>>&& pLogicalToPhysicalSubtaskMapping)
+    : originatingHost(pOriginatingHost)
+    , sequenceNumber(pSequenceNumber)
+    , transferDataElements(pElementCount)
+    , logicalToPhysicalSubtaskMapping(std::move(pLogicalToPhysicalSubtaskMapping))
+    {}
+};
+    
 }
 
 /**

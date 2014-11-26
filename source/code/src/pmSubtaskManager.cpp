@@ -32,6 +32,7 @@
 #endif
 
 #include <sstream>
+#include <random>
 
 #include <string.h>
 
@@ -750,23 +751,27 @@ void pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(const pmProc
     
 
 /* class pmPullSchedulingManager */
-pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
+pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint pMaxPercentVariationFromFixedAllotment /* = 0 */)
 	: pmSingleAssignmentSchedulingManager(pLocalTask)
 #ifdef SUPPORT_SPLIT_SUBTASKS
     , mUseSplits(false)
 #endif
-    , mMachineCount(0)
-    , mPartitionsPerMachine(0)
-    , mLeftoverMachinePartitions(0)
-    , mAssignmentResourceLock __LOCK_NAME__("pmPullSchedulingManager::mAssignmentResourceLock")
 {
+    EXCEPTION_ASSERT(pMaxPercentVariationFromFixedAllotment <= 100);
+    
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lDeviceCount = mLocalTask->GetAssignedDeviceCount();
+    ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
 
-	EXCEPTION_ASSERT(lSubtaskCount != 0 && lDeviceCount != 0);
+    std::vector<const pmProcessingElement*>& lAssignedDevices = mLocalTask->GetAssignedDevices();
+
+    EXCEPTION_ASSERT(lSubtaskCount != 0 && lDeviceCount != 0);
+    
+    std::vector<pmUnfinishedPartitionPtr> lSubtaskPartitions;
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
     const std::vector<std::pair<std::vector<const pmProcessingElement*>, std::pair<ulong, ulong>>>& lAllotmentData = mLocalTask->GetSubtaskSplitter().MakeInitialSchedulingAllotments(pLocalTask);
+    std::vector<pmUnfinishedPartitionPtr> lSplittedGroupSubtaskPartitions;
 
     if(!lAllotmentData.empty())
     {
@@ -779,143 +784,243 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask)
             if(pPair.first.size() > 1)    // Splitting Group
             {
                 mSplitGroupLeaders.insert(pPair.first[0]);
-                mSplittedGroupSubtaskPartitions.insert(lUnfinishedPartitionPtr);
+                lSplittedGroupSubtaskPartitions.emplace_back(lUnfinishedPartitionPtr);
             }
             else    // Unsplitting Group
             {
-                mSubtaskPartitions.insert(lUnfinishedPartitionPtr);
+                lSubtaskPartitions.emplace_back(lUnfinishedPartitionPtr);
             }
+            
+            mSplittedGroupAllotmentVaryHelper.emplace_back(lUnfinishedPartitionPtr);
         });
-
-        mSplittedGroupIter = mSplittedGroupSubtaskPartitions.begin();
-        mIter = mSubtaskPartitions.begin();
     }
     else
 #endif
     {
-        ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
         ulong lPartitionSize = lSubtaskCount/lPartitionCount;
         ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
         ulong lFirstSubtask = 0, lLastSubtask = 0;
         
         for(ulong i = 0; i < lPartitionCount; ++i)
-        {				
+        {
             if(i < lLeftoverSubtasks)
                 lLastSubtask = lFirstSubtask + lPartitionSize;
             else
                 lLastSubtask = lFirstSubtask + lPartitionSize - 1;
 
             pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
-            mSubtaskPartitions.insert(lUnfinishedPartitionPtr);
+            lSubtaskPartitions.emplace_back(lUnfinishedPartitionPtr);
             
             lFirstSubtask = lLastSubtask + 1;
         }
+    }
 
+    if(pMaxPercentVariationFromFixedAllotment)
+    {
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        VaryFixedAllotments(mSplittedGroupAllotmentVaryHelper, pMaxPercentVariationFromFixedAllotment);
+    #else
+        VaryFixedAllotments(lSubtaskPartitions, pMaxPercentVariationFromFixedAllotment);
+    #endif
+    }
+    
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    if(mUseSplits)
+    {
+        auto lSplittedGroupIter = lSplittedGroupSubtaskPartitions.begin();
+        auto lSplittedGroupEndIter = lSplittedGroupSubtaskPartitions.end();
+
+        auto lUnsplittedGroupIter = lSubtaskPartitions.begin();
+        auto lUnsplittedGroupEndIter = lSubtaskPartitions.end();
+
+        pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
+        for_each(lAssignedDevices, [&] (const pmProcessingElement* pDevice)
+        {
+            bool lSplittingDevice = lSubtaskSplitter.IsSplitting(pDevice->GetType());
+            
+            if(lSplittingDevice)
+            {
+                if(lSplittedGroupIter != lSplittedGroupEndIter && mSplitGroupLeaders.find(pDevice) != mSplitGroupLeaders.end())
+                {
+                    mAllottedPartitions[pDevice] = *lSplittedGroupIter;
+                    ++lSplittedGroupIter;
+                }
+            }
+            else
+            {
+                if(lUnsplittedGroupIter != lUnsplittedGroupEndIter)
+                {
+                    mAllottedPartitions[pDevice] = *lUnsplittedGroupIter;
+                    ++lUnsplittedGroupIter;
+                }
+            }
+        });
+    }
+#else
+    else
+    {
         // If there are not enough partitions as devices, then assign same number of partitions to all machines
         if(lPartitionCount < lDeviceCount)
         {
             std::set<const pmMachine*> lMachinesSet;
-            pmProcessingElement::GetMachines(mLocalTask->GetAssignedDevices(), lMachinesSet);
+            pmProcessingElement::GetMachines(lAssignedDevices, lMachinesSet);
 
-            mMachineCount = lMachinesSet.size();
-            mPartitionsPerMachine = mSubtaskPartitions.size() / mMachineCount;
-            mLeftoverMachinePartitions = mSubtaskPartitions.size() - mPartitionsPerMachine * mMachineCount;
+            size_t lMachineCount = lMachinesSet.size();
+            size_t lPartitionsPerMachine = lSubtaskPartitions.size() / lMachineCount;
+            size_t lLeftoverMachinePartitions = lSubtaskPartitions.size() - lPartitionsPerMachine * lMachineCount;
+
+            std::map<const pmMachine*, size_t> lPartitionsAssignedToMachinesMap;
+            
+            auto lDeviceIter = lAssignedDevices.begin();
+            auto lDeviceEndIter = lAssignedDevices.end();
+
+            for_each(lSubtaskPartitions, [&] (pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr)
+            {
+                for(; lDeviceIter != lDeviceEndIter; ++lDeviceIter)
+                {
+                    const pmProcessingElement* lDevice = *lDeviceIter;
+                    const pmMachine* lMachine = lDevice->GetMachine();
+
+                    size_t lPartitionsForCurrentMachine = lPartitionsPerMachine;
+                    if((uint)lLeftoverMachinePartitions > (uint)(*lMachine))
+                        ++lPartitionsForCurrentMachine;
+
+                    auto lMapIter = lPartitionsAssignedToMachinesMap.find(lMachine);
+
+                    if(lMapIter == lPartitionsAssignedToMachinesMap.end())
+                        lMapIter = lPartitionsAssignedToMachinesMap.emplace(lMachine, 0).first;
+                    else if(lMapIter->second >= lPartitionsForCurrentMachine)
+                        continue;
+
+                    ++lMapIter->second;
+                    
+                    mAllottedPartitions[lDevice] = pUnfinishedPartitionPtr;
+
+                    break;
+                }
+            });
+            
         }
-
-        mIter = mSubtaskPartitions.begin();
+        else
+        {
+            multi_for_each(lAssignedDevices, lSubtaskPartitions, [&] (const pmProcessingElement* pDevice, pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr)
+            {
+                mAllottedPartitions[pDevice] = pUnfinishedPartitionPtr;
+            });
+        }
     }
+#endif
 }
 
-pmPullSchedulingManager::~pmPullSchedulingManager()
+void pmPullSchedulingManager::VaryFixedAllotments(std::vector<pmUnfinishedPartitionPtr>& pVector, uint pMaxPercentVariationFromFixedAllotment)
 {
-    mSubtaskPartitions.clear();
+    std::random_device lRandomDevice;
+    std::mt19937 lGenerator(lRandomDevice());
+
+	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
+    ulong lPartitionCount = pVector.size();
+
+    ulong lPositiveCarry = 0;
+    ulong lNegativeCarry = 0;
+    
+    filtered_for_each_with_index(pVector, [&] (pmUnfinishedPartitionPtr& pPartitionPtr) {return (pPartitionPtr->lastSubtaskIndex != pPartitionPtr->firstSubtaskIndex);},
+    [&] (pmUnfinishedPartitionPtr& pPartitionPtr, size_t pIndex, size_t pFilteredIndex)
+    {
+        ulong lPrevLastSubtask = pPartitionPtr->lastSubtaskIndex;
+        ulong lPercentVariation = lGenerator() % pMaxPercentVariationFromFixedAllotment;
+        ulong lPartitionSubtasks = (pPartitionPtr->lastSubtaskIndex - pPartitionPtr->firstSubtaskIndex + 1);
+        ulong lSubtasksAdjustment = (ulong)(lPartitionSubtasks * (double)lPercentVariation/100.0);
+
+        EXCEPTION_ASSERT(lPositiveCarry == 0 || lNegativeCarry == 0);
+        
+        if(lPositiveCarry)
+            pPartitionPtr->firstSubtaskIndex += lPositiveCarry;
+        else if(lNegativeCarry)
+            pPartitionPtr->firstSubtaskIndex -= lNegativeCarry;
+
+        if(lSubtasksAdjustment)
+        {
+            if(lGenerator() % 2)    // Increase the number of subtasks
+            {
+                ulong lLastSubtask = pPartitionPtr->firstSubtaskIndex + lPartitionSubtasks - 1 + lSubtasksAdjustment;
+                
+                ulong lMaxPossibleLastSubtask = lSubtaskCount - (lPartitionCount - pIndex); // Leave atleast one subtask for all remaining partitions
+                
+                EXCEPTION_ASSERT(pPartitionPtr->firstSubtaskIndex <= lMaxPossibleLastSubtask);
+                
+                pPartitionPtr->lastSubtaskIndex = std::min<ulong>(lMaxPossibleLastSubtask, lLastSubtask);
+            }
+            else    // Decrease the number of subtasks
+            {
+                ulong lLastSubtask = pPartitionPtr->firstSubtaskIndex + lPartitionSubtasks - 1 - lSubtasksAdjustment;
+                
+                if(lLastSubtask > pPartitionPtr->firstSubtaskIndex)
+                    pPartitionPtr->lastSubtaskIndex = lLastSubtask;
+                else
+                    pPartitionPtr->lastSubtaskIndex = pPartitionPtr->firstSubtaskIndex;
+            }
+        }
+        else
+        {
+            ulong lLastSubtask = pPartitionPtr->firstSubtaskIndex + lPartitionSubtasks - 1;
+            
+            ulong lMaxPossibleLastSubtask = lSubtaskCount - (lPartitionCount - pIndex); // Leave atleast one subtask for all remaining partitions
+            
+            EXCEPTION_ASSERT(pPartitionPtr->firstSubtaskIndex <= lMaxPossibleLastSubtask);
+
+            pPartitionPtr->lastSubtaskIndex = std::min<ulong>(lMaxPossibleLastSubtask, lLastSubtask);
+        }
+        
+        EXCEPTION_ASSERT(pPartitionPtr->lastSubtaskIndex >= pPartitionPtr->firstSubtaskIndex);
+
+        lPositiveCarry = lNegativeCarry = 0;
+
+        if(lPrevLastSubtask > pPartitionPtr->lastSubtaskIndex)
+            lNegativeCarry = lPrevLastSubtask - pPartitionPtr->lastSubtaskIndex;
+        else if (lPrevLastSubtask < pPartitionPtr->lastSubtaskIndex)
+            lPositiveCarry = pPartitionPtr->lastSubtaskIndex - lPrevLastSubtask;
+    });
+    
+    (*(pVector.rbegin()))->lastSubtaskIndex = lSubtaskCount - 1;
+}
+    
+std::map<uint, std::pair<ulong, ulong>> pmPullSchedulingManager::ComputeMachineVersusInitialSubtaskCountMap()
+{
+    std::map<uint, ulong> lMap;
+
+    for_each(mAllottedPartitions, [&] (typename decltype(mAllottedPartitions)::value_type& pPair)
+    {
+        uint lMachine = *(pPair.first->GetMachine());
+        
+        auto lIter = lMap.find(lMachine);
+        if(lIter == lMap.end())
+            lIter = lMap.emplace(lMachine, 0).first;
+        
+        lIter->second += (pPair.second->lastSubtaskIndex - pPair.second->firstSubtaskIndex + 1);
+    });
+    
+    ulong lRunningCount = 0;
+    std::map<uint, std::pair<ulong, ulong>> lRunningCountMap;
+    for_each(lMap, [&] (const std::pair<uint, ulong>& pPair)
+    {
+        lRunningCountMap.emplace(std::piecewise_construct, std::forward_as_tuple(pPair.first), std::forward_as_tuple(lRunningCount, pPair.second));
+        lRunningCount += pPair.second;
+    });
+
+    return lRunningCountMap;
 }
     
 void pmPullSchedulingManager::AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee)
 {
-#ifdef SUPPORT_SPLIT_SUBTASKS
-    if(mUseSplits)
+    auto lIter = mAllottedPartitions.find(pDevice);
+
+    if(lIter != mAllottedPartitions.end())
     {
-        bool lSplittingDevice = mLocalTask->GetSubtaskSplitter().IsSplitting(pDevice->GetType());
-        
-        FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
-
-        if(lSplittingDevice)
-        {
-            if((mSplittedGroupIter == mSplittedGroupSubtaskPartitions.end()) || (mSplitGroupLeaders.find(pDevice) == mSplitGroupLeaders.end()))
-            {
-                pSubtaskCount = 0;
-                return;
-            }
-            
-            pmUnfinishedPartitionPtr lPartition = *mSplittedGroupIter;
-
-            pStartingSubtask = lPartition->firstSubtaskIndex;
-            pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
-            pOriginalAllottee = NULL;
-
-            ++mSplittedGroupIter;
-        }
-        else
-        {
-            if(mIter == mSubtaskPartitions.end())
-            {
-                pSubtaskCount = 0;
-                return;
-            }
-            
-            pmUnfinishedPartitionPtr lPartition = *mIter;
-
-            pStartingSubtask = lPartition->firstSubtaskIndex;
-            pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
-            pOriginalAllottee = NULL;
-
-            ++mIter;
-        }
-    }
-    else
-#endif
-    {
-        FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());
-
-        if(mIter == mSubtaskPartitions.end())
-        {
-            pSubtaskCount = 0;
-            return;
-        }
-
-        if(mPartitionsPerMachine)
-        {
-            EXCEPTION_ASSERT(mMachineCount);
-
-            const pmMachine* lMachine = pDevice->GetMachine();
-
-            size_t lPartitionsForCurrentMachine = mPartitionsPerMachine;
-            if((uint)mLeftoverMachinePartitions > (uint)(*lMachine))
-                ++lPartitionsForCurrentMachine;
-
-            auto lMapIter = mPartitionsAssignedToMachinesMap.find(lMachine);
-
-            if(lMapIter == mPartitionsAssignedToMachinesMap.end())
-            {
-                lMapIter = mPartitionsAssignedToMachinesMap.emplace(lMachine, 0).first;
-            }
-            else if(lMapIter->second >= lPartitionsForCurrentMachine)
-            {
-                pSubtaskCount = 0;
-                return;
-            }
-
-            ++lMapIter->second;
-        }
-
-        pmUnfinishedPartitionPtr lPartition = *mIter;
+        const pmUnfinishedPartitionPtr& lPartition = lIter->second;
 
         pStartingSubtask = lPartition->firstSubtaskIndex;
         pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
         pOriginalAllottee = NULL;
-
-        ++mIter;
     }
 }
 

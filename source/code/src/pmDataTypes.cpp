@@ -158,7 +158,7 @@ void pmSplitSubtaskExecutionTimelineAutoPtr::SetGracefulCompletion()
 std::string pmSplitSubtaskExecutionTimelineAutoPtr::GetEventName(ulong pSubtaskId, uint pSplitId, uint pSplitCount, pmTask* pTask)
 {
     std::stringstream lEventName;
-    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pSubtaskId << " (Split " << pSplitId << " of " << pSplitCount << ")";
+    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pTask->GetPhysicalSubtaskId(pSubtaskId) << " (Split " << pSplitId << " of " << pSplitCount << ")";
     
     return lEventName.str();
 }
@@ -166,7 +166,7 @@ std::string pmSplitSubtaskExecutionTimelineAutoPtr::GetEventName(ulong pSubtaskI
 std::string pmSplitSubtaskExecutionTimelineAutoPtr::GetCancelledEventName(ulong pSubtaskId, uint pSplitId, uint pSplitCount, pmTask* pTask)
 {
     std::stringstream lEventName;
-    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pSubtaskId << " (Split " << pSplitId << " of " << pSplitCount << ")_Cancelled";
+    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pTask->GetPhysicalSubtaskId(pSubtaskId) << " (Split " << pSplitId << " of " << pSplitCount << ")_Cancelled";
 
     return lEventName.str();
 }
@@ -226,7 +226,7 @@ void pmSubtaskRangeExecutionTimelineAutoPtr::SetGracefulCompletion()
 std::string pmSubtaskRangeExecutionTimelineAutoPtr::GetEventName(ulong pSubtaskId, pmTask* pTask)
 {
     std::stringstream lEventName;
-    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pSubtaskId;
+    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pTask->GetPhysicalSubtaskId(pSubtaskId);
     
     return lEventName.str();
 }
@@ -234,7 +234,7 @@ std::string pmSubtaskRangeExecutionTimelineAutoPtr::GetEventName(ulong pSubtaskI
 std::string pmSubtaskRangeExecutionTimelineAutoPtr::GetCancelledEventName(ulong pSubtaskId, pmTask* pTask)
 {
     std::stringstream lEventName;
-    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pSubtaskId << "_Cancelled";
+    lEventName << "Task [" << ((uint)(*(pTask->GetOriginatingHost()))) << ", " << (pTask->GetSequenceNumber()) << "] Subtask " << pTask->GetPhysicalSubtaskId(pSubtaskId) << "_Cancelled";
 
     return lEventName.str();
 }

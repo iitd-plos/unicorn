@@ -83,6 +83,7 @@ namespace pm
             SUBTASK_RANGE_CANCEL_TAG,
             FILE_OPERATIONS_TAG,
             MULTI_FILE_OPERATIONS_TAG,
+            AFFINITY_DATA_TRANSFER_TAG,
         #ifdef SERIALIZE_DEFERRED_LOGS
             DEFERRED_LOG_LENGTH_TAG,
             DEFERRED_LOG_TAG,
@@ -127,6 +128,7 @@ namespace pm
             FILE_OPERATIONS_STRUCT,
             MULTI_FILE_OPERATIONS_STRUCT,
             MULTI_FILE_OPERATIONS_PACKED,
+            AFFINITY_DATA_TRANSFER_PACKED,
             MAX_COMMUNICATOR_DATA_TYPES
         };
     }
