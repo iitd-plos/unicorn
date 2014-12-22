@@ -123,4 +123,21 @@ void pmProcessingElement::GetMachines(std::vector<const pmProcessingElement*>& p
 		pMachines.insert(lDevice->GetMachine());
 }
 
+void pmProcessingElement::GetMachinesInOrder(std::vector<const pmProcessingElement*>& pDevices, std::vector<const pmMachine*>& pMachines)
+{
+    std::map<uint, const pmMachine*> lMap;
+
+	for(auto lDevice: pDevices)
+    {
+        const pmMachine* lMachine = lDevice->GetMachine();
+        lMap[(uint)(*lMachine)] = lMachine;
+    }
+
+    pMachines.reserve(lMap.size());
+    for_each(lMap, [&] (const decltype(lMap)::value_type& pPair)
+    {
+        pMachines.emplace_back(pPair.second);
+    });
+}
+
 };

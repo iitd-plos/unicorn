@@ -1036,13 +1036,13 @@ const pmLocalTask* pmLocalTask::GetPreprocessorTask() const
     
 void pmLocalTask::ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace)
 {
-    std::set<const pmMachine*> lMachinesSet;
-    pmProcessingElement::GetMachines(GetAssignedDevices(), lMachinesSet);
+    std::vector<const pmMachine*> lMachinesVector;
+    pmProcessingElement::GetMachinesInOrder(GetAssignedDevices(), lMachinesVector);
 
     EXCEPTION_ASSERT(!mAffinityTable.get_ptr());
     
     mAffinityTable.reset(new pmAffinityTable(this));
-    mAffinityTable->PopulateAffinityTable(pAffinityAddressSpace, lMachinesSet);
+    mAffinityTable->PopulateAffinityTable(pAffinityAddressSpace, lMachinesVector);
 }
 
 void pmLocalTask::StartScheduling()

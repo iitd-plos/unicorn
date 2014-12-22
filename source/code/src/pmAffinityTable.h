@@ -35,6 +35,7 @@ class pmAddressSpace;
     
 class pmAffinityTable
 {
+public:
     struct subtaskData
     {
         const pmMachine* machine;
@@ -45,21 +46,17 @@ class pmAffinityTable
         , localBytes(pLocalBytes)
         {}
         
-        friend bool operator< (const subtaskData& pFirst, const subtaskData& pSecond)
-        {
-            return (pFirst.localBytes > pSecond.localBytes);
-        }
+        friend bool operator< (const subtaskData& pFirst, const subtaskData& pSecond);
     };
-
-    typedef std::set<subtaskData> rowType;
     
-public:
     pmAffinityTable(pmLocalTask* pLocalTask);
     
-    void PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::set<const pmMachine*>& pMachinesSet);
+    void PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
     void CreateSubtaskMappings();
 
 private:
+    typedef std::set<subtaskData> rowType;
+
     pmLocalTask* mLocalTask;
     pmTable<ulong, rowType> mTable; // subtask id versus machines
 };

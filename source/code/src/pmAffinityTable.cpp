@@ -33,18 +33,18 @@ pmAffinityTable::pmAffinityTable(pmLocalTask* pLocalTask)
 {
 }
 
-void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::set<const pmMachine*>& pMachinesSet)
+void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector)
 {
     ulong* lAffinityMem = (ulong*)pAffinityAddressSpace->GetMem();
 
     ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
-    EXCEPTION_ASSERT(pMachinesSet.size() * lSubtaskCount * sizeof(ulong) == pAffinityAddressSpace->GetLength());
+    EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(ulong) == pAffinityAddressSpace->GetLength());
 
     std::vector<rowType> lRowVectors;
     lRowVectors.resize(lSubtaskCount);
 
     ulong index = 0;
-    for_each(pMachinesSet, [&] (const pmMachine* pMachine)
+    for_each(pMachinesVector, [&] (const pmMachine* pMachine)
     {
         for(ulong i = 0; i < lSubtaskCount; ++i)
         {
@@ -74,6 +74,8 @@ void pmAffinityTable::CreateSubtaskMappings()
     {
         const rowType& lSubtaskRow = mTable.GetRow(i);
         
+        bool lAssigned = false;
+        
         // Most preferred machine for this subtask is at front of the row
         for(auto lSubtaskRowIter = lSubtaskRow.begin(), lSubtaskRowEndIter = lSubtaskRow.end(); lSubtaskRowIter != lSubtaskRowEndIter; ++lSubtaskRowIter)
         {
@@ -88,12 +90,25 @@ void pmAffinityTable::CreateSubtaskMappings()
                 ++lMapIter->second.first;
                 --lMapIter->second.second;
                 
+                lAssigned = true;
                 break;
             }
         }
+
+        EXCEPTION_ASSERT(lAssigned);
     }
     
     mLocalTask->SetAffinityMappings(std::move(lLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
+}
+    
+    
+/* struct subtaskData */
+bool operator< (const pmAffinityTable::subtaskData& pFirst, const pmAffinityTable::subtaskData& pSecond)
+{
+    if(pFirst.localBytes == pSecond.localBytes)
+        return ((uint)(*(pFirst.machine)) < (uint)(*(pSecond.machine)));
+    
+    return (pFirst.localBytes > pSecond.localBytes);
 }
 
 }
