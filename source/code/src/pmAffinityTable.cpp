@@ -60,23 +60,24 @@ void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpac
 
 void pmAffinityTable::CreateSubtaskMappings()
 {
-    std::vector<ulong> lLogicalToPhysicalSubtaskMapping(mLocalTask->GetSubtaskCount());
-    std::vector<ulong> lPhysicalToLogicalSubtaskMapping(mLocalTask->GetSubtaskCount());
+    ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
+
+    std::vector<ulong> lLogicalToPhysicalSubtaskMapping(lSubtaskCount);
+    std::vector<ulong> lPhysicalToLogicalSubtaskMapping(lSubtaskCount);
     
     pmPullSchedulingManager* lManager = dynamic_cast<pmPullSchedulingManager*>(mLocalTask->GetSubtaskManager());
     EXCEPTION_ASSERT(lManager);
     
     std::map<uint, std::pair<ulong, ulong>> lMap = lManager->ComputeMachineVersusInitialSubtaskCountMap();
 
-    ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
     for(ulong i = 0; i < lSubtaskCount; ++i)
     {
         const rowType& lSubtaskRow = mTable.GetRow(i);
         
         // Most preferred machine for this subtask is at front of the row
-        for_each(lSubtaskRow, [&] (const subtaskData& pData)
+        for(auto lSubtaskRowIter = lSubtaskRow.begin(), lSubtaskRowEndIter = lSubtaskRow.end(); lSubtaskRowIter != lSubtaskRowEndIter; ++lSubtaskRowIter)
         {
-            uint lMachine = *pData.machine;
+            uint lMachine = *lSubtaskRowIter->machine;
             
             auto lMapIter = lMap.find(lMachine);
             if(lMapIter != lMap.end() && lMapIter->second.second)
@@ -87,9 +88,9 @@ void pmAffinityTable::CreateSubtaskMappings()
                 ++lMapIter->second.first;
                 --lMapIter->second.second;
                 
-                return; // return from inner lambda
+                break;
             }
-        });
+        }
     }
     
     mLocalTask->SetAffinityMappings(std::move(lLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));

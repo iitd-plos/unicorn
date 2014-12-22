@@ -40,6 +40,21 @@ struct preprocessorTaskConf
     ulong sequenceNumber;  // of user task
 };
 
+void PostAffinityAddressSpaceFetchCallback(const pmCommandPtr& pCountDownCommand);
+
+void PostAffinityAddressSpaceFetchCallback(const pmCommandPtr& pCountDownCommand)
+{
+    pmTask* lPreprocessorTask = const_cast<pmTask*>(static_cast<const pmTask*>(pCountDownCommand->GetUserIdentifier()));
+    preprocessorTaskConf* lTaskConf = (preprocessorTaskConf*)lPreprocessorTask->GetTaskConfiguration();
+    pmLocalTask* lUserTask = static_cast<pmLocalTask*>(pmTaskManager::GetTaskManager()->FindTask(pmMachinePool::GetMachinePool()->GetMachine(lTaskConf->originatingHost), lTaskConf->sequenceNumber));
+
+    const std::vector<pmTaskMemory>& lPreprocessorTaskMemVector = lPreprocessorTask->GetTaskMemVector();
+    pmAddressSpace* lAddressSpace = lPreprocessorTaskMemVector[lPreprocessorTaskMemVector.size() - 1].addressSpace;
+
+    lUserTask->ComputeAffinityData(lAddressSpace);
+    lUserTask->StartScheduling();
+}
+
 pmStatus preprocessorTask_dataDistributionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo)
 {
     preprocessorTaskConf* lTaskConf = (preprocessorTaskConf*)pTaskInfo.taskConf;
@@ -125,11 +140,11 @@ pmStatus preprocessorTask_taskCompletionCallback(pmTaskInfo pTaskInfo)
     {
         case AFFINITY_DEDUCER:
         {
-            pmAddressSpace* lAddressSpace = lPreprocessorTaskMemVector[lPreprocessorTaskMemVector.size() - 1].addressSpace;
+            pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(1, lUserTask->GetPriority(), 0, PostAffinityAddressSpaceFetchCallback, lPreprocessorTask);
+            lCountDownCommand->MarkExecutionStart();
 
-            lUserTask->FetchAndComputeAffinityData(lAddressSpace);
-            lUserTask->StartScheduling();
-            pmReleaseMemory(lAddressSpace->GetUserMemHandle());
+            pmAddressSpace* lAddressSpace = lPreprocessorTaskMemVector[lPreprocessorTaskMemVector.size() - 1].addressSpace;
+            lAddressSpace->FetchAsync(lUserTask->GetPriority(), lCountDownCommand);
         
             break;
         }
@@ -156,6 +171,10 @@ pmStatus userTask_auxillaryTaskCompletionCallback(pmTaskInfo pTaskInfo)
     lUserTask->SetTaskCompletionCallback(lPreprocessorTask->GetCallbackUnit()->GetTaskCompletionCB()->GetCallback());
 
     // Destroy preprocessorTask
+    const std::vector<pmTaskMemory>& lPreprocessorTaskMemVector = lPreprocessorTask->GetTaskMemVector();
+    pmAddressSpace* lAddressSpace = lPreprocessorTaskMemVector[lPreprocessorTaskMemVector.size() - 1].addressSpace;
+
+    EXCEPTION_ASSERT(pmReleaseMemory(lAddressSpace->GetUserMemHandle()) == pmSuccess);
     EXCEPTION_ASSERT(pmReleaseTask((pmTaskHandle)(lPreprocessorTask)) == pmSuccess);
 
     // Call the original task completion callback
@@ -217,18 +236,6 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
         {
             lPreprocessorSubtasks = lMachinesSet.size();
 
-        #if 0
-            const std::vector<pmTaskMemory>& lTaskMemVector = pLocalTask->GetTaskMemVector();
-            lMemVector.reserve(lTaskMemVector.size() + 1);
-
-            for_each(lTaskMemVector, [&] (const pmTaskMemory& pMem)
-            {
-                // Only input address spaces need to be scanned for affinity
-                if(pLocalTask->IsReadOnly(pMem.addressSpace) || pLocalTask->IsReadWrite(pMem.addressSpace))
-                    lMemVector.emplace_back(pMem.addressSpace->GetUserMemHandle(), READ_ONLY, SUBSCRIPTION_NATURAL, true);
-            });
-        #endif
-            
             // Create an output address space for the preprocessor task (every machine stores percentage local data for all subtasks) */
             size_t lOutputMemSize = lPreprocessorSubtasks * pLocalTask->GetSubtaskCount() * sizeof(ulong);
             pmMemHandle lMemHandle;

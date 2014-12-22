@@ -190,7 +190,7 @@ class pmTask : public pmBase
         template<typename T>
         void RandomizeData(T& pData);
     
-        void Start();
+        void PrepareForStart();
     
         pmPoolAllocator& GetPoolAllocator(uint pAddressSpaceIndex, size_t pIndividualAllocationSize, size_t pMaxAllocations);
     
@@ -264,6 +264,7 @@ class pmTask : public pmBase
         std::vector<ulong> mLogicalToPhysicalSubtaskMappings, mPhysicalToLogicalSubtaskMappings;
     
     protected:
+        void Start();
         void CreateReducerAndRedistributors();
         bool DoesTaskHaveReadWriteAddressSpaceWithNonDisjointSubscriptions() const;
         bool RegisterRedistributionCompletion();    // Returns true when all address spaces finish redistribution
@@ -307,7 +308,7 @@ class pmLocalTask : public pmTask
         void SetPreprocessorTask(pmLocalTask* pLocalTask);
         const pmLocalTask* GetPreprocessorTask() const;
     
-        void FetchAndComputeAffinityData(pmAddressSpace* pAffinityAddressSpace);
+        void ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace);
         void StartScheduling();
     
         void SetTaskCompletionCallback(pmTaskCompletionCallback pCallback);
@@ -357,7 +358,6 @@ class pmRemoteTask : public pmTask
         virtual void MarkUserSideTaskCompletion();
         void MarkReductionFinished();
     
-        void RegisterAffinityDataReceiveCompletionCommand(pmCommandPtr& pAffinityReceiveCompletionCommandPtr);
         void ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSubtaskMapping);
     
 	private:
@@ -367,7 +367,6 @@ class pmRemoteTask : public pmTask
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
 
         std::vector<const pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined
-        pmCommandPtr mAffinityReceiveCompletionCommandPtr;
 };
 
 } // end namespace pm

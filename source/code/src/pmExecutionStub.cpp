@@ -155,7 +155,7 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
 #endif
     
 #ifdef PROACTIVE_STEAL_REQUESTS
-    if(pRange.task->GetSchedulingModel() == scheduler::PULL && pIsStealResponse)
+    if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()) && pIsStealResponse)
     {
         auto lIter = mStealRequestIssuedMap.find(pRange.task);
         EXCEPTION_ASSERT(lIter != mStealRequestIssuedMap.end() && lIter->second);
@@ -204,7 +204,7 @@ void pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCanc
             CancelCurrentlyExecutingSubtaskRange(pTaskListeningOnCancellation);
     }
     
-    if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask) && pTask->GetSchedulingModel() == scheduler::PULL)
+    if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask) && pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()))
     {
         FINALIZE_RESOURCE_PTR(dSecondaryAllotteeLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSecondaryAllotteeLock, Lock(), Unlock());
 
@@ -261,7 +261,7 @@ void pmExecutionStub::FreeGpuResources()
 void pmExecutionStub::FreeTaskResources(pmTask* pTask)
 {
 #ifdef PROACTIVE_STEAL_REQUESTS
-    if(pTask->GetSchedulingModel() == scheduler::PULL)
+    if(pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()))
         mStealRequestIssuedMap.erase(pTask);
 #endif
 
@@ -368,7 +368,7 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
         // When a split happens, the source stub always gets to execute the 0'th split. Other stubs get remaining splits when they demand.
         // Under PULL scheme, a multi-assign only happens from the currently executing subtask range which is always one subtask wide for
         // splitted subtasks. For PUSH model, the entire subtask range is multi-assigned by the owner host.
-        if(pRange.task->GetSchedulingModel() == scheduler::PULL)
+        if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()))
         {
             EXCEPTION_ASSERT(pRange.startSubtask == pRange.endSubtask);
             
@@ -494,7 +494,7 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
     }
 #endif
     
-    if(pRange.task->GetSchedulingModel() == scheduler::PULL)
+    if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()))
     {
         EXCEPTION_ASSERT(pRange.startSubtask == pRange.endSubtask);
     
@@ -974,14 +974,14 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             EXCEPTION_ASSERT(mCurrentSubtaskTimersMap.empty());
 
         #ifdef USE_STEAL_AGENT_PER_NODE
-            if(lEvent.range.task->GetSchedulingModel() == scheduler::PULL)
+            if(pmScheduler::SchedulingModelSupportsStealing(lEvent.range.task->GetSchedulingModel()))
                 lEvent.range.task->GetStealAgent()->SetStubMultiAssignment(this, true);
         #endif
 
             ExecuteSubtaskRange(lEvent);
 
         #ifdef USE_STEAL_AGENT_PER_NODE
-            if(lEvent.range.task->GetSchedulingModel() == scheduler::PULL)
+            if(pmScheduler::SchedulingModelSupportsStealing(lEvent.range.task->GetSchedulingModel()))
             {
                 lEvent.range.task->GetStealAgent()->SetStubMultiAssignment(this, false);
                 lEvent.range.task->GetStealAgent()->ClearExecutingSubtasks(this);
@@ -1020,7 +1020,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             }
         
         #ifdef TRACK_MULTI_ASSIGN
-            if(lRange.task->GetSchedulingModel() == scheduler::PULL)
+            if(pmScheduler::SchedulingModelSupportsStealing(lRange.task->GetSchedulingModel()))
             {
                 std::cout << "Multi assign partition [" << lRange.startSubtask << " - " << lRange.endSubtask << "] completed by secondary allottee - Device " << GetProcessingElement()->GetGlobalDeviceIndex() << ", Original Allottee: Device " << lEvent.range.originalAllottee->GetGlobalDeviceIndex() << std::endl;
             }
@@ -1275,7 +1275,7 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
 
 void pmExecutionStub::ClearSecondaryAllotteeMap(pmSubtaskRange& pRange)
 {
-    if(pRange.task->GetSchedulingModel() != scheduler::PULL)
+    if(!pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()))
         return;
         
     FINALIZE_RESOURCE_PTR(dSecondaryAllotteeLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSecondaryAllotteeLock, Lock(), Unlock());
@@ -1346,7 +1346,7 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
 
     pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), 0);
 
-	if(pRange.task->GetSchedulingModel() == scheduler::PULL)
+	if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()))
         IssueStealRequestIfRequired(pRange.task);
 }
 
@@ -1361,7 +1361,7 @@ bool pmExecutionStub::UpdateSecondaryAllotteeMap(std::pair<pmTask*, ulong>& pPai
 /* This method must be called with mCurrentSubtaskRangeLock acquired */
 bool pmExecutionStub::UpdateSecondaryAllotteeMapInternal(std::pair<pmTask*, ulong>& pPair, const pmProcessingElement* pRequestingDevice)
 {
-    DEBUG_EXCEPTION_ASSERT(pPair.first->GetSchedulingModel() == scheduler::PULL);
+    DEBUG_EXCEPTION_ASSERT(pmScheduler::SchedulingModelSupportsStealing(pPair.first->GetSchedulingModel()));
 
     std::map<std::pair<pmTask*, ulong>, std::vector<const pmProcessingElement*> >::iterator lIter = mSecondaryAllotteeMap.find(pPair);
     if(lIter != mSecondaryAllotteeMap.end())
@@ -1494,7 +1494,7 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
     pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), pTotalSplitCount);
 
     // A steal request is generated only if there is no more pending subtask in the stub queue
-	if(pRange.task->GetSchedulingModel() == scheduler::PULL && !HasMatchingCommand(pRange.task->GetPriority(), execEventMatchFunc, pRange.task))
+	if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()) && !HasMatchingCommand(pRange.task->GetPriority(), execEventMatchFunc, pRange.task))
         IssueStealRequestIfRequired(pRange.task);
 }
 
@@ -1543,7 +1543,7 @@ void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSpl
         return;
 
 #ifdef USE_STEAL_AGENT_PER_NODE
-    if(pSplitSubtaskAutoPtr->task->GetSchedulingModel() == scheduler::PULL)
+    if(pmScheduler::SchedulingModelSupportsStealing(pSplitSubtaskAutoPtr->task->GetSchedulingModel()))
         pSplitSubtaskAutoPtr->task->GetStealAgent()->SetStubMultiAssignment(this, true);
 #endif
 
@@ -1575,7 +1575,7 @@ void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSpl
     }
 
 #ifdef USE_STEAL_AGENT_PER_NODE
-    if(pSplitSubtaskAutoPtr->task->GetSchedulingModel() == scheduler::PULL)
+    if(pmScheduler::SchedulingModelSupportsStealing(pSplitSubtaskAutoPtr->task->GetSchedulingModel()))
         pSplitSubtaskAutoPtr->task->GetStealAgent()->SetStubMultiAssignment(this, false);
 #endif
 
@@ -1872,7 +1872,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
             AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pEvent.range, true, lEndSubtask)));
         
     #ifdef USE_STEAL_AGENT_PER_NODE
-        if(lParentRange.task->GetSchedulingModel() == scheduler::PULL)
+        if(pmScheduler::SchedulingModelSupportsStealing(lParentRange.task->GetSchedulingModel()))
             lParentRange.task->GetStealAgent()->RegisterExecutingSubtasks(this, lEndSubtask - lStartSubtask + 1);
     #endif
 
@@ -1886,7 +1886,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         for(ulong lSubtaskId = lStartSubtask; lSubtaskId <= lEndSubtask; ++lSubtaskId)
         {
         #ifdef PROACTIVE_STEAL_REQUESTS
-            if(lParentRange.task->GetSchedulingModel() == scheduler::PULL && !lRangePartiallyAddedBack && lSubtaskId == lEndSubtask)
+            if(pmScheduler::SchedulingModelSupportsStealing(lParentRange.task->GetSchedulingModel()) && !lRangePartiallyAddedBack && lSubtaskId == lEndSubtask)
             {
                 // Wait for stub's execution rate to be determined before sending steal request
                 if(lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this) == (double)0 && !mCurrentSubtaskQueue.empty())
@@ -1921,7 +1921,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
             }
 
         #ifdef USE_STEAL_AGENT_PER_NODE
-            if(lParentRange.task->GetSchedulingModel() == scheduler::PULL)
+            if(pmScheduler::SchedulingModelSupportsStealing(lParentRange.task->GetSchedulingModel()))
                 lParentRange.task->GetStealAgent()->DeregisterExecutingSubtasks(this, 1);
         #endif
 
@@ -1968,7 +1968,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 
                 pmSubtaskRange lSubtaskRange(pEvent.range.task, pEvent.range.originalAllottee, pEvent.range.startSubtask, lEndSubtask);
                 
-                if(pEvent.range.task->GetSchedulingModel() == scheduler::PULL && lEndSubtask != mCurrentSubtaskRangeStats->endSubtaskId)  // some subtasks have been stolen and forceAck has been set on the current range
+                if(pmScheduler::SchedulingModelSupportsStealing(pEvent.range.task->GetSchedulingModel()) && lEndSubtask != mCurrentSubtaskRangeStats->endSubtaskId)  // some subtasks have been stolen and forceAck has been set on the current range
                 {
                     lSubtaskRange.endSubtask = mCurrentSubtaskRangeStats->endSubtaskId;
                     
@@ -2156,7 +2156,7 @@ void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSpl
     
 void pmExecutionStub::IssueStealRequestIfRequired(pmTask* pTask)
 {
-    DEBUG_EXCEPTION_ASSERT(pTask->GetSchedulingModel() == scheduler::PULL);
+    DEBUG_EXCEPTION_ASSERT(pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()));
     
 #ifdef PROACTIVE_STEAL_REQUESTS
     auto lIter = mStealRequestIssuedMap.find(pTask);
@@ -3525,7 +3525,7 @@ bool execStub::stubEvent::BlocksSecondaryOperations()
 // pSubmitted false means notification just after removal from the queue
 void execStub::subtaskExecEvent::EventNotification(void* pThreadQueue, bool pSubmitted)
 {
-    if(range.task->GetSchedulingModel() == scheduler::PULL)
+    if(pmScheduler::SchedulingModelSupportsStealing(range.task->GetSchedulingModel()))
     {
         if(pSubmitted)
             range.task->GetStealAgent()->RegisterPendingSubtasks(reinterpret_cast<pmExecutionStub*>(pThreadQueue), range.endSubtask - range.startSubtask + 1);

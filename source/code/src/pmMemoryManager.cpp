@@ -646,7 +646,7 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
     using namespace linuxMemManager;
 
     EXCEPTION_ASSERT(pLength);
-    
+
     pmTask* lLockingTask = pAddressSpace->GetLockingTask();
     if(lLockingTask != pRequestingTask)
         return;

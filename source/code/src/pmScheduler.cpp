@@ -127,6 +127,11 @@ void SchedulerCommandCompletionCallback(const pmCommandPtr& pCommand)
 	lScheduler->CommandCompletionEvent(pCommand);
 }
 
+bool pmScheduler::SchedulingModelSupportsStealing(scheduler::schedulingModel pModel)
+{
+    return (pModel == PULL || pModel == PULL_WITH_AFFINITY);
+}
+    
 pmScheduler::pmScheduler()
 {
 #ifdef TRACK_SUBTASK_EXECUTION

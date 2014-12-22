@@ -454,6 +454,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 	public:
         virtual ~pmScheduler();
 		static pmScheduler* GetScheduler();
+    
+        static bool SchedulingModelSupportsStealing(scheduler::schedulingModel pModel);
 
 		void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
 		void ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);

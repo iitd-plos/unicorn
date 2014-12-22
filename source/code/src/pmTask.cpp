@@ -58,7 +58,7 @@ void AddressSpacesLockCallback(const pmCommandPtr& pCountDownCommand)
 {
     pmTask* lTask = const_cast<pmTask*>(static_cast<const pmTask*>(pCountDownCommand->GetUserIdentifier()));
     
-    lTask->Start();
+    lTask->PrepareForStart();
 }
     
 /* class pmTask */
@@ -100,7 +100,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
     , mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions(false)
     , mTaskMemVector(std::move(pTaskMemVector))
 #ifdef USE_STEAL_AGENT_PER_NODE
-    , mStealAgentPtr(((mSchedulingModel == scheduler::PULL) ? new pmStealAgent(this) : NULL))
+    , mStealAgentPtr((pmScheduler::SchedulingModelSupportsStealing(mSchedulingModel) ? new pmStealAgent(this) : NULL))
 #endif
 	, mAssignedDeviceCount(pAssignedDeviceCount)
     , mLastReductionScratchBuffer(NULL)
@@ -136,14 +136,11 @@ void pmTask::LockAddressSpaces()
 {
     if(mTaskMemVector.empty())
     {
-        Start();
+        PrepareForStart();
     }
     else
     {
-        // For remote task with affinity, we need to additionally wait for affinity data (logical to physical subtask mapping) to arrive before starting the user task
-        bool lRemoteTaskAffinityWait = (mSchedulingModel == scheduler::PULL_WITH_AFFINITY && dynamic_cast<pmRemoteTask*>(this));
-        
-        pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(mTaskMemVector.size() + (lRemoteTaskAffinityWait ? 1 : 0), GetPriority(), 0, AddressSpacesLockCallback, this);
+        pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(mTaskMemVector.size(), GetPriority(), 0, AddressSpacesLockCallback, this);
         lCountDownCommand->MarkExecutionStart();
 
         for_each(mTaskMemVector, [this, &lCountDownCommand] (const pmTaskMemory& pTaskMem)
@@ -151,13 +148,10 @@ void pmTask::LockAddressSpaces()
             pmAddressSpace* lAddressSpace = pTaskMem.addressSpace;
             lAddressSpace->EnqueueForLock(this, pTaskMem.memType, lCountDownCommand);
         });
-        
-        if(lRemoteTaskAffinityWait)
-            static_cast<pmRemoteTask*>(this)->RegisterAffinityDataReceiveCompletionCommand(lCountDownCommand);
     }
 }
     
-void pmTask::Start()
+void pmTask::PrepareForStart()
 {
     EXCEPTION_ASSERT(!mStarted);
 
@@ -182,6 +176,13 @@ void pmTask::Start()
     BuildTaskInfo();
     BuildPreSubscriptionSubtaskInfo();
 
+    // For remote task with affinity, we need to wait for affinity data (logical to physical subtask mapping) to arrive before starting the user task
+    if(!(mSchedulingModel == scheduler::PULL_WITH_AFFINITY && dynamic_cast<pmRemoteTask*>(this)))
+        Start();
+}
+    
+void pmTask::Start()
+{
     mStarted = true;
 
     if(dynamic_cast<pmLocalTask*>(this))
@@ -1033,10 +1034,8 @@ const pmLocalTask* pmLocalTask::GetPreprocessorTask() const
     return mPreprocessorTask;
 }
     
-void pmLocalTask::FetchAndComputeAffinityData(pmAddressSpace* pAffinityAddressSpace)
+void pmLocalTask::ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace)
 {
-    pAffinityAddressSpace->Fetch(GetPriority());
-
     std::set<const pmMachine*> lMachinesSet;
     pmProcessingElement::GetMachines(GetAssignedDevices(), lMachinesSet);
 
@@ -1386,11 +1385,6 @@ void pmRemoteTask::MarkSubtaskExecutionFinished()
         GetReducer()->SignalSendToMachineAboutNoLocalReduction();
 }
 
-void pmRemoteTask::RegisterAffinityDataReceiveCompletionCommand(pmCommandPtr& pAffinityReceiveCompletionCommandPtr)
-{
-    mAffinityReceiveCompletionCommandPtr = pAffinityReceiveCompletionCommandPtr;
-}
-    
 void pmRemoteTask::ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSubtaskMapping)
 {
     ulong lSubtaskCount = GetSubtaskCount();
@@ -1401,8 +1395,8 @@ void pmRemoteTask::ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSu
         lPhysicalToLogicalSubtaskMapping[pLogicalToPhysicalSubtaskMapping[i]] = i;
 
     SetAffinityMappings(std::move(pLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
-    
-    mAffinityReceiveCompletionCommandPtr->MarkExecutionEnd(pmSuccess, mAffinityReceiveCompletionCommandPtr);
+
+    Start();
 }
 
 };

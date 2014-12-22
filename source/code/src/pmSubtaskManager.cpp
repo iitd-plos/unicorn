@@ -727,7 +727,7 @@ void pmSingleAssignmentSchedulingManager::RegisterSubtaskCompletion(const pmProc
     pmUnfinishedPartitionPtr lTargetPartitionPtr;
     std::set<pmUnfinishedPartitionPtr>::iterator lIter = mUnacknowledgedPartitions.begin(), lEndIter = mUnacknowledgedPartitions.end();
     for(; lIter != lEndIter; ++lIter)
-    {
+    {   
         pmUnfinishedPartitionPtr lPartitionPtr = *lIter;
         if(lPartitionPtr->firstSubtaskIndex <= pStartingSubtask && lPartitionPtr->lastSubtaskIndex >= pStartingSubtask + pSubtaskCount - 1)
         {
@@ -868,6 +868,18 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
             size_t lMachineCount = lMachinesSet.size();
             size_t lPartitionsPerMachine = lSubtaskPartitions.size() / lMachineCount;
             size_t lLeftoverMachinePartitions = lSubtaskPartitions.size() - lPartitionsPerMachine * lMachineCount;
+            
+            std::set<const pmMachine*> lLeftoverMachinesSet;
+            if(lLeftoverMachinePartitions)
+            {
+                for_each_with_index(lMachinesSet, [&] (const pmMachine* pMachine, size_t pIndex)
+                {
+                    if(pIndex >= lLeftoverMachinePartitions)
+                        return; //return from lambda
+
+                    lLeftoverMachinesSet.insert(pMachine);
+                });
+            }
 
             std::map<const pmMachine*, size_t> lPartitionsAssignedToMachinesMap;
             
@@ -882,7 +894,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
                     const pmMachine* lMachine = lDevice->GetMachine();
 
                     size_t lPartitionsForCurrentMachine = lPartitionsPerMachine;
-                    if((uint)lLeftoverMachinePartitions > (uint)(*lMachine))
+                    if(lLeftoverMachinesSet.find(lMachine) != lLeftoverMachinesSet.end())
                         ++lPartitionsForCurrentMachine;
 
                     auto lMapIter = lPartitionsAssignedToMachinesMap.find(lMachine);
@@ -895,11 +907,11 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
                     ++lMapIter->second;
                     
                     mAllottedPartitions[lDevice] = pUnfinishedPartitionPtr;
-
+                    
+                    ++lDeviceIter;
                     break;
                 }
             });
-            
         }
         else
         {
@@ -1021,6 +1033,10 @@ void pmPullSchedulingManager::AssignSubtasksToDevice(const pmProcessingElement* 
         pStartingSubtask = lPartition->firstSubtaskIndex;
         pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
         pOriginalAllottee = NULL;
+    }
+    else
+    {
+        pSubtaskCount = 0;
     }
 }
 

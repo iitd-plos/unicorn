@@ -34,7 +34,7 @@ pmStealAgent::pmStealAgent(pmTask* pTask)
 : mTask(pTask)
 , mStubSink(pmStubManager::GetStubManager()->GetStubCount())
 {
-    DEBUG_EXCEPTION_ASSERT(mTask->GetSchedulingModel() == scheduler::PULL);
+    DEBUG_EXCEPTION_ASSERT(pmScheduler::SchedulingModelSupportsStealing(mTask->GetSchedulingModel()));
 }
 
 void pmStealAgent::RegisterPendingSubtasks(pmExecutionStub* pStub, ulong pPendingSubtasks)
