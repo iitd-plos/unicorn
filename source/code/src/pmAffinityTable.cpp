@@ -25,37 +25,146 @@
 #include "pmHardware.h"
 #include "pmTask.h"
 
+#include <map>
+
 namespace pm
 {
 
-pmAffinityTable::pmAffinityTable(pmLocalTask* pLocalTask)
+pmAffinityTable::pmAffinityTable(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion)
     : mLocalTask(pLocalTask)
+    , mAffinityCriterion(pAffinityCriterion)
 {
 }
 
 void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector)
 {
-    ulong* lAffinityMem = (ulong*)pAffinityAddressSpace->GetMem();
+    void* lAffinityMem = pAffinityAddressSpace->GetMem();
 
     ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
-    EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(ulong) == pAffinityAddressSpace->GetLength());
 
-    std::vector<rowType> lRowVectors;
-    lRowVectors.resize(lSubtaskCount);
+    size_t lMachines = pMachinesVector.size();
 
-    ulong index = 0;
-    for_each(pMachinesVector, [&] (const pmMachine* pMachine)
+    switch(mAffinityCriterion)
     {
-        for(ulong i = 0; i < lSubtaskCount; ++i)
+        case MAXIMIZE_LOCAL_DATA:
         {
-            lRowVectors[i].emplace(pMachine, lAffinityMem[index++]);
+            EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(ulong) == pAffinityAddressSpace->GetLength());
+            ulong* lAffinityData = (ulong*)lAffinityMem;
+
+            std::vector<std::multimap<ulong, const pmMachine*, std::greater<ulong>>> lVector;    // local bytes versus machines for each subtask
+            lVector.resize(lSubtaskCount);
+
+            ulong index = 0;
+            for_each(pMachinesVector, [&] (const pmMachine* pMachine)
+            {
+                for(ulong i = 0; i < lSubtaskCount; ++i)
+                {
+                    lVector[i].emplace(lAffinityData[index++], pMachine);
+                }
+            });
+            
+            for_each_with_index(lVector, [&] (const decltype(lVector)::value_type& pEntry, size_t pSubtask)
+            {
+                std::vector<const pmMachine*> lTableRow;
+                lTableRow.reserve(lMachines);
+                
+                std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<ulong, const pmMachine*>());
+                mTable.AddRow(pSubtask, std::move(lTableRow));
+            });
+            
+            break;
         }
-    });
-    
-    for_each_with_index(lRowVectors, [&] (rowType& pRow, size_t pSubtask)
-    {
-        mTable.AddRow(pSubtask, std::move(pRow));
-    });
+            
+        case MINIMIZE_REMOTE_SOURCES:
+        {
+            EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(uint) == pAffinityAddressSpace->GetLength());
+            uint* lAffinityData = (uint*)lAffinityMem;
+
+            std::vector<std::multimap<uint, const pmMachine*, std::less<uint>>> lVector;    // remote sources versus machines for each subtask
+            lVector.resize(lSubtaskCount);
+
+            ulong index = 0;
+            for_each(pMachinesVector, [&] (const pmMachine* pMachine)
+            {
+                for(ulong i = 0; i < lSubtaskCount; ++i)
+                {
+                    lVector[i].emplace(lAffinityData[index++], pMachine);
+                }
+            });
+            
+            for_each_with_index(lVector, [&] (const decltype(lVector)::value_type& pEntry, size_t pSubtask)
+            {
+                std::vector<const pmMachine*> lTableRow;
+                lTableRow.reserve(lMachines);
+                
+                std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<uint, const pmMachine*>());
+                mTable.AddRow(pSubtask, std::move(lTableRow));
+            });
+            
+            break;
+        }
+            
+        case MINIMIZE_REMOTE_TRANSFER_EVENTS:
+        {
+            EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(ulong) == pAffinityAddressSpace->GetLength());
+            ulong* lAffinityData = (ulong*)lAffinityMem;
+
+            std::vector<std::multimap<ulong, const pmMachine*, std::less<ulong>>> lVector;    // remote fetch time versus machines for each subtask
+            lVector.resize(lSubtaskCount);
+
+            ulong index = 0;
+            for_each(pMachinesVector, [&] (const pmMachine* pMachine)
+            {
+                for(ulong i = 0; i < lSubtaskCount; ++i)
+                {
+                    lVector[i].emplace(lAffinityData[index++], pMachine);
+                }
+            });
+            
+            for_each_with_index(lVector, [&] (const decltype(lVector)::value_type& pEntry, size_t pSubtask)
+            {
+                std::vector<const pmMachine*> lTableRow;
+                lTableRow.reserve(lMachines);
+                
+                std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<ulong, const pmMachine*>());
+                mTable.AddRow(pSubtask, std::move(lTableRow));
+            });
+            
+            break;
+        }
+
+        case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
+        {
+            EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(float) == pAffinityAddressSpace->GetLength());
+            float* lAffinityData = (float*)lAffinityMem;
+
+            std::vector<std::multimap<float, const pmMachine*, std::less<float>>> lVector;    // remote fetch time versus machines for each subtask
+            lVector.resize(lSubtaskCount);
+
+            ulong index = 0;
+            for_each(pMachinesVector, [&] (const pmMachine* pMachine)
+            {
+                for(ulong i = 0; i < lSubtaskCount; ++i)
+                {
+                    lVector[i].emplace(lAffinityData[index++], pMachine);
+                }
+            });
+            
+            for_each_with_index(lVector, [&] (const decltype(lVector)::value_type& pEntry, size_t pSubtask)
+            {
+                std::vector<const pmMachine*> lTableRow;
+                lTableRow.reserve(lMachines);
+                
+                std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<float, const pmMachine*>());
+                mTable.AddRow(pSubtask, std::move(lTableRow));
+            });
+            
+            break;
+        }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    };
 }
 
 void pmAffinityTable::CreateSubtaskMappings()
@@ -72,14 +181,15 @@ void pmAffinityTable::CreateSubtaskMappings()
 
     for(ulong i = 0; i < lSubtaskCount; ++i)
     {
-        const rowType& lSubtaskRow = mTable.GetRow(i);
+        const std::vector<const pmMachine*>& lSubtaskRow = mTable.GetRow(i);
         
         bool lAssigned = false;
         
         // Most preferred machine for this subtask is at front of the row
         for(auto lSubtaskRowIter = lSubtaskRow.begin(), lSubtaskRowEndIter = lSubtaskRow.end(); lSubtaskRowIter != lSubtaskRowEndIter; ++lSubtaskRowIter)
         {
-            uint lMachine = *lSubtaskRowIter->machine;
+            const pmMachine* lMachinePtr = *lSubtaskRowIter;
+            uint lMachine = *lMachinePtr;
             
             auto lMapIter = lMap.find(lMachine);
             if(lMapIter != lMap.end() && lMapIter->second.second)
@@ -99,16 +209,6 @@ void pmAffinityTable::CreateSubtaskMappings()
     }
     
     mLocalTask->SetAffinityMappings(std::move(lLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
-}
-    
-    
-/* struct subtaskData */
-bool operator< (const pmAffinityTable::subtaskData& pFirst, const pmAffinityTable::subtaskData& pSecond)
-{
-    if(pFirst.localBytes == pSecond.localBytes)
-        return ((uint)(*(pFirst.machine)) < (uint)(*(pSecond.machine)));
-    
-    return (pFirst.localBytes > pSecond.localBytes);
 }
 
 }

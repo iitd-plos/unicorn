@@ -58,7 +58,7 @@ class pmMachinePool : public pmBase
 			uint cpuCores;
 			uint gpuCards;
             uint cpuNumaDomains;    // Top level domains only
-			ulong  dataSent;
+			ulong dataSent;
 			ulong dataReceived;
 			double sendTime;
 			double receiveTime;

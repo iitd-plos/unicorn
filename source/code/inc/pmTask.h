@@ -278,7 +278,7 @@ class pmTask : public pmBase
 class pmLocalTask : public pmTask
 {
 	public:
-        pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost = PM_LOCAL_MACHINE, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
+        pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost = PM_LOCAL_MACHINE, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL, pmAffinityCriterion pAffinityCriterion = MAX_AFFINITY_CRITERION);
 
         virtual ~pmLocalTask();
 
@@ -308,6 +308,8 @@ class pmLocalTask : public pmTask
         void SetPreprocessorTask(pmLocalTask* pLocalTask);
         const pmLocalTask* GetPreprocessorTask() const;
     
+        pmAffinityCriterion GetAffinityCriterion() const;
+    
         void ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace);
         void StartScheduling();
     
@@ -335,6 +337,7 @@ class pmLocalTask : public pmTask
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
     
         pmLocalTask* mPreprocessorTask;
+        pmAffinityCriterion mAffinityCriterion;
     
         static ulong& GetSequenceId();   // Task number at the originating host
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetSequenceLock();

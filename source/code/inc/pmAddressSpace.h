@@ -144,6 +144,7 @@ class pmAddressSpace : public pmBase
         pmTask* GetLockingTask();
     
         ulong FindLocalDataSize(ulong pOffset, ulong pLength);
+        std::set<const pmMachine*> FindRemoteDataSources(ulong pOffset, ulong pLength);
     
         void ChangeOwnership(std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>& pOwnershipData);
     

@@ -892,6 +892,21 @@ ulong pmAddressSpace::FindLocalDataSize(ulong pOffset, ulong pLength)
     return lLocalDataSize;
 }
 
+std::set<const pmMachine*> pmAddressSpace::FindRemoteDataSources(ulong pOffset, ulong pLength)
+{
+    pmAddressSpace::pmMemOwnership lOwners;
+    GetOwners(pOffset, pLength, lOwners);
+    
+    std::set<const pmMachine*> lSet;
+    for_each(lOwners, [&] (const typename decltype(lOwners)::value_type& pPair)
+    {
+        if(pPair.second.second.host != PM_LOCAL_MACHINE)
+            lSet.emplace(pPair.second.second.host);
+    });
+    
+    return lSet;
+}
+
 bool pmAddressSpace::IsRegionLocallyOwned(ulong pOffset, ulong pLength)
 {
     pmAddressSpace::pmMemOwnership lOwners;

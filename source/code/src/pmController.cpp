@@ -290,7 +290,7 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
         lTaskMemVector.emplace_back(lAddressSpace, pTaskMem.memType, pTaskMem.subscriptionVisibilityType, pTaskMem.disjointReadWritesAcrossSubtasks);
     }
     
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags);
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags, pTaskDetails.affinityCriterion);
 
     pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
     static_cast<pmLocalTask*>(*pTaskHandle)->LockAddressSpaces();

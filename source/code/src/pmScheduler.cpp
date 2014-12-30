@@ -1211,7 +1211,7 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
 	AssignTaskToMachines(pLocalTask, lMachines);
 
     if(pLocalTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY && pLocalTask->GetCallbackUnit()->GetDataDistributionCB() && !pLocalTask->HasReadOnlyLazyAddressSpace())
-        pmPreprocessorTask::GetPreprocessorTask()->DeduceAffinity(pLocalTask);
+        pmPreprocessorTask::GetPreprocessorTask()->DeduceAffinity(pLocalTask, pLocalTask->GetAffinityCriterion());
     else
         pLocalTask->StartScheduling();
 

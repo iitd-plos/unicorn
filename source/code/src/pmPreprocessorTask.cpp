@@ -38,6 +38,7 @@ struct preprocessorTaskConf
     ulong originalTaskSubtasks;
     uint originatingHost;   // of user task
     ulong sequenceNumber;  // of user task
+    pmAffinityCriterion affinityCriterion;
 };
 
 void PostAffinityAddressSpaceFetchCallback(const pmCommandPtr& pCountDownCommand);
@@ -65,7 +66,9 @@ pmStatus preprocessorTask_dataDistributionCallback(pmTaskInfo pTaskInfo, pmDevic
     {
         case AFFINITY_DEDUCER:
         {
-            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, pSubtaskInfo.memCount - 1, WRITE_SUBSCRIPTION, pmSubscriptionInfo(pDeviceInfo.host * lTaskConf->originalTaskSubtasks * sizeof(ulong), lTaskConf->originalTaskSubtasks * sizeof(ulong)));
+            size_t lSampleSize = pmPreprocessorTask::GetSampleSizeForAffinityCriterion(lTaskConf->affinityCriterion);
+
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, pSubtaskInfo.memCount - 1, WRITE_SUBSCRIPTION, pmSubscriptionInfo((pDeviceInfo.host * lTaskConf->originalTaskSubtasks + (pSubtaskInfo.subtaskId % lTaskConf->originalTaskSubtasks)) * lSampleSize, lSampleSize));
     
             break;
         }
@@ -94,15 +97,34 @@ pmStatus preprocessorTask_cpuCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
     {
         case AFFINITY_DEDUCER:
         {
-            ulong* lOutputMem = (ulong*)pSubtaskInfo.memInfo[pSubtaskInfo.memCount - 1].writePtr;
+            void* lOutputMem = pSubtaskInfo.memInfo[pSubtaskInfo.memCount - 1].writePtr;
             
             pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetCpuStub(pDeviceInfo.deviceIdOnHost);
             pmSubscriptionManager& lSubscriptionManager = lUserTask->GetSubscriptionManager();
             
-            for(ulong i = 0; i < lTaskConf->originalTaskSubtasks; ++i)
+            ulong lUserSubtaskId = (pSubtaskInfo.subtaskId % lTaskConf->originalTaskSubtasks);
+            lSubscriptionManager.FindSubtaskMemDependencies(lStub, lUserSubtaskId, NULL, true);
+            
+            switch(lTaskConf->affinityCriterion)
             {
-                lSubscriptionManager.FindSubtaskMemDependencies(lStub, i, NULL, true);
-                lOutputMem[i] = lSubscriptionManager.FindLocalInputDataSizeForSubtask(lStub, i);
+                case MAXIMIZE_LOCAL_DATA:
+                    *((ulong*)lOutputMem) = lSubscriptionManager.FindLocalInputDataSizeForSubtask(lStub, lUserSubtaskId);
+                    break;
+
+                case MINIMIZE_REMOTE_SOURCES:
+                    *((uint*)lOutputMem) = lSubscriptionManager.FindRemoteDataSourcesForSubtask(lStub, lUserSubtaskId);
+                    break;
+                
+                case MINIMIZE_REMOTE_TRANSFER_EVENTS:
+                    *((ulong*)lOutputMem) = lSubscriptionManager.FindRemoteTransferEventsForSubtask(lStub, lUserSubtaskId);
+                    break;
+
+                case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
+                    *((float*)lOutputMem) = lSubscriptionManager.FindRemoteTransferEstimateForSubtask(lStub, lUserSubtaskId);
+                    break;
+                    
+                default:
+                    PMTHROW(pmFatalErrorException());
             }
             
             break;
@@ -200,28 +222,29 @@ pmPreprocessorTask* pmPreprocessorTask::GetPreprocessorTask()
     return &lPreprocessorTask;
 }
 
-void pmPreprocessorTask::DeduceAffinity(pm::pmLocalTask* pLocalTask)
+void pmPreprocessorTask::DeduceAffinity(pm::pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion)
 {
     DEBUG_EXCEPTION_ASSERT(pLocalTask->GetCallbackUnit() && pLocalTask->GetCallbackUnit()->GetDataDistributionCB() && !(static_cast<pmTask*>(*pTaskHandle))->HasReadOnlyLazyAddressSpace());
 
-    LaunchPreprocessorTask(pLocalTask, AFFINITY_DEDUCER);
+    LaunchPreprocessorTask(pLocalTask, AFFINITY_DEDUCER, pAffinityCriterion);
 }
 
 void pmPreprocessorTask::EvaluateDependency(pmLocalTask* pLocalTask)
 {
-    LaunchPreprocessorTask(pLocalTask, DEPENDENCY_EVALUATOR);
+    LaunchPreprocessorTask(pLocalTask, DEPENDENCY_EVALUATOR, MAX_AFFINITY_CRITERION);
 }
 
-void pmPreprocessorTask::DeduceAffinityAndEvaluateDependency(pmLocalTask* pLocalTask)
+void pmPreprocessorTask::DeduceAffinityAndEvaluateDependency(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion)
 {
     DEBUG_EXCEPTION_ASSERT(pLocalTask->GetCallbackUnit() && pLocalTask->GetCallbackUnit()->GetDataDistributionCB() && !(static_cast<pmTask*>(*pTaskHandle))->HasReadOnlyLazyAddressSpace());
 
-    LaunchPreprocessorTask(pLocalTask, AFFINITY_AND_DEPENDENCY_TASK);
+    LaunchPreprocessorTask(pLocalTask, AFFINITY_AND_DEPENDENCY_TASK, pAffinityCriterion);
 }
-    
-void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, preprocessorTaskType pTaskType)
+
+void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, preprocessorTaskType pTaskType, pmAffinityCriterion pAffinityCriterion)
 {
-    preprocessorTaskConf lTaskConf = {pTaskType, pLocalTask->GetSubtaskCount(), *pLocalTask->GetOriginatingHost(), pLocalTask->GetSequenceNumber()};
+    ulong lUserSubtasks = pLocalTask->GetSubtaskCount();
+    preprocessorTaskConf lTaskConf = {pTaskType, lUserSubtasks, *pLocalTask->GetOriginatingHost(), pLocalTask->GetSequenceNumber(), pAffinityCriterion};
 
     std::set<const pmMachine*> lMachinesSet;
     pmProcessingElement::GetMachines(pLocalTask->GetAssignedDevices(), lMachinesSet);
@@ -234,10 +257,11 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
     {
         case preprocessorTask::AFFINITY_DEDUCER:
         {
-            lPreprocessorSubtasks = lMachinesSet.size();
+            lPreprocessorSubtasks = lMachinesSet.size() * lUserSubtasks;
 
-            // Create an output address space for the preprocessor task (every machine stores percentage local data for all subtasks) */
-            size_t lOutputMemSize = lPreprocessorSubtasks * pLocalTask->GetSubtaskCount() * sizeof(ulong);
+            // Create an output address space for the preprocessor task (every machine stores local bytes for all subtasks) */
+            size_t lOutputMemSize = lMachinesSet.size() * lUserSubtasks * GetSampleSizeForAffinityCriterion(pAffinityCriterion);
+            
             pmMemHandle lMemHandle;
             pmCreateMemory(lOutputMemSize, &lMemHandle);
             
@@ -270,6 +294,33 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
 	pmTaskHandle lTaskHandle = NULL;
 
 	EXCEPTION_ASSERT(pmSubmitTask(lTaskDetails, &lTaskHandle) == pmSuccess);
+}
+    
+size_t pmPreprocessorTask::GetSampleSizeForAffinityCriterion(pmAffinityCriterion pAffinityCriterion)
+{
+    switch(pAffinityCriterion)
+    {
+        case MAXIMIZE_LOCAL_DATA:
+            return sizeof(ulong);
+            break;
+            
+        case MINIMIZE_REMOTE_SOURCES:
+            return sizeof(uint);
+            break;
+            
+        case MINIMIZE_REMOTE_TRANSFER_EVENTS:
+            return sizeof(ulong);
+            break;
+            
+        case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
+            return sizeof(float);
+            break;
+
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+    
+    return 0;
 }
     
 };

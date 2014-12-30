@@ -925,6 +925,90 @@ ulong pmSubscriptionManager::FindLocalInputDataSizeForSubtask(pmExecutionStub* p
     return lLocalDataSize;
 }
 
+uint pmSubscriptionManager::FindRemoteDataSourcesForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
+
+    uint lMaxRemoteSources = pmGetHostCount() - 1;
+    std::set<const pmMachine*> lRemoteDataSources;
+
+    filtered_for_each_with_index(mTask->GetAddressSpaces(), [&] (pmAddressSpace* pAddressSpace) { return mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace); },
+    [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pFilteredIndex)
+    {
+        uint lMemIndex = (uint)pAddressSpaceIndex;
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        GetNonConsolidatedReadSubscriptionsInternal(lSubtask, lMemIndex, lBeginIter, lEndIter);
+        
+        for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+        {
+            std::set<const pmMachine*> lSet = pAddressSpace->FindRemoteDataSources(lIter->first, lIter->second.first);
+            
+            for_each(lSet, [&] (const pmMachine* pMachine)
+            {
+                lRemoteDataSources.emplace(pMachine);
+            });
+            
+            if(lRemoteDataSources.size() == lMaxRemoteSources)
+                return;     // return from lambda
+        }
+    });
+
+    return (uint)lRemoteDataSources.size();
+}
+
+ulong pmSubscriptionManager::FindRemoteTransferEventsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
+
+    ulong lRemoteTransferEvents = 0;
+
+    multi_for_each(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
+    {
+        if(mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace))
+        {
+            lRemoteTransferEvents += pAddressSpaceData.mScatteredReadSubscriptionInfoVector.size() + pAddressSpaceData.mReadSubscriptionInfoVector.size();
+        }
+    });
+
+    return lRemoteTransferEvents;
+}
+    
+float pmSubscriptionManager::FindRemoteTransferEstimateForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+{
+    size_t lPageSize = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+    const double lLatencyPerPageFetch = 1.0;
+    const double lLatencyPerScatteredPageFetch = 1.1;
+
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
+
+    double lRemoteDataTransferTime = 0;
+
+    multi_for_each(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
+    {
+        if(mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace))
+        {
+            // Fetch exact scattered subscriptions (these subscriptions are packed at the sender side before transfer and then unpacked by the receiver)
+            for_each(pAddressSpaceData.mScatteredReadSubscriptionInfoVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+            {
+                ulong lLength = pScatteredSubscriptionInfo.size * pScatteredSubscriptionInfo.count;
+                ulong lPages = (lLength + lPageSize - 1) / lPageSize;
+
+                lRemoteDataTransferTime += lLatencyPerScatteredPageFetch * lPages;
+            });
+            
+            // For non-scattered subscriptions, we fetch entire memory pages (no packing/unpacking happens here)
+            for_each(pAddressSpaceData.mReadSubscriptionInfoVector, [&] (const pmSubscriptionInfo& pSubscriptionInfo)
+            {
+                ulong lPages = (pSubscriptionInfo.length + lPageSize - 1) / lPageSize;
+
+                lRemoteDataTransferTime += lLatencyPerPageFetch * lPages;
+            });
+        }
+    });
+
+    return (float)lRemoteDataTransferTime;
+}
     
 /* Must be called with mSubtaskMapVector stub's lock acquired for both subtasks */
 bool pmSubscriptionManager::AddressSpacesHaveMatchingSubscriptionsInternal(const pmSubtaskAddressSpaceData& pAddressSpaceData1, const pmSubtaskAddressSpaceData& pAddressSpaceData2) const

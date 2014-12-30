@@ -405,6 +405,46 @@ const std::vector<const pmMachine*>& pmTask::GetStealListForDevice(const pmProce
 #else
 const std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(const pmProcessingElement* pDevice)
 {
+#ifdef ENABLE_ROUND_ROBIN_VICTIM_SELECTION
+    auto lRoundRobinLambda = [pDevice] (const pmProcessingElement* pDevice1, const pmProcessingElement* pDevice2) -> bool
+    {
+        uint lIndex = pDevice->GetGlobalDeviceIndex();
+        uint lIndex1 = pDevice1->GetGlobalDeviceIndex();
+        uint lIndex2 = pDevice2->GetGlobalDeviceIndex();
+        
+        if((lIndex1 < lIndex && lIndex2 < lIndex) || (lIndex1 > lIndex && lIndex2 > lIndex))
+            return lIndex1 < lIndex2;
+
+        return (lIndex1 > lIndex);
+    };
+#endif
+
+#ifdef ENABLE_CPU_FIRST_VICTIM_SELECTION
+    auto lCpuFirstLambda = [] (const pmProcessingElement* pDevice1, const pmProcessingElement* pDevice2) -> bool
+    {
+        pmDeviceType lType1 = pDevice1->GetType();
+        pmDeviceType lType2 = pDevice2->GetType();
+        
+        if(lType1 == lType2)
+            return pDevice1->GetGlobalDeviceIndex() < pDevice2->GetGlobalDeviceIndex();
+
+        return (lType1 == CPU);
+    };
+#endif
+
+#ifdef ENABLE_GPU_FIRST_VICTIM_SELECTION
+    auto lGpuFirstLambda = [] (const pmProcessingElement* pDevice1, const pmProcessingElement* pDevice2) -> bool
+    {
+        pmDeviceType lType1 = pDevice1->GetType();
+        pmDeviceType lType2 = pDevice2->GetType();
+        
+        if(lType1 == lType2)
+            return pDevice1->GetGlobalDeviceIndex() < pDevice2->GetGlobalDeviceIndex();
+
+        return (lType1 == GPU);
+    };
+#endif
+
     FINALIZE_RESOURCE_PTR(dStealListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealListLock, Lock(), Unlock());
     
     auto lIter = mStealListForDevice.find(pDevice);
@@ -428,14 +468,26 @@ const std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(con
             });
             
             lIter = mStealListForDevice.emplace(pDevice, lRepresentativeDevices).first;
-            RandomizeData(lIter->second);
         }
         else
     #endif
         {
             lIter = mStealListForDevice.emplace(pDevice, lDevices).first;
-            RandomizeData(lIter->second);
         }
+
+    #ifdef ENABLE_ROUND_ROBIN_VICTIM_SELECTION
+        std::sort(lIter->second.begin(), lIter->second.end(), lRoundRobinLambda);
+    #else
+        #ifdef ENABLE_CPU_FIRST_VICTIM_SELECTION
+            std::sort(lIter->second.begin(), lIter->second.end(), lCpuFirstLambda);
+        #else
+            #ifdef ENABLE_GPU_FIRST_VICTIM_SELECTION
+                std::sort(lIter->second.begin(), lIter->second.end(), lGpuFirstLambda);
+            #else
+                RandomizeData(lIter->second);
+            #endif
+        #endif
+    #endif
     }
 
     return lIter->second;
@@ -911,7 +963,7 @@ bool pmTask::IsOpenCLTask() const
 
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* DEFAULT_TASK_FLAGS_VAL */)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* DEFAULT_TASK_FLAGS_VAL */, pmAffinityCriterion pAffinityCriterion /* = MAX_AFFINITY_CRITERION */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
@@ -920,6 +972,7 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, s
     , mLocalStubsFreeOfShadowMemCommits(false)
     , mCompletionLock __LOCK_NAME__("pmLocalTask::mCompletionLock")
     , mPreprocessorTask(NULL)
+    , mAffinityCriterion(pAffinityCriterion)
 {
     ulong lCurrentTime = GetIntegralCurrentTimeInSecs();
     ulong lTaskTimeOutTriggerTime = lCurrentTime + pTaskTimeOutInSecs;
@@ -1034,6 +1087,11 @@ const pmLocalTask* pmLocalTask::GetPreprocessorTask() const
     return mPreprocessorTask;
 }
     
+pmAffinityCriterion pmLocalTask::GetAffinityCriterion() const
+{
+    return mAffinityCriterion;
+}
+    
 void pmLocalTask::ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace)
 {
     std::vector<const pmMachine*> lMachinesVector;
@@ -1041,7 +1099,7 @@ void pmLocalTask::ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace)
 
     EXCEPTION_ASSERT(!mAffinityTable.get_ptr());
     
-    mAffinityTable.reset(new pmAffinityTable(this));
+    mAffinityTable.reset(new pmAffinityTable(this, mAffinityCriterion));
     mAffinityTable->PopulateAffinityTable(pAffinityAddressSpace, lMachinesVector);
 }
 

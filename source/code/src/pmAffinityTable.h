@@ -32,33 +32,19 @@ namespace pm
 class pmLocalTask;
 class pmMachine;
 class pmAddressSpace;
-    
-class pmAffinityTable
+
+class pmAffinityTable : public pmBase
 {
 public:
-    struct subtaskData
-    {
-        const pmMachine* machine;
-        ulong localBytes;
-        
-        subtaskData(const pmMachine* pMachine, ulong pLocalBytes)
-        : machine(pMachine)
-        , localBytes(pLocalBytes)
-        {}
-        
-        friend bool operator< (const subtaskData& pFirst, const subtaskData& pSecond);
-    };
-    
-    pmAffinityTable(pmLocalTask* pLocalTask);
+    pmAffinityTable(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion);
     
     void PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
     void CreateSubtaskMappings();
 
 private:
-    typedef std::set<subtaskData> rowType;
-
     pmLocalTask* mLocalTask;
-    pmTable<ulong, rowType> mTable; // subtask id versus machines
+    pmAffinityCriterion mAffinityCriterion;
+    pmTable<ulong, std::vector<const pmMachine*>> mTable; // subtask id versus machines in order of preference
 };
 
 } // end namespace pm

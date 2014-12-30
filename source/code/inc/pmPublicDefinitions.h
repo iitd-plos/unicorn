@@ -250,6 +250,15 @@ namespace pm
         PROPORTIONAL_STATIC
     } pmSchedulingPolicy;
 
+    typedef enum pmAffinityCriterion
+    {
+        MAXIMIZE_LOCAL_DATA,
+        MINIMIZE_REMOTE_SOURCES,
+        MINIMIZE_REMOTE_TRANSFER_EVENTS,
+        MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME,
+        MAX_AFFINITY_CRITERION
+    } pmAffinityCriterion;
+
     /* The lifetime of scratch buffer for a subtask */
     typedef enum pmScratchBufferType
     {
@@ -423,6 +432,7 @@ namespace pm
         bool cudaCacheEnabled;                  /* By default, this is true */
     #endif
         bool suppressTaskLogs;                  /* By default, this is false */
+        pmAffinityCriterion affinityCriterion;  /* By default, this is MAXIMIZE_LOCAL_DATA */
 		pmClusterHandle cluster;                /* Unused */
 
 		pmTaskDetails();

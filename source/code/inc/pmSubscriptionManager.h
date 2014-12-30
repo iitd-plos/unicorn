@@ -233,6 +233,9 @@ class pmSubscriptionManager : public pmBase
     
         float FindPercentLocalInputDataForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
         ulong FindLocalInputDataSizeForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
+        uint FindRemoteDataSourcesForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
+        ulong FindRemoteTransferEventsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
+        float FindRemoteTransferEstimateForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
     
         pmSubscriptionFormat GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
         std::vector<pmScatteredSubscriptionInfo> GetUnifiedScatteredSubscriptionInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);

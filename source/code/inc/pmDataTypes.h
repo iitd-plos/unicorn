@@ -573,6 +573,15 @@ namespace pm
         }
     };
     
+    template<typename T1, typename T2>
+    struct select2nd
+    {
+        T2 operator() (const std::pair<T1, T2>& pPair)
+        {
+            return pPair.second;
+        }
+    };
+    
 	template<typename T, typename D = deleteDeallocator<T> >
 	class finalize_ptr
 	{

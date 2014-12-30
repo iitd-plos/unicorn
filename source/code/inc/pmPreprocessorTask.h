@@ -38,7 +38,7 @@ enum preprocessorTaskType
     AFFINITY_AND_DEPENDENCY_TASK,
     MAX_TYPES
 };
-    
+
 }
 
 class pmPreprocessorTask : public pmBase
@@ -48,15 +48,17 @@ public:
 
     static pmPreprocessorTask* GetPreprocessorTask();
 
-    void DeduceAffinity(pmLocalTask* pLocalTask);
+    void DeduceAffinity(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion);
     void EvaluateDependency(pmLocalTask* pLocalTask);
-    void DeduceAffinityAndEvaluateDependency(pmLocalTask* pLocalTask);
+    void DeduceAffinityAndEvaluateDependency(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion);
+
+    static size_t GetSampleSizeForAffinityCriterion(pmAffinityCriterion pAffinityCriterion);
 
 private:
     pmPreprocessorTask();
 
-    void LaunchPreprocessorTask(pmLocalTask* pLocalTask, preprocessorTask::preprocessorTaskType pTaskType);
-    
+    void LaunchPreprocessorTask(pmLocalTask* pLocalTask, preprocessorTask::preprocessorTaskType pTaskType, pmAffinityCriterion pAffinityCriterion);
+
     pmCallbackHandle mPreprocessorTaskCallbackHandle;
 };
 

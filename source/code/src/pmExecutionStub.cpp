@@ -664,6 +664,9 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
 {
     ulong lStealCount = 0;
 
+#ifdef ENABLE_HALF_STEAL_CHUNK_SELECTION
+    lStealCount = pAvailableSubtasks / 2;
+#else
     if(pAvailableSubtasks)
     {
         // If stub has not executed any subtasks of the current task so far and none is in execution currently
@@ -715,6 +718,8 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
         if(pTask->GetSubtaskSplitter().IsSplitting(pRequestingDevice->GetType()))
             lStealCount = 1;
     }
+#endif
+    
 #endif
     
     return lStealCount;
@@ -868,17 +873,19 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 double lExpectedRemoteTimeToExecute = (lMultiAssignSubtaskCount/pRequestingDeviceExecutionRate);
                 double lExpectedLocalTimeToFinish = (lLocalRateZero ? 0.0 : ((lMultiAssignSubtaskCount/lLocalRate) - lElapsedTime));
             
+                double lFactor = MA_WAIT_FACTOR;
+                
                 // Be more lenient to multi-assign to different device type on the same node
                 // Be extremely lenient if pipelining continuation is a possibility (i.e. CPU to GPU multi-assignment on same node)
                 #ifdef PROACTIVE_STEAL_REQUESTS
                 #ifdef SUPPORT_COMPUTE_COMMUNICATION_OVERLAP
                 #ifdef BREAK_PIPELINE_ON_RESOURCE_EXHAUSTION
-                    const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
+                    lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
                 #else
                     #ifdef SUPPORT_CUDA
-                        const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType() && pRequestingDevice->GetType() == GPU_CUDA) ? MA_WAIT_FACTOR_LENIENT : MA_WAIT_FACTOR);
+                        lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType() && pRequestingDevice->GetType() == GPU_CUDA) ? MA_WAIT_FACTOR_LENIENT : MA_WAIT_FACTOR);
                     #else
-                        const double lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
+                        lFactor = ((pRequestingDevice->GetMachine() == PM_LOCAL_MACHINE && pRequestingDevice->GetType() != GetType()) ? 1.0 : MA_WAIT_FACTOR);
                     #endif
                 #endif
                 #endif

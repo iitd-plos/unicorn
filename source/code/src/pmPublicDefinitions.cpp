@@ -594,6 +594,7 @@ pmTaskDetails::pmTaskDetails()
     , cudaCacheEnabled(true)
 #endif
     , suppressTaskLogs(false)
+    , affinityCriterion(MAXIMIZE_LOCAL_DATA)
 	, cluster(NULL)
 {}
 
@@ -616,6 +617,7 @@ pmTaskDetails::pmTaskDetails(void* pTaskConf, uint pTaskConfLength, pmTaskMem* p
     , cudaCacheEnabled(true)
 #endif
     , suppressTaskLogs(false)
+    , affinityCriterion(MAXIMIZE_LOCAL_DATA)
 	, cluster(NULL)
 {}
 
