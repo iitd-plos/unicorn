@@ -236,7 +236,7 @@ void pmPreprocessorTask::EvaluateDependency(pmLocalTask* pLocalTask)
 
 void pmPreprocessorTask::DeduceAffinityAndEvaluateDependency(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion)
 {
-    DEBUG_EXCEPTION_ASSERT(pLocalTask->GetCallbackUnit() && pLocalTask->GetCallbackUnit()->GetDataDistributionCB() && !(static_cast<pmTask*>(*pTaskHandle))->HasReadOnlyLazyAddressSpace());
+    DEBUG_EXCEPTION_ASSERT(pLocalTask->GetCallbackUnit() && pLocalTask->GetCallbackUnit()->GetDataDistributionCB() && !(static_cast<pmTask*>(pLocalTask))->HasReadOnlyLazyAddressSpace());
 
     LaunchPreprocessorTask(pLocalTask, AFFINITY_AND_DEPENDENCY_TASK, pAffinityCriterion);
 }
