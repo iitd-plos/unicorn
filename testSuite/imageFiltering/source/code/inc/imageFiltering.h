@@ -9,7 +9,7 @@ namespace imageFiltering
     
 #define LOAD_IMAGE_INTO_ADDRESS_SPACE
     
-#define TILE_DIM 1024
+#define TILE_DIM 2048
 #define GPU_BLOCK_DIM 32
 
 #define DEFAULT_FILTER_RADIUS 1
