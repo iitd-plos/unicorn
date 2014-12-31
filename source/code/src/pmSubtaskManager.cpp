@@ -856,8 +856,8 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
             }
         });
     }
-#else
     else
+#endif
     {
         // If there are not enough partitions as devices, then assign same number of partitions to all machines
         if(lPartitionCount < lDeviceCount)
@@ -921,7 +921,6 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
             });
         }
     }
-#endif
 }
 
 void pmPullSchedulingManager::VaryFixedAllotments(std::vector<pmUnfinishedPartitionPtr>& pVector, uint pMaxPercentVariationFromFixedAllotment)
