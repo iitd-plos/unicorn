@@ -441,7 +441,7 @@ const std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(con
         if(lType1 == lType2)
             return pDevice1->GetGlobalDeviceIndex() < pDevice2->GetGlobalDeviceIndex();
 
-        return (lType1 == GPU);
+        return (lType1 == GPU_CUDA);
     };
 #endif
 
