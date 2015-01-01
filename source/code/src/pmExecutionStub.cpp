@@ -537,8 +537,6 @@ void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevic
                     PostHandleRangeExecutionCompletion(lCompletedRange, pmSuccess);
                 }
             
-                pmScheduler::GetScheduler()->SendSubtaskRangeCancellationMessage(pRange.originalAllottee, pRange);
-                
                 for_each(lSecondaryAllottees, [&] (const pmProcessingElement* pElement)
                 {
                     if(pElement != pRequestingDevice)
