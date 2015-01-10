@@ -33,6 +33,9 @@ using namespace stealAgent;
 pmStealAgent::pmStealAgent(pmTask* pTask)
 : mTask(pTask)
 , mStubSink(pmStubManager::GetStubManager()->GetStubCount())
+#ifdef ENABLE_DYNAMIC_AGGRESSION
+, mDynamicAggressionStubSink(pmStubManager::GetStubManager()->GetStubCount())
+#endif
 {
     DEBUG_EXCEPTION_ASSERT(pmScheduler::SchedulingModelSupportsStealing(mTask->GetSchedulingModel()));
 }
@@ -152,7 +155,62 @@ bool pmStealAgent::HasAnotherStubToStealFrom(pmExecutionStub* pStub, bool pCanMu
 {
     return GetStubWithMaxStealLikelihood(pCanMultiAssign, pStub);
 }
+
+#ifdef ENABLE_DYNAMIC_AGGRESSION
+void pmStealAgent::RecordStealRequestIssue(pmExecutionStub* pStub)
+{
+    auto& lDynamicAggressionStubData = mDynamicAggressionStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lDynamicAggressionStubData.stubLock, Lock(), Unlock());
+
+    EXCEPTION_ASSERT(lDynamicAggressionStubData.stealStartTime == 0);
+    lDynamicAggressionStubData.stealStartTime = pmBase::GetCurrentTimeInSecs();
+}
+    
+void pmStealAgent::RecordSuccessfulSteal(pmExecutionStub* pStub)
+{
+    auto& lDynamicAggressionStubData = mDynamicAggressionStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lDynamicAggressionStubData.stubLock, Lock(), Unlock());
+
+    lDynamicAggressionStubData.totalStealWaitTime += (pmBase::GetCurrentTimeInSecs() - lDynamicAggressionStubData.stealStartTime);
+    ++lDynamicAggressionStubData.totalSteals;
+    
+    lDynamicAggressionStubData.stealStartTime = 0;
+}
+
+double pmStealAgent::GetAverageStealWaitTime(pmExecutionStub* pStub)
+{
+    auto& lDynamicAggressionStubData = mDynamicAggressionStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lDynamicAggressionStubData.stubLock, Lock(), Unlock());
+
+    return ((lDynamicAggressionStubData.totalSteals == 0) ? std::numeric_limits<double>::max() : (lDynamicAggressionStubData.totalStealWaitTime / lDynamicAggressionStubData.totalSteals));
+}
+    
+void pmStealAgent::RecordSubtaskSubscriptionFetchTime(pmExecutionStub* pStub, double pTime)
+{
+    auto& lDynamicAggressionStubData = mDynamicAggressionStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lDynamicAggressionStubData.stubLock, Lock(), Unlock());
+
+    lDynamicAggressionStubData.totalSubscriptionFetchTime += pTime;
+    ++lDynamicAggressionStubData.totalSubscriptionsFetched;
+}
+
+double pmStealAgent::GetAverageSubtaskSubscriptionFetchTime(pmExecutionStub* pStub)
+{
+    auto& lDynamicAggressionStubData = mDynamicAggressionStubSink[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
+
+    FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lDynamicAggressionStubData.stubLock, Lock(), Unlock());
+    
+    return ((lDynamicAggressionStubData.totalSubscriptionsFetched == 0) ? std::numeric_limits<double>::max() : (lDynamicAggressionStubData.totalSubscriptionFetchTime / lDynamicAggressionStubData.totalSubscriptionsFetched));
+}
+#endif
     
 } // end namespace pm
 
 #endif
+
+
+

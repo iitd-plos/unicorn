@@ -145,7 +145,7 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 
 /* Stealing controls */
 #define PROACTIVE_STEAL_REQUESTS
-//#define ENABLE_TWO_LEVEL_STEALING
+#define ENABLE_TWO_LEVEL_STEALING
 #ifdef ENABLE_TWO_LEVEL_STEALING
     #define USE_STEAL_AGENT_PER_NODE
 #endif
@@ -159,6 +159,14 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
     #ifdef SUPPORT_CUDA
 //        #define ENABLE_GPU_FIRST_VICTIM_SELECTION
     #endif
+#endif
+
+#ifdef USE_STEAL_AGENT_PER_NODE
+#ifndef ENABLE_HALF_STEAL_CHUNK_SELECTION
+#ifdef PROACTIVE_STEAL_REQUESTS
+    #define ENABLE_DYNAMIC_AGGRESSION
+#endif
+#endif
 #endif
 
 

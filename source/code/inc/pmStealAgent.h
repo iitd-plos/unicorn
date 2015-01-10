@@ -48,6 +48,24 @@ namespace stealAgent
         , stubLock __LOCK_NAME__("stealAgent::stubData::stubLock")
         {}
     };
+    
+    struct dynamicAggressionStubData
+    {
+        double stealStartTime;
+        double totalStealWaitTime;
+        double totalSteals;
+        double totalSubscriptionFetchTime;
+        double totalSubscriptionsFetched;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS stubLock;
+        
+        dynamicAggressionStubData()
+        : stealStartTime(0)
+        , totalStealWaitTime(0)
+        , totalSteals(0)
+        , totalSubscriptionFetchTime(0)
+        , totalSubscriptionsFetched(0)
+        {}
+    };
 }
     
 // There is no synchronization inside this class. All stubs have exclusive data locations.
@@ -68,10 +86,22 @@ public:
     bool HasAnotherStubToStealFrom(pmExecutionStub* pStub, bool pCanMultiAssign);
 
     pmExecutionStub* GetStubWithMaxStealLikelihood(bool pConsiderMultiAssign, pmExecutionStub* pIgnoreStub = NULL);
+    
+#ifdef ENABLE_DYNAMIC_AGGRESSION
+    void RecordStealRequestIssue(pmExecutionStub* pStub);
+    void RecordSuccessfulSteal(pmExecutionStub* pStub);
+    double GetAverageStealWaitTime(pmExecutionStub* pStub);
+    void RecordSubtaskSubscriptionFetchTime(pmExecutionStub* pStub, double pTime);
+    double GetAverageSubtaskSubscriptionFetchTime(pmExecutionStub* pStub);
+#endif
 
 private:
     pmTask* mTask;
     std::vector<stealAgent::stubData> mStubSink;
+    
+#ifdef ENABLE_DYNAMIC_AGGRESSION
+    std::vector<stealAgent::dynamicAggressionStubData> mDynamicAggressionStubSink;
+#endif
 };
     
 } // end namespace pm

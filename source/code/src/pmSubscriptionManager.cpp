@@ -31,6 +31,10 @@
 #include "pmHardware.h"
 #include "pmLogger.h"
 
+#ifdef ENABLE_DYNAMIC_AGGRESSION
+#include "pmStealAgent.h"
+#endif
+
 #include <string.h>
 #include <sstream>
 
@@ -1473,6 +1477,10 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
+#ifdef ENABLE_DYNAMIC_AGGRESSION
+    double lFetchStartTime = pmBase::GetCurrentTimeInSecs();
+#endif
+
     ushort lPriority = (mTask->GetPriority() + (pPrefetch ? 1 : 0));    // Prefetch at slightly low priority
 
     std::vector<pmCommandPtr> lCommandVector;
@@ -1511,7 +1519,14 @@ void pmSubscriptionManager::FetchSubtaskSubscriptions(pmExecutionStub* pStub, ul
     });
 
     if(!pPrefetch)
+    {
         WaitForSubscriptions(lSubtask, pStub, pDeviceType, lCommandVector);
+
+    #ifdef ENABLE_DYNAMIC_AGGRESSION
+        if(pmScheduler::SchedulingModelSupportsStealing(mTask->GetSchedulingModel()))
+            mTask->GetStealAgent()->RecordSubtaskSubscriptionFetchTime(pStub, pmBase::GetCurrentTimeInSecs() - lFetchStartTime);
+    #endif
+    }
 }
     
 /* Must be called with mSubtaskMapVector stub's lock acquired */

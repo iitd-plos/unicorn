@@ -153,10 +153,14 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
         }
     }
 #endif
-    
+
 #ifdef PROACTIVE_STEAL_REQUESTS
     if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()) && pIsStealResponse)
     {
+    #ifdef ENABLE_DYNAMIC_AGGRESSION
+        pRange.task->GetStealAgent()->RecordSuccessfulSteal(this);
+    #endif
+
         auto lIter = mStealRequestIssuedMap.find(pRange.task);
         EXCEPTION_ASSERT(lIter != mStealRequestIssuedMap.end() && lIter->second);
         
@@ -698,7 +702,12 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
                 // Minimum unit of steal is a subtask. Since it can't be divided any further, so a perfect balance can't be achieved.
                 // Instead, check whether it is beneficial to assign one more subtask to the requesting device or not.
                 if(lStealCount < pAvailableSubtasks && (lStealCount + 1) / pRequestingDeviceExecutionRate < (pAvailableSubtasks - lStealCount) / pLocalExecutionRate)
-                    ++lStealCount;
+                {
+                #ifdef ENABLE_DYNAMIC_AGGRESSION
+                    if(!pTask->GetStealAgent()->HasAnotherStubToStealFrom(this, false))
+                #endif
+                        ++lStealCount;
+                }
             }
         }
     }
@@ -1888,17 +1897,47 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         ulong lSubtaskCount = (lEndSubtask - lStartSubtask + 1);
         lCommonTimePerSubtask = (lCommonTimer.GetElapsedTimeInSecs() / lSubtaskCount);
 
+        bool lProactiveStealAttempted = false;
+        
         for(ulong lSubtaskId = lStartSubtask; lSubtaskId <= lEndSubtask; ++lSubtaskId)
         {
         #ifdef PROACTIVE_STEAL_REQUESTS
-            if(pmScheduler::SchedulingModelSupportsStealing(lParentRange.task->GetSchedulingModel()) && !lRangePartiallyAddedBack && lSubtaskId == lEndSubtask)
+
+            ulong lAggressiveness = 0;
+
+        #ifdef ENABLE_DYNAMIC_AGGRESSION
+            if(pmScheduler::SchedulingModelSupportsStealing(lParentRange.task->GetSchedulingModel()))
+            {
+                double lRate = lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this);
+                
+                if(lRate != (double)0)
+                {
+                    double lStealTime = lParentRange.task->GetStealAgent()->GetAverageStealWaitTime(this);
+                    double lDataFetchTime = lParentRange.task->GetStealAgent()->GetAverageSubtaskSubscriptionFetchTime(this);
+                    
+                    if(lStealTime != std::numeric_limits<double>::max() && lDataFetchTime != std::numeric_limits<double>::max())
+                    {
+                        double lTotalWait = lStealTime + lDataFetchTime;
+                        
+                        ulong lMaxAggressiveness = lEndSubtask - lStartSubtask;
+                        ulong lRequiredAggressiveness = (ulong)(lTotalWait * lRate);
+                        lAggressiveness = std::min<ulong>(lMaxAggressiveness, lRequiredAggressiveness);
+                    }
+                }
+            }
+        #endif
+
+            if(pmScheduler::SchedulingModelSupportsStealing(lParentRange.task->GetSchedulingModel()) && !lRangePartiallyAddedBack && !lProactiveStealAttempted && (lSubtaskId >= (lEndSubtask - lAggressiveness)))
             {
                 // Wait for stub's execution rate to be determined before sending steal request
                 if(lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this) == (double)0 && !mCurrentSubtaskQueue.empty())
                     lWaitForNextSubtaskCompletionLambda(lCommonTimePerSubtask);
 
                 if(lParentRange.task->GetTaskExecStats().GetStubExecutionRate(this) != (double)0)
+                {
                     IssueStealRequestIfRequired(lParentRange.task);
+                    lProactiveStealAttempted = true;
+                }
             }
         #endif
 
@@ -2059,7 +2098,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 
     return lEndSubtask;
 }
-    
+
 void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, bool pPrefetch, pmSplitInfo* pSplitInfo)
 {
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
@@ -2168,6 +2207,11 @@ void pmExecutionStub::IssueStealRequestIfRequired(pmTask* pTask)
     if(lIter == mStealRequestIssuedMap.end() || !lIter->second)
     {
         mStealRequestIssuedMap[pTask] = true;
+        
+    #ifdef ENABLE_DYNAMIC_AGGRESSION
+        pTask->GetStealAgent()->RecordStealRequestIssue(this);
+    #endif
+
         pmScheduler::GetScheduler()->StealRequestEvent(GetProcessingElement(), pTask, pTask->GetTaskExecStats().GetStubExecutionRate(this));
     }
 #else
