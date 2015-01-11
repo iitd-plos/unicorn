@@ -194,8 +194,21 @@ void pmStealAgent::RecordSubtaskSubscriptionFetchTime(pmExecutionStub* pStub, do
 
     FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lDynamicAggressionStubData.stubLock, Lock(), Unlock());
 
-    lDynamicAggressionStubData.totalSubscriptionFetchTime += pTime;
-    ++lDynamicAggressionStubData.totalSubscriptionsFetched;
+    /* There is a loss in pre-fetching when a subtask is stolen (even when pipeline continuation is done.
+       This is because there is no subtask to start start pre-fetching data for before steal actually completes.
+       By stealing early, we hope to cover this loss.
+       The subscription fetch time sent to this function is the time a subtask waits on its subscriptions
+       and all the time overlapped in pre-fetch is not accounted. For this reason, we consider maximum pre-fetch
+       time below rather than average.
+     */
+
+//    lDynamicAggressionStubData.totalSubscriptionFetchTime += pTime;
+//    ++lDynamicAggressionStubData.totalSubscriptionsFetched;
+
+    if(pTime > lDynamicAggressionStubData.totalSubscriptionFetchTime)
+        lDynamicAggressionStubData.totalSubscriptionFetchTime = pTime;
+
+    lDynamicAggressionStubData.totalSubscriptionsFetched = 1;
 }
 
 double pmStealAgent::GetAverageSubtaskSubscriptionFetchTime(pmExecutionStub* pStub)

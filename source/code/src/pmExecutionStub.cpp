@@ -154,6 +154,8 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
     }
 #endif
 
+    AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pRange, false, 0)));
+
 #ifdef PROACTIVE_STEAL_REQUESTS
     if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()) && pIsStealResponse)
     {
@@ -167,8 +169,6 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
         lIter->second = false;
     }
 #endif
-
-	AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pRange, false, 0)));
 }
 
 void pmExecutionStub::AddSubtaskRangeToExecutionQueue(const std::shared_ptr<stubEvent>& pSharedPtr)
@@ -703,7 +703,7 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
                 // Instead, check whether it is beneficial to assign one more subtask to the requesting device or not.
                 if(lStealCount < pAvailableSubtasks && (lStealCount + 1) / pRequestingDeviceExecutionRate < (pAvailableSubtasks - lStealCount) / pLocalExecutionRate)
                 {
-                #ifdef ENABLE_DYNAMIC_AGGRESSION
+                #if 0   //def ENABLE_DYNAMIC_AGGRESSION
                     if(!pTask->GetStealAgent()->HasAnotherStubToStealFrom(this, false))
                 #endif
                         ++lStealCount;
