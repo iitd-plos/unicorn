@@ -40,24 +40,28 @@ template<>
 struct GetAffinityDataType<MAXIMIZE_LOCAL_DATA>
 {
     typedef ulong type;
+    typedef std::greater<type> sorter;
 };
 
 template<>
 struct GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>
 {
     typedef uint type;
+    typedef std::less<type> sorter;
 };
 
 template<>
 struct GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>
 {
     typedef ulong type;
+    typedef std::less<type> sorter;
 };
 
 template<>
 struct GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>
 {
     typedef float type;
+    typedef std::less<type> sorter;
 };
 
 
@@ -73,25 +77,25 @@ void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpac
     {
         case MAXIMIZE_LOCAL_DATA:
         {
-            MakeAffinityTable<GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::type>(pAffinityAddressSpace, pMachinesVector);
+            MakeAffinityTable<GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::type, GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::sorter>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
             
         case MINIMIZE_REMOTE_SOURCES:
         {
-            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::type>(pAffinityAddressSpace, pMachinesVector);
+            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::type, GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::sorter>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
             
         case MINIMIZE_REMOTE_TRANSFER_EVENTS:
         {
-            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::type>(pAffinityAddressSpace, pMachinesVector);
+            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::sorter>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
 
         case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
         {
-            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type>(pAffinityAddressSpace, pMachinesVector);
+            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::sorter>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
             
@@ -100,7 +104,7 @@ void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpac
     };
 }
 
-template<typename T>
+template<typename T, typename S>
 void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector)
 {
 #ifdef DUMP_AFFINITY_DATA
@@ -110,16 +114,14 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
     lStream << "Affinity data (Host: subtask => data; ...) for task [" << (uint)(*mLocalTask->GetOriginatingHost()) << ", " << mLocalTask->GetSequenceNumber() << "] ..." << std::endl;
 #endif
 
-    void* lAffinityMem = pAffinityAddressSpace->GetMem();
+    T* lAffinityData = static_cast<T*>(pAffinityAddressSpace->GetMem());
 
     ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
-
     uint lMachines = (uint)pMachinesVector.size();
 
     EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(T) == pAffinityAddressSpace->GetLength());
-    T* lAffinityData = (T*)lAffinityMem;
 
-    std::vector<std::multimap<T, const pmMachine*, std::greater<T>>> lVector;    // local bytes versus machines for each subtask
+    std::vector<std::multimap<T, const pmMachine*, S>> lVector;    // data versus machines for each subtask
     lVector.resize(lSubtaskCount);
 
     ulong index = 0;

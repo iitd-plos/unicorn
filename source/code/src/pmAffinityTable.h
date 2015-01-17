@@ -42,7 +42,7 @@ public:
     void CreateSubtaskMappings();
 
 private:
-    template<typename T>
+    template<typename T, typename S>
     void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
 
     pmLocalTask* mLocalTask;
