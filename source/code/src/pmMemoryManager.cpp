@@ -508,12 +508,14 @@ uint pmLinuxMemoryManager::GetScatteredMemoryFetchEvents(pmAddressSpace* pAddres
 {
     EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
 
+    void* lMem = pAddressSpace->GetMem();
+
 	pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
     localFilter lLocalFilter(lBlocksFilter, pAddressSpace);
     
     auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
     {
-        size_t lStartAddr = pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step;
+        ulong lStartAddr = (ulong)((char*)lMem + pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step);
 
         lLocalFilter.emplace_back(lStartAddr, lStartAddr + pScatteredSubscriptionInfo.size - 1);
     });
@@ -525,7 +527,8 @@ uint pmLinuxMemoryManager::GetScatteredMemoryFetchEvents(pmAddressSpace* pAddres
 ulong pmLinuxMemoryManager::GetScatteredMemoryFetchPages(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
 {
     EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
-
+    
+    void* lMem = pAddressSpace->GetMem();
     size_t lPageSize = GetVirtualMemoryPageSize();
 
     pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
@@ -533,7 +536,7 @@ ulong pmLinuxMemoryManager::GetScatteredMemoryFetchPages(pmAddressSpace* pAddres
     
     auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
     {
-        size_t lStartAddr = pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step;
+        ulong lStartAddr = (ulong)((char*)lMem + pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step);
 
         lLocalFilter.emplace_back(lStartAddr, lStartAddr + pScatteredSubscriptionInfo.size - 1);
     });
