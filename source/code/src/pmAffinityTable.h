@@ -42,6 +42,9 @@ public:
     void CreateSubtaskMappings();
 
 private:
+    template<typename T>
+    void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
+
     pmLocalTask* mLocalTask;
     pmAffinityCriterion mAffinityCriterion;
     pmTable<ulong, std::vector<const pmMachine*>> mTable; // subtask id versus machines in order of preference
