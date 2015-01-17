@@ -46,6 +46,7 @@ pmStatus pmDataDistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, ulo
 		return pmSuccess;
 
     pmSubtaskInfo lSubtaskInfo = pTask->GetPreSubscriptionSubtaskInfo(pSubtaskId, pSplitInfo);
+    lSubtaskInfo.subtaskId = pTask->GetPhysicalSubtaskId(lSubtaskInfo.subtaskId);
     
     pmStatus lStatus = pmStatusUnavailable;
     pmJmpBufAutoPtr lJmpBufAutoPtr;
@@ -72,7 +73,10 @@ pmStatus pmDataDistributionCB::InvokeDirect(pmExecutionStub* pStub, pmTask* pTas
 	if(!mCallback)
 		return pmSuccess;
 
-    return mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), pTask->GetPreSubscriptionSubtaskInfo(pSubtaskId, pSplitInfo));
+    pmSubtaskInfo lSubtaskInfo = pTask->GetPreSubscriptionSubtaskInfo(pSubtaskId, pSplitInfo);
+    lSubtaskInfo.subtaskId = pTask->GetPhysicalSubtaskId(lSubtaskInfo.subtaskId);
+
+    return mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
 }
 
 
@@ -173,7 +177,11 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo*
             if(!lJmpVal)
             {
                 lJmpBufAutoPtr.Reset(&lJmpBuf, pStub);
-                lStatus = mCallback_CPU(pTaskInfo, lDeviceInfo, pSubtaskInfo);
+
+                pmSubtaskInfo lSubtaskInfo = pSubtaskInfo;
+                lSubtaskInfo.subtaskId = pTask->GetPhysicalSubtaskId(pSubtaskInfo.subtaskId);
+
+                lStatus = mCallback_CPU(pTaskInfo, lDeviceInfo, lSubtaskInfo);
             }
             else
             {
@@ -225,8 +233,11 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong
 		return pmSuccess;
     
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
-    const pmSubtaskInfo& lSubtaskInfo1 = lSubscriptionManager.GetSubtaskInfo(pStub1, pSubtaskId1, pSplitInfo1);
-    const pmSubtaskInfo& lSubtaskInfo2 = lSubscriptionManager.GetSubtaskInfo(pStub2, pSubtaskId2, pSplitInfo2);
+    pmSubtaskInfo lSubtaskInfo1 = lSubscriptionManager.GetSubtaskInfo(pStub1, pSubtaskId1, pSplitInfo1);
+    pmSubtaskInfo lSubtaskInfo2 = lSubscriptionManager.GetSubtaskInfo(pStub2, pSubtaskId2, pSplitInfo2);
+    
+    lSubtaskInfo1.subtaskId = pTask->GetPhysicalSubtaskId(lSubtaskInfo1.subtaskId);
+    lSubtaskInfo2.subtaskId = pTask->GetPhysicalSubtaskId(lSubtaskInfo2.subtaskId);
     
 	return mCallback(pTask->GetTaskInfo(), pStub1->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo1, pStub2->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo2);
 }
@@ -247,7 +258,8 @@ pmStatus pmDataRedistributionCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, u
 	if(!mCallback)
 		return pmSuccess;
 
-    const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(pStub, pSubtaskId, pSplitInfo);
+    pmSubtaskInfo lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(pStub, pSubtaskId, pSplitInfo);
+    lSubtaskInfo.subtaskId = pTask->GetPhysicalSubtaskId(lSubtaskInfo.subtaskId);
 
 	return mCallback(pTask->GetTaskInfo(), pStub->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo);
 }

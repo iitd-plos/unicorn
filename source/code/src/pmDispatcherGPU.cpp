@@ -138,7 +138,8 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const 
     void* lDeviceInfoCudaPtr = pStub->GetDeviceInfoCudaPtr();
 
     pmSubtaskInfo lSubtaskInfoCuda = pSubtaskInfo;
-    
+    lSubtaskInfoCuda.subtaskId = pTask->GetPhysicalSubtaskId(lSubtaskInfoCuda.subtaskId);
+
     const std::vector<pmCudaSubtaskMemoryStruct>& lSubtaskPointers = pStub->GetSubtaskPointersMap().find(pSubtaskInfo.subtaskId)->second;
     const pmCudaSubtaskSecondaryBuffersStruct& lSubtaskSecondaryBuffers = pStub->GetSubtaskSecondaryBuffersMap().find(pSubtaskInfo.subtaskId)->second;
     

@@ -499,6 +499,15 @@ bool localDeviceSelectionCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo
 	return true;
 }
 
+uint getAffinityCriterion()
+{
+    const char* lVal = getenv("PMLIB_AFFINITY_CRITERION");
+    if(lVal)
+        return (uint)atoi(lVal);
+    
+    return 0;
+}
+
 bool isMultiAssignEnabled()
 {
     const char* lVal = getenv("PMLIB_DISABLE_MA");

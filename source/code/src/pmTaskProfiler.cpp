@@ -49,6 +49,7 @@ static const char* profileName[] =
     (char*)"COPY_TO_PINNED_MEMORY",
     (char*)"COPY_FROM_PINNED_MEMORY",
     (char*)"CUDA_COMMAND_PREPARATION",
+    (char*)"PREPROCESSOR_TASK_EXECUTION",
     (char*)"UNIVERSAL"
 };
 

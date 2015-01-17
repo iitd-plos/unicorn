@@ -425,6 +425,7 @@ namespace pm
             COPY_TO_PINNED_MEMORY,
             COPY_FROM_PINNED_MEMORY,
             CUDA_COMMAND_PREPARATION,
+            PREPROCESSOR_TASK_EXECUTION,
             UNIVERSAL, /* For internal use only */
             MAX_PROFILE_TYPES
         };

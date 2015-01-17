@@ -109,7 +109,7 @@ void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpac
             EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(ulong) == pAffinityAddressSpace->GetLength());
             ulong* lAffinityData = (ulong*)lAffinityMem;
 
-            std::vector<std::multimap<ulong, const pmMachine*, std::less<ulong>>> lVector;    // remote fetch time versus machines for each subtask
+            std::vector<std::multimap<ulong, const pmMachine*, std::less<ulong>>> lVector;    // remote transfer events versus machines for each subtask
             lVector.resize(lSubtaskCount);
 
             ulong index = 0;
@@ -207,6 +207,14 @@ void pmAffinityTable::CreateSubtaskMappings()
 
         EXCEPTION_ASSERT(lAssigned);
     }
+    
+#ifdef _DEBUG
+    for_each_with_index(lLogicalToPhysicalSubtaskMapping, [&] (ulong lLogicalSubtask, size_t lPhysicalSubtask)
+    {
+        EXCEPTION_ASSERT(lPhysicalToLogicalSubtaskMapping[lPhysicalSubtask] == lLogicalSubtask);
+        std::cout << "Logical subtask = " << lLogicalSubtask << "; Physical subtask = " << lPhysicalSubtask << "; Reverse mapped logical subtask = " << lPhysicalToLogicalSubtaskMapping[lPhysicalSubtask] << std::endl;
+    });
+#endif
     
     mLocalTask->SetAffinityMappings(std::move(lLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
 }

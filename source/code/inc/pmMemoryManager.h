@@ -62,9 +62,13 @@ class pmMemoryManager : public pmBase
         virtual void DeallocateMemory(pmAddressSpace* pAddressSpace) = 0;
         virtual void DeallocateMemory(void* pMem) = 0;
 
+        virtual uint GetMemoryFetchEvents(pmAddressSpace* pAddressSpace, size_t pOffset, size_t pLength) = 0;
+        virtual ulong GetMemoryFetchPages(pmAddressSpace* pAddressSpace, size_t pOffset, size_t pLength) = 0;
         virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector) = 0;
         virtual void CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>& pDataSource, pmTask* pRequestingTask) = 0;
 
+        virtual uint GetScatteredMemoryFetchEvents(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo) = 0;
+        virtual ulong GetScatteredMemoryFetchPages(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo) = 0;
         virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector) = 0;
         virtual void CopyReceivedScatteredMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, std::function<void (char*, ulong)>& pDataSource, pmTask* pRequestingTask) = 0;
     
@@ -139,9 +143,13 @@ class pmLinuxMemoryManager : public pmMemoryManager
         virtual void DeallocateMemory(pmAddressSpace* pAddressSpace);
         virtual void DeallocateMemory(void* pMem);
 
+        virtual uint GetMemoryFetchEvents(pmAddressSpace* pAddressSpace, size_t pOffset, size_t pLength);
+        virtual ulong GetMemoryFetchPages(pmAddressSpace* pAddressSpace, size_t pOffset, size_t pLength);
         virtual void FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector);
         virtual void CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>& pDataSource, pmTask* pRequestingTask);
 
+        virtual uint GetScatteredMemoryFetchEvents(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
+        virtual ulong GetScatteredMemoryFetchPages(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
         virtual void FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector);
         virtual void CopyReceivedScatteredMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, std::function<void (char*, ulong)>& pDataSource, pmTask* pRequestingTask);
 

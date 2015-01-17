@@ -1350,7 +1350,7 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
             {
                 lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
                 
-                std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
+                std::for_each(lBeginIter, lEndIter, [&] (const decltype(lBeginIter)::value_type& pPair)
                 {
                     lOwnershipVector.push_back(communicator::ownershipDataStruct(pPair.first, pPair.second.first));
                 });
@@ -1897,7 +1897,9 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
         ulong lSubtaskCount = (lEndSubtask - lStartSubtask + 1);
         lCommonTimePerSubtask = (lCommonTimer.GetElapsedTimeInSecs() / lSubtaskCount);
 
+    #ifdef PROACTIVE_STEAL_REQUESTS
         bool lProactiveStealAttempted = false;
+    #endif
         
         for(ulong lSubtaskId = lStartSubtask; lSubtaskId <= lEndSubtask; ++lSubtaskId)
         {

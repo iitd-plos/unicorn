@@ -128,8 +128,6 @@ pmTask::~pmTask()
 {
     if(mTaskConf)
         free(mTaskConf);
-
-    mSubscriptionManager.DropAllSubscriptions();
 }
     
 void pmTask::LockAddressSpaces()
@@ -523,7 +521,7 @@ void pmTask::BuildPreSubscriptionSubtaskInfo()
 pmSubtaskInfo pmTask::GetPreSubscriptionSubtaskInfo(ulong pSubtaskId, pmSplitInfo* pSplitInfo) const
 {
     pmSubtaskInfo lSubtaskInfo = mPreSubscriptionSubtaskInfo;
-    lSubtaskInfo.subtaskId = GetPhysicalSubtaskId(pSubtaskId);
+    lSubtaskInfo.subtaskId = pSubtaskId;
     
     if(pSplitInfo)
         lSubtaskInfo.splitInfo = *pSplitInfo;
@@ -881,7 +879,7 @@ pmMemType pmTask::GetMemType(const pmAddressSpace* pAddressSpace) const
 {
     DEBUG_EXCEPTION_ASSERT(mAddressSpaceTaskMemIndexMap.find(pAddressSpace) != mAddressSpaceTaskMemIndexMap.end());
     DEBUG_EXCEPTION_ASSERT(mAddressSpaceTaskMemIndexMap.find(pAddressSpace)->second < mTaskMemVector.size());
-    
+
     return mTaskMemVector[mAddressSpaceTaskMemIndexMap.find(pAddressSpace)->second].memType;
 }
     
@@ -891,6 +889,10 @@ void pmTask::SetAffinityMappings(std::vector<ulong>&& pLogicalToPhysical, std::v
     
     mLogicalToPhysicalSubtaskMappings = std::move(pLogicalToPhysical);
     mPhysicalToLogicalSubtaskMappings = std::move(pPhysicalToLogical);
+
+    // Subscriptions created in user task (by affinity task) can not be used because affinity registered these against physical subtask ids
+    // but now we have logical subtask ids. Some additional handling is required to use those subscriptions. Dropping for now ...
+    GetSubscriptionManager().DropAllSubscriptions();
 }
     
 ulong pmTask::GetPhysicalSubtaskId(ulong pLogicalSubtaskId) const
@@ -1454,6 +1456,10 @@ void pmRemoteTask::ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSu
 
     SetAffinityMappings(std::move(pLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
 
+    // Subscriptions created in user task (by affinity task) can not be used because affinity registered these against physical subtask ids
+    // but now we have logical subtask ids. Some additional handling is required to use those subscriptions. Dropping for now ...
+    GetSubscriptionManager().DropAllSubscriptions();
+    
     Start();
 }
 

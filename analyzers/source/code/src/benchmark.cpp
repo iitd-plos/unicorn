@@ -2211,39 +2211,76 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                     
                     for(size_t m = 0; m <= 1; ++m)  // Compute Communication Overlap
                     {
-                        if((k == 1 || l == 1 || m == 1) && (((SchedulingPolicy)i == STATIC_BEST) || ((SchedulingPolicy)i == STATIC_EQUAL)))
-                            continue;
-                        
-                    #ifdef GENERATE_ESSENTIALS_ONLY
-                        if(!((i == (size_t)PUSH || i == (size_t)PULL) && (k == 1) && (l == 0) && (m == 1)))
-                            continue;
-                    #endif
-
-                        setenv("PMLIB_DISABLE_MA", ((k == 0) ? "1" : "0"), 1);
-                        setenv("PMLIB_ENABLE_LAZY_MEM", ((l == 0) ? "0" : "1"), 1);
-                        setenv("PMLIB_DISABLE_COMPUTE_COMMUNICATION_OVERLAP", ((m == 0) ? "1" : "0"), 1);
-                        
-                        std::stringstream lOutputFile, lDisplayName;
-                        
-                        lOutputFile << pOutputFolder << lSeparator << pHosts << "_" << i << "_" << j << "_" << k << "_" << l << "_" << m;
-                        lDisplayName << lSchedulingModelNames[i] << "_" << lClusterTypeNames[j] << "_" << ((k == 0) ? "NonMA" : "MA") << "_" << ((l == 0) ? "NonLazy" : "Lazy") << "_" << ((m == 0) ? "NoCompCommOverlap" : "CompCommOverlap");
-
-                        std::ifstream lFileStream(lOutputFile.str().c_str());
-
-                        if(lFileStream.fail())
+                        size_t lMaxAffinityCriterion = ((i == (size_t)PULL_WITH_AFFINITY) ? 4 : 1);
+                        for(size_t n = 0; n < lMaxAffinityCriterion; ++n)  // Affinity Criterion (for PULL_WITH_AFFINITY)
                         {
-                            std::stringstream lStream;
-                            lStream << "source ~/.pmlibrc; ";
-                            lStream << "mpirun -n " << pHosts << " orte-clean; ";
-                            lStream << "mpirun -n " << pHosts << " " << lMpiOptions << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
-                            lStream << lFixedArgs;
-                            lStream << " > " << lTempFile.c_str() << " 2>&1";
+                            if((k == 1 || l == 1 || m == 1) && (((SchedulingPolicy)i == STATIC_BEST) || ((SchedulingPolicy)i == STATIC_EQUAL)))
+                                continue;
+                            
+                        #ifdef GENERATE_ESSENTIALS_ONLY
+                            if(!((i == (size_t)PUSH || i == (size_t)PULL || i == (size_t)PULL_WITH_AFFINITY) && (k == 1) && (l == 0) && (m == 1)))
+                                continue;
+                        #endif
 
-                            ExecuteShellCommand(lStream.str(), lDisplayName.str(), lOutputFile.str());
-                        }
-                        else
-                        {
-                            lFileStream.close();
+                            setenv("PMLIB_DISABLE_MA", ((k == 0) ? "1" : "0"), 1);
+                            setenv("PMLIB_ENABLE_LAZY_MEM", ((l == 0) ? "0" : "1"), 1);
+                            setenv("PMLIB_DISABLE_COMPUTE_COMMUNICATION_OVERLAP", ((m == 0) ? "1" : "0"), 1);
+                            
+                            if(i == (size_t)PULL_WITH_AFFINITY)
+                            {
+                                char lCriterion[2];
+                                lCriterion[0] = '0' + n;
+                                lCriterion[1] = '\0';
+
+                                setenv("PMLIB_AFFINITY_CRITERION", lCriterion, 1);
+                            }
+                            
+                            std::stringstream lOutputFile, lDisplayName;
+                            
+                            lOutputFile << pOutputFolder << lSeparator << pHosts << "_" << i << "_" << j << "_" << k << "_" << l << "_" << m;
+                            lDisplayName << lSchedulingModelNames[i] << "_" << lClusterTypeNames[j] << "_" << ((k == 0) ? "NonMA" : "MA") << "_" << ((l == 0) ? "NonLazy" : "Lazy") << "_" << ((m == 0) ? "NoCompCommOverlap" : "CompCommOverlap");
+
+                            std::ifstream lFileStream(lOutputFile.str().c_str());
+
+                            if(i == (size_t)PULL_WITH_AFFINITY)
+                            {
+                                lOutputFile << "_" << n;
+
+                                switch(n)
+                                {
+                                    case 0:
+                                        lDisplayName << "_MAXIMIZE_LOCAL_DATA";
+                                        break;
+                                        
+                                    case 1:
+                                        lDisplayName << "_MINIMIZE_REMOTE_SOURCES";
+                                        break;
+                                    
+                                    case 2:
+                                        lDisplayName << "_MINIMIZE_REMOTE_TRANSFER_EVENTS";
+                                        break;
+
+                                    case 3:
+                                        lDisplayName << "_MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME";
+                                        break;
+                                };
+                            }
+
+                            if(lFileStream.fail())
+                            {
+                                std::stringstream lStream;
+                                lStream << "source ~/.pmlibrc; ";
+                                lStream << "mpirun -n " << pHosts << " orte-clean; ";
+                                lStream << "mpirun -n " << pHosts << " " << lMpiOptions << " " << mExecPath << " 0 " << 4+j << " " << i << " " << pSpaceSeparatedVaryingsStr;
+                                lStream << lFixedArgs;
+                                lStream << " > " << lTempFile.c_str() << " 2>&1";
+
+                                ExecuteShellCommand(lStream.str(), lDisplayName.str(), lOutputFile.str());
+                            }
+                            else
+                            {
+                                lFileStream.close();
+                            }
                         }
                     }
                 }

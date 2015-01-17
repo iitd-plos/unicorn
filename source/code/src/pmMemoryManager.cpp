@@ -471,38 +471,86 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
     }
 }
 
+
+/* Helper structure for scattered memory transfers */
+struct localFilter
+{
+    localFilter(pmScatteredSubscriptionFilter& pGlobalFilter, pmAddressSpace* pAddressSpace)
+    : mGlobalFilter(pGlobalFilter)
+    , mAddressSpace(pAddressSpace)
+    , mMem(reinterpret_cast<ulong>(pAddressSpace->GetMem()))
+    {}
+    
+    void emplace_back(ulong pStartAddr, ulong pLastAddr)
+    {
+        ulong lLength = pLastAddr - pStartAddr + 1;
+
+        pmAddressSpace::pmMemOwnership lOwnerships;
+        mAddressSpace->GetOwners(pStartAddr - mMem, lLength, lOwnerships);
+
+        for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+        {
+            pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+
+            if(lRangeOwner.host != PM_LOCAL_MACHINE)
+                mGlobalFilter.AddNextSubRow(pPair.first, pPair.second.first, lRangeOwner);
+        });
+    }
+    
+private:
+    pmScatteredSubscriptionFilter& mGlobalFilter;
+    pmAddressSpace* mAddressSpace;
+    ulong mMem;
+};
+
+// This method assumes nothing is in flight
+uint pmLinuxMemoryManager::GetScatteredMemoryFetchEvents(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+{
+    EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
+
+	pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
+    localFilter lLocalFilter(lBlocksFilter, pAddressSpace);
+    
+    auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
+    {
+        size_t lStartAddr = pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step;
+
+        lLocalFilter.emplace_back(lStartAddr, lStartAddr + pScatteredSubscriptionInfo.size - 1);
+    });
+
+    return (uint)lBlocks.size();
+}
+
+// This method assumes nothing is in flight
+ulong pmLinuxMemoryManager::GetScatteredMemoryFetchPages(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+{
+    EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
+
+    size_t lPageSize = GetVirtualMemoryPageSize();
+
+    pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
+    localFilter lLocalFilter(lBlocksFilter, pAddressSpace);
+    
+    auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
+    {
+        size_t lStartAddr = pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step;
+
+        lLocalFilter.emplace_back(lStartAddr, lStartAddr + pScatteredSubscriptionInfo.size - 1);
+    });
+
+    ulong lPages = 0;
+    for_each(lBlocks, [&] (typename decltype(lBlocks)::value_type& pPair)
+    {
+        DEBUG_EXCEPTION_ASSERT(pPair.first.size && pPair.first.step && pPair.first.count);
+        
+        lPages += ((pPair.first.size * pPair.first.count) + lPageSize - 1) / lPageSize;
+    });
+
+    return lPages;
+}
+
 void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector)
 {
-    struct localFilter
-    {
-        localFilter(pmScatteredSubscriptionFilter& pGlobalFilter, pmAddressSpace* pAddressSpace)
-        : mGlobalFilter(pGlobalFilter)
-        , mAddressSpace(pAddressSpace)
-        , mMem(reinterpret_cast<ulong>(pAddressSpace->GetMem()))
-        {}
-        
-        void emplace_back(ulong pStartAddr, ulong pLastAddr)
-        {
-            ulong lLength = pLastAddr - pStartAddr + 1;
-
-            pmAddressSpace::pmMemOwnership lOwnerships;
-            mAddressSpace->GetOwners(pStartAddr - mMem, lLength, lOwnerships);
-
-            for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
-            {
-                pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
-
-                if(lRangeOwner.host != PM_LOCAL_MACHINE)
-                    mGlobalFilter.AddNextSubRow(pPair.first, pPair.second.first, lRangeOwner);
-            });
-        }
-        
-    private:
-        pmScatteredSubscriptionFilter& mGlobalFilter;
-        pmAddressSpace* mAddressSpace;
-        ulong mMem;
-    };
-
     EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
 
     using namespace linuxMemManager;
@@ -543,6 +591,50 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
     pCommandVector.insert(pCommandVector.end(), lTempCommandSet.begin(), lTempCommandSet.end());
 }
 
+// This method assumes nothing is in flight
+uint pmLinuxMemoryManager::GetMemoryFetchEvents(pmAddressSpace* pAddressSpace, size_t pOffset, size_t pLength)
+{
+    EXCEPTION_ASSERT(pLength);
+    
+    pmAddressSpace::pmMemOwnership lOwnerships;
+    pAddressSpace->GetOwners(pOffset, pLength, lOwnerships);
+    
+    uint lEvents = 0;
+
+    for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+    {
+        pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+
+        if(lRangeOwner.host != PM_LOCAL_MACHINE)
+            ++lEvents;
+    });
+    
+    return lEvents;
+}
+
+// This method assumes nothing is in flight
+ulong pmLinuxMemoryManager::GetMemoryFetchPages(pmAddressSpace* pAddressSpace, size_t pOffset, size_t pLength)
+{
+    EXCEPTION_ASSERT(pLength);
+    
+    size_t lPageSize = GetVirtualMemoryPageSize();
+    
+    pmAddressSpace::pmMemOwnership lOwnerships;
+    pAddressSpace->GetOwners(pOffset, pLength, lOwnerships);
+    
+    ulong lPages = 0;
+
+    for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+    {
+        pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+
+        if(lRangeOwner.host != PM_LOCAL_MACHINE)
+            lPages += ((pPair.second.first + lPageSize - 1) / lPageSize);
+    });
+    
+    return lPages;
+}
+    
 void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, size_t pOffset, size_t pLength, std::vector<pmCommandPtr>& pCommandVector)
 {
     EXCEPTION_ASSERT(pLength);

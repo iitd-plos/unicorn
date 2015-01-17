@@ -101,6 +101,7 @@ enum SchedulingPolicy
     PULL,
     STATIC_EQUAL,
     STATIC_BEST,
+    PULL_WITH_AFFINITY,
     MAX_SCHEDULING_POLICY
 };
 

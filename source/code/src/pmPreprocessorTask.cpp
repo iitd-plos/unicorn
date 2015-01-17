@@ -53,6 +53,11 @@ void PostAffinityAddressSpaceFetchCallback(const pmCommandPtr& pCountDownCommand
     pmAddressSpace* lAddressSpace = lPreprocessorTaskMemVector[lPreprocessorTaskMemVector.size() - 1].addressSpace;
 
     lUserTask->ComputeAffinityData(lAddressSpace);
+
+#ifdef ENABLE_TASK_PROFILING
+    lUserTask->GetTaskProfiler()->RecordProfileEvent(taskProfiler::PREPROCESSOR_TASK_EXECUTION, false);
+#endif
+
     lUserTask->StartScheduling();
 }
 
@@ -243,6 +248,10 @@ void pmPreprocessorTask::DeduceAffinityAndEvaluateDependency(pmLocalTask* pLocal
 
 void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, preprocessorTaskType pTaskType, pmAffinityCriterion pAffinityCriterion)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pLocalTask->GetTaskProfiler()->RecordProfileEvent(taskProfiler::PREPROCESSOR_TASK_EXECUTION, true);
+#endif
+
     ulong lUserSubtasks = pLocalTask->GetSubtaskCount();
     preprocessorTaskConf lTaskConf = {pTaskType, lUserSubtasks, *pLocalTask->GetOriginatingHost(), pLocalTask->GetSequenceNumber(), pAffinityCriterion};
 
@@ -261,7 +270,7 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
 
             // Create an output address space for the preprocessor task (every machine stores local bytes for all subtasks) */
             size_t lOutputMemSize = lMachinesSet.size() * lUserSubtasks * GetSampleSizeForAffinityCriterion(pAffinityCriterion);
-            
+
             pmMemHandle lMemHandle;
             pmCreateMemory(lOutputMemSize, &lMemHandle);
             

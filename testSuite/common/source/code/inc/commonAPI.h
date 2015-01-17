@@ -80,12 +80,13 @@ void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, uns
 
 void RequestPreSetupCallbackPostMpiInit(preSetupPostMpiInitFunc pFunc);
 
-bool isMultiAssignEnabled();    /* by default, it's enabled */
-bool isComputeCommunicationOverlapEnabled();    /* by default, it's enabled */
-bool isLazyMemEnabled();    /* by default, it's diabled */
+bool isMultiAssignEnabled();    /* by default, its enabled */
+uint getAffinityCriterion();    /* by default, its 0 */
+bool isComputeCommunicationOverlapEnabled();    /* by default, its enabled */
+bool isLazyMemEnabled();    /* by default, its diabled */
 
 #ifdef BUILD_CUDA
-bool isCudaCacheEnabled();   /* by default, it's enabled */
+bool isCudaCacheEnabled();   /* by default, its enabled */
 #endif
 
 #define CREATE_MEM(memSize, memHandle) SAFE_PM_EXEC( pmCreateMemory(memSize, &memHandle) )
@@ -99,6 +100,7 @@ bool isCudaCacheEnabled();   /* by default, it's enabled */
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \
 	lTaskDetails.multiAssignEnabled = isMultiAssignEnabled(); \
+    lTaskDetails.affinityCriterion = (pmAffinityCriterion)getAffinityCriterion(); \
     lTaskDetails.overlapComputeCommunication = isComputeCommunicationOverlapEnabled(); \
     lTaskDetails.cudaCacheEnabled = isCudaCacheEnabled();
 
@@ -111,6 +113,7 @@ bool isCudaCacheEnabled();   /* by default, it's enabled */
 	lTaskDetails.subtaskCount = totalSubtasks; \
 	lTaskDetails.policy = schedPolicy; \
 	lTaskDetails.multiAssignEnabled = isMultiAssignEnabled(); \
+    lTaskDetails.affinityCriterion = (pmAffinityCriterion)getAffinityCriterion(); \
     lTaskDetails.overlapComputeCommunication = isComputeCommunicationOverlapEnabled();
 
 #endif
