@@ -475,10 +475,11 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
 /* Helper structure for scattered memory transfers */
 struct localFilter
 {
-    localFilter(pmScatteredSubscriptionFilter& pGlobalFilter, pmAddressSpace* pAddressSpace)
+    localFilter(pmScatteredSubscriptionFilter& pGlobalFilter, pmAddressSpace* pAddressSpace, bool pUnprotected)
     : mGlobalFilter(pGlobalFilter)
     , mAddressSpace(pAddressSpace)
     , mMem(reinterpret_cast<ulong>(pAddressSpace->GetMem()))
+    , mUnprotected(pUnprotected)
     {}
     
     void emplace_back(ulong pStartAddr, ulong pLastAddr)
@@ -486,7 +487,11 @@ struct localFilter
         ulong lLength = pLastAddr - pStartAddr + 1;
 
         pmAddressSpace::pmMemOwnership lOwnerships;
-        mAddressSpace->GetOwners(pStartAddr - mMem, lLength, lOwnerships);
+        
+        if(mUnprotected)
+            mAddressSpace->GetOwnersUnprotected(pStartAddr - mMem, lLength, lOwnerships);
+        else
+            mAddressSpace->GetOwners(pStartAddr - mMem, lLength, lOwnerships);
 
         for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
         {
@@ -501,6 +506,7 @@ private:
     pmScatteredSubscriptionFilter& mGlobalFilter;
     pmAddressSpace* mAddressSpace;
     ulong mMem;
+    bool mUnprotected;
 };
 
 // This method assumes nothing is in flight
@@ -511,8 +517,8 @@ uint pmLinuxMemoryManager::GetScatteredMemoryFetchEvents(pmAddressSpace* pAddres
     void* lMem = pAddressSpace->GetMem();
 
 	pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
-    localFilter lLocalFilter(lBlocksFilter, pAddressSpace);
-    
+    localFilter lLocalFilter(lBlocksFilter, pAddressSpace, true);
+
     auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
     {
         ulong lStartAddr = (ulong)((char*)lMem + pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step);
@@ -532,7 +538,7 @@ ulong pmLinuxMemoryManager::GetScatteredMemoryFetchPages(pmAddressSpace* pAddres
     size_t lPageSize = GetVirtualMemoryPageSize();
 
     pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
-    localFilter lLocalFilter(lBlocksFilter, pAddressSpace);
+    localFilter lLocalFilter(lBlocksFilter, pAddressSpace, true);
     
     auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
     {
@@ -560,7 +566,7 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
     void* lMem = pAddressSpace->GetMem();
     
 	pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
-    localFilter lLocalFilter(lBlocksFilter, pAddressSpace);
+    localFilter lLocalFilter(lBlocksFilter, pAddressSpace, false);
     
     std::set<pmCommandPtr> lTempCommandSet;
     addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
@@ -600,7 +606,7 @@ uint pmLinuxMemoryManager::GetMemoryFetchEvents(pmAddressSpace* pAddressSpace, s
     EXCEPTION_ASSERT(pLength);
     
     pmAddressSpace::pmMemOwnership lOwnerships;
-    pAddressSpace->GetOwners(pOffset, pLength, lOwnerships);
+    pAddressSpace->GetOwnersUnprotected(pOffset, pLength, lOwnerships);
     
     uint lEvents = 0;
 
@@ -623,7 +629,7 @@ ulong pmLinuxMemoryManager::GetMemoryFetchPages(pmAddressSpace* pAddressSpace, s
     size_t lPageSize = GetVirtualMemoryPageSize();
     
     pmAddressSpace::pmMemOwnership lOwnerships;
-    pAddressSpace->GetOwners(pOffset, pLength, lOwnerships);
+    pAddressSpace->GetOwnersUnprotected(pOffset, pLength, lOwnerships);
     
     ulong lPages = 0;
 

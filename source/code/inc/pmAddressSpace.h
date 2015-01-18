@@ -132,8 +132,8 @@ class pmAddressSpace : public pmBase
 		void FlushOwnerships();
 
         bool IsRegionLocallyOwned(ulong pOffset, ulong pLength);
-		void GetOwners(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
-        void GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
+        void GetOwners(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
+        void GetOwnersUnprotected(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
 
         void Fetch(ushort pPriority);
         void FetchAsync(ushort pPriority, pmCommandPtr pCommand);
@@ -143,8 +143,8 @@ class pmAddressSpace : public pmBase
         void Unlock(pmTask* pTask);
         pmTask* GetLockingTask();
     
-        ulong FindLocalDataSize(ulong pOffset, ulong pLength);
-        std::set<const pmMachine*> FindRemoteDataSources(ulong pOffset, ulong pLength);
+        ulong FindLocalDataSizeUnprotected(ulong pOffset, ulong pLength);
+        std::set<const pmMachine*> FindRemoteDataSourcesUnprotected(ulong pOffset, ulong pLength);
     
         void ChangeOwnership(std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>& pOwnershipData);
     
@@ -180,6 +180,8 @@ class pmAddressSpace : public pmBase
     
         static ulong GetNextGenerationNumber();
     
+        void GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
+
         void Init(const pmMachine* pOwner);
         void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
         void SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength, pmMemOwnership& pMap);

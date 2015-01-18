@@ -876,11 +876,15 @@ void pmAddressSpace::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)
     pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str(), false);
 #endif
 }
-    
-ulong pmAddressSpace::FindLocalDataSize(ulong pOffset, ulong pLength)
+
+/* This method does not acquire mOwnershipLock (directly calls GetOwnersInternal instead of GetOwners).
+ It is only meant to be called by preprocessor task as it does not actually fetch data on user task's
+ address spaces, but just determines its current ownership.
+ */
+ulong pmAddressSpace::FindLocalDataSizeUnprotected(ulong pOffset, ulong pLength)
 {
     pmAddressSpace::pmMemOwnership lOwners;
-    GetOwners(pOffset, pLength, lOwners);
+    GetOwnersInternal(mOwnershipMap, pOffset, pLength, lOwners);
     
     ulong lLocalDataSize = 0;
     for_each(lOwners, [&] (const typename decltype(lOwners)::value_type& pPair)
@@ -892,10 +896,14 @@ ulong pmAddressSpace::FindLocalDataSize(ulong pOffset, ulong pLength)
     return lLocalDataSize;
 }
 
-std::set<const pmMachine*> pmAddressSpace::FindRemoteDataSources(ulong pOffset, ulong pLength)
+/* This method does not acquire mOwnershipLock (directly calls GetOwnersInternal instead of GetOwners).
+ It is only meant to be called by preprocessor task as it does not actually fetch data on user task's
+ address spaces, but just determines its current ownership.
+ */
+std::set<const pmMachine*> pmAddressSpace::FindRemoteDataSourcesUnprotected(ulong pOffset, ulong pLength)
 {
     pmAddressSpace::pmMemOwnership lOwners;
-    GetOwners(pOffset, pLength, lOwners);
+    GetOwnersInternal(mOwnershipMap, pOffset, pLength, lOwners);
     
     std::set<const pmMachine*> lSet;
     for_each(lOwners, [&] (const typename decltype(lOwners)::value_type& pPair)
@@ -923,6 +931,15 @@ void pmAddressSpace::GetOwners(ulong pOffset, ulong pLength, pmAddressSpace::pmM
 	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
     
     GetOwnersInternal(lMap, pOffset, pLength, pOwnerships);
+}
+
+/* This method does not acquire mOwnershipLock (directly calls GetOwnersInternal instead of GetOwners).
+ It is only meant to be called by preprocessor task as it does not actually fetch data on user task's
+ address spaces, but just determines its current ownership.
+ */
+void pmAddressSpace::GetOwnersUnprotected(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships)
+{
+    GetOwnersInternal(mOwnershipMap, pOffset, pLength, pOwnerships);
 }
 
 /* This method must be called with mOwnershipLock acquired */

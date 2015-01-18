@@ -906,7 +906,7 @@ float pmSubscriptionManager::FindPercentLocalInputDataForSubtask(pmExecutionStub
         for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
         {
             lTotalInputSubscriptionSize += lIter->second.first;
-            lLocalDataSize += pAddressSpace->FindLocalDataSize(lIter->first, lIter->second.first);
+            lLocalDataSize += pAddressSpace->FindLocalDataSizeUnprotected(lIter->first, lIter->second.first);
         }
     });
 
@@ -929,7 +929,7 @@ ulong pmSubscriptionManager::FindLocalInputDataSizeForSubtask(pmExecutionStub* p
         GetNonConsolidatedReadSubscriptionsInternal(lSubtask, lMemIndex, lBeginIter, lEndIter);
         
         for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
-            lLocalDataSize += pAddressSpace->FindLocalDataSize(lIter->first, lIter->second.first);
+            lLocalDataSize += pAddressSpace->FindLocalDataSizeUnprotected(lIter->first, lIter->second.first);
     });
 
     return lLocalDataSize;
@@ -952,7 +952,7 @@ uint pmSubscriptionManager::FindRemoteDataSourcesForSubtask(pmExecutionStub* pSt
         
         for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
         {
-            std::set<const pmMachine*> lSet = pAddressSpace->FindRemoteDataSources(lIter->first, lIter->second.first);
+            std::set<const pmMachine*> lSet = pAddressSpace->FindRemoteDataSourcesUnprotected(lIter->first, lIter->second.first);
             
             for_each(lSet, [&] (const pmMachine* pMachine)
             {
