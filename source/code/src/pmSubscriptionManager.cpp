@@ -187,6 +187,28 @@ void pmSubscriptionManager::DropAllSubscriptions()
 #endif
 }
     
+void pmSubscriptionManager::MoveConstantSubtaskDataToPreprocessorTaskHoldings()
+{
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    #ifdef _DEBUG
+        for_each(mSplitSubtaskMapVector, [] (decltype(mSplitSubtaskMapVector)::value_type& pPair)
+        {
+            EXCEPTION_ASSERT(pPair.first.empty());
+        });
+    #endif
+#endif
+    
+    for_each(mSubtaskMapVector, [&] (decltype(mSubtaskMapVector)::value_type& pPair)
+    {
+        for_each(pPair.first, [&] (subtaskMapType::value_type& pMapPair)
+        {
+            mPreprocessorTaskHoldings.emplace(mTask->GetLogicalSubtaskId(pMapPair.first), std::move(pMapPair.second));
+        });
+    });
+
+    DropAllSubscriptions();
+}
+    
 bool pmSubscriptionManager::HasSubtask(pm::pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
 #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -300,32 +322,46 @@ void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, u
     {
         std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS>& lPair = mSubtaskMapVector[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
 
-        // Auto lock/unlock scope
+        subtaskMapType::iterator lPreprocessorTaskHoldingsIterator;
+        if(mTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY && ((lPreprocessorTaskHoldingsIterator = mPreprocessorTaskHoldings.find(pSubtaskId)) != mPreprocessorTaskHoldings.end()) && lPreprocessorTaskHoldingsIterator->second.mValid)
         {
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
-
+            
             subtaskMapType::iterator lIter = lPair.first.find(pSubtaskId);
             if(lIter == lPair.first.end())
-                lIter = lPair.first.emplace(pSubtaskId, pmSubtask(mTask)).first;
-            
-            if(lIter->second.mReadyForExecution)
-                return;
-        }
-        
-        const pmDataDistributionCB* lCallback = mTask->GetCallbackUnit()->GetDataDistributionCB();
-        if(lCallback)
-        {
-            if(pNoJmpBuf)
-                lCallback->InvokeDirect(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
-            else
-                lCallback->Invoke(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
-        }
+                lIter = lPair.first.emplace(pSubtaskId, std::move(lPreprocessorTaskHoldingsIterator->second)).first;    // The move constructor sets mValid (of the subtask in mPreprocessorTaskHoldings) to false, preventing its further use
 
-        // Auto lock/unlock scope
+            lIter->second.mReadyForExecution = true;
+        }
+        else
         {
-            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
+            // Auto lock/unlock scope
+            {
+                FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
 
-            lPair.first.find(pSubtaskId)->second.mReadyForExecution = true;
+                subtaskMapType::iterator lIter = lPair.first.find(pSubtaskId);
+                if(lIter == lPair.first.end())
+                    lIter = lPair.first.emplace(pSubtaskId, pmSubtask(mTask)).first;
+                
+                if(lIter->second.mReadyForExecution)
+                    return;
+            }
+
+            const pmDataDistributionCB* lCallback = mTask->GetCallbackUnit()->GetDataDistributionCB();
+            if(lCallback)
+            {
+                if(pNoJmpBuf)
+                    lCallback->InvokeDirect(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
+                else
+                    lCallback->Invoke(pStub, mTask, pSubtaskId, pSplitInfo);    // Check return status
+            }
+
+            // Auto lock/unlock scope
+            {
+                FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
+
+                lPair.first.find(pSubtaskId)->second.mReadyForExecution = true;
+            }
         }
     }
 }
@@ -1973,6 +2009,7 @@ pmSubtask::pmSubtask(pmTask* pTask)
     : mAddressSpacesData(pTask->GetAddressSpaceCount())
     , mReadyForExecution(false)
     , mReservedCudaGlobalMemSize(0)
+    , mValid(true)
 {
     mMemInfo.reserve(pTask->GetAddressSpaceCount());
 }

@@ -174,9 +174,22 @@ namespace subscription
         bool mReadyForExecution;    // a flag indicating that pmDataDistributionCB has already been executed (data may not be fetched)
         size_t mReservedCudaGlobalMemSize;
         
+        bool mValid;    // Only for use by preprocessor task
+        
         pmSubtask(pmTask* pTask);
         
-        pmSubtask(pmSubtask&& pSubtask) = default;
+        pmSubtask(pmSubtask&& pSubtask)
+        : mCudaLaunchConf(std::move(pSubtask.mCudaLaunchConf))
+        , mSubtaskInfo(std::move(pSubtask.mSubtaskInfo))
+        , mScratchBuffers(std::move(pSubtask.mScratchBuffers))
+        , mMemInfo(std::move(pSubtask.mMemInfo))
+        , mAddressSpacesData(std::move(pSubtask.mAddressSpacesData))
+        , mReadyForExecution(pSubtask.mReadyForExecution)
+        , mReservedCudaGlobalMemSize(pSubtask.mReservedCudaGlobalMemSize)
+        , mValid(pSubtask.mValid)
+        {
+            pSubtask.mValid = false;
+        }
 	};
     
     struct shadowMemDetails
@@ -212,7 +225,7 @@ class pmSubscriptionManager : public pmBase
 	public:
 		pmSubscriptionManager(pmTask* pTask);
     
-        void DropAllSubscriptions();
+        void MoveConstantSubtaskDataToPreprocessorTaskHoldings();
     
         void FindSubtaskMemDependencies(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pNoJmpBuf = false);
 
@@ -287,6 +300,8 @@ class pmSubscriptionManager : public pmBase
     #endif
 
 	private:
+        void DropAllSubscriptions();
+
         void RegisterSubscriptionInternal(subscription::pmSubtask& pSubtask, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo);
 		void RegisterSubscriptionInternal(subscription::pmSubtask& pSubtask, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
 
@@ -324,6 +339,8 @@ class pmSubscriptionManager : public pmBase
         bool AddressSpacesHaveMatchingSubscriptionsInternal(const subscription::pmSubtaskAddressSpaceData& pAddressSpaceData1, const subscription::pmSubtaskAddressSpaceData& pAddressSpaceData2) const;
 
 		pmTask* mTask;
+
+        subtaskMapType mPreprocessorTaskHoldings;   // Assumes preprocessor task does not use subtask splitting or multi-assign
 
         std::vector<std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS> > mSubtaskMapVector;
 

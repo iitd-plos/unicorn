@@ -890,9 +890,7 @@ void pmTask::SetAffinityMappings(std::vector<ulong>&& pLogicalToPhysical, std::v
     mLogicalToPhysicalSubtaskMappings = std::move(pLogicalToPhysical);
     mPhysicalToLogicalSubtaskMappings = std::move(pPhysicalToLogical);
 
-    // Subscriptions created in user task (by affinity task) can not be used because affinity registered these against physical subtask ids
-    // but now we have logical subtask ids. Some additional handling is required to use those subscriptions. Dropping for now ...
-    GetSubscriptionManager().DropAllSubscriptions();
+    GetSubscriptionManager().MoveConstantSubtaskDataToPreprocessorTaskHoldings();
 }
     
 ulong pmTask::GetPhysicalSubtaskId(ulong pLogicalSubtaskId) const
@@ -1456,10 +1454,6 @@ void pmRemoteTask::ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSu
 
     SetAffinityMappings(std::move(pLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
 
-    // Subscriptions created in user task (by affinity task) can not be used because affinity registered these against physical subtask ids
-    // but now we have logical subtask ids. Some additional handling is required to use those subscriptions. Dropping for now ...
-    GetSubscriptionManager().DropAllSubscriptions();
-    
     Start();
 }
 
