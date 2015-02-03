@@ -88,6 +88,9 @@ namespace pm
             DEFERRED_LOG_LENGTH_TAG,
             DEFERRED_LOG_TAG,
         #endif
+        #ifdef USE_AFFINITY_IN_STEAL
+            STEAL_SUCCESS_DISCONTIGUOUS_TAG,
+        #endif
             MAX_COMMUNICATOR_COMMAND_TAGS
         };
 
@@ -129,6 +132,9 @@ namespace pm
             MULTI_FILE_OPERATIONS_STRUCT,
             MULTI_FILE_OPERATIONS_PACKED,
             AFFINITY_DATA_TRANSFER_PACKED,
+        #ifdef USE_AFFINITY_IN_STEAL
+            STEAL_SUCCESS_DISCONTIGUOUS_PACKED,
+        #endif
             MAX_COMMUNICATOR_DATA_TYPES
         };
     }

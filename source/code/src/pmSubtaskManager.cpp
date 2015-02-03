@@ -827,6 +827,16 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(mUseSplits)
     {
+        // Randomizing partitions helps better handle partitions of unequal size (i.e. leftover subtasks)
+        if(pLocalTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY)
+        {
+            std::random_device lRandomDevice;
+            std::mt19937 lGenerator(lRandomDevice());
+    
+            std::shuffle(lSubtaskPartitions.begin(), lSubtaskPartitions.end(), lGenerator);
+            std::shuffle(lSplittedGroupSubtaskPartitions.begin(), lSplittedGroupSubtaskPartitions.end(), lGenerator);
+        }
+
         auto lSplittedGroupIter = lSplittedGroupSubtaskPartitions.begin();
         auto lSplittedGroupEndIter = lSplittedGroupSubtaskPartitions.end();
 
@@ -915,6 +925,15 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
         }
         else
         {
+            // Randomizing partitions helps better handle partitions of unequal size (i.e. leftover subtasks)
+            if(pLocalTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY)
+            {
+                std::random_device lRandomDevice;
+                std::mt19937 lGenerator(lRandomDevice());
+        
+                std::shuffle(lSubtaskPartitions.begin(), lSubtaskPartitions.end(), lGenerator);
+            }
+
             multi_for_each(lAssignedDevices, lSubtaskPartitions, [&] (const pmProcessingElement* pDevice, pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr)
             {
                 mAllottedPartitions[pDevice] = pUnfinishedPartitionPtr;

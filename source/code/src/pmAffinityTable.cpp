@@ -101,7 +101,7 @@ void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpac
             
         default:
             PMTHROW(pmFatalErrorException());
-    };
+    }
 }
 
 template<typename T, typename S>
@@ -121,11 +121,16 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
 
     EXCEPTION_ASSERT(pMachinesVector.size() * lSubtaskCount * sizeof(T) == pAffinityAddressSpace->GetLength());
 
+#ifdef MACHINES_PICK_BEST_SUBTASKS
+    std::vector<std::multimap<T, ulong, S>> lVector;    // data versus subtasks for each machine
+    lVector.resize(lMachines);
+#else
     std::vector<std::multimap<T, const pmMachine*, S>> lVector;    // data versus machines for each subtask
     lVector.resize(lSubtaskCount);
+#endif
 
     ulong index = 0;
-    for_each(pMachinesVector, [&] (const pmMachine* pMachine)
+    for_each_with_index(pMachinesVector, [&] (const pmMachine* pMachine, size_t pMachineIndex)
     {
     #ifdef DUMP_AFFINITY_DATA
         lStream << "Host " << (uint)(*pMachine) << ": ";
@@ -141,8 +146,12 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
             if(i != lSubtaskCount - 1)
                 lStream << "; ";
         #endif
-            
+
+        #ifdef MACHINES_PICK_BEST_SUBTASKS
+            lVector[pMachineIndex].emplace(lData, i);
+        #else
             lVector[i].emplace(lData, pMachine);
+        #endif
         }
 
     #ifdef DUMP_AFFINITY_DATA
@@ -154,13 +163,21 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
     pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str());
 #endif
 
-    for_each_with_index(lVector, [&] (const typename decltype(lVector)::value_type& pEntry, size_t pSubtask)
+    for_each_with_index(lVector, [&] (const typename decltype(lVector)::value_type& pEntry, size_t pIndex)
     {
+    #ifdef MACHINES_PICK_BEST_SUBTASKS
+        std::vector<ulong> lTableRow;
+        lTableRow.reserve(lSubtaskCount);
+        
+        std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<T, ulong>());
+        mTable.AddRow((uint)(*pMachinesVector[pIndex]), std::move(lTableRow));
+    #else
         std::vector<const pmMachine*> lTableRow;
         lTableRow.reserve(lMachines);
         
         std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<T, const pmMachine*>());
-        mTable.AddRow(pSubtask, std::move(lTableRow));
+        mTable.AddRow(pIndex, std::move(lTableRow));
+    #endif
     });
 }
 
@@ -176,6 +193,50 @@ void pmAffinityTable::CreateSubtaskMappings()
     
     std::map<uint, std::pair<ulong, ulong>> lMap = lManager->ComputeMachineVersusInitialSubtaskCountMap();
 
+#ifdef MACHINES_PICK_BEST_SUBTASKS
+    std::set<ulong> lSubtasksAllotted;
+    auto lSubtasksAllottedEndIter = lSubtasksAllotted.end();
+
+    std::map<uint, std::vector<ulong>::const_iterator> lSubtasksIterMap;
+    for_each(lMap, [&] (const decltype(lMap)::value_type& pPair)
+    {
+        lSubtasksIterMap.emplace(pPair.first, mTable.GetRow(pPair.first).begin());
+    });
+
+    auto lIter = lMap.begin(), lEndIter = lMap.end();
+    while(lSubtasksAllotted.size() != lSubtaskCount)
+    {
+        // Get next available machine
+        bool lMachineFound = false;
+        
+        while(!lMachineFound)
+        {
+            if(lIter == lEndIter)
+                lIter = lMap.begin();
+
+            if(lIter->second.second)
+                lMachineFound = true;
+            else
+                ++lIter;
+        }
+        
+        uint lMachine = lIter->first;
+        
+        // Find next best subtask for this machine
+        auto lSubtasksIter = lSubtasksIterMap.find(lMachine)->second;
+        while(lSubtasksAllotted.find(*lSubtasksIter) != lSubtasksAllottedEndIter)
+            ++lSubtasksIter;
+
+        // Assign the selected subtask to the selected machine
+        lLogicalToPhysicalSubtaskMapping[lIter->second.first] = *lSubtasksIter;
+        lPhysicalToLogicalSubtaskMapping[*lSubtasksIter] = lIter->second.first;
+
+        lSubtasksAllotted.emplace(*lSubtasksIter);
+        ++lIter->second.first;
+        --lIter->second.second;
+        ++lIter;    // change machine every iteration
+    }
+#else
     for(ulong i = 0; i < lSubtaskCount; ++i)
     {
         const std::vector<const pmMachine*>& lSubtaskRow = mTable.GetRow(i);
@@ -204,6 +265,7 @@ void pmAffinityTable::CreateSubtaskMappings()
 
         EXCEPTION_ASSERT(lAssigned);
     }
+#endif
     
 #ifdef _DEBUG
     for_each_with_index(lLogicalToPhysicalSubtaskMapping, [&] (ulong lPhysicalSubtask, size_t lLogicalSubtask)
@@ -230,6 +292,68 @@ void pmAffinityTable::CreateSubtaskMappings()
 
     mLocalTask->SetAffinityMappings(std::move(lLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
 }
+
+#ifdef USE_AFFINITY_IN_STEAL
+std::vector<ulong> pmAffinityTable::FindSubtasksWithBestAffinity(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine)
+{
+    std::vector<const pmMachine*> lMachinesVector;
+    pmProcessingElement::GetMachinesInOrder(((dynamic_cast<pmLocalTask*>(pTask) != NULL) ? ((pmLocalTask*)pTask)->GetAssignedDevices() : ((pmRemoteTask*)pTask)->GetAssignedDevices()), lMachinesVector);
+
+    pmAddressSpace* lAffinityAddressSpace = ((dynamic_cast<pmLocalTask*>(pTask) != NULL) ? ((pmLocalTask*)pTask)->GetAffinityAddressSpace() : ((pmRemoteTask*)pTask)->GetAffinityAddressSpace());
+    EXCEPTION_ASSERT(lAffinityAddressSpace != NULL);
+    
+    auto lIter = std::find(lMachinesVector.begin(), lMachinesVector.end(), pMachine);
+    EXCEPTION_ASSERT(lIter != lMachinesVector.end());
+    
+    size_t lMachineIndex = lIter - lMachinesVector.begin();
+    
+    switch(pTask->GetAffinityCriterion())
+    {
+        case MAXIMIZE_LOCAL_DATA:
+            return FindSubtasksWithBestAffinity<GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::type, GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::sorter>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex, pTask->GetSubtaskCount());
+            
+        case MINIMIZE_REMOTE_SOURCES:
+            return FindSubtasksWithBestAffinity<GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::type, GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::sorter>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex, pTask->GetSubtaskCount());
+            
+        case MINIMIZE_REMOTE_TRANSFER_EVENTS:
+            return FindSubtasksWithBestAffinity<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::sorter>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex, pTask->GetSubtaskCount());
+
+        case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
+            return FindSubtasksWithBestAffinity<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::sorter>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex, pTask->GetSubtaskCount());
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+    
+    return std::vector<ulong>();
+}
+    
+template<typename T, typename S>
+std::vector<ulong> pmAffinityTable::FindSubtasksWithBestAffinity(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, size_t pMachineIndex, ulong pSubtaskCount)
+{
+    T* lAffinityData = static_cast<T*>(pAffinityAddressSpace->GetMem());
+    
+    lAffinityData += pMachineIndex * pSubtaskCount;
+    
+    std::multimap<T, ulong, S> lArrangedSubtasks;
+    for(ulong i = pStartSubtask; i <= pEndSubtask; ++i)
+        lArrangedSubtasks.emplace(lAffinityData[i], i);
+    
+    EXCEPTION_ASSERT(lArrangedSubtasks.size() >= pCount);
+    
+    auto lIter = lArrangedSubtasks.begin();
+
+    std::vector<ulong> lSubtasksVector;
+    lSubtasksVector.reserve(pCount);
+
+    for(size_t i = 0; i < pCount; ++i, ++lIter)
+        lSubtasksVector.emplace_back(lIter->second);
+    
+    std::sort(lSubtasksVector.begin(), lSubtasksVector.end());
+    
+    return lSubtasksVector;
+}
+#endif
 
 }
 

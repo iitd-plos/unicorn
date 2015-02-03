@@ -119,6 +119,7 @@ remoteTaskAssignStruct::remoteTaskAssignStruct(pmLocalTask* pLocalTask)
     , sequenceNumber(pLocalTask->GetSequenceNumber())
 	, priority(pLocalTask->GetPriority())
 	, schedModel((ushort)(pLocalTask->GetSchedulingModel()))
+    , affinityCriterion(pLocalTask->GetAffinityCriterion())
     , flags(0)
 {
     if(pLocalTask->IsMultiAssignEnabled())

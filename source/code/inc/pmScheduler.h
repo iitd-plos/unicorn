@@ -73,7 +73,7 @@ enum eventIdentifier
 	SUBTASK_EXECUTION,
 	STEAL_REQUEST_STEALER,	/* Steal request genearted at source */
 	STEAL_PROCESS_TARGET,	/* Steal request sent to target */
-	STEAL_SUCCESS_TARGET,	/* Target sends success on steal */
+    STEAL_SUCCESS_TARGET,	/* Target sends success on steal */
 	STEAL_FAIL_TARGET,		/* Target rejects steal request */
 	STEAL_SUCCESS_STEALER,	/* Source processes receipt of STEAL_SUCCESS_RESPONSE */
 	STEAL_FAIL_STEALER,		/* Source processes receipt of STEAL_FAIL_RESPONSE */
@@ -94,6 +94,11 @@ enum eventIdentifier
     TERMINATE_TASK,
     REDUCTION_TERMINATION_EVENT,
     AFFINITY_TRANSFER_EVENT,
+#ifdef USE_AFFINITY_IN_STEAL
+    SUBTASK_EXECUTION_DISCONTIGUOUS_STEAL,
+    STEAL_SUCCESS_DISCONTIGUOUS_TARGET,
+    STEAL_SUCCESS_DISCONTIGUOUS_STEALER,
+#endif
     MAX_SCHEDULER_EVENTS
 };
 
@@ -129,6 +134,22 @@ struct subtaskExecEvent : public schedulerEvent
     , isStealResponse(pIsStealResponse)
     {}
 };
+
+#ifdef USE_AFFINITY_IN_STEAL
+struct subtaskExecDiscontiguousStealEvent : public schedulerEvent
+{
+    pmTask* task;
+	const pmProcessingElement* device;
+    std::vector<ulong> discontiguousStealData;
+    
+    subtaskExecDiscontiguousStealEvent(eventIdentifier pEventId, pmTask* pTask, const pmProcessingElement* pDevice, std::vector<ulong>&& pDiscontiguousStealData)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    , device(pDevice)
+    , discontiguousStealData(std::move(pDiscontiguousStealData))
+    {}
+};
+#endif
 
 struct stealRequestEvent : public schedulerEvent
 {
@@ -176,6 +197,24 @@ struct stealSuccessTargetEvent : public schedulerEvent
     {}
 };
 
+#ifdef USE_AFFINITY_IN_STEAL
+struct stealSuccessDiscontiguousTargetEvent : public schedulerEvent
+{
+    pmTask* task;
+	const pmProcessingElement* stealingDevice;
+	const pmProcessingElement* targetDevice;
+    std::vector<ulong> discontiguousStealData;
+    
+    stealSuccessDiscontiguousTargetEvent(eventIdentifier pEventId, pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    , stealingDevice(pStealingDevice)
+    , targetDevice(pTargetDevice)
+    , discontiguousStealData(std::move(pDiscontiguousStealData))
+    {}
+};
+#endif
+
 struct stealFailTargetEvent : public schedulerEvent
 {
 	const pmProcessingElement* stealingDevice;
@@ -203,6 +242,24 @@ struct stealSuccessStealerEvent : public schedulerEvent
     , range(pRange)
     {}
 };
+
+#ifdef USE_AFFINITY_IN_STEAL
+struct stealSuccessDiscontiguousStealerEvent : public schedulerEvent
+{
+    pmTask* task;
+	const pmProcessingElement* stealingDevice;
+	const pmProcessingElement* targetDevice;
+    std::vector<ulong> discontiguousStealData;
+    
+    stealSuccessDiscontiguousStealerEvent(eventIdentifier pEventId, pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    , stealingDevice(pStealingDevice)
+    , targetDevice(pTargetDevice)
+    , discontiguousStealData(std::move(pDiscontiguousStealData))
+    {}
+};
+#endif
 
 struct stealFailStealerEvent : public schedulerEvent
 {
@@ -470,9 +527,18 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void StealRequestEvent(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate);
 		void StealProcessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate, bool pMultiAssign);
 		void StealSuccessEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
-		void StealFailedEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
+        void StealFailedEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
 		void StealSuccessReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 		void StealFailedReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
+
+    #ifdef USE_AFFINITY_IN_STEAL
+        void PushEvent(pmTask* pTask, const pmProcessingElement* pDevice, std::vector<ulong>&& pDiscontiguousStealData);
+        void SendStealResponse(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData);
+    
+        void StealSuccessEvent(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData);
+        void StealSuccessReturnEvent(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData);
+    #endif
+
         void AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
 		void AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 		void TaskCancelEvent(pmTask* pTask);
@@ -546,6 +612,11 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void ServeStealRequest(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask, double pExecutionRate, bool pShouldMultiAssign);
 		void ReceiveFailedStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask);
 		void ReceiveStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
+    
+    #ifdef USE_AFFINITY_IN_STEAL
+        void PushToStub(pmTask* pTask, const pmProcessingElement* pDevice, std::vector<ulong>&& pDiscontiguousStealData);
+        void ReceiveStealResponse(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData);
+    #endif
 
         void RegisterPostTaskCompletionOwnershipTransfers(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, const std::vector<communicator::ownershipDataStruct>& pOwnershipVector, const std::vector<uint>& pAddressSpaceIndexVector);
     

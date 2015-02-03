@@ -169,6 +169,12 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 #endif
 #endif
 
+#define USE_AFFINITY_IN_STEAL
+
+
+/* Affinity Controls */
+#define MACHINES_PICK_BEST_SUBTASKS // defines whether subtasks choose best machines or vice versa
+
 
 /* Utility controls */
 #define BUILD_FOR_PMLIB_ANALYZER
@@ -198,7 +204,7 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 //#define DUMP_MPI_CALLS
 #define DUMP_SUBTASK_EXECUTION_PROFILE
 #define DUMP_EXCEPTION_BACKTRACE
-//#define DUMP_AFFINITY_DATA
+#define DUMP_AFFINITY_DATA
 
 #define EXIT_ON_EXCEPTION
 

@@ -225,6 +225,8 @@ class pmSubscriptionManager : public pmBase
 	public:
 		pmSubscriptionManager(pmTask* pTask);
     
+        void DropAllSubscriptions();
+
         void MoveConstantSubtaskDataToPreprocessorTaskHoldings();
     
         void FindSubtaskMemDependencies(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pNoJmpBuf = false);
@@ -300,8 +302,6 @@ class pmSubscriptionManager : public pmBase
     #endif
 
 	private:
-        void DropAllSubscriptions();
-
         void RegisterSubscriptionInternal(subscription::pmSubtask& pSubtask, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo);
 		void RegisterSubscriptionInternal(subscription::pmSubtask& pSubtask, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
 

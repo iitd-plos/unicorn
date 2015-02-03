@@ -151,6 +151,12 @@ bool pmSubtaskCB::HasOpenCLCallback() const
     return false;
 #endif
 }
+    
+pmSubtaskCallback_CPU pmSubtaskCB::GetCpuCallback() const
+{
+    return mCallback_CPU;
+}
+
 
 #ifdef SUPPORT_CUDA
 pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, std::vector<pmCudaMemcpyCommand>* pHostToDeviceCommands /* = NULL */, std::vector<pmCudaMemcpyCommand>* pDeviceToHostCommands /* = NULL */, void* pStreamPtr /* = NULL */) const

@@ -34,6 +34,7 @@
 #include "pmMemoryManager.h"
 #include "pmReducer.h"
 #include "pmRedistributor.h"
+#include "pmAffinityTable.h"
 
 #ifdef USE_STEAL_AGENT_PER_NODE
     #include "pmStealAgent.h"
@@ -122,7 +123,7 @@ void pmExecutionStub::InitializeEventTimeline()
 }
 #endif
 
-void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
+void pmExecutionStub::PushInternal(const pmSubtaskRange& pRange, bool pIsStealResponse)
 {
 	DEBUG_EXCEPTION_ASSERT(pRange.endSubtask >= pRange.startSubtask);
 
@@ -155,7 +156,12 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
 #endif
 
     AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, pRange, false, 0)));
+}
 
+void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
+{
+    PushInternal(pRange, pIsStealResponse);
+    
 #ifdef PROACTIVE_STEAL_REQUESTS
     if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()) && pIsStealResponse)
     {
@@ -170,6 +176,36 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
     }
 #endif
 }
+
+#ifdef USE_AFFINITY_IN_STEAL
+void pmExecutionStub::Push(pmTask* pTask, std::vector<ulong>&& pDiscontiguousStealData)
+{
+    DEBUG_EXCEPTION_ASSERT(pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()));
+
+    EXCEPTION_ASSERT(!pDiscontiguousStealData.empty() && (pDiscontiguousStealData.size() % 2 == 0));
+
+    auto lIter = pDiscontiguousStealData.begin(), lEndIter = pDiscontiguousStealData.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        ulong lFirstSubtask = *lIter;
+        ++lIter;
+
+        pmSubtaskRange lRange(pTask, NULL, lFirstSubtask, *lIter);
+        PushInternal(lRange, true);
+    }
+
+#ifdef PROACTIVE_STEAL_REQUESTS
+    #ifdef ENABLE_DYNAMIC_AGGRESSION
+        pTask->GetStealAgent()->RecordSuccessfulSteal(this);
+    #endif
+
+    auto lRequestIter = mStealRequestIssuedMap.find(pTask);
+    EXCEPTION_ASSERT(lRequestIter != mStealRequestIssuedMap.end() && lRequestIter->second);
+    
+    lRequestIter->second = false;
+#endif
+}
+#endif
 
 void pmExecutionStub::AddSubtaskRangeToExecutionQueue(const std::shared_ptr<stubEvent>& pSharedPtr)
 {
@@ -748,7 +784,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
 
     // In case no currentSubtaskIdValid is false, number of pending subtasks is one less than available (i.e. endSubtaskId - startSubtaskId + 1). This is done to ensure that all subtasks do not get stolen and atleast
     // one is left with the executing device. Stealing all is not implemented gracefully yet.
-    ulong lPendingExecutions = mCurrentSubtaskRangeStats ? (mCurrentSubtaskRangeStats->endSubtaskId - (mCurrentSubtaskRangeStats->currentSubtaskIdValid ? mCurrentSubtaskRangeStats->currentSubtaskId : mCurrentSubtaskRangeStats->startSubtaskId)) : 0;
+    ulong lPendingExecutions = (mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask) ? (mCurrentSubtaskRangeStats->endSubtaskId - (mCurrentSubtaskRangeStats->currentSubtaskIdValid ? mCurrentSubtaskRangeStats->currentSubtaskId : mCurrentSubtaskRangeStats->startSubtaskId)) : 0;
 
     if(lFound)
     {
@@ -759,38 +795,113 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
             ulong lStealCount = GetStealCount(pTask, pRequestingDevice, lAvailableSubtasks, lLocalRate, pRequestingDeviceExecutionRate);
             
             if(lStealCount)
-            {                        
-                pmSubtaskRange lStolenRange(pTask, NULL, (lExecEvent.range.endSubtask - lStealCount) + 1, lExecEvent.range.endSubtask);
-                
-                lExecEvent.range.endSubtask -= lStealCount;
-                
-                bool lCurrentSubtaskInRemainingRange = false;
-                if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && lExecEvent.range.startSubtask <= mCurrentSubtaskRangeStats->startSubtaskId && mCurrentSubtaskRangeStats->endSubtaskId <= lExecEvent.range.endSubtask)
+            {
+            #ifdef USE_AFFINITY_IN_STEAL
+                if(pTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY && lStealCount != lAvailableSubtasks && pRequestingDevice->GetMachine() != PM_LOCAL_MACHINE)
                 {
-                    DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned);
-                
-                    lCurrentSubtaskInRemainingRange = true;
-                }
-                
-                if(!lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // no pending subtask
-                {
-                    if(lExecEvent.rangeExecutedOnce)
-                        PostHandleRangeExecutionCompletion(lExecEvent.range, pmSuccess);
-                }
-                else if(lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // only current subtask range pending
-                {
-                    DEBUG_EXCEPTION_ASSERT(lExecEvent.lastExecutedSubtaskId == mCurrentSubtaskRangeStats->endSubtaskId);
+                    ulong lFirstSubtask = (lExecEvent.rangeExecutedOnce ? (lExecEvent.lastExecutedSubtaskId + 1) : lExecEvent.range.startSubtask);
+                    ulong lLastSubtask = lExecEvent.range.endSubtask;
 
-                    mCurrentSubtaskRangeStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask range finishes
+                    std::vector<ulong> lAffinitySubtasks = pmAffinityTable::FindSubtasksWithBestAffinity(pTask, lFirstSubtask, lExecEvent.range.endSubtask, lStealCount, pRequestingDevice->GetMachine());
+                    EXCEPTION_ASSERT(lAffinitySubtasks.size() == lStealCount);
+                    
+                    lStealSuccess = true;
+                    
+                    if(lAffinitySubtasks[0] != lExecEvent.range.startSubtask)
+                    {
+                        lExecEvent.range.endSubtask = lAffinitySubtasks[0] - 1;
+                        
+                        bool lCurrentSubtaskInRemainingRange = false;
+                        if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && lExecEvent.range.startSubtask <= mCurrentSubtaskRangeStats->startSubtaskId && mCurrentSubtaskRangeStats->endSubtaskId <= lExecEvent.range.endSubtask)
+                        {
+                            DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned);
+                            
+                            lCurrentSubtaskInRemainingRange = true;
+                        }
+
+                        if(!lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // no pending subtask
+                        {
+                            if(lExecEvent.rangeExecutedOnce)
+                                PostHandleRangeExecutionCompletion(lExecEvent.range, pmSuccess);
+                        }
+                        else if(lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // only current subtask range pending
+                        {
+                            DEBUG_EXCEPTION_ASSERT(lExecEvent.lastExecutedSubtaskId == mCurrentSubtaskRangeStats->endSubtaskId);
+
+                            mCurrentSubtaskRangeStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask range finishes
+                        }
+                        else // pending range does not have current subtask or has more subtasks after the current one
+                        {
+                            SwitchThread(std::move(lTaskEvent), lPriority);
+                        }
+                    }
+
+                    std::vector<ulong> lStolenRanges;
+                    size_t lAffinityIndex = 0;
+
+                    while(lAffinityIndex < lStealCount)
+                    {
+                        ulong lStartSubtask = lAffinitySubtasks[lAffinityIndex];
+                        while(lAffinityIndex + 1 < lStealCount && lAffinitySubtasks[lAffinityIndex + 1] == lAffinitySubtasks[lAffinityIndex] + 1)
+                            ++lAffinityIndex;
+
+                        lStolenRanges.emplace_back(lStartSubtask);
+                        lStolenRanges.emplace_back(lAffinitySubtasks[lAffinityIndex]);
+
+                        if(lAffinityIndex + 1 < lStealCount)
+                        {
+                            EXCEPTION_ASSERT(lAffinitySubtasks[lAffinityIndex + 1] != lAffinitySubtasks[lAffinityIndex] + 1);
+
+                            pmSubtaskRange lNextRange(pTask, NULL, lAffinitySubtasks[lAffinityIndex] + 1, lAffinitySubtasks[lAffinityIndex + 1] - 1);
+                            AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, lNextRange, false, 0)));
+                        }
+                        
+                        ++lAffinityIndex;
+                    }
+
+                    if(lAffinitySubtasks[lStealCount - 1] != lLastSubtask)
+                    {
+                        pmSubtaskRange lNextRange(pTask, NULL, lAffinitySubtasks[lStealCount - 1] + 1, lLastSubtask);
+                        AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, lNextRange, false, 0)));
+                    }
+
+                    pmScheduler::GetScheduler()->StealSuccessEvent(pTask, pRequestingDevice, lLocalDevice, std::move(lStolenRanges));
                 }
-                else // pending range does not have current subtask or has more subtasks after the current one
+                else
+            #endif
                 {
-                    if(lExecEvent.rangeExecutedOnce || !(lStolenRange.startSubtask == lExecEvent.range.startSubtask && lStolenRange.endSubtask == lExecEvent.range.endSubtask + lStealCount))
-                        SwitchThread(std::move(lTaskEvent), lPriority);
+                    pmSubtaskRange lStolenRange(pTask, NULL, (lExecEvent.range.endSubtask - lStealCount) + 1, lExecEvent.range.endSubtask);
+                    
+                    lExecEvent.range.endSubtask -= lStealCount;
+
+                    bool lCurrentSubtaskInRemainingRange = false;
+                    if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && lExecEvent.range.startSubtask <= mCurrentSubtaskRangeStats->startSubtaskId && mCurrentSubtaskRangeStats->endSubtaskId <= lExecEvent.range.endSubtask)
+                    {
+                        DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned);
+                    
+                        lCurrentSubtaskInRemainingRange = true;
+                    }
+
+                    if(!lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // no pending subtask
+                    {
+                        if(lExecEvent.rangeExecutedOnce)
+                            PostHandleRangeExecutionCompletion(lExecEvent.range, pmSuccess);
+                    }
+                    else if(lCurrentSubtaskInRemainingRange && lExecEvent.lastExecutedSubtaskId == lExecEvent.range.endSubtask) // only current subtask range pending
+                    {
+                        DEBUG_EXCEPTION_ASSERT(lExecEvent.lastExecutedSubtaskId == mCurrentSubtaskRangeStats->endSubtaskId);
+
+                        mCurrentSubtaskRangeStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask range finishes
+                    }
+                    else // pending range does not have current subtask or has more subtasks after the current one
+                    {
+                        if(lExecEvent.rangeExecutedOnce || !(lStolenRange.startSubtask == lExecEvent.range.startSubtask && lStolenRange.endSubtask == lExecEvent.range.endSubtask + lStealCount))
+                            SwitchThread(std::move(lTaskEvent), lPriority);
+                    }
+                    
+                    lStealSuccess = true;
+                    pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
                 }
-                
-                lStealSuccess = true;
-                pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
             }
             else
             {
@@ -812,19 +923,74 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
         
         if(lStealCount)
         {
-            pmSubtaskRange lStolenRange(pTask, NULL, (mCurrentSubtaskRangeStats->endSubtaskId - lStealCount) + 1, mCurrentSubtaskRangeStats->endSubtaskId);
-        
-            mCurrentSubtaskRangeStats->endSubtaskId -= lStealCount;
-            mCurrentSubtaskRangeStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask range finishes
-            
-            DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->endSubtaskId >= mCurrentSubtaskRangeStats->startSubtaskId);
+        #ifdef USE_AFFINITY_IN_STEAL
+            if(pTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY && lStealCount != lPendingExecutions && pRequestingDevice->GetMachine() != PM_LOCAL_MACHINE)
+            {
+                ulong lFirstSubtask = (mCurrentSubtaskRangeStats->currentSubtaskIdValid ? mCurrentSubtaskRangeStats->currentSubtaskId : mCurrentSubtaskRangeStats->startSubtaskId) + 1;
+                ulong lLastSubtask = mCurrentSubtaskRangeStats->endSubtaskId;
 
-            lStealSuccess = true;
-            pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
+                std::vector<ulong> lAffinitySubtasks = pmAffinityTable::FindSubtasksWithBestAffinity(pTask, lFirstSubtask, mCurrentSubtaskRangeStats->endSubtaskId, lStealCount, pRequestingDevice->GetMachine());
+                EXCEPTION_ASSERT(lAffinitySubtasks.size() == lStealCount);
+                
+            #ifdef USE_STEAL_AGENT_PER_NODE
+                pTask->GetStealAgent()->DeregisterExecutingSubtasks(this, mCurrentSubtaskRangeStats->endSubtaskId - lAffinitySubtasks[0] + 1);
+            #endif
 
-        #ifdef USE_STEAL_AGENT_PER_NODE
-            pTask->GetStealAgent()->DeregisterExecutingSubtasks(this, lStealCount);
+                mCurrentSubtaskRangeStats->endSubtaskId = lAffinitySubtasks[0] - 1;
+                mCurrentSubtaskRangeStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask range finishes
+
+                DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->endSubtaskId >= mCurrentSubtaskRangeStats->startSubtaskId);
+
+                lStealSuccess = true;
+
+                std::vector<ulong> lStolenRanges;
+                size_t lAffinityIndex = 0;
+
+                while(lAffinityIndex < lStealCount)
+                {
+                    ulong lStartSubtask = lAffinitySubtasks[lAffinityIndex];
+                    while(lAffinityIndex + 1 < lStealCount && lAffinitySubtasks[lAffinityIndex + 1] == lAffinitySubtasks[lAffinityIndex] + 1)
+                        ++lAffinityIndex;
+
+                    lStolenRanges.emplace_back(lStartSubtask);
+                    lStolenRanges.emplace_back(lAffinitySubtasks[lAffinityIndex]);
+
+                    if(lAffinityIndex + 1 < lStealCount)
+                    {
+                        EXCEPTION_ASSERT(lAffinitySubtasks[lAffinityIndex + 1] != lAffinitySubtasks[lAffinityIndex] + 1);
+
+                        pmSubtaskRange lNextRange(pTask, NULL, lAffinitySubtasks[lAffinityIndex] + 1, lAffinitySubtasks[lAffinityIndex + 1] - 1);
+                        AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, lNextRange, false, 0)));
+                    }
+                    
+                    ++lAffinityIndex;
+                }
+                
+                if(lAffinitySubtasks[lStealCount - 1] != lLastSubtask)
+                {
+                    pmSubtaskRange lNextRange(pTask, NULL, lAffinitySubtasks[lStealCount - 1] + 1, lLastSubtask);
+                    AddSubtaskRangeToExecutionQueue(std::shared_ptr<stubEvent>(new subtaskExecEvent(SUBTASK_EXEC, lNextRange, false, 0)));
+                }
+                
+                pmScheduler::GetScheduler()->StealSuccessEvent(pTask, pRequestingDevice, lLocalDevice, std::move(lStolenRanges));
+            }
+            else
         #endif
+            {
+                pmSubtaskRange lStolenRange(pTask, NULL, (mCurrentSubtaskRangeStats->endSubtaskId - lStealCount) + 1, mCurrentSubtaskRangeStats->endSubtaskId);
+            
+                mCurrentSubtaskRangeStats->endSubtaskId -= lStealCount;
+                mCurrentSubtaskRangeStats->forceAckFlag = true;  // send acknowledgement of the done range after current subtask range finishes
+                
+                DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats->endSubtaskId >= mCurrentSubtaskRangeStats->startSubtaskId);
+
+                lStealSuccess = true;
+                pmScheduler::GetScheduler()->StealSuccessEvent(pRequestingDevice, lLocalDevice, lStolenRange);
+
+            #ifdef USE_STEAL_AGENT_PER_NODE
+                pTask->GetStealAgent()->DeregisterExecutingSubtasks(this, lStealCount);
+            #endif
+            }
         }
     }
     else if(pTask->IsMultiAssignEnabled() && pShouldMultiAssign && mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask && mCurrentSubtaskRangeStats->originalAllottee && !mCurrentSubtaskRangeStats->reassigned

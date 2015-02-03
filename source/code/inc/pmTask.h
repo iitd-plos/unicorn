@@ -64,7 +64,7 @@ class pmTask : public pmBase
     friend void AddressSpacesLockCallback(const pmCommandPtr& pCountDownCommand);
 
 	protected:
-        pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags);
+        pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags, pmAffinityCriterion pAffinityCriterion);
 
 	public:
 		virtual ~pmTask();
@@ -178,6 +178,8 @@ class pmTask : public pmBase
     #ifdef USE_STEAL_AGENT_PER_NODE
         pmStealAgent* GetStealAgent();
     #endif
+    
+        pmAffinityCriterion GetAffinityCriterion() const;
 
         void SetAffinityMappings(std::vector<ulong>&& pLogicalToPhysical, std::vector<ulong>&& pPhysicalToLogical);
         ulong GetPhysicalSubtaskId(ulong pLogicalSubtaskId) const;
@@ -260,7 +262,9 @@ class pmTask : public pmBase
     #ifdef USE_STEAL_AGENT_PER_NODE
         std::unique_ptr<pmStealAgent> mStealAgentPtr;
     #endif
-    
+
+        pmAffinityCriterion mAffinityCriterion;
+
         std::vector<ulong> mLogicalToPhysicalSubtaskMappings, mPhysicalToLogicalSubtaskMappings;
     
     protected:
@@ -308,7 +312,7 @@ class pmLocalTask : public pmTask
         void SetPreprocessorTask(pmLocalTask* pLocalTask);
         const pmLocalTask* GetPreprocessorTask() const;
     
-        pmAffinityCriterion GetAffinityCriterion() const;
+        pmAddressSpace* GetAffinityAddressSpace() const;
     
         void ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace);
         void StartScheduling();
@@ -337,7 +341,6 @@ class pmLocalTask : public pmTask
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
     
         pmLocalTask* mPreprocessorTask;
-        pmAffinityCriterion mAffinityCriterion;
     
         static ulong& GetSequenceId();   // Task number at the originating host
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetSequenceLock();
@@ -346,7 +349,7 @@ class pmLocalTask : public pmTask
 class pmRemoteTask : public pmTask
 {
 	public:
-        pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, const pmMachine* pOriginatingHost, ulong pSequenceNumber, std::vector<const pmProcessingElement*>&& pDevices, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL);
+        pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, const pmMachine* pOriginatingHost, ulong pSequenceNumber, std::vector<const pmProcessingElement*>&& pDevices, const pmCluster* pCluster = PM_GLOBAL_CLUSTER, ushort pPriority = DEFAULT_PRIORITY_LEVEL, scheduler::schedulingModel pSchedulingModel = DEFAULT_SCHEDULING_MODEL, ushort pTaskFlags = DEFAULT_TASK_FLAGS_VAL, pmAffinityCriterion pAffinityCriterion = MAX_AFFINITY_CRITERION);
 
         virtual ~pmRemoteTask();
 
@@ -361,7 +364,8 @@ class pmRemoteTask : public pmTask
         virtual void MarkUserSideTaskCompletion();
         void MarkReductionFinished();
     
-        void ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSubtaskMapping);
+        void ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSubtaskMapping, pmAddressSpace* pAffinityAddressSpace);
+        pmAddressSpace* GetAffinityAddressSpace();
     
 	private:
         finalize_ptr<char, deleteArrayDeallocator<char>> mTaskConfAutoPtr;
@@ -370,6 +374,11 @@ class pmRemoteTask : public pmTask
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
 
         std::vector<const pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined
+        pmAddressSpace* mAffinityAddressSpace;
+    
+    #ifdef USE_AFFINITY_IN_STEAL
+        bool mAffinityAddressSpaceFetched;
+    #endif
 };
 
 } // end namespace pm

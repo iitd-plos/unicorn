@@ -332,6 +332,21 @@ size_t pmPreprocessorTask::GetSampleSizeForAffinityCriterion(pmAffinityCriterion
     return 0;
 }
     
+bool pmPreprocessorTask::IsAffinityTask(pmTask* pTask)
+{
+    const pmCallbackUnit* lCallbackUnit = pTask->GetCallbackUnit();
+    
+    if(lCallbackUnit)
+    {
+        const pmSubtaskCB* lSubtaskCB = lCallbackUnit->GetSubtaskCB();
+        
+        if(lSubtaskCB && lSubtaskCB->GetCpuCallback() == preprocessorTask_cpuCallback && ((preprocessorTaskConf*)pTask->GetTaskConfiguration())->taskType == AFFINITY_DEDUCER)
+            return true;
+    }
+    
+    return false;
+}
+    
 };
 
 

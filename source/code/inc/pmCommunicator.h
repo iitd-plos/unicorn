@@ -173,6 +173,7 @@ struct remoteTaskAssignStruct
     ulong sequenceNumber;   // Sequence number of task on originating host
     ushort priority;
     ushort schedModel;
+    ushort affinityCriterion;   // enum pmAffinityCriterion
     ushort flags;
 
     remoteTaskAssignStruct()
@@ -185,6 +186,7 @@ struct remoteTaskAssignStruct
     , sequenceNumber(0)
     , priority(MIN_PRIORITY_LEVEL)
     , schedModel(std::numeric_limits<ushort>::max())
+    , affinityCriterion((ushort)MAX_AFFINITY_CRITERION)
     , flags(0)
     {
         callbackKey[0] = '\0';
@@ -194,7 +196,7 @@ struct remoteTaskAssignStruct
 
     enum fieldCount
     {
-        FIELD_COUNT_VALUE = 11
+        FIELD_COUNT_VALUE = 12
     };
 
 };
@@ -1010,6 +1012,7 @@ struct affinityDataTransferPacked
 {
     uint originatingHost;
     ulong sequenceNumber;	// sequence number of local task object (on originating host)
+    memoryIdentifierStruct affinityAddressSpace;
     uint transferDataElements;
     finalize_ptr<ulong, deleteArrayDeallocator<ulong>> logicalToPhysicalSubtaskMapping;
 
@@ -1019,13 +1022,43 @@ struct affinityDataTransferPacked
     , transferDataElements(0)
     {}
     
-    affinityDataTransferPacked(uint pOriginatingHost, ulong pSequenceNumber, uint pElementCount, finalize_ptr<ulong, deleteArrayDeallocator<ulong>>&& pLogicalToPhysicalSubtaskMapping)
+    affinityDataTransferPacked(uint pOriginatingHost, ulong pSequenceNumber, uint pMemOwnerHost, ulong pGenerationNumber, uint pElementCount, finalize_ptr<ulong, deleteArrayDeallocator<ulong>>&& pLogicalToPhysicalSubtaskMapping)
     : originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
+    , affinityAddressSpace(pMemOwnerHost, pGenerationNumber)
     , transferDataElements(pElementCount)
     , logicalToPhysicalSubtaskMapping(std::move(pLogicalToPhysicalSubtaskMapping))
     {}
 };
+
+#ifdef USE_AFFINITY_IN_STEAL
+struct stealSuccessDiscontiguousPacked
+{
+    uint stealingDeviceGlobalIndex;
+    uint targetDeviceGlobalIndex;
+    uint originatingHost;
+    ulong sequenceNumber;	// sequence number of local task object (on originating host)
+    uint stealDataElements;
+    std::vector<ulong> discontiguousStealData;
+    
+    stealSuccessDiscontiguousPacked()
+    : stealingDeviceGlobalIndex(std::numeric_limits<uint>::max())
+    , targetDeviceGlobalIndex(std::numeric_limits<uint>::max())
+    , originatingHost(std::numeric_limits<uint>::max())
+    , sequenceNumber(std::numeric_limits<ulong>::max())
+    , stealDataElements(0)
+    {}
+    
+    stealSuccessDiscontiguousPacked(uint pStealingDeviceGlobalIndex, uint pTargetDeviceGlobalIndex, uint pOriginatingHost, ulong pSequenceNumber, uint pElementCount, std::vector<ulong>&& pDiscontiguousStealData)
+    : stealingDeviceGlobalIndex(pStealingDeviceGlobalIndex)
+    , targetDeviceGlobalIndex(pTargetDeviceGlobalIndex)
+    , originatingHost(pOriginatingHost)
+    , sequenceNumber(pSequenceNumber)
+    , stealDataElements(pElementCount)
+    , discontiguousStealData(std::move(pDiscontiguousStealData))
+    {}
+};
+#endif
     
 }
 

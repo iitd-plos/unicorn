@@ -597,7 +597,7 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
             
             EXCEPTION_ASSERT(lData->transferDataElements);
             
-			lLength += 2 * sizeof(uint) + sizeof(ulong) + lData->transferDataElements * sizeof(ulong);
+			lLength += 2 * sizeof(uint) + sizeof(ulong) + sizeof(memoryIdentifierStruct) + lData->transferDataElements * sizeof(ulong);
             
 			if(lLength > __MAX_SIGNED(int))
 				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
@@ -614,7 +614,10 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 
-			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->transferDataElements, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->affinityAddressSpace, 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->transferDataElements, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
             
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(lData->logicalToPhysicalSubtaskMapping.get_ptr(), lData->transferDataElements, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
@@ -624,6 +627,49 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
             
             break;
         }
+            
+    #ifdef USE_AFFINITY_IN_STEAL
+        case STEAL_SUCCESS_DISCONTIGUOUS_PACKED:
+        {
+            stealSuccessDiscontiguousPacked* lData = (stealSuccessDiscontiguousPacked*)(pCommand->GetData());
+            EXCEPTION_ASSERT(lData);
+            
+            EXCEPTION_ASSERT(lData->stealDataElements && (lData->stealDataElements % 2 == 0));
+            
+			lLength += 4 * sizeof(uint) + sizeof(ulong) + lData->stealDataElements * sizeof(ulong);
+            
+			if(lLength > __MAX_SIGNED(int))
+				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
+            
+            lPackedDataAutoPtr.reset(new char[lLength]);
+			char* lPackedData = lPackedDataAutoPtr.get_ptr();
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->stealingDeviceGlobalIndex, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+			
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->targetDeviceGlobalIndex, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->originatingHost, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->stealDataElements, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->discontiguousStealData[0], lData->stealDataElements, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+            lLength = lPos;
+            
+            break;
+        }
+    #endif
 
 		default:
 			PMTHROW(pmFatalErrorException());
@@ -681,6 +727,12 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
         case AFFINITY_DATA_TRANSFER_TAG:
             lDataType = AFFINITY_DATA_TRANSFER_PACKED;
             break;
+            
+    #ifdef USE_AFFINITY_IN_STEAL
+        case STEAL_SUCCESS_DISCONTIGUOUS_TAG:
+            lDataType = STEAL_SUCCESS_DISCONTIGUOUS_PACKED;
+            break;
+    #endif
 
         default:
             PMTHROW(pmFatalErrorException());
@@ -947,7 +999,10 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->transferDataElements, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->affinityAddressSpace), 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->transferDataElements, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
             EXCEPTION_ASSERT(lPackedData->transferDataElements);
@@ -961,6 +1016,39 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
             
             break;
         }
+            
+    #ifdef USE_AFFINITY_IN_STEAL
+        case STEAL_SUCCESS_DISCONTIGUOUS_PACKED:
+        {
+            finalize_ptr<stealSuccessDiscontiguousPacked> lPackedData(new stealSuccessDiscontiguousPacked());
+
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->stealingDeviceGlobalIndex, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+			
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->targetDeviceGlobalIndex, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->originatingHost, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+        
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->stealDataElements, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            EXCEPTION_ASSERT(lPackedData->stealDataElements && (lPackedData->stealDataElements % 2 == 0));
+            
+            lPackedData->discontiguousStealData.resize(lPackedData->stealDataElements);
+            
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->discontiguousStealData[0], lPackedData->stealDataElements, MPI_UNSIGNED_LONG, lCommunicator) != MPI_SUCCESS)) )
+                PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            
+            lCommand = pmCommunicatorCommand<stealSuccessDiscontiguousPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, lCompletionCallback);
+            
+            break;
+        }
+    #endif
         
 		default:
 			PMTHROW(pmFatalErrorException());
@@ -979,6 +1067,9 @@ bool pmMPI::IsUnknownLengthTag(communicatorCommandTags pTag)
             pTag == SEND_ACKNOWLEDGEMENT_TAG ||
             pTag == OWNERSHIP_TRANSFER_TAG ||
             pTag == MULTI_FILE_OPERATIONS_TAG ||
+        #ifdef USE_AFFINITY_IN_STEAL
+            pTag == STEAL_SUCCESS_DISCONTIGUOUS_TAG ||
+        #endif
             pTag == AFFINITY_DATA_TRANSFER_TAG);
 }
 
@@ -1364,6 +1455,9 @@ MPI_Datatype pmMPI::GetDataTypeMPI(communicatorDataTypes pDataType)
         case OWNERSHIP_TRANSFER_PACKED:
         case MULTI_FILE_OPERATIONS_PACKED:
         case AFFINITY_DATA_TRANSFER_PACKED:
+    #ifdef USE_AFFINITY_IN_STEAL
+        case STEAL_SUCCESS_DISCONTIGUOUS_PACKED:
+    #endif
 			return MPI_PACKED;
 			break;
 
@@ -1621,7 +1715,8 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 7, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.priority, lPriorityMPI, MPI_UNSIGNED_SHORT, 8, 1);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.schedModel, lSchedModelMPI, MPI_UNSIGNED_SHORT, 9, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.flags, lFlagsMPI, MPI_UNSIGNED_SHORT, 10, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.affinityCriterion, lFlagsAffinityCriterion, MPI_UNSIGNED_SHORT, 10, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.flags, lFlagsMPI, MPI_UNSIGNED_SHORT, 11, 1);
 
 			break;
 		}

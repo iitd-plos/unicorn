@@ -40,14 +40,28 @@ public:
     
     void PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
     void CreateSubtaskMappings();
+    
+#ifdef USE_AFFINITY_IN_STEAL
+    static std::vector<ulong> FindSubtasksWithBestAffinity(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine);
+#endif
 
 private:
     template<typename T, typename S>
     void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
 
+#ifdef USE_AFFINITY_IN_STEAL
+    template<typename T, typename S>
+    static std::vector<ulong> FindSubtasksWithBestAffinity(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, size_t pMachineIndex, ulong pSubtaskCount);
+#endif
+
     pmLocalTask* mLocalTask;
     pmAffinityCriterion mAffinityCriterion;
+    
+#ifdef MACHINES_PICK_BEST_SUBTASKS
+    pmTable<uint, std::vector<ulong>> mTable; // machine index versus subtasks in order of preference
+#else
     pmTable<ulong, std::vector<const pmMachine*>> mTable; // subtask id versus machines in order of preference
+#endif
 };
 
 } // end namespace pm

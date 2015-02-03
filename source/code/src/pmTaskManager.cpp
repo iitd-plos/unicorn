@@ -86,7 +86,7 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(communicator::remoteTaskAssignPack
     for(uint i = 0; i < pRemoteTaskData->taskStruct.assignedDeviceCount; ++i)
         lDevices.emplace_back(pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(((uint*)pRemoteTaskData->devices.get_ptr())[i]));
 
-	pmRemoteTask* lRemoteTask = new pmRemoteTask(pRemoteTaskData->taskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, std::move(lTaskMemVector), pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, std::move(lDevices), PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), pRemoteTaskData->taskStruct.flags);
+	pmRemoteTask* lRemoteTask = new pmRemoteTask(pRemoteTaskData->taskConf, pRemoteTaskData->taskStruct.taskConfLength, pRemoteTaskData->taskStruct.taskId, std::move(lTaskMemVector), pRemoteTaskData->taskStruct.subtaskCount, lCallbackUnit, pmMachinePool::GetMachinePool()->GetMachine(pRemoteTaskData->taskStruct.originatingHost), pRemoteTaskData->taskStruct.sequenceNumber, std::move(lDevices), PM_GLOBAL_CLUSTER, pRemoteTaskData->taskStruct.priority, (scheduler::schedulingModel)(pRemoteTaskData->taskStruct.schedModel), pRemoteTaskData->taskStruct.flags, (pmAffinityCriterion)(pRemoteTaskData->taskStruct.affinityCriterion));
 
     SubmitTask(lRemoteTask);
     lRemoteTask->LockAddressSpaces();

@@ -266,6 +266,10 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 		void Push(const pmSubtaskRange& pRange, bool pIsStealResponse);
     
+    #ifdef USE_AFFINITY_IN_STEAL
+        void Push(pmTask* pTask, std::vector<ulong>&& pDiscontiguousStealData);
+    #endif
+    
 		virtual void ThreadSwitchCallback(std::shared_ptr<execStub::stubEvent>& pEvent);
 
 		virtual std::string GetDeviceName() = 0;
@@ -329,6 +333,8 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         virtual void TerminateUserModeExecution() = 0;
 
 	private:
+        void PushInternal(const pmSubtaskRange& pRange, bool pIsStealResponse);
+
         void CheckTermination();
         void AddSubtaskRangeToExecutionQueue(const std::shared_ptr<execStub::stubEvent>& pSharedPtr);
 
@@ -371,7 +377,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
                 bool& mPrematureTermination;
                 pmExecutionStub* mStub;
         } currentSubtaskRangeTerminus;
-    
+
         ulong GetStealCount(pmTask* pTask, const pmProcessingElement* pRequestingDevice, ulong pAvailableSubtasks, double pLocalExecutionRate, double pRequestingDeviceExecutionRate);
     
         void ProcessEvent(execStub::stubEvent& pEvent);

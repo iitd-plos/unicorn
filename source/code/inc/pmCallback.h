@@ -75,6 +75,8 @@ class pmSubtaskCB : public pmCallback
         bool HasCustomGpuCallback() const;
         bool HasBothCpuAndGpuCallbacks() const;
         bool HasOpenCLCallback() const;
+    
+        pmSubtaskCallback_CPU GetCpuCallback() const;
 
 	private:
 		pmSubtaskCallback_CPU mCallback_CPU;

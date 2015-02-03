@@ -53,6 +53,7 @@ public:
     void DeduceAffinityAndEvaluateDependency(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion);
 
     static size_t GetSampleSizeForAffinityCriterion(pmAffinityCriterion pAffinityCriterion);
+    static bool IsAffinityTask(pmTask* pTask);
 
 private:
     pmPreprocessorTask();

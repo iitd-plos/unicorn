@@ -37,6 +37,7 @@
 #include "pmExecutionStub.h"
 #include "pmUtility.h"
 #include "pmAffinityTable.h"
+#include "pmPreprocessorTask.h"
 
 #ifdef USE_STEAL_AGENT_PER_NODE
 #include "pmStealAgent.h"
@@ -62,7 +63,7 @@ void AddressSpacesLockCallback(const pmCommandPtr& pCountDownCommand)
 }
     
 /* class pmTask */
-pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags)
+pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, uint pAssignedDeviceCount, const pmMachine* pOriginatingHost, const pmCluster* pCluster, ushort pPriority, scheduler::schedulingModel pSchedulingModel, ushort pTaskFlags, pmAffinityCriterion pAffinityCriterion)
 	: mTaskId(pTaskId)
 	, mCallbackUnit(pCallbackUnit)
 	, mSubtaskCount(pSubtaskCount)
@@ -102,6 +103,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 #ifdef USE_STEAL_AGENT_PER_NODE
     , mStealAgentPtr((pmScheduler::SchedulingModelSupportsStealing(mSchedulingModel) ? new pmStealAgent(this) : NULL))
 #endif
+    , mAffinityCriterion(pAffinityCriterion)
 	, mAssignedDeviceCount(pAssignedDeviceCount)
     , mLastReductionScratchBuffer(NULL)
 {
@@ -126,6 +128,8 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 
 pmTask::~pmTask()
 {
+    mSubscriptionManager.DropAllSubscriptions();
+
     if(mTaskConf)
         free(mTaskConf);
 }
@@ -854,6 +858,11 @@ void pmTask::SetSequenceNumber(ulong pSequenceNumber)
     mSequenceNumber = pSequenceNumber;
 }
 
+pmAffinityCriterion pmTask::GetAffinityCriterion() const
+{
+    return mAffinityCriterion;
+}
+    
 pmSubscriptionVisibilityType pmTask::GetAddressSpaceSubscriptionVisibility(const pmAddressSpace* pAddressSpace, const pmExecutionStub* pStub) const
 {
     DEBUG_EXCEPTION_ASSERT(mAddressSpaceTaskMemIndexMap.find(pAddressSpace) != mAddressSpaceTaskMemIndexMap.end());
@@ -964,7 +973,7 @@ bool pmTask::IsOpenCLTask() const
 
 /* class pmLocalTask */
 pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* DEFAULT_TASK_FLAGS_VAL */, pmAffinityCriterion pAffinityCriterion /* = MAX_AFFINITY_CRITERION */)
-	: pmTask(pTaskConf, pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags)
+	: pmTask(pTaskConf, pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags, pAffinityCriterion)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
     , mUserSideTaskCompleted(false)
@@ -972,7 +981,6 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, s
     , mLocalStubsFreeOfShadowMemCommits(false)
     , mCompletionLock __LOCK_NAME__("pmLocalTask::mCompletionLock")
     , mPreprocessorTask(NULL)
-    , mAffinityCriterion(pAffinityCriterion)
 {
     ulong lCurrentTime = GetIntegralCurrentTimeInSecs();
     ulong lTaskTimeOutTriggerTime = lCurrentTime + pTaskTimeOutInSecs;
@@ -1086,10 +1094,14 @@ const pmLocalTask* pmLocalTask::GetPreprocessorTask() const
 {
     return mPreprocessorTask;
 }
-    
-pmAffinityCriterion pmLocalTask::GetAffinityCriterion() const
+
+pmAddressSpace* pmLocalTask::GetAffinityAddressSpace() const
 {
-    return mAffinityCriterion;
+    if(!mPreprocessorTask)
+        return NULL;
+    
+    const std::vector<pmTaskMemory>& lPreprocessorTaskMemVector = mPreprocessorTask->GetTaskMemVector();
+    return lPreprocessorTaskMemVector[lPreprocessorTaskMemVector.size() - 1].addressSpace;
 }
     
 void pmLocalTask::ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace)
@@ -1099,7 +1111,7 @@ void pmLocalTask::ComputeAffinityData(pmAddressSpace* pAffinityAddressSpace)
 
     EXCEPTION_ASSERT(!mAffinityTable.get_ptr());
     
-    mAffinityTable.reset(new pmAffinityTable(this, mAffinityCriterion));
+    mAffinityTable.reset(new pmAffinityTable(this, GetAffinityCriterion()));
     mAffinityTable->PopulateAffinityTable(pAffinityAddressSpace, lMachinesVector);
 }
 
@@ -1341,14 +1353,18 @@ pmSubtaskManager* pmLocalTask::GetSubtaskManager()
 
 
 /* class pmRemoteTask */
-pmRemoteTask::pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, const pmMachine* pOriginatingHost, ulong pSequenceNumber, std::vector<const pmProcessingElement*>&& pDevices, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* = DEFAULT_TASK_FLAGS_VAL */)
-	: pmTask(pTaskConf.get_ptr(), pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, (uint)pDevices.size(), pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags)
+pmRemoteTask::pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, const pmMachine* pOriginatingHost, ulong pSequenceNumber, std::vector<const pmProcessingElement*>&& pDevices, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* = DEFAULT_TASK_FLAGS_VAL */, pmAffinityCriterion pAffinityCriterion /* = MAX_AFFINITY_CRITERION */)
+	: pmTask(pTaskConf.get_ptr(), pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, (uint)pDevices.size(), pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags, pAffinityCriterion)
     , mTaskConfAutoPtr(std::move(pTaskConf))
     , mUserSideTaskCompleted(false)
     , mLocalStubsFreeOfCancellations(false)
     , mLocalStubsFreeOfShadowMemCommits(false)
     , mCompletionLock __LOCK_NAME__("pmRemoteTask::mCompletionLock")
     , mDevices(pDevices)
+    , mAffinityAddressSpace(NULL)
+#ifdef USE_AFFINITY_IN_STEAL
+    , mAffinityAddressSpaceFetched(false)
+#endif
 {
     SetSequenceNumber(pSequenceNumber);
 
@@ -1362,14 +1378,14 @@ pmRemoteTask::~pmRemoteTask()
 void pmRemoteTask::DoPostInternalCompletion()
 {
     FlushMemoryOwnerships();
-    UnlockMemories();    
+    UnlockMemories();
 }
 
 std::vector<const pmProcessingElement*>& pmRemoteTask::GetAssignedDevices()
 {
 	return mDevices;
 }
-    
+
 void pmRemoteTask::TerminateTask()
 {
     pmScheduler::GetScheduler()->TerminateTaskEvent(this);
@@ -1443,7 +1459,7 @@ void pmRemoteTask::MarkSubtaskExecutionFinished()
         GetReducer()->SignalSendToMachineAboutNoLocalReduction();
 }
 
-void pmRemoteTask::ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSubtaskMapping)
+void pmRemoteTask::ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSubtaskMapping, pmAddressSpace* pAffinityAddressSpace)
 {
     ulong lSubtaskCount = GetSubtaskCount();
     EXCEPTION_ASSERT(pLogicalToPhysicalSubtaskMapping.size() == lSubtaskCount);
@@ -1453,8 +1469,31 @@ void pmRemoteTask::ReceiveAffinityData(std::vector<ulong>&& pLogicalToPhysicalSu
         lPhysicalToLogicalSubtaskMapping[pLogicalToPhysicalSubtaskMapping[i]] = i;
 
     SetAffinityMappings(std::move(pLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
+    
+    mAffinityAddressSpace = pAffinityAddressSpace;
+    
+#ifdef USE_AFFINITY_IN_STEAL
+    // Pre-fetch Affinity address space on remote hosts
+    pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(1, GetPriority(), 0, NULL);
+    lCountDownCommand->MarkExecutionStart();
+
+    mAffinityAddressSpace->FetchAsync(GetPriority(), lCountDownCommand);
+#endif
 
     Start();
+}
+    
+pmAddressSpace* pmRemoteTask::GetAffinityAddressSpace()
+{
+#ifdef USE_AFFINITY_IN_STEAL
+    if(!mAffinityAddressSpaceFetched)
+    {
+        mAffinityAddressSpace->Fetch(GetPriority());
+        mAffinityAddressSpaceFetched = true;
+    }
+#endif
+
+    return mAffinityAddressSpace;
 }
 
 };

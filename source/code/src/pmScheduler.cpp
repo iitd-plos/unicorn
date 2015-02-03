@@ -289,6 +289,29 @@ void pmScheduler::PushEvent(const pmProcessingElement* pDevice, const pmSubtaskR
 
 	SwitchThread(std::shared_ptr<schedulerEvent>(new subtaskExecEvent(SUBTASK_EXECUTION, pDevice, pRange, pIsStealResponse)), pRange.task->GetPriority());
 }
+    
+#ifdef USE_AFFINITY_IN_STEAL
+void pmScheduler::PushEvent(pmTask* pTask, const pmProcessingElement* pDevice, std::vector<ulong>&& pDiscontiguousStealData)
+{
+#ifdef TRACK_SUBTASK_EXECUTION
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+        
+        auto lIter = pDiscontiguousStealData.begin(), lEndIter = pDiscontiguousStealData.end();
+        for(; lIter != lEndIter; ++lIter)
+        {
+            ulong lFirstSubtask = *lIter;
+            ++lIter;
+
+            mSubtasksAssigned += ((*lIter - lFirstSubtask) + 1);
+        }
+    }
+#endif
+
+    SwitchThread(std::shared_ptr<schedulerEvent>(new subtaskExecDiscontiguousStealEvent(SUBTASK_EXECUTION_DISCONTIGUOUS_STEAL, pTask, pDevice, std::move(pDiscontiguousStealData))), pTask->GetPriority());
+}
+#endif
 
 void pmScheduler::StealRequestEvent(const pmProcessingElement* pStealingDevice, pmTask* pTask, double pExecutionRate)
 {
@@ -322,6 +345,18 @@ void pmScheduler::StealSuccessEvent(const pmProcessingElement* pStealingDevice, 
 	SwitchThread(std::shared_ptr<schedulerEvent>(new stealSuccessTargetEvent(STEAL_SUCCESS_TARGET, pStealingDevice, pTargetDevice, pRange)), pRange.task->GetPriority());
 }
 
+#ifdef USE_AFFINITY_IN_STEAL
+void pmScheduler::StealSuccessEvent(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData)
+{
+    EXCEPTION_ASSERT(!pDiscontiguousStealData.empty() && (pDiscontiguousStealData.size() % 2 == 0));
+    
+    if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
+        return;
+    
+    SwitchThread(std::shared_ptr<schedulerEvent>(new stealSuccessDiscontiguousTargetEvent(STEAL_SUCCESS_DISCONTIGUOUS_TARGET, pTask, pStealingDevice, pTargetDevice, std::move(pDiscontiguousStealData))), pTask->GetPriority());
+}
+#endif
+
 void pmScheduler::StealFailedEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
     if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
@@ -337,6 +372,18 @@ void pmScheduler::StealSuccessReturnEvent(const pmProcessingElement* pStealingDe
     
 	SwitchThread(std::shared_ptr<schedulerEvent>(new stealSuccessStealerEvent(STEAL_SUCCESS_STEALER, pStealingDevice, pTargetDevice, pRange)), pRange.task->GetPriority());
 }
+
+#ifdef USE_AFFINITY_IN_STEAL
+void pmScheduler::StealSuccessReturnEvent(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData)
+{
+    EXCEPTION_ASSERT(!pDiscontiguousStealData.empty() && (pDiscontiguousStealData.size() % 2 == 0));
+
+    if(!pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask))
+        return;
+    
+    SwitchThread(std::shared_ptr<schedulerEvent>(new stealSuccessDiscontiguousStealerEvent(STEAL_SUCCESS_DISCONTIGUOUS_STEALER, pTask, pStealingDevice, pTargetDevice, std::move(pDiscontiguousStealData))), pTask->GetPriority());
+}
+#endif
 
 void pmScheduler::StealFailedReturnEvent(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
@@ -488,6 +535,18 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             
             break;
         }
+            
+    #ifdef USE_AFFINITY_IN_STEAL
+        case SUBTASK_EXECUTION_DISCONTIGUOUS_STEAL:
+        {
+            subtaskExecDiscontiguousStealEvent& lEvent = static_cast<subtaskExecDiscontiguousStealEvent&>(pEvent);
+
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEvent.task))
+                PushToStub(lEvent.task, lEvent.device, std::move(lEvent.discontiguousStealData));
+            
+            break;
+        }
+    #endif
 
 		case STEAL_REQUEST_STEALER:	/* Comes from stub thread */
         {
@@ -523,7 +582,23 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             break;
         }
 
-		case STEAL_FAIL_TARGET: /* Comes from stub thread */
+    #ifdef USE_AFFINITY_IN_STEAL
+		case STEAL_SUCCESS_DISCONTIGUOUS_TARGET:	/* Comes from stub thread */
+        {
+            stealSuccessDiscontiguousTargetEvent& lEventDetails = static_cast<stealSuccessDiscontiguousTargetEvent&>(pEvent);
+
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.task))
+                SendStealResponse(lEventDetails.task, lEventDetails.stealingDevice, lEventDetails.targetDevice, std::move(lEventDetails.discontiguousStealData));
+            
+        #ifdef ENABLE_TASK_PROFILING
+            lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_SERVE, false);
+        #endif
+            
+            break;
+        }
+    #endif
+
+        case STEAL_FAIL_TARGET: /* Comes from stub thread */
         {
             stealFailTargetEvent& lEventDetails = static_cast<stealFailTargetEvent&>(pEvent);
 
@@ -551,7 +626,23 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             break;
         }
 
-		case STEAL_FAIL_STEALER: /* Comes from network thread */
+    #ifdef USE_AFFINITY_IN_STEAL
+		case STEAL_SUCCESS_DISCONTIGUOUS_STEALER: /* Comes from network thread */
+        {
+            stealSuccessDiscontiguousStealerEvent& lEventDetails = static_cast<stealSuccessDiscontiguousStealerEvent&>(pEvent);
+
+        #ifdef ENABLE_TASK_PROFILING
+            lEventDetails.task->GetTaskProfiler()->RecordProfileEvent(taskProfiler::SUBTASK_STEAL_WAIT, false);
+        #endif
+
+            if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.task))
+                ReceiveStealResponse(lEventDetails.task, lEventDetails.stealingDevice, lEventDetails.targetDevice, std::move(lEventDetails.discontiguousStealData));
+            
+            break;
+        }
+    #endif
+
+        case STEAL_FAIL_STEALER: /* Comes from network thread */
         {
             stealFailStealerEvent& lEventDetails = static_cast<stealFailStealerEvent&>(pEvent);
 
@@ -1058,8 +1149,10 @@ void pmScheduler::SendAffinityDataToMachines(pmLocalTask* pLocalTask, const std:
     {
 		if(pMachine != PM_LOCAL_MACHINE)
 		{
+            pmAddressSpace* lAffinityAddressSpace = pLocalTask->GetAffinityAddressSpace();
+
             finalize_ptr<ulong, deleteArrayDeallocator<ulong>> lDataPtr(lData, false);
-            finalize_ptr<affinityDataTransferPacked> lPackedData(new affinityDataTransferPacked((uint)(*(pLocalTask->GetOriginatingHost())), pLocalTask->GetSequenceNumber(), (uint)pLogicalToPhysicalSubtaskMappings.size(), std::move(lDataPtr)));
+            finalize_ptr<affinityDataTransferPacked> lPackedData(new affinityDataTransferPacked((uint)(*(pLocalTask->GetOriginatingHost())), pLocalTask->GetSequenceNumber(), *lAffinityAddressSpace->GetMemOwnerHost(), lAffinityAddressSpace->GetGenerationNumber(), (uint)pLogicalToPhysicalSubtaskMappings.size(), std::move(lDataPtr)));
 
             pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<affinityDataTransferPacked>::CreateSharedPtr(pLocalTask->GetPriority(), SEND, AFFINITY_DATA_TRANSFER_TAG, pMachine, AFFINITY_DATA_TRANSFER_PACKED, lPackedData, 1);
 
@@ -1223,6 +1316,13 @@ void pmScheduler::PushToStub(const pmProcessingElement* pDevice, const pmSubtask
     pDevice->GetLocalExecutionStub()->Push(pRange, pIsStealResponse);
 }
 
+#ifdef USE_AFFINITY_IN_STEAL
+void pmScheduler::PushToStub(pmTask* pTask, const pmProcessingElement* pDevice, std::vector<ulong>&& pDiscontiguousStealData)
+{
+    pDevice->GetLocalExecutionStub()->Push(pTask, std::move(pDiscontiguousStealData));
+}
+#endif
+    
 #ifdef ENABLE_TWO_LEVEL_STEALING
 const pmMachine* pmScheduler::RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign)
 #else
@@ -1353,6 +1453,34 @@ void pmScheduler::SendStealResponse(const pmProcessingElement* pStealingDevice, 
 	}
 }
 
+#ifdef USE_AFFINITY_IN_STEAL
+void pmScheduler::SendStealResponse(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData)
+{
+#ifdef TRACK_SUBTASK_STEALS
+    for_each(pRangeVector, [&] (const pmSubtaskRange& range)
+    {
+        STEAL_RESPONSE_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*(pTargetDevice->GetMachine())), pStealingDevice->GetGlobalDeviceIndex(), pTargetDevice->GetGlobalDeviceIndex(), pRange.task->GetTaskExecStats().GetStubExecutionRate(pmStubManager::GetStubManager()->GetStub(pTargetDevice)), pRange.endSubtask - pRange.startSubtask + 1);
+    });
+#endif
+
+	const pmMachine* lMachine = pStealingDevice->GetMachine();
+	if(lMachine == PM_LOCAL_MACHINE)
+	{
+        StealSuccessReturnEvent(pTask, pStealingDevice, pTargetDevice, std::move(pDiscontiguousStealData));
+	}
+	else
+	{
+		const pmMachine* lOriginatingHost = pTask->GetOriginatingHost();
+
+        finalize_ptr<stealSuccessDiscontiguousPacked> lPackedData(new stealSuccessDiscontiguousPacked(pStealingDevice->GetGlobalDeviceIndex(), pTargetDevice->GetGlobalDeviceIndex(), *lOriginatingHost, pTask->GetSequenceNumber(), (uint)pDiscontiguousStealData.size(), std::move(pDiscontiguousStealData)));
+
+        pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<stealSuccessDiscontiguousPacked>::CreateSharedPtr(pTask->GetPriority(), SEND, STEAL_SUCCESS_DISCONTIGUOUS_TAG, lMachine, STEAL_SUCCESS_DISCONTIGUOUS_PACKED, lPackedData, 1);
+
+        pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
+	}
+}
+#endif
+    
 void pmScheduler::ReceiveStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange)
 {
 	pmTaskExecStats& lTaskExecStats = pRange.task->GetTaskExecStats();
@@ -1360,6 +1488,16 @@ void pmScheduler::ReceiveStealResponse(const pmProcessingElement* pStealingDevic
 
 	PushEvent(pStealingDevice, pRange, true);
 }
+
+#ifdef USE_AFFINITY_IN_STEAL
+void pmScheduler::ReceiveStealResponse(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData)
+{
+	pmTaskExecStats& lTaskExecStats = pTask->GetTaskExecStats();
+	lTaskExecStats.RecordSuccessfulStealAttempt(pmStubManager::GetStubManager()->GetStub(pStealingDevice));
+    
+    PushEvent(pTask, pStealingDevice, std::move(pDiscontiguousStealData));
+}
+#endif
 
 void pmScheduler::SendFailedStealResponse(const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, pmTask* pTask)
 {
@@ -1978,12 +2116,36 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                     pmRemoteTask* lRemoteTask = dynamic_cast<pmRemoteTask*>(pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber));
                     
                     EXCEPTION_ASSERT(lRemoteTask);
+                    
+                    pmAddressSpace* lAffinityAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lData->affinityAddressSpace.memOwnerHost), lData->affinityAddressSpace.generationNumber);
+                    EXCEPTION_ASSERT(lAffinityAddressSpace);
 
                     std::vector<ulong> lLogicalToPhysicalSubtaskMapping(lData->logicalToPhysicalSubtaskMapping.get_ptr(), lData->logicalToPhysicalSubtaskMapping.get_ptr() + lData->transferDataElements);
-                    lRemoteTask->ReceiveAffinityData(std::move(lLogicalToPhysicalSubtaskMapping));
+                    lRemoteTask->ReceiveAffinityData(std::move(lLogicalToPhysicalSubtaskMapping), lAffinityAddressSpace);
                     
                     break;
                 }
+                    
+            #ifdef USE_AFFINITY_IN_STEAL
+                case STEAL_SUCCESS_DISCONTIGUOUS_TAG:
+                {
+                    stealSuccessDiscontiguousPacked* lData = (stealSuccessDiscontiguousPacked*)(lCommunicatorCommand->GetData());
+                    
+					const pmProcessingElement* lStealingDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->stealingDeviceGlobalIndex);
+					const pmProcessingElement* lTargetDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->targetDeviceGlobalIndex);
+
+					const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+
+                    if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lOriginatingHost, lData->sequenceNumber))
+                    {
+                        pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+
+                        StealSuccessReturnEvent(lTask, lStealingDevice, lTargetDevice, std::move(lData->discontiguousStealData));
+                    }
+                    
+                    break;
+                }
+            #endif
 
 				default:
 					PMTHROW(pmFatalErrorException());
