@@ -323,7 +323,7 @@ void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, u
         std::pair<subtaskMapType, RESOURCE_LOCK_IMPLEMENTATION_CLASS>& lPair = mSubtaskMapVector[pStub->GetProcessingElement()->GetDeviceIndexInMachine()];
 
         subtaskMapType::iterator lPreprocessorTaskHoldingsIterator;
-        if(mTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY && ((lPreprocessorTaskHoldingsIterator = mPreprocessorTaskHoldings.find(pSubtaskId)) != mPreprocessorTaskHoldings.end()) && lPreprocessorTaskHoldingsIterator->second.mValid)
+        if(mTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY && pStub->GetType() == pmDeviceType::CPU && ((lPreprocessorTaskHoldingsIterator = mPreprocessorTaskHoldings.find(pSubtaskId)) != mPreprocessorTaskHoldings.end()) && lPreprocessorTaskHoldingsIterator->second.mValid)
         {
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
             
