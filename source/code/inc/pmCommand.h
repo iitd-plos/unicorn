@@ -211,10 +211,10 @@ struct pmCommunicatorCommandCloner<T, deleteArrayDeallocator<T>, true>
 {
     pmCommunicatorCommandPtr operator() (pmCommunicatorCommand<T, deleteArrayDeallocator<T>>* pCommand)
     {
-        auto lDataUnits = pCommand->GetDataUnits();
+        ulong lDataUnits = pCommand->GetDataUnits();
         finalize_ptr<T, deleteArrayDeallocator<T>> lPtr(new T[lDataUnits]);
         
-        for(auto i = 0; i < lDataUnits; ++i)
+        for(ulong i = 0; i < lDataUnits; ++i)
             (lPtr.get_ptr())[i] = static_cast<T*>(pCommand->GetData())[i];
         
         return pmCommunicatorCommand<T, deleteArrayDeallocator<T>>::CreateSharedPtr(pCommand->GetPriority(), (communicator::communicatorCommandTypes)(pCommand->GetType()), pCommand->GetTag(), pCommand->GetDestination(), pCommand->GetDataType(), lPtr, lDataUnits, pCommand->GetCommandCompletionCallback(), pCommand->GetUserIdentifier());
