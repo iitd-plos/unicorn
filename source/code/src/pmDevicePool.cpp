@@ -287,6 +287,54 @@ void pmDevicePool::GetAllDevicesOfTypeOnMachines(pmDeviceType pType, const std::
 	}
 }
     
+std::vector<const pmProcessingElement*> pmDevicePool::InterleaveDevicesFromDifferentMachines(const std::vector<const pmProcessingElement*>& pDevices) const
+{
+    std::map<const pmMachine*, std::vector<const pmProcessingElement*>> lMachineVersusDevicesMap;
+    for_each(pDevices, [&] (const pmProcessingElement* pDevice)
+    {
+        const pmMachine* lMachine = pDevice->GetMachine();
+
+        auto lIter = lMachineVersusDevicesMap.find(lMachine);
+        if(lIter == lMachineVersusDevicesMap.end())
+            lIter = lMachineVersusDevicesMap.emplace(lMachine, std::vector<const pmProcessingElement*>()).first;
+
+        lIter->second.emplace_back(pDevice);
+    });
+    
+    std::map<const pmMachine*, std::pair<std::map<const pmMachine*, std::vector<const pmProcessingElement*>>::iterator, std::vector<const pmProcessingElement*>::iterator>> lMachineVersusDevicesIterMap;
+    auto lBeginIter = lMachineVersusDevicesMap.begin(), lEndIter = lMachineVersusDevicesMap.end(), lIter = lBeginIter;
+    for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
+    {
+        lMachineVersusDevicesIterMap.emplace(std::piecewise_construct, std::forward_as_tuple(lIter->first), std::forward_as_tuple(lIter, lIter->second.begin()));
+    }
+
+    size_t lDeviceCount = pDevices.size();
+
+    std::vector<const pmProcessingElement*> lInterleavedDevices;
+    lInterleavedDevices.reserve(lDeviceCount);
+
+    ulong i = 0;
+    auto lBeginIter2 = lMachineVersusDevicesIterMap.begin(), lEndIter2 = lMachineVersusDevicesIterMap.end(), lIter2 = lBeginIter2;
+    while(i != lDeviceCount)
+    {
+        std::cout << i << std::endl;
+        if(lIter2 == lEndIter2)
+            lIter2 = lBeginIter2;
+        
+        if(lIter2->second.second != lIter2->second.first->second.end())
+        {
+            lInterleavedDevices.emplace_back(*lIter2->second.second);
+            ++lIter2->second.second;
+
+            ++i;
+        }
+        
+        ++lIter2;
+    }
+
+    return lInterleavedDevices;
+}
+    
 }
 
 

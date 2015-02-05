@@ -823,7 +823,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
         VaryFixedAllotments(lSubtaskPartitions, pMaxPercentVariationFromFixedAllotment);
     #endif
     }
-    
+
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(mUseSplits)
     {
@@ -844,7 +844,9 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
         auto lUnsplittedGroupEndIter = lSubtaskPartitions.end();
 
         pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
-        for_each(lAssignedDevices, [&] (const pmProcessingElement* pDevice)
+
+        const std::vector<const pmProcessingElement*> lInterleavedDevices = pmDevicePool::GetDevicePool()->InterleaveDevicesFromDifferentMachines(lAssignedDevices);
+        for_each(lInterleavedDevices, [&] (const pmProcessingElement* pDevice)
         {
             bool lSplittingDevice = lSubtaskSplitter.IsSplitting(pDevice->GetType());
             
@@ -869,76 +871,12 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
     else
 #endif
     {
-        // If there are not enough partitions as devices, then assign same number of partitions to all machines
-        if(lPartitionCount < lDeviceCount)
+        // All partitions with leftover subtasks are placed at the front. Interleaving devices from different machines distributes loads evenly.
+        const std::vector<const pmProcessingElement*> lInterleavedDevices = pmDevicePool::GetDevicePool()->InterleaveDevicesFromDifferentMachines(lAssignedDevices);
+        multi_for_each(lInterleavedDevices, lSubtaskPartitions, [&] (const pmProcessingElement* pDevice, pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr)
         {
-            std::set<const pmMachine*> lMachinesSet;
-            pmProcessingElement::GetMachines(lAssignedDevices, lMachinesSet);
-
-            size_t lMachineCount = lMachinesSet.size();
-            size_t lPartitionsPerMachine = lSubtaskPartitions.size() / lMachineCount;
-            size_t lLeftoverMachinePartitions = lSubtaskPartitions.size() - lPartitionsPerMachine * lMachineCount;
-            
-            std::set<const pmMachine*> lLeftoverMachinesSet;
-            if(lLeftoverMachinePartitions)
-            {
-                for_each_with_index(lMachinesSet, [&] (const pmMachine* pMachine, size_t pIndex)
-                {
-                    if(pIndex >= lLeftoverMachinePartitions)
-                        return; //return from lambda
-
-                    lLeftoverMachinesSet.insert(pMachine);
-                });
-            }
-
-            std::map<const pmMachine*, size_t> lPartitionsAssignedToMachinesMap;
-            
-            auto lDeviceIter = lAssignedDevices.begin();
-            auto lDeviceEndIter = lAssignedDevices.end();
-
-            for_each(lSubtaskPartitions, [&] (pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr)
-            {
-                for(; lDeviceIter != lDeviceEndIter; ++lDeviceIter)
-                {
-                    const pmProcessingElement* lDevice = *lDeviceIter;
-                    const pmMachine* lMachine = lDevice->GetMachine();
-
-                    size_t lPartitionsForCurrentMachine = lPartitionsPerMachine;
-                    if(lLeftoverMachinesSet.find(lMachine) != lLeftoverMachinesSet.end())
-                        ++lPartitionsForCurrentMachine;
-
-                    auto lMapIter = lPartitionsAssignedToMachinesMap.find(lMachine);
-
-                    if(lMapIter == lPartitionsAssignedToMachinesMap.end())
-                        lMapIter = lPartitionsAssignedToMachinesMap.emplace(lMachine, 0).first;
-                    else if(lMapIter->second >= lPartitionsForCurrentMachine)
-                        continue;
-
-                    ++lMapIter->second;
-                    
-                    mAllottedPartitions[lDevice] = pUnfinishedPartitionPtr;
-                    
-                    ++lDeviceIter;
-                    break;
-                }
-            });
-        }
-        else
-        {
-            // Randomizing partitions helps better handle partitions of unequal size (i.e. leftover subtasks)
-            if(pLocalTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY)
-            {
-                std::random_device lRandomDevice;
-                std::mt19937 lGenerator(lRandomDevice());
-        
-                std::shuffle(lSubtaskPartitions.begin(), lSubtaskPartitions.end(), lGenerator);
-            }
-
-            multi_for_each(lAssignedDevices, lSubtaskPartitions, [&] (const pmProcessingElement* pDevice, pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr)
-            {
-                mAllottedPartitions[pDevice] = pUnfinishedPartitionPtr;
-            });
-        }
+            mAllottedPartitions[pDevice] = pUnfinishedPartitionPtr;
+        });
     }
 }
 
