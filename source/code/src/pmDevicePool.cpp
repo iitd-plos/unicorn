@@ -317,7 +317,6 @@ std::vector<const pmProcessingElement*> pmDevicePool::InterleaveDevicesFromDiffe
     auto lBeginIter2 = lMachineVersusDevicesIterMap.begin(), lEndIter2 = lMachineVersusDevicesIterMap.end(), lIter2 = lBeginIter2;
     while(i != lDeviceCount)
     {
-        std::cout << i << std::endl;
         if(lIter2 == lEndIter2)
             lIter2 = lBeginIter2;
         
