@@ -278,6 +278,15 @@ void pmDevicePool::GetAllDevicesOfTypeInCluster(pmDeviceType pType, const pmClus
 	}
 }
 
+void pmDevicePool::GetAllDevicesOfTypeOnMachines(pmDeviceType pType, const std::set<const pmMachine*>& pMachines, std::vector<const pmProcessingElement*>& pDevices) const
+{
+	for(auto& lDevice: mDevicesVector)
+	{
+		if(lDevice.GetType() == pType && pMachines.find(lDevice.GetMachine()) != pMachines.end())
+			pDevices.push_back(&lDevice);
+	}
+}
+    
 }
 
 

@@ -26,6 +26,7 @@
 #include "pmAddressSpace.h"
 #include "pmCallbackUnit.h"
 #include "pmStubManager.h"
+#include "pmController.h"
 
 namespace pm
 {
@@ -302,7 +303,7 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
 
 	pmTaskHandle lTaskHandle = NULL;
 
-	EXCEPTION_ASSERT(pmSubmitTask(lTaskDetails, &lTaskHandle) == pmSuccess);
+    pmController::GetController()->SubmitTask_Public(lTaskDetails, &lTaskHandle, lMachinesSet);
 }
     
 size_t pmPreprocessorTask::GetSampleSizeForAffinityCriterion(pmAffinityCriterion pAffinityCriterion)

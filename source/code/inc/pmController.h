@@ -71,7 +71,7 @@ class pmController : public pmBase
         void FetchMemory_Public(pmMemHandle pMem);
         void FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, size_t pLength);
         void GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr);
-		void SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle);
+		void SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle, const std::set<const pmMachine*>& pRestrictToMachinesSet = std::set<const pmMachine*>());
 		void ReleaseTask_Public(pmTaskHandle pTaskHandle);
 		void WaitForTaskCompletion_Public(pmTaskHandle pTaskHandle);
 		void GetTaskExecutionTimeInSecs_Public(pmTaskHandle pTaskHandle, double* pTime);

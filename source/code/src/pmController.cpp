@@ -227,7 +227,7 @@ void pmController::GetRawMemPtr_Public(pmMemHandle pMem, void** pPtr)
     *pPtr = lAddressSpace->GetMem();
 }
 
-void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle)
+void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* pTaskHandle, const std::set<const pmMachine*>& pRestrictToMachinesSet /* = std::set<const pmMachine*>() */)
 {
 	*pTaskHandle = NULL;
 
@@ -290,7 +290,7 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
         lTaskMemVector.emplace_back(lAddressSpace, pTaskMem.memType, pTaskMem.subscriptionVisibilityType, pTaskMem.disjointReadWritesAcrossSubtasks);
     }
     
-	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags, pTaskDetails.affinityCriterion);
+	*pTaskHandle = new pmLocalTask(pTaskDetails.taskConf, pTaskDetails.taskConfLength, pTaskDetails.taskId, std::move(lTaskMemVector), pTaskDetails.subtaskCount, lCallbackUnit, pTaskDetails.timeOutInSecs, PM_LOCAL_MACHINE, PM_GLOBAL_CLUSTER, pTaskDetails.priority, lModel, lTaskFlags, pTaskDetails.affinityCriterion, pRestrictToMachinesSet);
 
     pmTaskManager::GetTaskManager()->SubmitTask(static_cast<pmLocalTask*>(*pTaskHandle));
     static_cast<pmLocalTask*>(*pTaskHandle)->LockAddressSpaces();

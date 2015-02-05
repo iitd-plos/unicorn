@@ -972,7 +972,7 @@ bool pmTask::IsOpenCLTask() const
 
 
 /* class pmLocalTask */
-pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* DEFAULT_TASK_FLAGS_VAL */, pmAffinityCriterion pAffinityCriterion /* = MAX_AFFINITY_CRITERION */)
+pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector<pmTaskMemory>&& pTaskMemVector, ulong pSubtaskCount, const pmCallbackUnit* pCallbackUnit, int pTaskTimeOutInSecs, const pmMachine* pOriginatingHost /* = PM_LOCAL_MACHINE */, const pmCluster* pCluster /* = PM_GLOBAL_CLUSTER */, ushort pPriority /* = DEFAULT_PRIORITY_LEVEL */, scheduler::schedulingModel pSchedulingModel /* =  DEFAULT_SCHEDULING_MODEL */, ushort pTaskFlags /* DEFAULT_TASK_FLAGS_VAL */, pmAffinityCriterion pAffinityCriterion /* = MAX_AFFINITY_CRITERION */, const std::set<const pmMachine*>& pRestrictToMachinesSet /* = std::set<const pmMachine*>() */)
 	: pmTask(pTaskConf, pTaskConfLength, pTaskId, std::move(pTaskMemVector), pSubtaskCount, pCallbackUnit, 0, pOriginatingHost, pCluster, pPriority, pSchedulingModel, pTaskFlags, pAffinityCriterion)
     , mTaskTimeOutTriggerTime((ulong)__MAX(int))
     , mPendingCompletions(0)
@@ -996,7 +996,7 @@ pmLocalTask::pmLocalTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, s
     mTaskCommand = pmCommand::CreateSharedPtr(pPriority, 0, NULL);
     
     std::set<const pmMachine*> lMachines;
-    FindCandidateProcessingElements(lMachines);
+    FindCandidateProcessingElements(lMachines, pRestrictToMachinesSet);
 }
 
 pmLocalTask::~pmLocalTask()
@@ -1287,7 +1287,7 @@ std::vector<const pmProcessingElement*> pmLocalTask::SelectMaxCpuDevicesPerHost(
     return lVector;
 }
 
-const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcessingElements(std::set<const pmMachine*>& pMachines)
+const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcessingElements(std::set<const pmMachine*>& pMachines, const std::set<const pmMachine*>& pRestrictToMachinesSet /* = std::set<const pmMachine*>() */)
 {
 	pmDevicePool* lDevicePool;
 	SAFE_GET_DEVICE_POOL(lDevicePool);
@@ -1299,8 +1299,17 @@ const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcess
 		for(uint i = 0; i < MAX_DEVICE_TYPES; ++i)
 		{
             pmDeviceType lType = (pmDeviceType)(MAX_DEVICE_TYPES - 1 - i);
-			if(lSubtaskCB->IsCallbackDefinedForDevice(lType))
-				lDevicePool->GetAllDevicesOfTypeInCluster(lType, GetCluster(), lAvailableDevices);
+            
+            if(pRestrictToMachinesSet.empty())
+            {
+                if(lSubtaskCB->IsCallbackDefinedForDevice(lType))
+                    lDevicePool->GetAllDevicesOfTypeInCluster(lType, GetCluster(), lAvailableDevices);
+            }
+            else
+            {
+                if(lSubtaskCB->IsCallbackDefinedForDevice(lType))
+                    lDevicePool->GetAllDevicesOfTypeOnMachines(lType, pRestrictToMachinesSet, lAvailableDevices);
+            }
 		}
 
     #ifdef SUPPORT_CUDA
