@@ -837,8 +837,6 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
         auto lUnsplittedGroupEndIter = lSubtaskPartitions.end();
 
         pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
-
-        const std::vector<const pmProcessingElement*> lInterleavedDevices = pmDevicePool::GetDevicePool()->InterleaveDevicesFromDifferentMachines(lAssignedDevices);
         for_each(lInterleavedDevices, [&] (const pmProcessingElement* pDevice)
         {
             bool lSplittingDevice = lSubtaskSplitter.IsSplitting(pDevice->GetType());
