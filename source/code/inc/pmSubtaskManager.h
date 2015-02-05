@@ -172,14 +172,24 @@ class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager
         bool mUseSplits;
     #endif
 
-        std::map<const pmProcessingElement*, pmUnfinishedPartitionPtr> mAllottedPartitions;
+    std::map<const pmProcessingElement*, pmUnfinishedPartitionPtr> mAllottedPartitions;
+};
+    
+class pmNodeEqualStaticSchedulingManager : public pmSingleAssignmentSchedulingManager
+{
+public:
+    pmNodeEqualStaticSchedulingManager(pmLocalTask* pLocalTask);
+    
+    virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
+
+private:
+    std::map<const pmProcessingElement*, pmUnfinishedPartitionPtr> mAllottedPartitions;
 };
 
 class pmProportionalSchedulingManager : public pmSingleAssignmentSchedulingManager
 {
 public:
     pmProportionalSchedulingManager(pmLocalTask* pLocalTask);
-    virtual ~pmProportionalSchedulingManager();	
     
     virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
     

@@ -247,7 +247,8 @@ namespace pm
         RANDOM_STEAL,   /* default policy */
         RANDOM_STEAL_WITH_AFFINITY,
         EQUAL_STATIC,
-        PROPORTIONAL_STATIC
+        PROPORTIONAL_STATIC,
+        NODE_EQUAL_STATIC
     } pmSchedulingPolicy;
 
     typedef enum pmAffinityCriterion

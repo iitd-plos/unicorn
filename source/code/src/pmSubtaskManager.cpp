@@ -825,7 +825,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
     }
 
     // All partitions with leftover subtasks are placed at the front. Interleaving devices from different machines distributes load evenly
-    const std::vector<const pmProcessingElement*> lInterleavedDevices = pmDevicePool::GetDevicePool()->InterleaveDevicesFromDifferentMachines(lAssignedDevices);
+    const std::vector<const pmProcessingElement*> lInterleavedDevices = pmDevicePool::GetDevicePool()->InterleaveDevicesFromDifferentMachines(lAssignedDevices, mLocalTask->GetSchedulingModel() == scheduler::STATIC_EQUAL);
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(mUseSplits)
@@ -864,7 +864,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
     else
 #endif
     {
-        multi_for_each(lInterleavedDevices, lSubtaskPartitions, [&] (const pmProcessingElement* pDevice, pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr)
+        multi_for_each(lSubtaskPartitions, lInterleavedDevices, [&] (pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr, const pmProcessingElement* pDevice)
         {
             mAllottedPartitions[pDevice] = pUnfinishedPartitionPtr;
         });
@@ -986,7 +986,84 @@ void pmPullSchedulingManager::AssignSubtasksToDevice(const pmProcessingElement* 
         pSubtaskCount = 0;
     }
 }
+    
 
+/* class pmNodeEqualStaticSchedulingManager */
+pmNodeEqualStaticSchedulingManager::pmNodeEqualStaticSchedulingManager(pmLocalTask* pLocalTask)
+	: pmSingleAssignmentSchedulingManager(pLocalTask)
+{
+	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
+	ulong lDeviceCount = mLocalTask->GetAssignedDeviceCount();
+
+    std::vector<const pmProcessingElement*>& lAssignedDevices = mLocalTask->GetAssignedDevices();
+
+    std::map<const pmMachine*, std::vector<const pmProcessingElement*>> lMachineVersusDevicesMap;
+    for_each(lAssignedDevices, [&] (const pmProcessingElement* pDevice)
+    {
+        const pmMachine* lMachine = pDevice->GetMachine();
+
+        auto lIter = lMachineVersusDevicesMap.find(lMachine);
+        if(lIter == lMachineVersusDevicesMap.end())
+            lIter = lMachineVersusDevicesMap.emplace(lMachine, std::vector<const pmProcessingElement*>()).first;
+
+        lIter->second.emplace_back(pDevice);
+    });
+
+    EXCEPTION_ASSERT(lSubtaskCount != 0 && lDeviceCount != 0 && (lSubtaskCount % lMachineVersusDevicesMap.size() == 0));
+    
+    ulong lSubtasksPerMachine = lSubtaskCount / lMachineVersusDevicesMap.size();
+    ulong lFirstSubtask = 0, lLastSubtask = 0;
+
+    for_each(lMachineVersusDevicesMap, [&] (decltype(lMachineVersusDevicesMap)::value_type& pPair)
+    {
+        std::vector<pmUnfinishedPartitionPtr> lSubtaskPartitions;
+        const std::vector<const pmProcessingElement*>& pDevices = pPair.second;
+    
+        ulong lDevicesOnMachine = pDevices.size();
+        ulong lPartitionCount = std::min(lSubtasksPerMachine, lDevicesOnMachine);
+        ulong lPartitionSize = lSubtasksPerMachine/lPartitionCount;
+        ulong lLeftoverSubtasks = lSubtasksPerMachine - lPartitionSize * lPartitionCount;
+
+        for(ulong i = 0; i < lPartitionCount; ++i)
+        {
+            if(i < lLeftoverSubtasks)
+                lLastSubtask = lFirstSubtask + lPartitionSize;
+            else
+                lLastSubtask = lFirstSubtask + lPartitionSize - 1;
+
+            pmSubtaskManager::pmUnfinishedPartitionPtr lUnfinishedPartitionPtr(new pmSubtaskManager::pmUnfinishedPartition(lFirstSubtask, lLastSubtask));
+            lSubtaskPartitions.emplace_back(lUnfinishedPartitionPtr);
+            
+            lFirstSubtask = lLastSubtask + 1;
+        }
+
+        multi_for_each(lSubtaskPartitions, pDevices, [&] (pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr, const pmProcessingElement* pDevice)
+        {
+            mAllottedPartitions[pDevice] = pUnfinishedPartitionPtr;
+        });
+    });
+}
+    
+void pmNodeEqualStaticSchedulingManager::AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee)
+{
+    auto lIter = mAllottedPartitions.find(pDevice);
+
+    if(lIter != mAllottedPartitions.end())
+    {
+        const pmUnfinishedPartitionPtr& lPartition = lIter->second;
+
+        pStartingSubtask = lPartition->firstSubtaskIndex;
+        pSubtaskCount = lPartition->lastSubtaskIndex - lPartition->firstSubtaskIndex + 1;
+        pOriginalAllottee = NULL;
+    }
+    else
+    {
+        pSubtaskCount = 0;
+    }
+}
+
+
+/* class pmProportionalSchedulingManager */
 pmProportionalSchedulingManager::pmProportionalSchedulingManager(pmLocalTask* pLocalTask)
 	: pmSingleAssignmentSchedulingManager(pLocalTask)
     , mLocalCpuPower(0)
@@ -1032,11 +1109,6 @@ pmProportionalSchedulingManager::pmProportionalSchedulingManager(pmLocalTask* pL
     }
 }
     
-pmProportionalSchedulingManager::~pmProportionalSchedulingManager()
-{
-    mDevicePartitionMap.clear();
-}
-
 void pmProportionalSchedulingManager::AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee)
 {
 	FINALIZE_RESOURCE_PTR(dAssignmentResource, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mAssignmentResourceLock, Lock(), Unlock());

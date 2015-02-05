@@ -45,7 +45,8 @@ enum schedulingModel
 	PULL,	/* subtasks are pulled by stubs from their scheduler which pull from originating task manager */
     PULL_WITH_AFFINITY, /* subtasks are pulled by stubs from their scheduler which pull from originating task manager (but the initial distribution is affinity based) */
     STATIC_EQUAL,  /* subtasks are equally and statically divided among all stubs */
-    STATIC_PROPORTIONAL  /* subtasks are proportionally (as defined in configuration file STATIC_PROP_CONF_FILE) and statically divided among all stubs */
+    STATIC_PROPORTIONAL,  /* subtasks are proportionally (as defined in configuration file STATIC_PROP_CONF_FILE) and statically divided among all stubs */
+    STATIC_EQUAL_NODE   /* subtasks are equally and statically divided among all nodes */
 };
 
 enum pushStrategy

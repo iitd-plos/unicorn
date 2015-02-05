@@ -136,7 +136,8 @@ class pmDevicePool : public pmBase
         void GetAllDevicesOfTypeInCluster(pmDeviceType pType, const pmCluster* pCluster, std::vector<const pmProcessingElement*>& pDevices) const;
         void GetAllDevicesOfTypeOnMachines(pmDeviceType pType, const std::set<const pmMachine*>& pMachines, std::vector<const pmProcessingElement*>& pDevices) const;
     
-        std::vector<const pmProcessingElement*> InterleaveDevicesFromDifferentMachines(const std::vector<const pmProcessingElement*>& pDevices) const;
+        std::vector<const pmProcessingElement*> InterleaveDevicesOfDifferentTypes(const std::vector<const pmProcessingElement*>& pDevices) const;
+        std::vector<const pmProcessingElement*> InterleaveDevicesFromDifferentMachines(const std::vector<const pmProcessingElement*>& pDevices, bool pCycleDeviceTypes) const;
 		
 	private:
 		pmDevicePool()

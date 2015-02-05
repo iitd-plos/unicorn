@@ -286,11 +286,44 @@ void pmDevicePool::GetAllDevicesOfTypeOnMachines(pmDeviceType pType, const std::
 			pDevices.push_back(&lDevice);
 	}
 }
-    
-std::vector<const pmProcessingElement*> pmDevicePool::InterleaveDevicesFromDifferentMachines(const std::vector<const pmProcessingElement*>& pDevices) const
+
+std::vector<const pmProcessingElement*> pmDevicePool::InterleaveDevicesOfDifferentTypes(const std::vector<const pmProcessingElement*>& pDevices) const
 {
+    std::vector<const pmProcessingElement*> lDevices;
+
+    std::map<pmDeviceType, std::list<const pmProcessingElement*>> lDeviceClassificationMap;
+    for_each(pDevices, [&lDeviceClassificationMap] (const pmProcessingElement* pDevice)
+             {
+                 lDeviceClassificationMap[pDevice->GetType()].push_front(pDevice);
+             });
+    
+    while(!lDeviceClassificationMap.empty())
+    {
+        for(size_t i = 0; i < MAX_DEVICE_TYPES; ++i)
+        {
+            auto lIter = lDeviceClassificationMap.find((pmDeviceType)i);
+            if(lIter != lDeviceClassificationMap.end())
+            {
+                EXCEPTION_ASSERT(!lIter->second.empty());
+                
+                lDevices.push_back(lIter->second.back());
+
+                lIter->second.pop_back();
+                if(lIter->second.empty())
+                    lDeviceClassificationMap.erase(lIter);
+            }
+        }
+    }
+    
+    return lDevices;
+}
+    
+std::vector<const pmProcessingElement*> pmDevicePool::InterleaveDevicesFromDifferentMachines(const std::vector<const pmProcessingElement*>& pDevices, bool pCycleDeviceTypes) const
+{
+    const std::vector<const pmProcessingElement*>& lDevices = (pCycleDeviceTypes ? InterleaveDevicesOfDifferentTypes(pDevices) : pDevices);
+
     std::map<const pmMachine*, std::vector<const pmProcessingElement*>> lMachineVersusDevicesMap;
-    for_each(pDevices, [&] (const pmProcessingElement* pDevice)
+    for_each(lDevices, [&] (const pmProcessingElement* pDevice)
     {
         const pmMachine* lMachine = pDevice->GetMachine();
 
@@ -308,7 +341,7 @@ std::vector<const pmProcessingElement*> pmDevicePool::InterleaveDevicesFromDiffe
         lMachineVersusDevicesIterMap.emplace(std::piecewise_construct, std::forward_as_tuple(lIter->first), std::forward_as_tuple(lIter, lIter->second.begin()));
     }
 
-    size_t lDeviceCount = pDevices.size();
+    size_t lDeviceCount = lDevices.size();
 
     std::vector<const pmProcessingElement*> lInterleavedDevices;
     lInterleavedDevices.reserve(lDeviceCount);

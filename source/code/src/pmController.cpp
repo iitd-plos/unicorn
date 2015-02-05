@@ -250,6 +250,8 @@ void pmController::SubmitTask_Public(pmTaskDetails pTaskDetails, pmTaskHandle* p
             lModel = scheduler::STATIC_EQUAL;
         else if(pTaskDetails.policy == PROPORTIONAL_STATIC)
             lModel = scheduler::STATIC_PROPORTIONAL;
+        else if(pTaskDetails.policy == NODE_EQUAL_STATIC)
+            lModel = scheduler::STATIC_EQUAL_NODE;
         else
             PMTHROW(pmFatalErrorException());
     }

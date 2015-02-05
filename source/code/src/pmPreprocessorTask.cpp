@@ -296,7 +296,7 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
     
     pmTaskDetails lTaskDetails(&lTaskConf, sizeof(preprocessorTaskConf), &lMemVector[0], (uint)lMemVector.size(), mPreprocessorTaskCallbackHandle, lPreprocessorSubtasks);
     
-	lTaskDetails.policy = EQUAL_STATIC;
+	lTaskDetails.policy = NODE_EQUAL_STATIC;
 	lTaskDetails.multiAssignEnabled = false;
     lTaskDetails.overlapComputeCommunication = false;
     lTaskDetails.suppressTaskLogs = true;

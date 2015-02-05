@@ -1211,7 +1211,11 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
 			mSubtaskManager.reset(new pmProportionalSchedulingManager(this));
 			break;
 
-		default:
+		case scheduler::STATIC_EQUAL_NODE:
+			mSubtaskManager.reset(new pmNodeEqualStaticSchedulingManager(this));
+			break;
+
+        default:
 			PMTHROW(pmFatalErrorException());
 	}
 
