@@ -2240,8 +2240,6 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                             lOutputFile << pOutputFolder << lSeparator << pHosts << "_" << i << "_" << j << "_" << k << "_" << l << "_" << m;
                             lDisplayName << lSchedulingModelNames[i] << "_" << lClusterTypeNames[j] << "_" << ((k == 0) ? "NonMA" : "MA") << "_" << ((l == 0) ? "NonLazy" : "Lazy") << "_" << ((m == 0) ? "NoCompCommOverlap" : "CompCommOverlap");
 
-                            std::ifstream lFileStream(lOutputFile.str().c_str());
-
                             if(i == (size_t)PULL_WITH_AFFINITY)
                             {
                                 lOutputFile << "_" << n;
@@ -2265,6 +2263,8 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                                         break;
                                 };
                             }
+
+                            std::ifstream lFileStream(lOutputFile.str().c_str());
 
                             if(lFileStream.fail())
                             {

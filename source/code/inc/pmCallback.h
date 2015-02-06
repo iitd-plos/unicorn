@@ -53,7 +53,7 @@ class pmDataDistributionCB : public pmCallback
         pmStatus InvokeDirect(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) const;
 
 	private:
-		pmDataDistributionCallback mCallback;
+		const pmDataDistributionCallback mCallback;
 };
 
 class pmSubtaskCB : public pmCallback
@@ -79,10 +79,10 @@ class pmSubtaskCB : public pmCallback
         pmSubtaskCallback_CPU GetCpuCallback() const;
 
 	private:
-		pmSubtaskCallback_CPU mCallback_CPU;
-        pmSubtaskCallback_GPU_CUDA mCallback_GPU_CUDA;
-        pmSubtaskCallback_GPU_Custom mCallback_GPU_Custom;
-        std::string mOpenCLImplementation;
+		const pmSubtaskCallback_CPU mCallback_CPU;
+        const pmSubtaskCallback_GPU_CUDA mCallback_GPU_CUDA;
+        const pmSubtaskCallback_GPU_Custom mCallback_GPU_Custom;
+        const std::string mOpenCLImplementation;
 };
 
 class pmDataReductionCB : public pmCallback
@@ -93,7 +93,7 @@ class pmDataReductionCB : public pmCallback
 		pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2) const;
 
 	private:
-		pmDataReductionCallback mCallback;
+		const pmDataReductionCallback mCallback;
 };
 
 class pmDataRedistributionCB : public pmCallback
@@ -104,7 +104,7 @@ class pmDataRedistributionCB : public pmCallback
 		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, bool pMultiAssign) const;
 
 	private:
-		pmDataRedistributionCallback mCallback;
+		const pmDataRedistributionCallback mCallback;
 };
 
 class pmDeviceSelectionCB : public pmCallback
@@ -115,7 +115,7 @@ class pmDeviceSelectionCB : public pmCallback
 		bool Invoke(pmTask* pTask, const pmProcessingElement* pProcessingElement) const;
 
 	private:
-		pmDeviceSelectionCallback mCallback;
+		const pmDeviceSelectionCallback mCallback;
 };
 
 class pmPreDataTransferCB : public pmCallback
@@ -126,7 +126,7 @@ class pmPreDataTransferCB : public pmCallback
 		pmStatus Invoke() const;
 
 	private:
-		pmPreDataTransferCallback mCallback;
+		const pmPreDataTransferCallback mCallback;
 };
 
 class pmPostDataTransferCB : public pmCallback
@@ -137,7 +137,7 @@ class pmPostDataTransferCB : public pmCallback
 		pmStatus Invoke() const;
 
 	private:
-		pmPostDataTransferCallback mCallback;
+		const pmPostDataTransferCallback mCallback;
 };
 
 class pmTaskCompletionCB : public pmCallback
@@ -149,8 +149,12 @@ class pmTaskCompletionCB : public pmCallback
     
         pmTaskCompletionCallback GetCallback() const;
 
+        void* GetUserData() const;
+        void SetUserData(void* pUserData);
+
 	private:
-		pmTaskCompletionCallback mCallback;
+		const pmTaskCompletionCallback mCallback;
+        void* mUserData;
 };
 
 } // end namespace pm

@@ -104,7 +104,7 @@ pmStatus preprocessorTask_cpuCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
         case AFFINITY_DEDUCER:
         {
             void* lOutputMem = pSubtaskInfo.memInfo[pSubtaskInfo.memCount - 1].writePtr;
-            
+
             pmExecutionStub* lStub = pmStubManager::GetStubManager()->GetCpuStub(pDeviceInfo.deviceIdOnHost);
             pmSubscriptionManager& lSubscriptionManager = lUserTask->GetSubscriptionManager();
             
@@ -155,12 +155,14 @@ pmStatus preprocessorTask_taskCompletionCallback(pmTaskInfo pTaskInfo)
     
     pmLocalTask* lPreprocessorTask = static_cast<pmLocalTask*>(pTaskInfo.taskHandle);
     pmLocalTask* lUserTask = static_cast<pmLocalTask*>(pmTaskManager::GetTaskManager()->FindTask(pmMachinePool::GetMachinePool()->GetMachine(lTaskConf->originatingHost), lTaskConf->sequenceNumber));
-    const pmTaskCompletionCB* lTaskCompletionCB = lUserTask->GetCallbackUnit()->GetTaskCompletionCB();
-    
-    lUserTask->SetPreprocessorTask(lPreprocessorTask);
-    lPreprocessorTask->SetTaskCompletionCallback(lTaskCompletionCB ? lTaskCompletionCB->GetCallback() : NULL);
-    lUserTask->SetTaskCompletionCallback(userTask_auxillaryTaskCompletionCallback);
 
+    lUserTask->SetPreprocessorTask(lPreprocessorTask);
+
+    const pmTaskCompletionCB* lUserTaskCompletionCB = lUserTask->GetCallbackUnit()->GetTaskCompletionCB();
+    pmTaskCompletionCallback lOrgUserCallback = (lUserTaskCompletionCB ? lUserTaskCompletionCB->GetCallback() : NULL);
+    lUserTask->SetTaskCompletionCallback(userTask_auxillaryTaskCompletionCallback);
+    const_cast<pmTaskCompletionCB*>(lUserTask->GetCallbackUnit()->GetTaskCompletionCB())->SetUserData(reinterpret_cast<void*>(lOrgUserCallback));
+    
     // Consume data computed by pre-processor task and delete preprocessor task's address spaces
     const std::vector<pmTaskMemory>& lPreprocessorTaskMemVector = lPreprocessorTask->GetTaskMemVector();
 
@@ -196,7 +198,7 @@ pmStatus userTask_auxillaryTaskCompletionCallback(pmTaskInfo pTaskInfo)
     const pmLocalTask* lPreprocessorTask = lUserTask->GetPreprocessorTask();
 
     // Reset the original task callback
-    lUserTask->SetTaskCompletionCallback(lPreprocessorTask->GetCallbackUnit()->GetTaskCompletionCB()->GetCallback());
+    lUserTask->SetTaskCompletionCallback(reinterpret_cast<pmTaskCompletionCallback>(lUserTask->GetCallbackUnit()->GetTaskCompletionCB()->GetUserData()));
 
     // Destroy preprocessorTask
     const std::vector<pmTaskMemory>& lPreprocessorTaskMemVector = lPreprocessorTask->GetTaskMemVector();
@@ -205,7 +207,7 @@ pmStatus userTask_auxillaryTaskCompletionCallback(pmTaskInfo pTaskInfo)
     EXCEPTION_ASSERT(pmReleaseMemory(lAddressSpace->GetUserMemHandle()) == pmSuccess);
     EXCEPTION_ASSERT(pmReleaseTask((pmTaskHandle)(lPreprocessorTask)) == pmSuccess);
 
-    // Call the original task completion callback
+    // Call the original user task completion callback
     return lUserTask->GetCallbackUnit()->GetTaskCompletionCB()->Invoke(lUserTask);
 }
     

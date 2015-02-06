@@ -321,6 +321,7 @@ pmStatus pmPostDataTransferCB::Invoke() const
 /* class pmTaskCompletionCB */
 pmTaskCompletionCB::pmTaskCompletionCB(pmTaskCompletionCallback pCallback)
 	: mCallback(pCallback)
+    , mUserData(NULL)
 {
 }
 
@@ -336,6 +337,17 @@ pmTaskCompletionCallback pmTaskCompletionCB::GetCallback() const
 {
     return mCallback;
 }
+    
+void* pmTaskCompletionCB::GetUserData() const
+{
+    return mUserData;
+}
+
+void pmTaskCompletionCB::SetUserData(void* pUserData)
+{
+    mUserData = pUserData;
+}
+
 
 };
 
