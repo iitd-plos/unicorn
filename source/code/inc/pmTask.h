@@ -182,8 +182,8 @@ class pmTask : public pmBase
         pmAffinityCriterion GetAffinityCriterion() const;
 
         void SetAffinityMappings(std::vector<ulong>&& pLogicalToPhysical, std::vector<ulong>&& pPhysicalToLogical);
-        ulong GetPhysicalSubtaskId(ulong pLogicalSubtaskId) const;
-        ulong GetLogicalSubtaskId(ulong pPhysicalSubtaskId) const;
+        ulong GetPhysicalSubtaskId(ulong pLogicalSubtaskId);
+        ulong GetLogicalSubtaskId(ulong pPhysicalSubtaskId);
 
     private:
 		void BuildTaskInfo();

@@ -432,6 +432,8 @@ namespace pm
             COPY_FROM_PINNED_MEMORY,
             CUDA_COMMAND_PREPARATION,
             PREPROCESSOR_TASK_EXECUTION,
+            AFFINITY_SUBTASK_MAPPINGS,
+            AFFINITY_USE_OVERHEAD,
             UNIVERSAL, /* For internal use only */
             MAX_PROFILE_TYPES
         };

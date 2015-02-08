@@ -179,12 +179,14 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
         mTable.AddRow(pIndex, std::move(lTableRow));
     #endif
     });
-    
-    CreateSubtaskMappings();
 }
 
 void pmAffinityTable::CreateSubtaskMappings()
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mLocalTask->GetTaskProfiler(), taskProfiler::AFFINITY_SUBTASK_MAPPINGS);
+#endif
+
     ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 
     std::vector<ulong> lLogicalToPhysicalSubtaskMapping(lSubtaskCount);
@@ -298,6 +300,10 @@ void pmAffinityTable::CreateSubtaskMappings()
 #ifdef USE_AFFINITY_IN_STEAL
 std::vector<ulong> pmAffinityTable::FindSubtasksWithBestAffinity(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::AFFINITY_USE_OVERHEAD);
+#endif
+
     std::vector<const pmMachine*> lMachinesVector;
     pmProcessingElement::GetMachinesInOrder(((dynamic_cast<pmLocalTask*>(pTask) != NULL) ? ((pmLocalTask*)pTask)->GetAssignedDevices() : ((pmRemoteTask*)pTask)->GetAssignedDevices()), lMachinesVector);
 

@@ -902,16 +902,24 @@ void pmTask::SetAffinityMappings(std::vector<ulong>&& pLogicalToPhysical, std::v
     GetSubscriptionManager().MoveConstantSubtaskDataToPreprocessorTaskHoldings();
 }
     
-ulong pmTask::GetPhysicalSubtaskId(ulong pLogicalSubtaskId) const
+ulong pmTask::GetPhysicalSubtaskId(ulong pLogicalSubtaskId)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(GetTaskProfiler(), taskProfiler::AFFINITY_USE_OVERHEAD);
+#endif
+
     if(mLogicalToPhysicalSubtaskMappings.empty())
         return pLogicalSubtaskId;
     else
         return mLogicalToPhysicalSubtaskMappings[pLogicalSubtaskId];
 }
 
-ulong pmTask::GetLogicalSubtaskId(ulong pPhysicalSubtaskId) const
+ulong pmTask::GetLogicalSubtaskId(ulong pPhysicalSubtaskId)
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(GetTaskProfiler(), taskProfiler::AFFINITY_USE_OVERHEAD);
+#endif
+
     if(mPhysicalToLogicalSubtaskMappings.empty())
         return pPhysicalSubtaskId;
     else
@@ -1188,6 +1196,8 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
             
             if(pSchedulingModel == scheduler::PULL_WITH_AFFINITY)
             {
+                mAffinityTable->CreateSubtaskMappings();
+
                 const std::vector<ulong>& lLogicalToPhysicalSubtaskMappings = GetLogicalToPhysicalSubtaskMappings();
                 
                 std::set<const pmMachine*> lMachines;

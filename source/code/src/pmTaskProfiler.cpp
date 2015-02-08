@@ -50,6 +50,8 @@ static const char* profileName[] =
     (char*)"COPY_FROM_PINNED_MEMORY",
     (char*)"CUDA_COMMAND_PREPARATION",
     (char*)"PREPROCESSOR_TASK_EXECUTION",
+    (char*)"AFFINITY_SUBTASK_MAPPINGS",
+    (char*)"AFFINITY_USE_OVERHEAD",
     (char*)"UNIVERSAL"
 };
 

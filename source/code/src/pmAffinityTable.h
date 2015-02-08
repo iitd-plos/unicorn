@@ -39,14 +39,13 @@ public:
     pmAffinityTable(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion);
     
     void PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
+    void CreateSubtaskMappings();
     
 #ifdef USE_AFFINITY_IN_STEAL
     static std::vector<ulong> FindSubtasksWithBestAffinity(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine);
 #endif
 
 private:
-    void CreateSubtaskMappings();
-
     template<typename T, typename S>
     void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
 
