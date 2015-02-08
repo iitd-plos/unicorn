@@ -57,7 +57,7 @@ pmTaskExecStats::~pmTaskExecStats()
     lStream << std::endl << "Task Exec Stats [Host " << pmGetHostId() << "] ............ " << std::endl;
 
 #ifdef ENABLE_MEM_PROFILING
-    lStream << "Memory Transfers - Received = " << mMemReceived << " bytes; Receive Events = " << mMemReceiveEvents << "; Sent = " << mMemTransferred << " bytes; Send Events = " << mMemTransferEvents << std::endl;
+    lStream << "Total Memory Transfers - Received = " << mMemReceived << " bytes; Receive Events = " << mMemReceiveEvents << "; Sent = " << mMemTransferred << " bytes; Send Events = " << mMemTransferEvents << std::endl;
     lStream << "Scattered Memory Transfers - Received = " << mScatteredMemReceived << " bytes; Receive Events = " << mScatteredMemReceiveEvents << "; Sent = " << mScatteredMemTransferred << " bytes; Send Events = " << mScatteredMemTransferEvents << std::endl;
 #endif
     

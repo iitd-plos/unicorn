@@ -1188,8 +1188,6 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
             
             if(pSchedulingModel == scheduler::PULL_WITH_AFFINITY)
             {
-                mAffinityTable->CreateSubtaskMappings();
-
                 const std::vector<ulong>& lLogicalToPhysicalSubtaskMappings = GetLogicalToPhysicalSubtaskMappings();
                 
                 std::set<const pmMachine*> lMachines;

@@ -179,6 +179,8 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
         mTable.AddRow(pIndex, std::move(lTableRow));
     #endif
     });
+    
+    CreateSubtaskMappings();
 }
 
 void pmAffinityTable::CreateSubtaskMappings()
