@@ -38,6 +38,9 @@
 #include <string.h>
 #include <sstream>
 
+#include <boost/geometry/geometries/box.hpp>
+#include <boost/geometry/index/rtree.hpp>
+
 namespace pm
 {
 
@@ -314,7 +317,10 @@ void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, u
         {
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
             
-            lPair.first.find(lDataPair)->second.mReadyForExecution = true;
+            pmSubtask& lSubtask = lPair.first.find(lDataPair)->second;
+            
+            InsertScatteredSubscriptionsToSubtaskMapsInternal(lSubtask);
+            lSubtask.mReadyForExecution = true;
         }
     }
     else
@@ -360,7 +366,10 @@ void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, u
             {
                 FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
 
-                lPair.first.find(pSubtaskId)->second.mReadyForExecution = true;
+                pmSubtask& lSubtask = lPair.first.find(pSubtaskId)->second;
+
+                InsertScatteredSubscriptionsToSubtaskMapsInternal(lSubtask);
+                lSubtask.mReadyForExecution = true;
             }
         }
     }
@@ -451,20 +460,14 @@ void pmSubscriptionManager::RegisterSubscriptionInternal(pmSubtask& pSubtask, ui
 
     pmSubtaskAddressSpaceData& lAddressSpaceData = pSubtask.mAddressSpacesData[pMemIndex];
     pmSubtaskSubscriptionData& lSubscriptionData = (IsReadSubscription(pSubscriptionType) ? lAddressSpaceData.mReadSubscriptionData : lAddressSpaceData.mWriteSubscriptionData);
+    pmSubscriptionInfo& lConsolidatedSubscription = lSubscriptionData.mConsolidatedSubscriptions;
 
     if(IsReadSubscription(pSubscriptionType))
         lAddressSpaceData.mScatteredReadSubscriptionInfoVector.emplace_back(pScatteredSubscriptionInfo);
     else
         lAddressSpaceData.mScatteredWriteSubscriptionInfoVector.emplace_back(pScatteredSubscriptionInfo);
 
-    subscriptionRecordType& lMap = lSubscriptionData.mSubscriptionRecords;
-    pmSubscriptionInfo& lConsolidatedSubscription = lSubscriptionData.mConsolidatedSubscriptions;
-    
-    subscriptionRecordType::iterator lIter = lMap.find(pScatteredSubscriptionInfo.offset);
-    if(lIter != lMap.end() && lIter->second.first == pScatteredSubscriptionInfo.size)
-        return;     // Subscription information already present
-    
-    if(lMap.empty())
+    if(lConsolidatedSubscription.length == 0)
     {
         lConsolidatedSubscription = pmSubscriptionInfo(pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.step * pScatteredSubscriptionInfo.count);
     }
@@ -480,9 +483,94 @@ void pmSubscriptionManager::RegisterSubscriptionInternal(pmSubtask& pSubtask, ui
         lConsolidatedSubscription.offset = std::min(lExistingOffset, lNewOffset);
         lConsolidatedSubscription.length = (std::max(lExistingSpan, lNewSpan) - lConsolidatedSubscription.offset);
     }
+}
+    
+/* Must be called with mSubtaskMapVector stub's lock acquired */
+void pmSubscriptionManager::InsertScatteredSubscriptionsToSubtaskMapsInternal(subscription::pmSubtask& pSubtask)
+{
+    auto lSameStepLambda = [] (const std::vector<pmScatteredSubscriptionInfo>& pVector) -> bool
+    {
+        auto lIter = pVector.begin(), lEndIter = pVector.end();
+        
+        unsigned long lCurrentStep = lIter->step;
+        ++lIter;
+        
+        for(; lIter != lEndIter; ++lIter)
+        {
+            if(lIter->step != lCurrentStep)
+                return false;   // return from lambda
+        }
+        
+        return true;
+    };
+    
+    auto lExhaustiveLambda = [&] (subscriptionRecordType& pMap, const std::vector<pmScatteredSubscriptionInfo>& pVector)
+    {
+        for_each(pVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+        {
+            for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
+                AddSubscriptionRecordToMap(pmSubscriptionInfo(pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size), pMap);
+        });
+    };
 
-    for(size_t i = 0; i < pScatteredSubscriptionInfo.count; ++i)
-        AddSubscriptionRecordToMap(pmSubscriptionInfo(pScatteredSubscriptionInfo.offset + i * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size), lMap);
+    auto lFastLambda = [&] (subscriptionRecordType& pMap, const std::vector<pmScatteredSubscriptionInfo>& pVector)
+    {
+        namespace bg = boost::geometry;
+        namespace bgi = boost::geometry::index;
+
+        bgi::rtree<bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>>, bgi::quadratic<16>> lRtree;
+        
+        for_each(pVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+        {
+            bg::model::point<ulong, 2, bg::cs::cartesian> lPoint1(pScatteredSubscriptionInfo.offset % pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.offset / pScatteredSubscriptionInfo.step);
+            bg::model::point<ulong, 2, bg::cs::cartesian> lPoint2(lPoint1.get<0>() + pScatteredSubscriptionInfo.size - 1, lPoint1.get<1>() + pScatteredSubscriptionInfo.count - 1);
+            
+            bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>> lBox(lPoint1, lPoint2);
+
+            std::vector<bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>>> lOverlappingSubscriptions;
+            lRtree.query(bgi::intersects(lBox), std::back_inserter(lOverlappingSubscriptions));
+
+            if(lOverlappingSubscriptions.empty())
+            {
+                lRtree.insert(lBox);
+            }
+            else
+            {
+                // This code needs to be improved by breaking overlapping rects into non-overlapping ones
+                lExhaustiveLambda(pMap, pVector);
+                return; // return from lambda
+            }
+        });
+        
+        std::vector<bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>>> lResolvedSubscriptions;
+        bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>> lBox(bg::model::point<ulong, 2, bg::cs::cartesian>(0, 0), bg::model::point<ulong, 2, bg::cs::cartesian>(std::numeric_limits<ulong>::max(), std::numeric_limits<ulong>::max()));
+        lRtree.query(bgi::intersects(lBox), std::back_inserter(lResolvedSubscriptions));
+
+        unsigned long lStep = pVector.begin()->step;
+        for_each(lResolvedSubscriptions, [&] (const bg::model::box<bg::model::point<unsigned long, 2, bg::cs::cartesian>>& pBox)
+        {
+            auto lPoint1 = pBox.min_corner();
+            auto lPoint2 = pBox.max_corner();
+            
+            pmScatteredSubscriptionInfo lScatteredSubscription(lPoint1.get<1>() * lStep + lPoint1.get<0>(), lPoint2.get<0>() - lPoint1.get<0>() + 1, lStep, lPoint2.get<1>() - lPoint1.get<1>() + 1);
+            
+            for(size_t i = 0; i < lScatteredSubscription.count; ++i)
+                pMap[lScatteredSubscription.offset + i * lScatteredSubscription.step].first = lScatteredSubscription.size;
+        });
+    };
+    
+    multi_for_each(mTask->GetAddressSpaces(), pSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
+    {
+        if(!pAddressSpaceData.mScatteredReadSubscriptionInfoVector.empty() && pAddressSpaceData.mReadSubscriptionInfoVector.empty() && lSameStepLambda(pAddressSpaceData.mScatteredReadSubscriptionInfoVector))
+            lFastLambda(pAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredReadSubscriptionInfoVector);
+        else
+            lExhaustiveLambda(pAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredReadSubscriptionInfoVector);
+
+        if(!pAddressSpaceData.mScatteredWriteSubscriptionInfoVector.empty() && pAddressSpaceData.mWriteSubscriptionInfoVector.empty() && lSameStepLambda(pAddressSpaceData.mScatteredWriteSubscriptionInfoVector))
+            lFastLambda(pAddressSpaceData.mWriteSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredWriteSubscriptionInfoVector);
+        else
+            lExhaustiveLambda(pAddressSpaceData.mWriteSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredWriteSubscriptionInfoVector);
+    });
 }
     
 pmSubscriptionFormat pmSubscriptionManager::GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
@@ -2043,6 +2131,7 @@ bool operator!=(const subscriptionRecordType& pRecord1, const subscriptionRecord
 
 }
 
+
 /* shadowMemDeallocator */
 void shadowMemDeallocator::operator()(void* pMem)
 {
@@ -2071,6 +2160,6 @@ void shadowMemDeallocator::operator()(void* pMem)
         }
     }
 }
-
+    
 }
 

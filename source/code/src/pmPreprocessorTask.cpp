@@ -300,7 +300,7 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
     
 	lTaskDetails.policy = NODE_EQUAL_STATIC;
 	lTaskDetails.multiAssignEnabled = false;
-    lTaskDetails.overlapComputeCommunication = false;
+    lTaskDetails.overlapComputeCommunication = true;
     lTaskDetails.suppressTaskLogs = true;
 
 	pmTaskHandle lTaskHandle = NULL;

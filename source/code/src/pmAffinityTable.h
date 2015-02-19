@@ -43,6 +43,7 @@ public:
     
 #ifdef USE_AFFINITY_IN_STEAL
     static std::vector<ulong> FindSubtasksWithBestAffinity(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine);
+    static std::vector<ulong> FindSubtasksWithMaxDifferenceInAffinities(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine1, const pmMachine* pMachine2);
 #endif
 
 private:
@@ -52,6 +53,9 @@ private:
 #ifdef USE_AFFINITY_IN_STEAL
     template<typename T, typename S>
     static std::vector<ulong> FindSubtasksWithBestAffinity(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, size_t pMachineIndex, ulong pSubtaskCount);
+
+    template<typename T, typename S, typename D>
+    static std::vector<ulong> FindSubtasksWithMaxDifferenceInAffinities(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, size_t pMachineIndex1, size_t pMachineIndex2, ulong pSubtaskCount);
 #endif
 
     pmLocalTask* mLocalTask;

@@ -44,7 +44,7 @@ namespace subscription
 	};
 
     typedef std::map<size_t, std::pair<size_t, subscriptionData> > subscriptionRecordType;
-    
+
     bool operator==(const subscription::subscriptionRecordType& pRecord1, const subscription::subscriptionRecordType& pRecord2);
     bool operator!=(const subscription::subscriptionRecordType& pRecord1, const subscription::subscriptionRecordType& pRecord2);
 
@@ -79,8 +79,8 @@ namespace subscription
     struct pmSubtaskSubscriptionData
     {
         pmSubscriptionInfo mConsolidatedSubscriptions;
-        subscriptionRecordType mSubscriptionRecords;
-        
+        subscription::subscriptionRecordType mSubscriptionRecords;
+
         bool operator==(const pmSubtaskSubscriptionData& pData) const
         {
             if(mConsolidatedSubscriptions != pData.mConsolidatedSubscriptions)
@@ -304,6 +304,8 @@ class pmSubscriptionManager : public pmBase
 	private:
         void RegisterSubscriptionInternal(subscription::pmSubtask& pSubtask, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo);
 		void RegisterSubscriptionInternal(subscription::pmSubtask& pSubtask, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
+    
+        void InsertScatteredSubscriptionsToSubtaskMapsInternal(subscription::pmSubtask& pSubtask);
 
         subscription::subscriptionRecordType GetNonConsolidatedReadWriteSubscriptionsAsMapInternal(subscription::pmSubtask& pSubtask, uint pMemIndex);
         size_t GetAddressSpaceOffsetFromCompactViewOffsetInternal(subscription::pmSubtask& pSubtask, uint pMemIndex, size_t pCompactViewOffset);

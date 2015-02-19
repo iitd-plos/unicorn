@@ -802,7 +802,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                     ulong lFirstSubtask = (lExecEvent.rangeExecutedOnce ? (lExecEvent.lastExecutedSubtaskId + 1) : lExecEvent.range.startSubtask);
                     ulong lLastSubtask = lExecEvent.range.endSubtask;
 
-                    std::vector<ulong> lAffinitySubtasks = pmAffinityTable::FindSubtasksWithBestAffinity(pTask, lFirstSubtask, lExecEvent.range.endSubtask, lStealCount, pRequestingDevice->GetMachine());
+                    std::vector<ulong> lAffinitySubtasks = pmAffinityTable::FindSubtasksWithMaxDifferenceInAffinities(pTask, lFirstSubtask, lExecEvent.range.endSubtask, lStealCount, PM_LOCAL_MACHINE, pRequestingDevice->GetMachine());
                     EXCEPTION_ASSERT(lAffinitySubtasks.size() == lStealCount);
                     
                     lStealSuccess = true;
@@ -929,7 +929,7 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 ulong lFirstSubtask = (mCurrentSubtaskRangeStats->currentSubtaskIdValid ? mCurrentSubtaskRangeStats->currentSubtaskId : mCurrentSubtaskRangeStats->startSubtaskId) + 1;
                 ulong lLastSubtask = mCurrentSubtaskRangeStats->endSubtaskId;
 
-                std::vector<ulong> lAffinitySubtasks = pmAffinityTable::FindSubtasksWithBestAffinity(pTask, lFirstSubtask, mCurrentSubtaskRangeStats->endSubtaskId, lStealCount, pRequestingDevice->GetMachine());
+                std::vector<ulong> lAffinitySubtasks = pmAffinityTable::FindSubtasksWithMaxDifferenceInAffinities(pTask, lFirstSubtask, mCurrentSubtaskRangeStats->endSubtaskId, lStealCount, PM_LOCAL_MACHINE, pRequestingDevice->GetMachine());
                 EXCEPTION_ASSERT(lAffinitySubtasks.size() == lStealCount);
                 
             #ifdef USE_STEAL_AGENT_PER_NODE

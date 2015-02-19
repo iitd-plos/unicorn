@@ -16,6 +16,8 @@ DEBUG=0
 
 PTHREAD_LIBS= -lpthread
 
+BOOST_INCLUDE= -I../../thirdparty/boost
+
 COMPILER=g++
 NVCC_COMPILER=nvcc
 FLAGS=-Wall -std=c++11 -fPIC -DUNIX -D$(PLATFORM) -MMD
@@ -120,7 +122,7 @@ OBJECTS += $(CUDA_OBJECTS)
 LIBRARIES += -L$(CUDA_LIB_PATH) -L$(CUDA_DRIVER_LIB_PATH) -lcuda -lcudart
 endif
 
-INCLUDES += -I../../source/code/inc $(MPI_INCLUDE)
+INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(BOOST_INCLUDE)
 
 all: prebuild compile link postbuild final
 

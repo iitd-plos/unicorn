@@ -41,6 +41,7 @@ struct GetAffinityDataType<MAXIMIZE_LOCAL_DATA>
 {
     typedef ulong type;
     typedef std::greater<type> sorter;
+    typedef double difference_type;
 };
 
 template<>
@@ -48,6 +49,7 @@ struct GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>
 {
     typedef uint type;
     typedef std::less<type> sorter;
+    typedef long difference_type;
 };
 
 template<>
@@ -55,6 +57,7 @@ struct GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>
 {
     typedef ulong type;
     typedef std::less<type> sorter;
+    typedef double difference_type;
 };
 
 template<>
@@ -62,6 +65,7 @@ struct GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>
 {
     typedef float type;
     typedef std::less<type> sorter;
+    typedef double difference_type;
 };
 
 
@@ -270,7 +274,7 @@ void pmAffinityTable::CreateSubtaskMappings()
         EXCEPTION_ASSERT(lAssigned);
     }
 #endif
-    
+
 #ifdef _DEBUG
     for_each_with_index(lLogicalToPhysicalSubtaskMapping, [&] (ulong lPhysicalSubtask, size_t lLogicalSubtask)
     {
@@ -346,6 +350,72 @@ std::vector<ulong> pmAffinityTable::FindSubtasksWithBestAffinity(pmAddressSpace*
     std::multimap<T, ulong, S> lArrangedSubtasks;
     for(ulong i = pStartSubtask; i <= pEndSubtask; ++i)
         lArrangedSubtasks.emplace(lAffinityData[i], i);
+    
+    EXCEPTION_ASSERT(lArrangedSubtasks.size() >= pCount);
+    
+    auto lIter = lArrangedSubtasks.begin();
+
+    std::vector<ulong> lSubtasksVector;
+    lSubtasksVector.reserve(pCount);
+
+    for(size_t i = 0; i < pCount; ++i, ++lIter)
+        lSubtasksVector.emplace_back(lIter->second);
+    
+    std::sort(lSubtasksVector.begin(), lSubtasksVector.end());
+    
+    return lSubtasksVector;
+}
+
+std::vector<ulong> pmAffinityTable::FindSubtasksWithMaxDifferenceInAffinities(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine1, const pmMachine* pMachine2)
+{
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::AFFINITY_USE_OVERHEAD);
+#endif
+
+    std::vector<const pmMachine*> lMachinesVector;
+    pmProcessingElement::GetMachinesInOrder(((dynamic_cast<pmLocalTask*>(pTask) != NULL) ? ((pmLocalTask*)pTask)->GetAssignedDevices() : ((pmRemoteTask*)pTask)->GetAssignedDevices()), lMachinesVector);
+
+    pmAddressSpace* lAffinityAddressSpace = ((dynamic_cast<pmLocalTask*>(pTask) != NULL) ? ((pmLocalTask*)pTask)->GetAffinityAddressSpace() : ((pmRemoteTask*)pTask)->GetAffinityAddressSpace());
+    EXCEPTION_ASSERT(lAffinityAddressSpace != NULL);
+    
+    auto lIter1 = std::find(lMachinesVector.begin(), lMachinesVector.end(), pMachine1), lIter2 = std::find(lMachinesVector.begin(), lMachinesVector.end(), pMachine2);
+    EXCEPTION_ASSERT(lIter1 != lMachinesVector.end());
+    
+    size_t lMachineIndex1 = lIter1 - lMachinesVector.begin();
+    size_t lMachineIndex2 = lIter2 - lMachinesVector.begin();
+    
+    switch(pTask->GetAffinityCriterion())
+    {
+        case MAXIMIZE_LOCAL_DATA:
+            return FindSubtasksWithMaxDifferenceInAffinities<GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::type, GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::sorter, GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::difference_type>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex1, lMachineIndex2, pTask->GetSubtaskCount());
+            
+        case MINIMIZE_REMOTE_SOURCES:
+            return FindSubtasksWithMaxDifferenceInAffinities<GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::type, GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::sorter, GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::difference_type>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex1, lMachineIndex2, pTask->GetSubtaskCount());
+            
+        case MINIMIZE_REMOTE_TRANSFER_EVENTS:
+            return FindSubtasksWithMaxDifferenceInAffinities<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::sorter, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::difference_type>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex1, lMachineIndex2, pTask->GetSubtaskCount());
+
+        case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
+            return FindSubtasksWithMaxDifferenceInAffinities<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::sorter, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::difference_type>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex1, lMachineIndex2, pTask->GetSubtaskCount());
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+    
+    return std::vector<ulong>();
+}
+    
+template<typename T, typename S, typename D>
+std::vector<ulong> pmAffinityTable::FindSubtasksWithMaxDifferenceInAffinities(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, size_t pMachineIndex1, size_t pMachineIndex2, ulong pSubtaskCount)
+{
+    T* lAffinityData = static_cast<T*>(pAffinityAddressSpace->GetMem());
+
+    T* lAffinityData1 = lAffinityData + pMachineIndex1 * pSubtaskCount;
+    T* lAffinityData2 = lAffinityData + pMachineIndex2 * pSubtaskCount;
+    
+    std::multimap<D, ulong, S> lArrangedSubtasks;
+    for(ulong i = pStartSubtask; i <= pEndSubtask; ++i)
+        lArrangedSubtasks.emplace((D)(lAffinityData2[i]) - (D)(lAffinityData1[i]), i);
     
     EXCEPTION_ASSERT(lArrangedSubtasks.size() >= pCount);
     

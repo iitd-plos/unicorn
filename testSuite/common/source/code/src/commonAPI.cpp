@@ -382,7 +382,7 @@ void Do2DRandomBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
     {
         for(unsigned int j = 0; j < lBlockCols; ++j)
         {
-            if(pMachinesList[i] == pMachineId)
+            if(pMachinesList[i * lBlockCols + j] == pMachineId)
             {
                 size_t lBlockOffset = (i * pMatrixWidth + j) * pBlockDim * pElemSize;
 
