@@ -561,15 +561,21 @@ void pmSubscriptionManager::InsertScatteredSubscriptionsToSubtaskMapsInternal(su
     
     multi_for_each(mTask->GetAddressSpaces(), pSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
     {
-        if(!pAddressSpaceData.mScatteredReadSubscriptionInfoVector.empty() && pAddressSpaceData.mReadSubscriptionInfoVector.empty() && lSameStepLambda(pAddressSpaceData.mScatteredReadSubscriptionInfoVector))
-            lFastLambda(pAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredReadSubscriptionInfoVector);
-        else
-            lExhaustiveLambda(pAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredReadSubscriptionInfoVector);
+        if(!pAddressSpaceData.mScatteredReadSubscriptionInfoVector.empty())
+        {
+            if(pAddressSpaceData.mReadSubscriptionInfoVector.empty() && lSameStepLambda(pAddressSpaceData.mScatteredReadSubscriptionInfoVector))
+                lFastLambda(pAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredReadSubscriptionInfoVector);
+            else
+                lExhaustiveLambda(pAddressSpaceData.mReadSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredReadSubscriptionInfoVector);
+        }
 
-        if(!pAddressSpaceData.mScatteredWriteSubscriptionInfoVector.empty() && pAddressSpaceData.mWriteSubscriptionInfoVector.empty() && lSameStepLambda(pAddressSpaceData.mScatteredWriteSubscriptionInfoVector))
-            lFastLambda(pAddressSpaceData.mWriteSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredWriteSubscriptionInfoVector);
-        else
-            lExhaustiveLambda(pAddressSpaceData.mWriteSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredWriteSubscriptionInfoVector);
+        if(!pAddressSpaceData.mScatteredWriteSubscriptionInfoVector.empty())
+        {
+            if(pAddressSpaceData.mWriteSubscriptionInfoVector.empty() && lSameStepLambda(pAddressSpaceData.mScatteredWriteSubscriptionInfoVector))
+                lFastLambda(pAddressSpaceData.mWriteSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredWriteSubscriptionInfoVector);
+            else
+                lExhaustiveLambda(pAddressSpaceData.mWriteSubscriptionData.mSubscriptionRecords, pAddressSpaceData.mScatteredWriteSubscriptionInfoVector);
+        }
     });
 }
     
