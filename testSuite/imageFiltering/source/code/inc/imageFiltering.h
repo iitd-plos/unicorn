@@ -17,6 +17,10 @@ namespace imageFiltering
 #define MAX_FILTER_RADIUS 15
 #define MAX_FILTER_DIM 32
 
+#define DEFAULT_ITERATION_COUNT 10
+
+#define DO_MULTIPLE_CONVOLUTIONS
+
 using namespace pm;
 
 #define MAX_IMAGE_PATH_LENGTH 256

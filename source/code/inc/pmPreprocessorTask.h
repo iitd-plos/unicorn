@@ -59,6 +59,7 @@ private:
     pmPreprocessorTask();
 
     void LaunchPreprocessorTask(pmLocalTask* pLocalTask, preprocessorTask::preprocessorTaskType pTaskType, pmAffinityCriterion pAffinityCriterion);
+    static uint GetPercentageSubtasksToBeEvaluatedPerHostForAffinityComputation();
 
     pmCallbackHandle mPreprocessorTaskCallbackHandle;
 };

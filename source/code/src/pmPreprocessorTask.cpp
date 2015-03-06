@@ -28,6 +28,8 @@
 #include "pmStubManager.h"
 #include "pmController.h"
 
+#include <random>
+
 namespace pm
 {
 
@@ -40,6 +42,7 @@ struct preprocessorTaskConf
     uint originatingHost;   // of user task
     ulong sequenceNumber;  // of user task
     pmAffinityCriterion affinityCriterion;
+    uint machinesCount;
 };
 
 void PostAffinityAddressSpaceFetchCallback(const pmCommandPtr& pCountDownCommand);
@@ -73,8 +76,18 @@ pmStatus preprocessorTask_dataDistributionCallback(pmTaskInfo pTaskInfo, pmDevic
         case AFFINITY_DEDUCER:
         {
             size_t lSampleSize = pmPreprocessorTask::GetSampleSizeForAffinityCriterion(lTaskConf->affinityCriterion);
+            
+            if(lTaskConf->originalTaskSubtasks * lTaskConf->machinesCount != pTaskInfo.subtaskCount)
+            {
+                ulong lSubtasksPerMachine = pTaskInfo.subtaskCount / lTaskConf->machinesCount;
+                lSampleSize *= 2;
 
-            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, pSubtaskInfo.memCount - 1, WRITE_SUBSCRIPTION, pmSubscriptionInfo((pDeviceInfo.host * lTaskConf->originalTaskSubtasks + (pSubtaskInfo.subtaskId % lTaskConf->originalTaskSubtasks)) * lSampleSize, lSampleSize));
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, pSubtaskInfo.memCount - 1, WRITE_SUBSCRIPTION, pmSubscriptionInfo((pDeviceInfo.host * lSubtasksPerMachine + (pSubtaskInfo.subtaskId % lSubtasksPerMachine)) * lSampleSize, lSampleSize));
+            }
+            else
+            {
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, pSubtaskInfo.memCount - 1, WRITE_SUBSCRIPTION, pmSubscriptionInfo((pDeviceInfo.host * lTaskConf->originalTaskSubtasks + (pSubtaskInfo.subtaskId % lTaskConf->originalTaskSubtasks)) * lSampleSize, lSampleSize));
+            }
     
             break;
         }
@@ -109,23 +122,77 @@ pmStatus preprocessorTask_cpuCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
             pmSubscriptionManager& lSubscriptionManager = lUserTask->GetSubscriptionManager();
             
             ulong lUserSubtaskId = (pSubtaskInfo.subtaskId % lTaskConf->originalTaskSubtasks);
-            lSubscriptionManager.FindSubtaskMemDependencies(lStub, lUserSubtaskId, NULL, true);
             
+            bool lSelectiveSubtasks = false;
+            if(lTaskConf->originalTaskSubtasks * lTaskConf->machinesCount != pTaskInfo.subtaskCount)
+            {
+                lSelectiveSubtasks = true;
+                
+                ulong lSubtasksPerMachine = pTaskInfo.subtaskCount / lTaskConf->machinesCount;
+                float lSubtaskSpan = lTaskConf->originalTaskSubtasks / lSubtasksPerMachine;
+                
+                EXCEPTION_ASSERT(lSubtaskSpan > 1.0);
+                
+                ulong lChoiceId = (pSubtaskInfo.subtaskId % lSubtasksPerMachine);
+                ulong lFirstPossibleSubtask = (ulong)((float)lChoiceId * lSubtaskSpan);
+                ulong lLastPosibleSubtask = (ulong)((float)(lChoiceId + 1) * lSubtaskSpan);
+                
+                if(lLastPosibleSubtask > lTaskConf->originalTaskSubtasks)
+                    lLastPosibleSubtask = lTaskConf->originalTaskSubtasks;
+                
+                if(lChoiceId == lSubtasksPerMachine - 1 && lLastPosibleSubtask != lTaskConf->originalTaskSubtasks)
+                    lLastPosibleSubtask = lTaskConf->originalTaskSubtasks;
+                
+                ulong lPossibilities = lLastPosibleSubtask - lFirstPossibleSubtask;
+                EXCEPTION_ASSERT(lPossibilities);
+                
+                std::random_device lRandomDevice;
+                std::mt19937 lGenerator(lRandomDevice());
+
+                lUserSubtaskId = lFirstPossibleSubtask + (lGenerator() % lPossibilities);
+            }
+            
+            lSubscriptionManager.FindSubtaskMemDependencies(lStub, lUserSubtaskId, NULL, true);
+
             switch(lTaskConf->affinityCriterion)
             {
                 case MAXIMIZE_LOCAL_DATA:
+                    if(lSelectiveSubtasks)
+                    {
+                        *((ulong*)lOutputMem) = (ulong)lUserSubtaskId;
+                        lOutputMem = (void*)((ulong*)lOutputMem + 1);
+                    }
+
                     *((ulong*)lOutputMem) = lSubscriptionManager.FindLocalInputDataSizeForSubtask(lStub, lUserSubtaskId);
                     break;
 
                 case MINIMIZE_REMOTE_SOURCES:
+                    if(lSelectiveSubtasks)
+                    {
+                        *((uint*)lOutputMem) = (uint)lUserSubtaskId;
+                        lOutputMem = (void*)((uint*)lOutputMem + 1);
+                    }
+
                     *((uint*)lOutputMem) = lSubscriptionManager.FindRemoteDataSourcesForSubtask(lStub, lUserSubtaskId);
                     break;
                 
                 case MINIMIZE_REMOTE_TRANSFER_EVENTS:
+                    if(lSelectiveSubtasks)
+                    {
+                        *((ulong*)lOutputMem) = (ulong)lUserSubtaskId;
+                        lOutputMem = (void*)((ulong*)lOutputMem + 1);
+                    }
+
                     *((ulong*)lOutputMem) = lSubscriptionManager.FindRemoteTransferEventsForSubtask(lStub, lUserSubtaskId);
                     break;
 
                 case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
+                    if(lSelectiveSubtasks)
+                    {
+                        *((float*)lOutputMem) = (float)lUserSubtaskId;
+                        lOutputMem = (void*)((float*)lOutputMem + 1);
+                    }
+
                     *((float*)lOutputMem) = lSubscriptionManager.FindRemoteTransferEstimateForSubtask(lStub, lUserSubtaskId);
                     break;
                     
@@ -230,6 +297,20 @@ pmPreprocessorTask* pmPreprocessorTask::GetPreprocessorTask()
     return &lPreprocessorTask;
 }
 
+uint pmPreprocessorTask::GetPercentageSubtasksToBeEvaluatedPerHostForAffinityComputation()
+{
+    static const char* lVal = getenv("PMLIB_PERCENT_SUBTASKS_PER_HOST_FOR_AFFINITY_COMPUTATION");
+    if(lVal)
+    {
+        uint lValue = (uint)atoi(lVal);
+
+        if(lValue != 0 && lValue < 100)
+            return lValue;
+    }
+    
+    return 100;
+}
+
 void pmPreprocessorTask::DeduceAffinity(pm::pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion)
 {
     DEBUG_EXCEPTION_ASSERT(pLocalTask->GetCallbackUnit() && pLocalTask->GetCallbackUnit()->GetDataDistributionCB() && !(static_cast<pmTask*>(pLocalTask))->HasReadOnlyLazyAddressSpace());
@@ -255,11 +336,11 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
     pLocalTask->GetTaskProfiler()->RecordProfileEvent(taskProfiler::PREPROCESSOR_TASK_EXECUTION, true);
 #endif
 
-    ulong lUserSubtasks = pLocalTask->GetSubtaskCount();
-    preprocessorTaskConf lTaskConf = {pTaskType, lUserSubtasks, *pLocalTask->GetOriginatingHost(), pLocalTask->GetSequenceNumber(), pAffinityCriterion};
-
     std::set<const pmMachine*> lMachinesSet;
     pmProcessingElement::GetMachines(pLocalTask->GetAssignedDevices(), lMachinesSet);
+
+    ulong lUserSubtasks = pLocalTask->GetSubtaskCount();
+    preprocessorTaskConf lTaskConf = {pTaskType, lUserSubtasks, *pLocalTask->GetOriginatingHost(), pLocalTask->GetSequenceNumber(), pAffinityCriterion, (uint)lMachinesSet.size()};
     
     std::vector<pmTaskMem> lMemVector;
     
@@ -269,10 +350,19 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
     {
         case preprocessorTask::AFFINITY_DEDUCER:
         {
+            uint lPercentSubtasks = GetPercentageSubtasksToBeEvaluatedPerHostForAffinityComputation();
+            uint lMemoryMultiple = 1;
+
+            if(lPercentSubtasks != 100)
+            {
+                lUserSubtasks = (ulong)(((float)lPercentSubtasks / 100) * lUserSubtasks);
+                lMemoryMultiple = 2;    // For now, keeping subtask id in same format as affinity sample
+            }
+            
             lPreprocessorSubtasks = lMachinesSet.size() * lUserSubtasks;
 
             // Create an output address space for the preprocessor task (every machine stores local bytes for all subtasks) */
-            size_t lOutputMemSize = lMachinesSet.size() * lUserSubtasks * GetSampleSizeForAffinityCriterion(pAffinityCriterion);
+            size_t lOutputMemSize = lMemoryMultiple * lPreprocessorSubtasks * GetSampleSizeForAffinityCriterion(pAffinityCriterion);
 
             pmMemHandle lMemHandle;
             pmCreateMemory(lOutputMemSize, &lMemHandle);
@@ -295,7 +385,7 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
         default:
             PMTHROW(pmFatalErrorException());
     }
-    
+
     pmTaskDetails lTaskDetails(&lTaskConf, sizeof(preprocessorTaskConf), &lMemVector[0], (uint)lMemVector.size(), mPreprocessorTaskCallbackHandle, lPreprocessorSubtasks);
     
 	lTaskDetails.policy = NODE_EQUAL_STATIC;

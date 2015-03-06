@@ -48,7 +48,7 @@ public:
 
 private:
     template<typename T, typename S>
-    void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
+    void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, T pSentinelValue);
 
 #ifdef USE_AFFINITY_IN_STEAL
     template<typename T, typename S>

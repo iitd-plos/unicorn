@@ -95,10 +95,9 @@ void readImage(char* pImagePath, void* pImageData, bool pInverted)
 	fclose(fp);
 }
     
-void serialImageFilter(void* pImageData, size_t pFilterRadius)
+void serialImageFilter(void* pImageData, size_t pFilterRadius, char* pSerialOutput, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM])
 {
     char* lImageData = (char*)pImageData;
-    char* lSerialOutput = (char*)gSerialOutput;
     
     int lDimMinX, lDimMaxX, lDimMinY, lDimMaxY;
 
@@ -119,19 +118,76 @@ void serialImageFilter(void* pImageData, size_t pFilterRadius)
                     int m = ((k < 0) ? 0 : (((size_t)k >= gImageHeight) ? (gImageHeight - 1) : k));
                     int n = ((l < 0) ? 0 : (((size_t)l >= gImageWidth) ? (gImageWidth - 1) : l));
                     
-                    size_t lIndex = (m * gImageWidth + n) * PIXEL_COUNT;
-                    lRedVal += lImageData[lIndex] * gFilter[k - lDimMinY][l - lDimMinX];
-                    lGreenVal += lImageData[lIndex + 1] * gFilter[k - lDimMinY][l - lDimMinX];
-                    lBlueVal += lImageData[lIndex + 2] * gFilter[k - lDimMinY][l - lDimMinX];
+                #ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+                    // The allocated address space is of size imageWidth * imageHeight. Every row is not aligned at imageBytesPerLine offset.
+                    size_t lInvertedIndex = ((gImageHeight - 1 - m) * gImageWidth + n) * PIXEL_COUNT;
+                #else
+                    size_t lInvertedIndex = (gImageHeight - 1 - m) * lTaskConf->imageBytesPerLine + n * PIXEL_COUNT;
+                #endif
+                    
+                    lBlueVal += lImageData[lInvertedIndex] * pFilter[k - lDimMinY][l - lDimMinX];
+                    lGreenVal += lImageData[lInvertedIndex + 1] * pFilter[k - lDimMinY][l - lDimMinX];
+                    lRedVal += lImageData[lInvertedIndex + 2] * pFilter[k - lDimMinY][l - lDimMinX];
                 }
             }
             
             size_t lOffset = (i * gImageWidth + j) * PIXEL_COUNT;
-            lSerialOutput[lOffset] = lRedVal;
-            lSerialOutput[lOffset + 1] = lGreenVal;
-            lSerialOutput[lOffset + 2] = lBlueVal;
+            pSerialOutput[lOffset] = lRedVal;
+            pSerialOutput[lOffset + 1] = lGreenVal;
+            pSerialOutput[lOffset + 2] = lBlueVal;
         }
     }
+}
+    
+bool parallelImageFilter(pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, const char* pImagePath, int pFilterRadius, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM])
+{
+	// Number of subtasks is equal to the number of tiles in the image
+    unsigned int lSubtasks = ((unsigned int)gImageWidth/TILE_DIM + ((unsigned int)gImageWidth%TILE_DIM ? 1 : 0)) * ((unsigned int)gImageHeight/TILE_DIM + ((unsigned int)gImageHeight%TILE_DIM ? 1 : 0));
+
+    pmTaskMem lTaskMem[MAX_MEM_INDICES];
+
+#ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+    CREATE_TASK(lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
+    
+    lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle, READ_ONLY, SUBSCRIPTION_OPTIMAL};
+#else
+	CREATE_TASK(lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
+#endif
+    
+    lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, WRITE_ONLY, SUBSCRIPTION_OPTIMAL};
+
+    lTaskDetails.taskMemCount = MAX_MEM_INDICES;
+    lTaskDetails.taskMem = (pmTaskMem*)(lTaskMem);
+
+	imageFilterTaskConf lTaskConf;
+    strcpy(lTaskConf.imagePath, pImagePath);
+    lTaskConf.imageWidth = gImageWidth;
+    lTaskConf.imageHeight = gImageHeight;
+    lTaskConf.imageOffset = gImageOffset;
+    lTaskConf.imageBytesPerLine = gImageBytesPerLine;
+    lTaskConf.filterRadius = pFilterRadius;
+    
+    int lFilterDim = 2 * pFilterRadius + 1;
+    for(int i = 0; i < lFilterDim; ++i)
+        for(int j = 0;  j < lFilterDim; ++j)
+            lTaskConf.filter[i][j] = pFilter[i][j];
+
+	lTaskDetails.taskConf = (void*)(&lTaskConf);
+	lTaskDetails.taskConfLength = sizeof(lTaskConf);
+    
+    lTaskDetails.canSplitCpuSubtasks = true;
+
+	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
+	
+    if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
+    {
+        FREE_TASK_AND_RESOURCES
+        return false;
+    }
+    
+    pmReleaseTask(lTaskHandle);
+    
+    return true;
 }
     
 bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, int* pStartCol, int* pEndCol, int* pStartRow, int* pEndRow)
@@ -276,12 +332,26 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
     
 	return pmSuccess;
 }
+    
+#ifdef DO_MULTIPLE_CONVOLUTIONS
 
+#define READ_NON_COMMON_ARGS \
+    int lFilterRadius = DEFAULT_FILTER_RADIUS; \
+	char* lImagePath = DEFAULT_IMAGE_PATH; \
+    int lIterations = DEFAULT_ITERATION_COUNT; \
+    FETCH_INT_ARG(lFilterRadius, pCommonArgs, argc, argv); \
+    FETCH_STR_ARG(lImagePath, pCommonArgs + 1, argc, argv); \
+    FETCH_INT_ARG(lIterations, pCommonArgs + 2, argc, argv);
+    
+#else
+    
 #define READ_NON_COMMON_ARGS \
     int lFilterRadius = DEFAULT_FILTER_RADIUS; \
 	char* lImagePath = DEFAULT_IMAGE_PATH; \
     FETCH_INT_ARG(lFilterRadius, pCommonArgs, argc, argv); \
 	FETCH_STR_ARG(lImagePath, pCommonArgs + 1, argc, argv);
+
+#endif
 
 // Returns execution time on success; 0 on error
 double DoSerialProcess(int argc, char** argv, int pCommonArgs)
@@ -289,11 +359,24 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 	READ_NON_COMMON_ARGS
 
     void* lImageData = malloc(IMAGE_SIZE);
-    readImage(lImagePath, lImageData, false);
+    readImage(lImagePath, lImageData, true);
     
 	double lStartTime = getCurrentTimeInSecs();
 
-	serialImageFilter(lImageData, lFilterRadius);
+#ifdef DO_MULTIPLE_CONVOLUTIONS
+    for(uint i = 0; i < lIterations; ++i)
+    {
+        if(i != 0)
+            std::swap(lImageData, gSerialOutput);
+
+        serialImageFilter(lImageData, lFilterRadius, (char*)gSerialOutput, gFilter);
+    }
+    
+    if(lIterations % 2 == 0)
+        std::swap(lImageData, gSerialOutput);
+#else
+	serialImageFilter(lImageData, lFilterRadius, (char*)gSerialOutput, gFilter);
+#endif
 
 	double lEndTime = getCurrentTimeInSecs();
 
@@ -312,8 +395,22 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 
 	double lStartTime = getCurrentTimeInSecs();
 
-	if(singleGpuImageFilter(lImageData, gImageWidth, gImageHeight, gFilter, lFilterRadius, gImageBytesPerLine, gParallelOutput) != 0)
+#ifdef DO_MULTIPLE_CONVOLUTIONS
+    for(uint i = 0; i < lIterations; ++i)
+    {
+        if(i != 0)
+            std::swap(lImageData, gParallelOutput);
+
+        if(singleGpuImageFilter(lImageData, gImageWidth, gImageHeight, gFilter, lFilterRadius, gImageBytesPerLine, gParallelOutput) != 0)
+            return 0;
+    }
+
+    if(lIterations % 2 == 0)
+        std::swap(lImageData, gParallelOutput);
+#else
+    if(singleGpuImageFilter(lImageData, gImageWidth, gImageHeight, gFilter, lFilterRadius, gImageBytesPerLine, gParallelOutput) != 0)
         return 0;
+#endif
 
 	double lEndTime = getCurrentTimeInSecs();
 
@@ -329,77 +426,65 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 {
 	READ_NON_COMMON_ARGS
 
-	// Number of subtasks is equal to the number of tiles in the image
-    unsigned int lSubtasks = ((unsigned int)gImageWidth/TILE_DIM + ((unsigned int)gImageWidth%TILE_DIM ? 1 : 0)) * ((unsigned int)gImageHeight/TILE_DIM + ((unsigned int)gImageHeight%TILE_DIM ? 1 : 0));
+    pmMemHandle lInputMemHandle = NULL, lOutputMemHandle = NULL;
 
 #ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
-    CREATE_SIMPLE_TASK(IMAGE_SIZE, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
-    
     pmRawMemPtr lRawInputPtr;
-    pmGetRawMemPtr(lTaskDetails.taskMem[INPUT_MEM_INDEX].memHandle, &lRawInputPtr);
+
+    CREATE_MEM(IMAGE_SIZE, lInputMemHandle);
+
+    pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
 
     readImage(lImagePath, lRawInputPtr, true);
     
-    lTaskMem[INPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_OPTIMAL;
-
-    DistributeMemory(lTaskMem[INPUT_MEM_INDEX].memHandle, BLOCK_DIST_2D_RANDOM, TILE_DIM, (unsigned int)gImageWidth, (unsigned int)gImageHeight, PIXEL_COUNT, false);
+    DistributeMemory(lInputMemHandle, BLOCK_DIST_2D_RANDOM, TILE_DIM, (unsigned int)gImageWidth, (unsigned int)gImageHeight, PIXEL_COUNT, false);
 #else
     if(pmMapFile(lImagePath) != pmSuccess)
         exit(1);
-
-	CREATE_SIMPLE_TASK(0, IMAGE_SIZE, lSubtasks, pCallbackHandle[0], pSchedulingPolicy)
 #endif
-    
-    lTaskMem[OUTPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_OPTIMAL;
 
-	imageFilterTaskConf lTaskConf;
-    strcpy(lTaskConf.imagePath, lImagePath);
-    lTaskConf.imageWidth = gImageWidth;
-    lTaskConf.imageHeight = gImageHeight;
-    lTaskConf.imageOffset = gImageOffset;
-    lTaskConf.imageBytesPerLine = gImageBytesPerLine;
-    lTaskConf.filterRadius = lFilterRadius;
-    
-    int lFilterDim = 2 * lFilterRadius + 1;
-    for(int i = 0; i < lFilterDim; ++i)
-        for(int j = 0;  j < lFilterDim; ++j)
-            lTaskConf.filter[i][j] = gFilter[i][j];
+    CREATE_MEM(IMAGE_SIZE, lOutputMemHandle);
 
-	lTaskDetails.taskConf = (void*)(&lTaskConf);
-	lTaskDetails.taskConfLength = sizeof(lTaskConf);
-    
-    lTaskDetails.canSplitCpuSubtasks = true;
+    double lStartTime = getCurrentTimeInSecs();
 
-	double lStartTime = getCurrentTimeInSecs();
-
-	SAFE_PM_EXEC( pmSubmitTask(lTaskDetails, &lTaskHandle) );
-	
-    if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
+#ifdef DO_MULTIPLE_CONVOLUTIONS
+    for(uint i = 0; i < lIterations; ++i)
     {
-        FREE_TASK_AND_RESOURCES
-        return (double)-1.0;
+        if(i != 0)
+            std::swap(lInputMemHandle, lOutputMemHandle);
+
+        if(!parallelImageFilter(pCallbackHandle, pSchedulingPolicy, lInputMemHandle, lOutputMemHandle, lImagePath, lFilterRadius, gFilter))
+            exit(1);
     }
     
-	double lEndTime = getCurrentTimeInSecs();
+    if(lIterations % 2 == 0)
+        std::swap(lInputMemHandle, lOutputMemHandle);
+#else
+    if(!parallelImageFilter(pCallbackHandle, pSchedulingPolicy, lInputMemHandle, lOutputMemHandle, lImagePath, lFilterRadius, gFilter))
+        exit(1);
+#endif
+    
+    double lEndTime = getCurrentTimeInSecs();
 
     if(pFetchBack)
     {
-        SAFE_PM_EXEC( pmFetchMemory(lTaskDetails.taskMem[OUTPUT_MEM_INDEX].memHandle) );
+        SAFE_PM_EXEC( pmFetchMemory(lOutputMemHandle) );
 
         pmRawMemPtr lRawOutputPtr;
-        pmGetRawMemPtr(lTaskDetails.taskMem[OUTPUT_MEM_INDEX].memHandle, &lRawOutputPtr);
+        pmGetRawMemPtr(lOutputMemHandle, &lRawOutputPtr);
         memcpy(gParallelOutput, lRawOutputPtr, IMAGE_SIZE);
     }
-
-	FREE_TASK_AND_RESOURCES
+    
+    pmReleaseMemory(lOutputMemHandle);
 
 #ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+    pmReleaseMemory(lInputMemHandle);
 #else
     if(pmUnmapFile(lImagePath) != pmSuccess)
         exit(1);
 #endif
 
-	return (lEndTime - lStartTime);
+    return (lEndTime - lStartTime);
 }
 
 pmCallbacks DoSetDefaultCallbacks()
