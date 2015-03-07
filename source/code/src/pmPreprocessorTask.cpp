@@ -129,7 +129,7 @@ pmStatus preprocessorTask_cpuCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
                 lSelectiveSubtasks = true;
                 
                 ulong lSubtasksPerMachine = pTaskInfo.subtaskCount / lTaskConf->machinesCount;
-                float lSubtaskSpan = lTaskConf->originalTaskSubtasks / lSubtasksPerMachine;
+                float lSubtaskSpan = (float)lTaskConf->originalTaskSubtasks / lSubtasksPerMachine;
                 
                 EXCEPTION_ASSERT(lSubtaskSpan > 1.0);
                 

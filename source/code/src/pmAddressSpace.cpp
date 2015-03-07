@@ -437,11 +437,24 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
         }
     #endif
     }
-    
-    if(pmUtility::IsWritable(pMemType))
+
+    // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
-        mOriginalOwnershipMap = mOwnershipMap;
+
+        // FlushOwnerships is called for writable address spaces which causes their mOriginalOwnershipMap to be cleared
+        bool lAddressSpaceReadOnlyLastTime = !mOriginalOwnershipMap.empty();
+
+        // Nothing has to be done if address space was read only last time and is read only even now. In this case, the
+        // already kept mOriginalOwnership map, must be kept as it is (for future restorations when address space becomes writable)
+        if(!(lAddressSpaceReadOnlyLastTime && pmUtility::IsReadOnly(pMemType)))
+        {
+            // If the address space was read only last time but writable now, then its original ownership map must be restored
+            if(lAddressSpaceReadOnlyLastTime && pmUtility::IsWritable(pMemType))
+                mOwnershipMap = mOriginalOwnershipMap;
+            else
+                mOriginalOwnershipMap = mOwnershipMap;
+        }
     }
     
 #ifdef SUPPORT_LAZY_MEMORY
