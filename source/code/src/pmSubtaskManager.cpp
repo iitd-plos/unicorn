@@ -941,8 +941,10 @@ void pmPullSchedulingManager::VaryFixedAllotments(std::vector<pmUnfinishedPartit
     (*(pVector.rbegin()))->lastSubtaskIndex = lSubtaskCount - 1;
 }
     
-std::map<uint, std::pair<ulong, ulong>> pmPullSchedulingManager::ComputeMachineVersusInitialSubtaskCountMap()
+std::map<uint, std::pair<ulong, ulong>> pmPullSchedulingManager::ComputeMachineVersusInitialSubtaskCountMap(std::vector<ulong>& pLogicalSubtaskIds)
 {
+    pLogicalSubtaskIds.reserve(mLocalTask->GetSubtaskCount());
+
     std::map<uint, ulong> lMap;
 
     for_each(mAllottedPartitions, [&] (typename decltype(mAllottedPartitions)::value_type& pPair)
@@ -954,6 +956,9 @@ std::map<uint, std::pair<ulong, ulong>> pmPullSchedulingManager::ComputeMachineV
             lIter = lMap.emplace(lMachine, 0).first;
         
         lIter->second += (pPair.second->lastSubtaskIndex - pPair.second->firstSubtaskIndex + 1);
+        
+        for(ulong i = pPair.second->firstSubtaskIndex; i <= pPair.second->lastSubtaskIndex; ++i)
+            pLogicalSubtaskIds.emplace_back(i);
     });
     
     ulong lRunningCount = 0;

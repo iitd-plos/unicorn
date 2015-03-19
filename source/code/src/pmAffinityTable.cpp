@@ -226,7 +226,8 @@ void pmAffinityTable::CreateSubtaskMappings()
     pmPullSchedulingManager* lManager = dynamic_cast<pmPullSchedulingManager*>(mLocalTask->GetSubtaskManager());
     EXCEPTION_ASSERT(lManager);
     
-    std::map<uint, std::pair<ulong, ulong>> lMap = lManager->ComputeMachineVersusInitialSubtaskCountMap();
+    std::vector<ulong> lLogicalSubtaskIdsVector;
+    std::map<uint, std::pair<ulong, ulong>> lMap = lManager->ComputeMachineVersusInitialSubtaskCountMap(lLogicalSubtaskIdsVector);
 
 #ifdef MACHINES_PICK_BEST_SUBTASKS
     std::set<ulong> lSubtasksAllotted;
@@ -262,9 +263,11 @@ void pmAffinityTable::CreateSubtaskMappings()
         while(lSubtasksAllotted.find(*lSubtasksIter) != lSubtasksAllottedEndIter)
             ++lSubtasksIter;
 
+        ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lIter->second.first];
+
         // Assign the selected subtask to the selected machine
-        lLogicalToPhysicalSubtaskMapping[lIter->second.first] = *lSubtasksIter;
-        lPhysicalToLogicalSubtaskMapping[*lSubtasksIter] = lIter->second.first;
+        lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = *lSubtasksIter;
+        lPhysicalToLogicalSubtaskMapping[*lSubtasksIter] = lLogicalSubtaskId;
 
         lSubtasksAllotted.emplace(*lSubtasksIter);
         ++lIter->second.first;
@@ -287,8 +290,10 @@ void pmAffinityTable::CreateSubtaskMappings()
             auto lMapIter = lMap.find(lMachine);
             if(lMapIter != lMap.end() && lMapIter->second.second)
             {
-                lLogicalToPhysicalSubtaskMapping[lMapIter->second.first] = i;
-                lPhysicalToLogicalSubtaskMapping[i] = lMapIter->second.first;
+                ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lMapIter->second.first];
+
+                lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = i;
+                lPhysicalToLogicalSubtaskMapping[i] = lLogicalSubtaskId;
 
                 ++lMapIter->second.first;
                 --lMapIter->second.second;

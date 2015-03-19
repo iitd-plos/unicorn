@@ -161,7 +161,8 @@ class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager
 
 		virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
     
-        std::map<uint, std::pair<ulong, ulong>> ComputeMachineVersusInitialSubtaskCountMap();   // Returns a map of machine id versus pair of starting logical subtask id and subtask count on that machine
+        // Returns a map of machine id versus pair of running count of logical subtask id and subtask count on that machine. The actual logical subtask id is found by dereferencing pLogicalSubtaskIds
+        std::map<uint, std::pair<ulong, ulong>> ComputeMachineVersusInitialSubtaskCountMap(std::vector<ulong>& pLogicalSubtaskIds);
     
     private:
         void VaryFixedAllotments(std::vector<pmUnfinishedPartitionPtr>& pVector, uint pMaxPercentVariationFromFixedAllotment);
