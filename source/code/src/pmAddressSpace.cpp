@@ -1079,7 +1079,7 @@ pmScatteredSubscriptionFilter::pmScatteredSubscriptionFilter(const pmScatteredSu
     : mScatteredSubscriptionInfo(pScatteredSubscriptionInfo)
 {}
     
-const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& pmScatteredSubscriptionFilter::FilterBlocks(const std::function<void (size_t)>& pRowFunctor)
+const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>>& pmScatteredSubscriptionFilter::FilterBlocks(const std::function<void (size_t)>& pRowFunctor)
 {
     for(size_t i = 0; i < mScatteredSubscriptionInfo.count; ++i)
         pRowFunctor(i);
@@ -1123,7 +1123,7 @@ void pmScatteredSubscriptionFilter::AddNextSubRow(ulong pOffset, ulong pLength, 
         
         if(lRemoveCurrentRange)
         {
-            mBlocksToBeFetched.emplace_back(lData.subscriptionInfo, lData.rangeOwner);
+            mBlocksToBeFetched[lData.rangeOwner.host].emplace_back(lData.subscriptionInfo, lData.rangeOwner);
             mCurrentBlocks.erase(lIter++);
         }
         else
@@ -1136,7 +1136,7 @@ void pmScatteredSubscriptionFilter::AddNextSubRow(ulong pOffset, ulong pLength, 
         mCurrentBlocks.emplace_back(lStartCol, pLength, pmScatteredSubscriptionInfo(pOffset, pLength, mScatteredSubscriptionInfo.step, 1), pRangeOwner);
 }
 
-const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& pmScatteredSubscriptionFilter::GetLeftoverBlocks()
+const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>>& pmScatteredSubscriptionFilter::GetLeftoverBlocks()
 {
     PromoteCurrentBlocks();
     
@@ -1147,7 +1147,7 @@ void pmScatteredSubscriptionFilter::PromoteCurrentBlocks()
 {
     for_each(mCurrentBlocks, [&] (const blockData& pData)
     {
-        mBlocksToBeFetched.emplace_back(pData.subscriptionInfo, pData.rangeOwner);
+        mBlocksToBeFetched[pData.rangeOwner.host].emplace_back(pData.subscriptionInfo, pData.rangeOwner);
     });
     
     mCurrentBlocks.clear();

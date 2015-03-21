@@ -158,6 +158,7 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SUBTASK_RANGE_CANCEL_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(NO_REDUCTION_REQD_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MULTI_FILE_OPERATIONS_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_STRUCT);
 
 	SetupPersistentCommunicationCommands();
 }
@@ -183,6 +184,7 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SUBTASK_RANGE_CANCEL_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(NO_REDUCTION_REQD_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MULTI_FILE_OPERATIONS_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 

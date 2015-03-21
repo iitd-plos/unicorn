@@ -209,6 +209,8 @@ public:
     void CancelMemoryTransferEvents(pmAddressSpace* pAddressSpace);
     void CancelTaskSpecificMemoryTransferEvents(pmTask* pTask);
     
+    pmCommandCompletionCallbackType GetHeavyOperationsCommandCompletionCallback();
+    
     static pmHeavyOperationsThreadPool* GetHeavyOperationsThreadPool();
 
 private:

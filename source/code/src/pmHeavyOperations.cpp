@@ -73,6 +73,11 @@ void HeavyOperationsCommandCompletionCallback(const pmCommandPtr& pCommand)
 	pmHeavyOperationsThreadPool* lHeavyOperationsThreadPool = pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool();
 	lHeavyOperationsThreadPool->CommandCompletionEvent(pCommand);
 }
+    
+pmCommandCompletionCallbackType pmHeavyOperationsThreadPool::GetHeavyOperationsCommandCompletionCallback()
+{
+    return HeavyOperationsCommandCompletionCallback;
+}
 
 pmHeavyOperationsThreadPool* pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()
 {
@@ -430,71 +435,74 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
             lBlocksFilter.AddNextSubRow(pPair.first, pPair.second.first, pPair.second.second);
         });
     });
-    
-    for_each(lBlocks, [&] (typename decltype(lBlocks)::value_type& pPair)
+
+    for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
     {
-        pmScatteredSubscriptionInfo& lScatteredInfo = pPair.first;
-        pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second;
-        ulong lReceiverOffset = pReceiverOffset + lRangeOwner.hostOffset - pOffset;
-
-        EXCEPTION_ASSERT(lScatteredInfo.size && lScatteredInfo.step && lScatteredInfo.count);
-
-        if(lRangeOwner.host == PM_LOCAL_MACHINE)
+        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>& pPair)
         {
-        #ifdef ENABLE_MEM_PROFILING
-            if(!pRequestingTask || !pRequestingTask->ShouldSuppressTaskLogs())
+            const pmScatteredSubscriptionInfo& lScatteredInfo = pPair.first;
+            const pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second;
+            ulong lReceiverOffset = pReceiverOffset + lRangeOwner.hostOffset - pOffset;
+
+            EXCEPTION_ASSERT(lScatteredInfo.size && lScatteredInfo.step && lScatteredInfo.count);
+
+            if(lRangeOwner.host == PM_LOCAL_MACHINE)
             {
-                pSrcAddressSpace->RecordMemTransfer(lScatteredInfo.size * lScatteredInfo.count);
-
-                if(pRequestingTask)
-                    pRequestingTask->GetTaskExecStats().RecordMemTransferEvent(lScatteredInfo.size * lScatteredInfo.count, true);
-            }
-        #endif
-
-            pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
-            char* lBeginAddr = (char*)(lOwnerAddressSpace->GetMem());
-
-            // If the memory request is too large than what MPI can handle in a single transport, then break the request into multiple ones
-            // To maintain scattered transfers, we keep the lScatteredInfo.size unchanged but adjust lScatteredInfo.count
-            ulong lMaxTransport = __MAX_SIGNED(int) - MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
-            ulong lMaxCounts = lMaxTransport / lScatteredInfo.size;    // How many scattered counts can be transported once?
-            
-            EXCEPTION_ASSERT(lMaxCounts);   // Atleast one count must be transferrable (otherwise, the request must be broken down into general request --- not implemented yet)
-            ulong lSteps = (lScatteredInfo.count / lMaxCounts) + ((lScatteredInfo.count % lMaxCounts) ? 1 : 0);
-
-            ulong lInternalStepOffset = 0;
-
-            for(ulong step = 0; step < lSteps; ++step)
-            {
-                ulong lStepCounts = ((step == lSteps - 1) ? (lScatteredInfo.count - lMaxCounts * step) : lMaxCounts);
-                
-                pmScatteredSubscriptionInfo lStepScatteredInfo(lScatteredInfo.offset + lInternalStepOffset, lScatteredInfo.size, lScatteredInfo.step, lStepCounts);
-
-                // This function returns pointer to scattered memory for step pScatteredIndex
-                std::function<char* (ulong)> lFunc([lBeginAddr, lStepScatteredInfo, lRangeOwner, lInternalStepOffset] (ulong pScatteredIndex) -> char*
+            #ifdef ENABLE_MEM_PROFILING
+                if(!pRequestingTask || !pRequestingTask->ShouldSuppressTaskLogs())
                 {
-                    DEBUG_EXCEPTION_ASSERT(pScatteredIndex < lStepScatteredInfo.count);
+                    pSrcAddressSpace->RecordMemTransfer(lScatteredInfo.size * lScatteredInfo.count);
 
-                    return lBeginAddr + lRangeOwner.hostOffset + lInternalStepOffset + lStepScatteredInfo.step * pScatteredIndex;
-                });
+                    if(pRequestingTask)
+                        pRequestingTask->GetTaskExecStats().RecordMemTransferEvent(lScatteredInfo.size * lScatteredInfo.count, true);
+                }
+            #endif
 
-                finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.size, lStepScatteredInfo.step, lStepScatteredInfo.count, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
-            
-                MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.offset, lStepScatteredInfo.size * lStepScatteredInfo.count, (uint)(*pRequestingMachine))
+                pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
+                char* lBeginAddr = (char*)(lOwnerAddressSpace->GetMem());
 
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
-
-                pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
+                // If the memory request is too large than what MPI can handle in a single transport, then break the request into multiple ones
+                // To maintain scattered transfers, we keep the lScatteredInfo.size unchanged but adjust lScatteredInfo.count
+                ulong lMaxTransport = __MAX_SIGNED(int) - MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetVirtualMemoryPageSize();
+                ulong lMaxCounts = lMaxTransport / lScatteredInfo.size;    // How many scattered counts can be transported once?
                 
-                lInternalStepOffset += lStepCounts * lScatteredInfo.step;
-            }
-        }
-        else
-        {
-            DEBUG_EXCEPTION_ASSERT(!pIsForwarded);
+                EXCEPTION_ASSERT(lMaxCounts);   // Atleast one count must be transferrable (otherwise, the request must be broken down into general request --- not implemented yet)
+                ulong lSteps = (lScatteredInfo.count / lMaxCounts) + ((lScatteredInfo.count % lMaxCounts) ? 1 : 0);
 
-            ForwardMemoryRequest(pSrcAddressSpace, lRangeOwner, lRangeOwner.memIdentifier, pDestMemIdentifier, TRANSFER_SCATTERED, lReceiverOffset, lScatteredInfo.offset, lScatteredInfo.size, lScatteredInfo.step, lScatteredInfo.count, pRequestingMachine, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority);
-        }
+                ulong lInternalStepOffset = 0;
+
+                for(ulong step = 0; step < lSteps; ++step)
+                {
+                    ulong lStepCounts = ((step == lSteps - 1) ? (lScatteredInfo.count - lMaxCounts * step) : lMaxCounts);
+                    
+                    pmScatteredSubscriptionInfo lStepScatteredInfo(lScatteredInfo.offset + lInternalStepOffset, lScatteredInfo.size, lScatteredInfo.step, lStepCounts);
+
+                    // This function returns pointer to scattered memory for step pScatteredIndex
+                    std::function<char* (ulong)> lFunc([lBeginAddr, lStepScatteredInfo, lRangeOwner, lInternalStepOffset] (ulong pScatteredIndex) -> char*
+                    {
+                        DEBUG_EXCEPTION_ASSERT(pScatteredIndex < lStepScatteredInfo.count);
+
+                        return lBeginAddr + lRangeOwner.hostOffset + lInternalStepOffset + lStepScatteredInfo.step * pScatteredIndex;
+                    });
+
+                    finalize_ptr<memoryReceivePacked> lPackedData(new memoryReceivePacked(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.size, lStepScatteredInfo.step, lStepScatteredInfo.count, lFunc, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber));
+                
+                    MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.offset, lStepScatteredInfo.size * lStepScatteredInfo.count, (uint)(*pRequestingMachine))
+
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceivePacked>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_PACKED, lPackedData, 1);
+
+                    pmCommunicator::GetCommunicator()->SendPacked(std::move(lCommand), false);
+                    
+                    lInternalStepOffset += lStepCounts * lScatteredInfo.step;
+                }
+            }
+            else
+            {
+                DEBUG_EXCEPTION_ASSERT(!pIsForwarded);
+
+                ForwardMemoryRequest(pSrcAddressSpace, lRangeOwner, lRangeOwner.memIdentifier, pDestMemIdentifier, TRANSFER_SCATTERED, lReceiverOffset, lScatteredInfo.offset, lScatteredInfo.size, lScatteredInfo.step, lScatteredInfo.count, pRequestingMachine, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority);
+            }
+        });
     });
 }
     
@@ -532,6 +540,25 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
 
 					break;
 				}
+                    
+                case SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_TAG:
+                {
+					scatteredMemoryTransferRequestCombinedPacked* lData = (scatteredMemoryTransferRequestCombinedPacked*)(lCommunicatorCommand->GetData());
+
+					pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lData->sourceMemIdentifier.memOwnerHost), lData->sourceMemIdentifier.generationNumber);
+
+					if(lAddressSpace)
+                    {
+                        const std::vector<scatteredMemoryTransferRequestCombinedStruct>& lVector = *lData->requestData.get_ptr();
+                        
+                        for_each(lVector, [&] (const scatteredMemoryTransferRequestCombinedStruct& pStruct)
+                        {
+                            pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->MemTransferEvent(lData->sourceMemIdentifier, lData->destMemIdentifier, communicator::TRANSFER_SCATTERED, pStruct.offset, pStruct.length, pStruct.step, pStruct.count, pmMachinePool::GetMachinePool()->GetMachine(lData->destHost), pStruct.receiverOffset, false, lData->priority, lData->isTaskOriginated, lData->originatingHost, lData->sequenceNumber);
+                        });
+                    }
+
+                    break;
+                }
 
                 case FILE_OPERATIONS_TAG:
                 {

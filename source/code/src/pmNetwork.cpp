@@ -670,6 +670,54 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
             break;
         }
     #endif
+            
+        case SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_PACKED:
+        {
+            scatteredMemoryTransferRequestCombinedPacked* lData = (scatteredMemoryTransferRequestCombinedPacked*)(pCommand->GetData());
+            EXCEPTION_ASSERT(lData && lData->count);
+            
+			lLength += 2 * sizeof(uint) + 3 * sizeof(ushort) + sizeof(ulong) + 2 * sizeof(memoryIdentifierStruct) + lData->count * sizeof(scatteredMemoryTransferRequestCombinedStruct);
+            
+			if(lLength > __MAX_SIGNED(int))
+				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
+            
+            lPackedDataAutoPtr.reset(new char[lLength]);
+			char* lPackedData = lPackedDataAutoPtr.get_ptr();
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->sourceMemIdentifier, 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+			
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->destMemIdentifier, 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->destHost, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->isTaskOriginated, 1, MPI_UNSIGNED_SHORT, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+			
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->originatingHost, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->priority, 1, MPI_UNSIGNED_SHORT, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->count, 1, MPI_UNSIGNED_SHORT, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&(*lData->requestData.get_ptr())[0], lData->count, GetDataTypeMPI(SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+            lLength = lPos;
+            
+            break;
+        }
 
 		default:
 			PMTHROW(pmFatalErrorException());
@@ -733,6 +781,10 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
             lDataType = STEAL_SUCCESS_DISCONTIGUOUS_PACKED;
             break;
     #endif
+            
+        case SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_TAG:
+            lDataType = SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_PACKED;
+            break;
 
         default:
             PMTHROW(pmFatalErrorException());
@@ -1050,7 +1102,49 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
         }
     #endif
         
-		default:
+        case SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_PACKED:
+        {
+            finalize_ptr<scatteredMemoryTransferRequestCombinedPacked> lPackedData(new scatteredMemoryTransferRequestCombinedPacked());
+
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->sourceMemIdentifier, 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+			
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->destMemIdentifier, 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->destHost, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+			
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->isTaskOriginated, 1, MPI_UNSIGNED_SHORT, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->originatingHost, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+        
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->priority, 1, MPI_UNSIGNED_SHORT, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->count, 1, MPI_UNSIGNED_SHORT, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            std::cout << "Host " << pmGetHostId() << " " << lPackedData->destHost << std::endl;
+            
+            EXCEPTION_ASSERT(lPackedData->count);
+            
+            lPackedData->requestData.reset(new std::vector<scatteredMemoryTransferRequestCombinedStruct>(lPackedData->count));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(*lPackedData->requestData.get_ptr())[0], lPackedData->count, GetDataTypeMPI(SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+                PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            
+            lCommand = pmCommunicatorCommand<scatteredMemoryTransferRequestCombinedPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->GetHeavyOperationsCommandCompletionCallback());
+            
+            break;
+        }
+
+        default:
 			PMTHROW(pmFatalErrorException());
 	}
 
@@ -1070,7 +1164,8 @@ bool pmMPI::IsUnknownLengthTag(communicatorCommandTags pTag)
         #ifdef USE_AFFINITY_IN_STEAL
             pTag == STEAL_SUCCESS_DISCONTIGUOUS_TAG ||
         #endif
-            pTag == AFFINITY_DATA_TRANSFER_TAG);
+            pTag == AFFINITY_DATA_TRANSFER_TAG ||
+            pTag == SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_TAG);
 }
 
 void pmMPI::SendNonBlocking(pmCommunicatorCommandPtr& pCommand)
@@ -1458,6 +1553,7 @@ MPI_Datatype pmMPI::GetDataTypeMPI(communicatorDataTypes pDataType)
     #ifdef USE_AFFINITY_IN_STEAL
         case STEAL_SUCCESS_DISCONTIGUOUS_PACKED:
     #endif
+        case SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_PACKED:
 			return MPI_PACKED;
 			break;
 
@@ -1647,6 +1743,12 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			lFieldCount = multiFileOperationsStruct::FIELD_COUNT_VALUE;
 			break;
 		}
+            
+        case SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_STRUCT:
+        {
+            lFieldCount = scatteredMemoryTransferRequestCombinedStruct::FIELD_COUNT_VALUE;
+            break;
+        }
 
 		default:
 			PMTHROW(pmFatalErrorException());
@@ -1962,6 +2064,18 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.totalLength, lTotalLengthMPI, MPI_UNSIGNED, 4, 1);
 
 			break;        
+        }
+            
+        case SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_STRUCT:
+        {
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(scatteredMemoryTransferRequestCombinedStruct, lData, lDataMPI);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.receiverOffset, lReceiverOffsetMPI, MPI_UNSIGNED_LONG, 0, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 2, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.step, lStepMPI, MPI_UNSIGNED_LONG, 3, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.count, lCountMPI, MPI_UNSIGNED_LONG, 4, 1);
+
+            break;
         }
 
 		default:

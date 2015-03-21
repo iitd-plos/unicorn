@@ -578,6 +578,74 @@ struct memoryTransferRequest
         DEBUG_EXCEPTION_ASSERT(transferType == TRANSFER_GENERAL || (length != 0 && step != 0 && count != 0));
     }
 };
+
+struct scatteredMemoryTransferRequestCombinedStruct
+{
+    ulong receiverOffset;
+    ulong offset;
+    ulong length;
+    ulong step;
+    ulong count;
+
+    typedef enum fieldCount
+    {
+        FIELD_COUNT_VALUE = 5
+    } fieldCount;
+
+    scatteredMemoryTransferRequestCombinedStruct()
+    : receiverOffset(std::numeric_limits<ulong>::max())
+    , offset(std::numeric_limits<ulong>::max())
+    , length(std::numeric_limits<ulong>::max())
+    , step(std::numeric_limits<ulong>::max())
+    , count(std::numeric_limits<ulong>::max())
+    {}
+    
+    scatteredMemoryTransferRequestCombinedStruct(ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+    : receiverOffset(pReceiverOffset)
+    , offset(pOffset)
+    , length(pLength)
+    , step(pStep)
+    , count(pCount)
+    {
+        DEBUG_EXCEPTION_ASSERT(length != 0 && step != 0 && count != 0);
+    }
+};
+
+struct scatteredMemoryTransferRequestCombinedPacked
+{
+    memoryIdentifierStruct sourceMemIdentifier;
+    memoryIdentifierStruct destMemIdentifier;
+    uint destHost;			// Host that will receive the memory (generally same as the requesting host)
+    ushort isTaskOriginated;    // Tells whether a task has demanded this memory or user has explicitly requested it
+    uint originatingHost;   // Valid only if isTaskOriginated is true
+    ulong sequenceNumber;	// Valid only if isTaskOriginated is true; sequence number of local task object (on originating host)
+    ushort priority;
+    ushort count;       // Count of elements in vector of scatteredMemoryTransferRequestCombinedStruct
+    finalize_ptr<std::vector<scatteredMemoryTransferRequestCombinedStruct>> requestData;
+    
+    scatteredMemoryTransferRequestCombinedPacked()
+    : sourceMemIdentifier()
+    , destMemIdentifier()
+    , destHost(std::numeric_limits<uint>::max())
+    , isTaskOriginated(std::numeric_limits<ushort>::max())
+    , originatingHost(std::numeric_limits<uint>::max())
+    , sequenceNumber(std::numeric_limits<ulong>::max())
+    , priority(std::numeric_limits<ushort>::max())
+    , count(0)
+    {}
+
+    scatteredMemoryTransferRequestCombinedPacked(const memoryIdentifierStruct& pSourceStruct, const memoryIdentifierStruct& pDestStruct, uint pDestHost, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber, ushort pPriority, finalize_ptr<std::vector<scatteredMemoryTransferRequestCombinedStruct>>& pRequestAutoPtr)
+    : sourceMemIdentifier(pSourceStruct)
+    , destMemIdentifier(pDestStruct)
+    , destHost(pDestHost)
+    , isTaskOriginated(pIsTaskOriginated)
+    , originatingHost(pOriginatingHost)
+    , sequenceNumber(pSequenceNumber)
+    , priority(pPriority)
+    , count(pRequestAutoPtr->size())
+    , requestData(std::move(pRequestAutoPtr))
+    {}
+};
     
 struct shadowMemTransferStruct
 {

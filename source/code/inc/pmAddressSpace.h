@@ -258,12 +258,12 @@ public:
     pmScatteredSubscriptionFilter(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
 
     // pRowFunctor should call AddNextSubRow for every range to be kept
-    const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& FilterBlocks(const std::function<void (size_t)>& pRowFunctor);
+    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>>& FilterBlocks(const std::function<void (size_t)>& pRowFunctor);
     
     void AddNextSubRow(ulong pOffset, ulong pLength, pmAddressSpace::vmRangeOwner& pRangeOwner);
     
 private:
-    const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& GetLeftoverBlocks();
+    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>>& GetLeftoverBlocks();
     void PromoteCurrentBlocks();
 
     struct blockData
@@ -284,7 +284,7 @@ private:
     const pmScatteredSubscriptionInfo& mScatteredSubscriptionInfo;
     
     std::list<blockData> mCurrentBlocks;   // computed till last row processed
-    std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>> mBlocksToBeFetched;
+    std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>> mBlocksToBeFetched;
 };
 
 } // end namespace pm
