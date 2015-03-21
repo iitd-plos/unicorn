@@ -612,7 +612,6 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
         }
         else
         {
-        std::cout << "Combining " << pMapKeyValue.second.size() << std::endl;
             std::vector<pmCommandPtr> lCommandVector;
             FetchNonOverlappingScatteredMemoryRegions(pPriority, pAddressSpace, lMem, pMapKeyValue.second, lMap, lCommandVector);
 
