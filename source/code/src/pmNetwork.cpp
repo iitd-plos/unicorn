@@ -1130,8 +1130,6 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
             if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->count, 1, MPI_UNSIGNED_SHORT, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-            std::cout << "Host " << pmGetHostId() << " " << lPackedData->destHost << std::endl;
-            
             EXCEPTION_ASSERT(lPackedData->count);
             
             lPackedData->requestData.reset(new std::vector<scatteredMemoryTransferRequestCombinedStruct>(lPackedData->count));
