@@ -124,6 +124,32 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 
         mTaskHasReadWriteAddressSpaceWithNonDisjointSubscriptions |= (IsReadWrite(lAddressSpace) && !pTaskMem.disjointReadWritesAcrossSubtasks);
     });
+
+#ifdef RANDOMIZE_PULL_ASSIGNMENTS
+    if(mSchedulingModel == scheduler::PULL)
+    {
+        ulong lSubtaskCount = GetSubtaskCount();
+        mLogicalToPhysicalSubtaskMappings.reserve(lSubtaskCount);
+
+        for(ulong i = 0; i < lSubtaskCount; ++i)
+            mLogicalToPhysicalSubtaskMappings.emplace_back(i);
+
+        // Use same randomization on all machines, so that they independently produce same results
+        std::mt19937 lEngine;
+
+        lEngine.seed((uint)mAddressSpaces[0]->GetLength());
+        lEngine();
+
+        for(ulong i = 0; i < lSubtaskCount; ++i)
+            std::swap(mLogicalToPhysicalSubtaskMappings[lEngine() % lSubtaskCount], mLogicalToPhysicalSubtaskMappings[lEngine() % lSubtaskCount]);
+        
+        mPhysicalToLogicalSubtaskMappings.resize(lSubtaskCount);
+
+        auto lIter = mLogicalToPhysicalSubtaskMappings.begin(), lEndIter = mLogicalToPhysicalSubtaskMappings.end();
+        for(ulong i = 0; lIter != lEndIter; ++i, ++lIter)
+            mPhysicalToLogicalSubtaskMappings[mLogicalToPhysicalSubtaskMappings[i]] = i;
+    }
+#endif
 }
 
 pmTask::~pmTask()
@@ -1193,7 +1219,7 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
             }
             
 			mSubtaskManager.reset(new pmPullSchedulingManager(this, lMaxPercentVariation));
-            
+
             if(pSchedulingModel == scheduler::PULL_WITH_AFFINITY)
             {
                 mAffinityTable->CreateSubtaskMappings();
