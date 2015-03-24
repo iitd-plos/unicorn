@@ -947,17 +947,22 @@ std::map<uint, std::pair<ulong, ulong>> pmPullSchedulingManager::ComputeMachineV
 
     std::map<uint, ulong> lMap;
 
-    for_each(mAllottedPartitions, [&] (typename decltype(mAllottedPartitions)::value_type& pPair)
+    // Order allotted partitions in increasing order of machine ids
+    std::multimap<uint, decltype(mAllottedPartitions)::const_iterator> lMachinewisePartitions;
+    for(auto lIter = mAllottedPartitions.begin(), lEndIter = mAllottedPartitions.end(); lIter != lEndIter; ++lIter)
+        lMachinewisePartitions.emplace((uint)(*(lIter->first->GetMachine())), lIter);
+
+    for_each(lMachinewisePartitions, [&] (decltype(lMachinewisePartitions)::value_type& pPair)
     {
-        uint lMachine = *(pPair.first->GetMachine());
-        
+        uint lMachine = pPair.first;
         auto lIter = lMap.find(lMachine);
         if(lIter == lMap.end())
             lIter = lMap.emplace(lMachine, 0).first;
         
-        lIter->second += (pPair.second->lastSubtaskIndex - pPair.second->firstSubtaskIndex + 1);
-        
-        for(ulong i = pPair.second->firstSubtaskIndex; i <= pPair.second->lastSubtaskIndex; ++i)
+        const pmUnfinishedPartitionPtr& pPtr = pPair.second->second;
+        lIter->second += (pPtr->lastSubtaskIndex - pPtr->firstSubtaskIndex + 1);
+
+        for(ulong i = pPtr->firstSubtaskIndex; i <= pPtr->lastSubtaskIndex; ++i)
             pLogicalSubtaskIds.emplace_back(i);
     });
     

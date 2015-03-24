@@ -597,6 +597,7 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
     
     std::map<pmMachine*, std::vector<pmScatteredSubscriptionInfo>> lMachinewiseBlocks;
     
+#ifdef GROUP_SCATTERED_REQUESTS
     for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
     {
         if(pMapKeyValue.second.size() == 1)
@@ -619,6 +620,21 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
                 std::move(lCommandVector.begin(), lCommandVector.end(), std::back_inserter(pCommandVector));
         }
     });
+#else
+    for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
+    {
+        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>& pPair)
+        {
+            EXCEPTION_ASSERT(pPair.first.size && pPair.first.step && pPair.first.count);
+
+            pmCommandPtr lCommand;
+            FetchNonOverlappingMemoryRegion(pPriority, pAddressSpace, lMem, communicator::TRANSFER_SCATTERED, pPair.first.offset, pPair.first.size, pPair.first.step, pPair.first.count, pPair.second, lMap, lCommand);
+
+            if(lCommand.get())
+                pCommandVector.emplace_back(std::move(lCommand));
+        });
+    });
+#endif
     
     pCommandVector.insert(pCommandVector.end(), lTempCommandSet.begin(), lTempCommandSet.end());
 }
