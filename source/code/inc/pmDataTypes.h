@@ -1250,10 +1250,27 @@ namespace pm
         return std::move(__f);
     }
 
+    template<typename _InputIterator1, typename _InputIterator2, typename _Command_Function>
+    _Command_Function multi_for_each_with_index(_InputIterator1 __first1, _InputIterator1 __last1, _InputIterator2 __first2, _InputIterator2 __last2, _Command_Function __f)
+    {
+        DEBUG_EXCEPTION_ASSERT(std::distance(__first1 , __last1) <= std::distance(__first2, __last2));
+
+        for(size_t index = 0; __first1 != __last1; ++__first1, ++__first2, ++index)
+            __f(*__first1, *__first2, index);
+        
+        return std::move(__f);
+    }
+
     template<typename _Container1, typename _Container2, typename _Command_Function>
     _Command_Function multi_for_each(_Container1& __container1, _Container2& __container2, _Command_Function __f)
     {
         return multi_for_each(__container1.begin(), __container1.end(), __container2.begin(), __container2.end(), __f);
+    }
+
+    template<typename _Container1, typename _Container2, typename _Command_Function>
+    _Command_Function multi_for_each_with_index(_Container1& __container1, _Container2& __container2, _Command_Function __f)
+    {
+        return multi_for_each_with_index(__container1.begin(), __container1.end(), __container2.begin(), __container2.end(), __f);
     }
 
 } // end namespace pm

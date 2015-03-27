@@ -31,7 +31,7 @@
 
 namespace pm
 {
-    
+
 template<pmAffinityCriterion>
 struct GetAffinityDataType
 {};
@@ -76,6 +76,15 @@ struct GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>
     static constexpr type sentinel_value = std::numeric_limits<type>::max();
 };
 
+template<>
+struct GetAffinityDataType<DERIVED_AFFINITY>
+{
+    typedef float type;
+    typedef std::greater<type> sorter;
+    typedef double difference_type;
+
+    static constexpr type sentinel_value = std::numeric_limits<type>::min();
+};
 
 pmAffinityTable::pmAffinityTable(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion)
     : mLocalTask(pLocalTask)
@@ -111,6 +120,12 @@ void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpac
             break;
         }
             
+        case DERIVED_AFFINITY:
+        {
+            MakeAffinityTable<GetAffinityDataType<DERIVED_AFFINITY>::type, GetAffinityDataType<DERIVED_AFFINITY>::sorter>(pAffinityAddressSpace, pMachinesVector, GetAffinityDataType<DERIVED_AFFINITY>::sentinel_value);
+            break;
+        }
+
         default:
             PMTHROW(pmFatalErrorException());
     }
@@ -226,9 +241,10 @@ void pmAffinityTable::CreateSubtaskMappings()
     pmPullSchedulingManager* lManager = dynamic_cast<pmPullSchedulingManager*>(mLocalTask->GetSubtaskManager());
     EXCEPTION_ASSERT(lManager);
     
+    // Logical subtask ids are already assigned by scheduler; this code maps them to the physical ones
     std::vector<ulong> lLogicalSubtaskIdsVector;
     std::map<uint, std::pair<ulong, ulong>> lMap = lManager->ComputeMachineVersusInitialSubtaskCountMap(lLogicalSubtaskIdsVector);
-
+    
 #ifdef MACHINES_PICK_BEST_SUBTASKS
     std::set<ulong> lSubtasksAllotted;
     auto lSubtasksAllottedEndIter = lSubtasksAllotted.end();
@@ -365,6 +381,9 @@ std::vector<ulong> pmAffinityTable::FindSubtasksWithBestAffinity(pmTask* pTask, 
         case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
             return FindSubtasksWithBestAffinity<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::sorter>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex, pTask->GetSubtaskCount());
             
+        case DERIVED_AFFINITY:
+            return FindSubtasksWithBestAffinity<GetAffinityDataType<DERIVED_AFFINITY>::type, GetAffinityDataType<DERIVED_AFFINITY>::sorter>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex, pTask->GetSubtaskCount());
+
         default:
             PMTHROW(pmFatalErrorException());
     }
@@ -430,6 +449,9 @@ std::vector<ulong> pmAffinityTable::FindSubtasksWithMaxDifferenceInAffinities(pm
         case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
             return FindSubtasksWithMaxDifferenceInAffinities<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::sorter, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::difference_type>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex1, lMachineIndex2, pTask->GetSubtaskCount());
             
+        case DERIVED_AFFINITY:
+            return FindSubtasksWithMaxDifferenceInAffinities<GetAffinityDataType<DERIVED_AFFINITY>::type, GetAffinityDataType<DERIVED_AFFINITY>::sorter, GetAffinityDataType<DERIVED_AFFINITY>::difference_type>(lAffinityAddressSpace, lMachinesVector, pStartSubtask, pEndSubtask, pCount, lMachineIndex1, lMachineIndex2, pTask->GetSubtaskCount());
+
         default:
             PMTHROW(pmFatalErrorException());
     }
@@ -462,6 +484,154 @@ std::vector<ulong> pmAffinityTable::FindSubtasksWithMaxDifferenceInAffinities(pm
     std::sort(lSubtasksVector.begin(), lSubtasksVector.end());
     
     return lSubtasksVector;
+}
+#endif
+    
+#ifdef USE_DYNAMIC_AFFINITY
+ulong pmAffinityTable::GetSubtaskWithBestAffinity(pmTask* pTask, pmExecutionStub* pStub, const std::vector<ulong>& pSubtasks, std::shared_ptr<void>& pSharedPtr, bool pUpdate)
+{
+    switch(pTask->GetAffinityCriterion())
+    {
+        case MAXIMIZE_LOCAL_DATA:
+        {
+            typedef typename std::multimap<GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::type, ulong, GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::sorter> map_type;
+
+            map_type* lMultiMap = NULL;
+
+            if(pUpdate)
+            {
+                pSharedPtr.reset(new map_type());
+                map_type* lMultiMap = (map_type*)(pSharedPtr.get());
+
+                pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+
+                for_each(pSubtasks, [&] (ulong pSubtaskId)
+                {
+                    lSubscriptionManager.FindSubtaskMemDependencies(pStub, pSubtaskId, NULL, true);
+
+                    lMultiMap->emplace(lSubscriptionManager.FindLocalInputDataSizeForSubtask(pStub, pSubtaskId), pSubtaskId);
+                });
+            }
+            
+            lMultiMap = (map_type*)(pSharedPtr.get());
+            EXCEPTION_ASSERT(lMultiMap);
+            
+            return lMultiMap->begin()->first;
+        }
+
+        case MINIMIZE_REMOTE_SOURCES:
+        {
+            typedef typename std::multimap<GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::type, ulong, GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::sorter> map_type;
+
+            map_type* lMultiMap = NULL;
+
+            if(pUpdate)
+            {
+                pSharedPtr.reset(new map_type());
+                map_type* lMultiMap = (map_type*)(pSharedPtr.get());
+
+                pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+
+                for_each(pSubtasks, [&] (ulong pSubtaskId)
+                {
+                    lSubscriptionManager.FindSubtaskMemDependencies(pStub, pSubtaskId, NULL, true);
+
+                    lMultiMap->emplace(lSubscriptionManager.FindRemoteDataSourcesForSubtask(pStub, pSubtaskId), pSubtaskId);
+                });
+            }
+            
+            lMultiMap = (map_type*)(pSharedPtr.get());
+            EXCEPTION_ASSERT(lMultiMap);
+            
+            return lMultiMap->begin()->first;
+        }
+            
+        case MINIMIZE_REMOTE_TRANSFER_EVENTS:
+        {
+            typedef typename std::multimap<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::type, ulong, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::sorter> map_type;
+
+            map_type* lMultiMap = NULL;
+
+            if(pUpdate)
+            {
+                pSharedPtr.reset(new map_type());
+                map_type* lMultiMap = (map_type*)(pSharedPtr.get());
+
+                pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+
+                for_each(pSubtasks, [&] (ulong pSubtaskId)
+                {
+                    lSubscriptionManager.FindSubtaskMemDependencies(pStub, pSubtaskId, NULL, true);
+
+                    lMultiMap->emplace(lSubscriptionManager.FindRemoteTransferEventsForSubtask(pStub, pSubtaskId), pSubtaskId);
+                });
+            }
+            
+            lMultiMap = (map_type*)(pSharedPtr.get());
+            EXCEPTION_ASSERT(lMultiMap);
+            
+            return lMultiMap->begin()->first;
+        }
+
+        case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
+        {
+            typedef typename std::multimap<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type, ulong, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::sorter> map_type;
+
+            map_type* lMultiMap = NULL;
+
+            if(pUpdate)
+            {
+                pSharedPtr.reset(new map_type());
+                map_type* lMultiMap = (map_type*)(pSharedPtr.get());
+
+                pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+
+                for_each(pSubtasks, [&] (ulong pSubtaskId)
+                {
+                    lSubscriptionManager.FindSubtaskMemDependencies(pStub, pSubtaskId, NULL, true);
+
+                    lMultiMap->emplace(lSubscriptionManager.FindRemoteTransferEstimateForSubtask(pStub, pSubtaskId), pSubtaskId);
+                });
+            }
+            
+            lMultiMap = (map_type*)(pSharedPtr.get());
+            EXCEPTION_ASSERT(lMultiMap);
+            
+            return lMultiMap->begin()->first;
+        }
+
+        case DERIVED_AFFINITY:
+        {
+            typedef typename std::multimap<GetAffinityDataType<DERIVED_AFFINITY>::type, ulong, GetAffinityDataType<DERIVED_AFFINITY>::sorter> map_type;
+
+            map_type* lMultiMap = NULL;
+
+            if(pUpdate)
+            {
+                pSharedPtr.reset(new map_type());
+                map_type* lMultiMap = (map_type*)(pSharedPtr.get());
+
+                pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
+
+                for_each(pSubtasks, [&] (ulong pSubtaskId)
+                {
+                    lSubscriptionManager.FindSubtaskMemDependencies(pStub, pSubtaskId, NULL, true);
+
+                    lMultiMap->emplace(lSubscriptionManager.FindDerivedAffinityValueForSubtask(pStub, pSubtaskId), pSubtaskId);
+                });
+            }
+            
+            lMultiMap = (map_type*)(pSharedPtr.get());
+            EXCEPTION_ASSERT(lMultiMap);
+            
+            return lMultiMap->begin()->first;
+        }
+
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+
+    return std::numeric_limits<ulong>::max();
 }
 #endif
 

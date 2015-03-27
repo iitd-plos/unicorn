@@ -23,6 +23,10 @@
 #include "pmStubManager.h"
 #include "pmExecutionStub.h"
 
+#ifdef USE_DYNAMIC_AFFINITY
+#include "pmAffinityTable.h"
+#endif
+
 #ifdef USE_STEAL_AGENT_PER_NODE
 
 namespace pm
@@ -156,6 +160,24 @@ bool pmStealAgent::HasAnotherStubToStealFrom(pmExecutionStub* pStub, bool pCanMu
     return GetStubWithMaxStealLikelihood(pCanMultiAssign, pStub);
 }
 
+#ifdef USE_DYNAMIC_AFFINITY
+void pmStealAgent::HibernateSubtasks(const std::vector<ulong>& pSubtasksVector)
+{
+    EXCEPTION_ASSERT(mTask->GetAffinityCriterion() != MAX_AFFINITY_CRITERION);
+    
+    FINALIZE_RESOURCE_PTR(dHibernationLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mHibernationLock, Lock(), Unlock());
+
+    std::copy(pSubtasksVector.begin(), pSubtasksVector.end(), std::inserter(mHibernatedSubtasks, mHibernatedSubtasks.end()));
+}
+    
+ulong pmStealAgent::GetNextHibernatedSubtask(pmExecutionStub* pStub)
+{
+    FINALIZE_RESOURCE_PTR(dHibernationLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mHibernationLock, Lock(), Unlock());
+
+    return pmAffinityTable::GetSubtaskWithBestAffinity(mTask, pStub, mHibernatedSubtasks, mAffinityData, true);
+}
+#endif
+    
 #ifdef ENABLE_DYNAMIC_AGGRESSION
 void pmStealAgent::RecordStealRequestIssue(pmExecutionStub* pStub)
 {

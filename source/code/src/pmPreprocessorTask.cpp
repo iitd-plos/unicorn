@@ -196,6 +196,16 @@ pmStatus preprocessorTask_cpuCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
                     *((float*)lOutputMem) = lSubscriptionManager.FindRemoteTransferEstimateForSubtask(lStub, lUserSubtaskId);
                     break;
                     
+                case DERIVED_AFFINITY:
+                    if(lSelectiveSubtasks)
+                    {
+                        *((float*)lOutputMem) = (float)lUserSubtaskId;
+                        lOutputMem = (void*)((float*)lOutputMem + 1);
+                    }
+
+                    *((float*)lOutputMem) = lSubscriptionManager.FindDerivedAffinityValueForSubtask(lStub, lUserSubtaskId);
+                    break;
+
                 default:
                     PMTHROW(pmFatalErrorException());
             }
@@ -417,6 +427,10 @@ size_t pmPreprocessorTask::GetSampleSizeForAffinityCriterion(pmAffinityCriterion
             break;
             
         case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
+            return sizeof(float);
+            break;
+
+        case DERIVED_AFFINITY:
             return sizeof(float);
             break;
 

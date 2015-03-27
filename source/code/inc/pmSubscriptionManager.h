@@ -251,6 +251,7 @@ class pmSubscriptionManager : public pmBase
         uint FindRemoteDataSourcesForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
         ulong FindRemoteTransferEventsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
         float FindRemoteTransferEstimateForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
+        float FindDerivedAffinityValueForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
     
         pmSubscriptionFormat GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
         std::vector<pmScatteredSubscriptionInfo> GetUnifiedScatteredSubscriptionInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);

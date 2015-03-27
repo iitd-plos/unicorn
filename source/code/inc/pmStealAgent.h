@@ -68,7 +68,8 @@ namespace stealAgent
     };
 }
     
-// There is no synchronization inside this class. All stubs have exclusive data locations.
+// Most methods in this class are not synchronized. All stubs have exclusive data locations.
+// If USE_DYNAMIC_AFFINITY is defined, mHibernatedSubtasks is synchronized
 class pmStealAgent : public pmBase
 {
 public:
@@ -86,6 +87,11 @@ public:
     bool HasAnotherStubToStealFrom(pmExecutionStub* pStub, bool pCanMultiAssign);
 
     pmExecutionStub* GetStubWithMaxStealLikelihood(bool pConsiderMultiAssign, pmExecutionStub* pIgnoreStub = NULL);
+
+#ifdef USE_DYNAMIC_AFFINITY
+    void HibernateSubtasks(const std::vector<ulong>& pSubtasksVector);
+    ulong GetNextHibernatedSubtask(pmExecutionStub* pStub);
+#endif
     
 #ifdef ENABLE_DYNAMIC_AGGRESSION
     void RecordStealRequestIssue(pmExecutionStub* pStub);
@@ -101,6 +107,12 @@ private:
     
 #ifdef ENABLE_DYNAMIC_AGGRESSION
     std::vector<stealAgent::dynamicAggressionStubData> mDynamicAggressionStubSink;
+#endif
+    
+#ifdef USE_DYNAMIC_AFFINITY
+    std::vector<ulong> mHibernatedSubtasks;
+    std::shared_ptr<void> mAffinityData;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mHibernationLock;
 #endif
 };
     
