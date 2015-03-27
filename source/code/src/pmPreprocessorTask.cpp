@@ -342,6 +342,8 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
     ulong lUserSubtasks = pLocalTask->GetSubtaskCount();
     preprocessorTaskConf lTaskConf = {pTaskType, lUserSubtasks, *pLocalTask->GetOriginatingHost(), pLocalTask->GetSequenceNumber(), pAffinityCriterion, (uint)lMachinesSet.size()};
     
+    EXCEPTION_ASSERT(lUserSubtasks);
+    
     std::vector<pmTaskMem> lMemVector;
     
     ulong lPreprocessorSubtasks = 0;
@@ -355,8 +357,8 @@ void pmPreprocessorTask::LaunchPreprocessorTask(pm::pmLocalTask* pLocalTask, pre
 
             if(lPercentSubtasks != 100)
             {
-                lUserSubtasks = (ulong)(((float)lPercentSubtasks / 100) * lUserSubtasks);
-                lMemoryMultiple = 2;    // For now, keeping subtask id in same format as affinity sample
+                lUserSubtasks = std::max((ulong)1, (ulong)(((float)lPercentSubtasks / 100) * lUserSubtasks));
+                lMemoryMultiple = ((lUserSubtasks < pLocalTask->GetSubtaskCount()) ? 2 : 1);    // For now, keeping subtask id in same format as affinity sample
             }
             
             lPreprocessorSubtasks = lMachinesSet.size() * lUserSubtasks;
