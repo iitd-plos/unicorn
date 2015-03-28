@@ -27,6 +27,7 @@
 #include "pmCallbackUnit.h"
 #include "pmStubManager.h"
 #include "pmController.h"
+#include "pmAffinityTable.h"
 
 #include <random>
 
@@ -203,7 +204,13 @@ pmStatus preprocessorTask_cpuCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
                         lOutputMem = (void*)((float*)lOutputMem + 1);
                     }
 
-                    *((float*)lOutputMem) = lSubscriptionManager.FindDerivedAffinityValueForSubtask(lStub, lUserSubtaskId);
+                    derivedAffinityData data;
+                    //data.localBytes = lSubscriptionManager.FindLocalInputDataSizeForSubtask(lStub, lUserSubtaskId);
+                    data.remoteNodes = lSubscriptionManager.FindRemoteDataSourcesForSubtask(lStub, lUserSubtaskId);
+                    data.remoteEvents = lSubscriptionManager.FindRemoteTransferEventsForSubtask(lStub, lUserSubtaskId);
+                    data.estimatedTime = lSubscriptionManager.FindRemoteTransferEstimateForSubtask(lStub, lUserSubtaskId);
+                    
+                    *((derivedAffinityData*)lOutputMem) = data;
                     break;
 
                 default:
@@ -431,7 +438,7 @@ size_t pmPreprocessorTask::GetSampleSizeForAffinityCriterion(pmAffinityCriterion
             break;
 
         case DERIVED_AFFINITY:
-            return sizeof(float);
+            return sizeof(derivedAffinityData);
             break;
 
         default:

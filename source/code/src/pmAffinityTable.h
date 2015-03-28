@@ -32,6 +32,35 @@ namespace pm
 class pmLocalTask;
 class pmMachine;
 class pmAddressSpace;
+    
+struct derivedAffinityData
+{
+    //ulong localBytes;
+    uint remoteNodes;
+    ulong remoteEvents;
+    float estimatedTime;
+    
+    derivedAffinityData operator- (const derivedAffinityData& pData)
+    {
+        derivedAffinityData lData;
+//        lData.localBytes = localBytes - pData.localBytes;
+        lData.remoteNodes = remoteNodes - pData.remoteNodes;
+        lData.remoteEvents = remoteEvents - pData.remoteEvents;
+        lData.estimatedTime = estimatedTime - pData.estimatedTime;
+        
+        return lData;
+    }
+};
+
+std::ostream& operator<< (std::ostream& pOStream, const derivedAffinityData& pData);
+
+struct derivedAffinityDataSorter : std::binary_function<derivedAffinityData, derivedAffinityData, bool>
+{
+    bool operator()(const derivedAffinityData& pData1, const derivedAffinityData& pData2) const
+    {
+        return std::tie(pData1.estimatedTime, pData1.remoteEvents, pData1.remoteNodes) < std::tie(pData2.estimatedTime, pData2.remoteEvents, pData2.remoteNodes);
+    }
+};
 
 class pmAffinityTable : public pmBase
 {

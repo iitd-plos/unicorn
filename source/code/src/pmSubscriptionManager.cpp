@@ -1168,6 +1168,7 @@ float pmSubscriptionManager::FindRemoteTransferEstimateForSubtask(pmExecutionStu
     return ((float)lLocalDataSize / (lRemoteTransferEvents * lEstimatedTime));
 }
 
+#if 0
 float pmSubscriptionManager::FindDerivedAffinityValueForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 {
     const double lLatencyPerNonScatteredPageFetch = 1.0;
@@ -1198,6 +1199,7 @@ float pmSubscriptionManager::FindDerivedAffinityValueForSubtask(pmExecutionStub*
 
     return (float)(lScatteredPages * lLatencyPerScatteredPageFetch + lNonScatteredPages * lLatencyPerNonScatteredPageFetch);
 }
+#endif
     
 /* Must be called with mSubtaskMapVector stub's lock acquired for both subtasks */
 bool pmSubscriptionManager::AddressSpacesHaveMatchingSubscriptionsInternal(const pmSubtaskAddressSpaceData& pAddressSpaceData1, const pmSubtaskAddressSpaceData& pAddressSpaceData2) const
