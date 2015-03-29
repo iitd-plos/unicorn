@@ -25,6 +25,7 @@
 #include "pmTable.h"
 
 #include <set>
+#include <cmath>
 
 namespace pm
 {
@@ -35,8 +36,8 @@ class pmAddressSpace;
     
 struct derivedAffinityData
 {
-    //ulong localBytes;
-    uint remoteNodes;
+//    ulong localBytes;
+//    uint remoteNodes;
     ulong remoteEvents;
     float estimatedTime;
     
@@ -44,7 +45,7 @@ struct derivedAffinityData
     {
         derivedAffinityData lData;
 //        lData.localBytes = localBytes - pData.localBytes;
-        lData.remoteNodes = remoteNodes - pData.remoteNodes;
+//        lData.remoteNodes = remoteNodes - pData.remoteNodes;
         lData.remoteEvents = remoteEvents - pData.remoteEvents;
         lData.estimatedTime = estimatedTime - pData.estimatedTime;
         
@@ -58,7 +59,40 @@ struct derivedAffinityDataSorter : std::binary_function<derivedAffinityData, der
 {
     bool operator()(const derivedAffinityData& pData1, const derivedAffinityData& pData2) const
     {
-        return std::tie(pData1.estimatedTime, pData1.remoteEvents, pData1.remoteNodes) < std::tie(pData2.estimatedTime, pData2.remoteEvents, pData2.remoteNodes);
+        const float lPercent = 10.0/100.0;
+
+    #if 0
+        if(std::abs(pData1.estimatedTime - pData2.estimatedTime) < lPercent * std::max(pData1.estimatedTime, pData2.estimatedTime))
+        {
+            if(std::abs((float)pData1.remoteEvents - (float)pData2.remoteEvents) < lPercent * std::max(pData1.remoteEvents, pData2.remoteEvents))
+                return pData1.remoteNodes < pData2.remoteNodes;
+
+            return pData1.remoteEvents < pData2.remoteEvents;
+        }
+        
+        return pData1.estimatedTime < pData2.estimatedTime;
+    #else
+        // If the subtask is better on both criterion, select it
+        if(pData1.remoteEvents < pData2.remoteEvents && pData1.estimatedTime < pData2.estimatedTime)
+            return true;
+        
+        if(pData2.remoteEvents < pData1.remoteEvents && pData2.estimatedTime < pData1.estimatedTime)
+            return false;
+
+        // If the subtask is better on one criterion and within a percentage on other, select it
+        bool lBetter1 = (pData1.remoteEvents < pData2.remoteEvents && (pData2.estimatedTime - pData1.estimatedTime) < lPercent * pData2.estimatedTime);
+        bool lBetter2 = (pData2.estimatedTime < pData1.estimatedTime && (pData1.remoteEvents - pData2.remoteEvents) < lPercent * pData1.remoteEvents);
+        bool lBetter3 = (pData1.estimatedTime < pData2.estimatedTime && (pData2.remoteEvents - pData1.remoteEvents) < lPercent * pData2.remoteEvents);
+        bool lBetter4 = (pData2.remoteEvents < pData1.remoteEvents && (pData1.estimatedTime - pData1.estimatedTime) < lPercent * pData1.estimatedTime);
+        
+        if(lBetter1 && !lBetter2)
+            return true;
+        
+        if(lBetter3 && !lBetter4)
+            return true;
+        
+        return false;
+    #endif
     }
 };
 

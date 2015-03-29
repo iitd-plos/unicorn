@@ -206,7 +206,7 @@ pmStatus preprocessorTask_cpuCallback(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice
 
                     derivedAffinityData data;
                     //data.localBytes = lSubscriptionManager.FindLocalInputDataSizeForSubtask(lStub, lUserSubtaskId);
-                    data.remoteNodes = lSubscriptionManager.FindRemoteDataSourcesForSubtask(lStub, lUserSubtaskId);
+                    //data.remoteNodes = lSubscriptionManager.FindRemoteDataSourcesForSubtask(lStub, lUserSubtaskId);
                     data.remoteEvents = lSubscriptionManager.FindRemoteTransferEventsForSubtask(lStub, lUserSubtaskId);
                     data.estimatedTime = lSubscriptionManager.FindRemoteTransferEstimateForSubtask(lStub, lUserSubtaskId);
                     

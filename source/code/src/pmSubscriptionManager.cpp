@@ -1133,39 +1133,26 @@ float pmSubscriptionManager::FindRemoteTransferEstimateForSubtask(pmExecutionStu
 
     double lScatteredPages = 0;
     double lNonScatteredPages = 0;
-    ulong lRemoteTransferEvents = 0;
-    ulong lLocalDataSize = 0;
 
-    multi_for_each_with_index(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData, size_t pAddressSpaceIndex)
+    multi_for_each(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
     {
-        uint lMemIndex = (uint)pAddressSpaceIndex;
-
         if(mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace))
         {
-            subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
-            GetNonConsolidatedReadSubscriptionsInternal(lSubtask, lMemIndex, lBeginIter, lEndIter);
-            
-            for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
-                lLocalDataSize += pAddressSpace->FindLocalDataSizeUnprotected(lIter->first, lIter->second.first);
-
             // Fetch exact scattered subscriptions (these subscriptions are packed at the sender side before transfer and then unpacked by the receiver)
             for_each(pAddressSpaceData.mScatteredReadSubscriptionInfoVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
             {
                 lScatteredPages += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetScatteredMemoryFetchPages(pAddressSpace, pScatteredSubscriptionInfo);
-                lRemoteTransferEvents += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetScatteredMemoryFetchEvents(pAddressSpace, pScatteredSubscriptionInfo);
             });
             
             // For non-scattered subscriptions, we fetch entire memory pages (no packing/unpacking happens here)
             for_each(pAddressSpaceData.mReadSubscriptionInfoVector, [&] (const pmSubscriptionInfo& pSubscriptionInfo)
             {
                 lNonScatteredPages += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetMemoryFetchPages(pAddressSpace, pSubscriptionInfo.offset, pSubscriptionInfo.length);
-                lRemoteTransferEvents += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetMemoryFetchEvents(pAddressSpace, pSubscriptionInfo.offset, pSubscriptionInfo.length);
             });
         }
     });
 
-    float lEstimatedTime = (float)(lScatteredPages * lLatencyPerScatteredPageFetch + lNonScatteredPages * lLatencyPerNonScatteredPageFetch);
-    return ((float)lLocalDataSize / (lRemoteTransferEvents * lEstimatedTime));
+    return (float)(lScatteredPages * lLatencyPerScatteredPageFetch + lNonScatteredPages * lLatencyPerNonScatteredPageFetch);
 }
 
 #if 0

@@ -86,7 +86,7 @@ struct GetAffinityDataType<DERIVED_AFFINITY>
     static type sentinel_value;
 };
     
-derivedAffinityData GetAffinityDataType<DERIVED_AFFINITY>::sentinel_value = {std::numeric_limits<uint>::max(), std::numeric_limits<ulong>::max(), std::numeric_limits<float>::max()};
+derivedAffinityData GetAffinityDataType<DERIVED_AFFINITY>::sentinel_value = {std::numeric_limits<ulong>::max(), std::numeric_limits<float>::max()};
 
 pmAffinityTable::pmAffinityTable(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion)
     : mLocalTask(pLocalTask)
@@ -149,7 +149,7 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
     uint lMachines = (uint)pMachinesVector.size();
     
     bool lSubtaskIdEmbedded = (lSubtaskCount * lMachines != mLocalTask->GetPreprocessorTask()->GetSubtaskCount());
-    std::cout << pMachinesVector.size() << " " << lSubtaskCount << " " << sizeof(T) << " " << pAffinityAddressSpace->GetLength() << std::endl;
+
     EXCEPTION_ASSERT((lSubtaskIdEmbedded ? (2 * mLocalTask->GetPreprocessorTask()->GetSubtaskCount()) : (pMachinesVector.size() * lSubtaskCount)) * sizeof(T) == pAffinityAddressSpace->GetLength());
 
 #ifdef MACHINES_PICK_BEST_SUBTASKS
@@ -159,7 +159,7 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
     std::vector<std::multimap<T, const pmMachine*, S>> lVector;    // data versus machines for each subtask
     lVector.resize(lSubtaskCount);
 #endif
-
+    
     for_each_with_index(pMachinesVector, [&] (const pmMachine* pMachine, size_t pMachineIndex)
     {
     #ifdef DUMP_AFFINITY_DATA
@@ -626,7 +626,7 @@ ulong pmAffinityTable::GetSubtaskWithBestAffinity(pmTask* pTask, pmExecutionStub
 
                     derivedAffinityData data;
                     //data.localBytes = lSubscriptionManager.FindLocalInputDataSizeForSubtask(pStub, pSubtaskId);
-                    data.remoteNodes = lSubscriptionManager.FindRemoteDataSourcesForSubtask(pStub, pSubtaskId);
+                    //data.remoteNodes = lSubscriptionManager.FindRemoteDataSourcesForSubtask(pStub, pSubtaskId);
                     data.remoteEvents = lSubscriptionManager.FindRemoteTransferEventsForSubtask(pStub, pSubtaskId);
                     data.estimatedTime = lSubscriptionManager.FindRemoteTransferEstimateForSubtask(pStub, pSubtaskId);
                     lMultiMap->emplace(data, pSubtaskId);
@@ -650,7 +650,8 @@ ulong pmAffinityTable::GetSubtaskWithBestAffinity(pmTask* pTask, pmExecutionStub
 std::ostream& operator<< (std::ostream& pOStream, const derivedAffinityData& pData)
 {
     //return pOStream << "[" << pData.localBytes << ", " << pData.remoteNodes << ", " << pData.remoteEvents << ", " << pData.estimatedTime << "]";
-    return pOStream << "[" << pData.remoteNodes << ", " << pData.remoteEvents << ", " << pData.estimatedTime << "]";
+    //return pOStream << "[" << pData.remoteNodes << ", " << pData.remoteEvents << ", " << pData.estimatedTime << "]";
+    return pOStream << "[" << pData.remoteEvents << ", " << pData.estimatedTime << "]";
 }
 
 }
