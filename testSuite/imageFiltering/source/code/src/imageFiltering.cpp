@@ -12,7 +12,12 @@ namespace imageFiltering
 void* gSampleInput;
 void* gSerialOutput;
 void* gParallelOutput;
+    
+#ifdef DO_MULTIPLE_CONVOLUTIONS
+char gFilter[MAX_ITERATIONS][MAX_FILTER_DIM][MAX_FILTER_DIM];
+#else
 char gFilter[MAX_FILTER_DIM][MAX_FILTER_DIM];
+#endif
     
 size_t gImageWidth, gImageHeight, gImageOffset, gImageBytesPerLine;
 
@@ -111,6 +116,23 @@ void serialImageFilter(void* pImageData, size_t pFilterRadius, char* pSerialOutp
             lDimMaxY = i + pFilterRadius;
             
             char lRedVal = 0, lGreenVal = 0, lBlueVal = 0;
+
+        #ifdef USE_ELLIPTICAL_FILTER
+            unsigned int lSemiMajorAxis = 1, lSemiMinorAxis = 1;
+            float lSemiMajorAxisSquare = 1, lSemiMinorAxisSquare = 1;
+            
+            unsigned int lTotalSubtasks = ((unsigned int)gImageWidth/TILE_DIM + ((unsigned int)gImageWidth%TILE_DIM ? 1 : 0)) * ((unsigned int)gImageHeight/TILE_DIM + ((unsigned int)gImageHeight%TILE_DIM ? 1 : 0));
+            unsigned int lSubtasksPerRow = ((unsigned int)gImageWidth/TILE_DIM + ((unsigned int)gImageWidth%TILE_DIM ? 1 : 0));
+            ulong lSubtaskId = (i / TILE_DIM) * lSubtasksPerRow + (j / TILE_DIM);
+            ulong lSubtasksLeft = lTotalSubtasks - lSubtaskId;  // This is always greater than 1
+
+            lSemiMajorAxis = pFilterRadius * ((float)lSubtaskId / lTotalSubtasks);
+            lSemiMinorAxis = pFilterRadius * ((float)lSubtasksLeft / lTotalSubtasks);
+            
+            lSemiMajorAxisSquare = lSemiMajorAxis * lSemiMajorAxis;
+            lSemiMinorAxisSquare = lSemiMinorAxis * lSemiMinorAxis;
+        #endif
+
             for(int k = lDimMinY; k <= lDimMaxY; ++k)
             {
                 for(int l = lDimMinX; l <= lDimMaxX; ++l)
@@ -125,9 +147,24 @@ void serialImageFilter(void* pImageData, size_t pFilterRadius, char* pSerialOutp
                     size_t lInvertedIndex = (gImageHeight - 1 - m) * lTaskConf->imageBytesPerLine + n * PIXEL_COUNT;
                 #endif
                     
+                #ifdef USE_ELLIPTICAL_FILTER
+                    float x = l - (lDimMinX + lDimMaxX)/2;
+                    float y = k - (lDimMinY + lDimMaxY)/2;
+                    
+                    if((x * x) / lSemiMajorAxisSquare + (y * y) / lSemiMinorAxisSquare < 1.0)   // Inside Ellipse
+                    {
+                        lBlueVal += lImageData[lInvertedIndex] * pFilter[k - lDimMinY][l - lDimMinX];
+                        lGreenVal += lImageData[lInvertedIndex + 1] * pFilter[k - lDimMinY][l - lDimMinX];
+                        lRedVal += lImageData[lInvertedIndex + 2] * pFilter[k - lDimMinY][l - lDimMinX];
+                    }
+                    else    // Outside Ellipse
+                    {
+                    }
+                #else
                     lBlueVal += lImageData[lInvertedIndex] * pFilter[k - lDimMinY][l - lDimMinX];
                     lGreenVal += lImageData[lInvertedIndex + 1] * pFilter[k - lDimMinY][l - lDimMinX];
                     lRedVal += lImageData[lInvertedIndex + 2] * pFilter[k - lDimMinY][l - lDimMinX];
+                #endif
                 }
             }
             
@@ -293,6 +330,19 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
     int lDimMinX, lDimMaxX, lDimMinY, lDimMaxY;
     size_t lWidth = ((pSubtaskInfo.memInfo[OUTPUT_MEM_INDEX].visibilityType == SUBSCRIPTION_NATURAL) ? lTaskConf->imageWidth : (lSubscriptionEndCol - lSubscriptionStartCol));
 
+#ifdef USE_ELLIPTICAL_FILTER
+    unsigned int lSemiMajorAxis = 1, lSemiMinorAxis = 1;
+    float lSemiMajorAxisSquare = 1, lSemiMinorAxisSquare = 1;
+    
+    ulong lSubtasksLeft = pTaskInfo.subtaskCount - pSubtaskInfo.subtaskId;  // This is always greater than 1
+
+    lSemiMajorAxis = lTaskConf->filterRadius * ((float)pSubtaskInfo.subtaskId / pTaskInfo.subtaskCount);
+    lSemiMinorAxis = lTaskConf->filterRadius * ((float)lSubtasksLeft / pTaskInfo.subtaskCount);
+    
+    lSemiMajorAxisSquare = lSemiMajorAxis * lSemiMajorAxis;
+    lSemiMinorAxisSquare = lSemiMinorAxis * lSemiMinorAxis;
+#endif
+
     for(int i = lSubscriptionStartRow; i < lSubscriptionEndRow; ++i)
     {
         for(int j = lSubscriptionStartCol; j < lSubscriptionEndCol; ++j)
@@ -317,9 +367,24 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
                     size_t lInvertedIndex = (lTaskConf->imageHeight - 1 - m) * lTaskConf->imageBytesPerLine + n * PIXEL_COUNT;
                 #endif
                     
+                #ifdef USE_ELLIPTICAL_FILTER
+                    float x = l - (lDimMinX + lDimMaxX)/2;
+                    float y = k - (lDimMinY + lDimMaxY)/2;
+                    
+                    if((x * x) / lSemiMajorAxisSquare + (y * y) / lSemiMinorAxisSquare < 1.0)   // Inside Ellipse
+                    {
+                        lBlueVal += lInvertedImageData[lInvertedIndex] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
+                        lGreenVal += lInvertedImageData[lInvertedIndex + 1] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
+                        lRedVal += lInvertedImageData[lInvertedIndex + 2] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
+                    }
+                    else    // Outside Ellipse
+                    {
+                    }
+                #else
                     lBlueVal += lInvertedImageData[lInvertedIndex] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
                     lGreenVal += lInvertedImageData[lInvertedIndex + 1] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
                     lRedVal += lInvertedImageData[lInvertedIndex + 2] * lTaskConf->filter[k - lDimMinY][l - lDimMinX];
+                #endif
                 }
             }
             
@@ -337,11 +402,13 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
 
 #define READ_NON_COMMON_ARGS \
     int lFilterRadius = DEFAULT_FILTER_RADIUS; \
+    int lFilterRadiusStep = DEFAULT_FILTER_RADIUS_STEP; \
 	char* lImagePath = DEFAULT_IMAGE_PATH; \
     int lIterations = DEFAULT_ITERATION_COUNT; \
     FETCH_INT_ARG(lFilterRadius, pCommonArgs, argc, argv); \
-    FETCH_STR_ARG(lImagePath, pCommonArgs + 1, argc, argv); \
-    FETCH_INT_ARG(lIterations, pCommonArgs + 2, argc, argv);
+    FETCH_INT_ARG(lFilterRadiusStep, pCommonArgs + 1, argc, argv); \
+    FETCH_STR_ARG(lImagePath, pCommonArgs + 2, argc, argv); \
+    FETCH_INT_ARG(lIterations, pCommonArgs + 3, argc, argv);
     
 #else
     
@@ -369,7 +436,7 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
         if(i != 0)
             std::swap(lImageData, gSerialOutput);
 
-        serialImageFilter(lImageData, lFilterRadius, (char*)gSerialOutput, gFilter);
+        serialImageFilter(lImageData, lFilterRadius + i * lFilterRadiusStep, (char*)gSerialOutput, gFilter[i]);
     }
     
     if(lIterations % 2 == 0)
@@ -401,7 +468,7 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
         if(i != 0)
             std::swap(lImageData, gParallelOutput);
 
-        if(singleGpuImageFilter(lImageData, gImageWidth, gImageHeight, gFilter, lFilterRadius, gImageBytesPerLine, gParallelOutput) != 0)
+        if(singleGpuImageFilter(lImageData, gImageWidth, gImageHeight, gFilter[i], lFilterRadius + i * lFilterRadiusStep, gImageBytesPerLine, gParallelOutput) != 0)
             return 0;
     }
 
@@ -453,7 +520,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         if(i != 0)
             std::swap(lInputMemHandle, lOutputMemHandle);
 
-        if(!parallelImageFilter(pCallbackHandle, pSchedulingPolicy, lInputMemHandle, lOutputMemHandle, lImagePath, lFilterRadius, gFilter))
+        if(!parallelImageFilter(pCallbackHandle, pSchedulingPolicy, lInputMemHandle, lOutputMemHandle, lImagePath, lFilterRadius + i * lFilterRadiusStep, gFilter[i]))
             exit(1);
     }
     
@@ -506,18 +573,11 @@ pmCallbacks DoSetDefaultCallbacks()
 int DoInit(int argc, char** argv, int pCommonArgs)
 {
 	READ_NON_COMMON_ARGS
-    
-    if(lFilterRadius < MIN_FILTER_RADIUS || lFilterRadius > MAX_FILTER_RADIUS)
-    {
-        std::cout << "Filter radius must be between " << MIN_FILTER_RADIUS << " and " << MAX_FILTER_RADIUS << std::endl;
-        exit(1);
-    }
 
-    if(strlen(lImagePath) >= MAX_IMAGE_PATH_LENGTH)
-    {
-        std::cout << "Image path too long" << std::endl;
+#ifdef DO_MULTIPLE_CONVOLUTIONS
+    if(lIterations > MAX_ITERATIONS)
         exit(1);
-    }
+#endif
     
     readImageMetaData(lImagePath);
 
@@ -525,11 +585,40 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 	gParallelOutput = malloc(IMAGE_SIZE);
 
     srand((unsigned int)time(NULL));
+
+    if(strlen(lImagePath) >= MAX_IMAGE_PATH_LENGTH)
+    {
+        std::cout << "Image path too long" << std::endl;
+        exit(1);
+    }
     
+#ifdef DO_MULTIPLE_CONVOLUTIONS
+    for(uint k = 0; k < lIterations; ++k)
+    {
+        if((lFilterRadius + k * lFilterRadiusStep) < MIN_FILTER_RADIUS || (lFilterRadius + k * lFilterRadiusStep) > MAX_FILTER_RADIUS)
+        {
+            std::cout << "Filter radius must be between " << MIN_FILTER_RADIUS << " and " << MAX_FILTER_RADIUS << std::endl;
+            exit(1);
+        }
+
+        int lFilterDim = 2 * (lFilterRadius + k * lFilterRadiusStep) + 1;
+        for(int i = 0; i < lFilterDim; ++i)
+            for(int j = 0; j < lFilterDim; ++j)
+                gFilter[k][i][j] = (((rand() % 2) ? 1 : -1) * rand());
+    }
+#else
+    if(lFilterRadius < MIN_FILTER_RADIUS || lFilterRadius > MAX_FILTER_RADIUS)
+    {
+        std::cout << "Filter radius must be between " << MIN_FILTER_RADIUS << " and " << MAX_FILTER_RADIUS << std::endl;
+        exit(1);
+    }
+
     int lFilterDim = 2 * lFilterRadius + 1;
+
     for(int i = 0; i < lFilterDim; ++i)
         for(int j = 0; j < lFilterDim; ++j)
             gFilter[i][j] = (((rand() % 2) ? 1 : -1) * rand());
+#endif
     
 	return 0;
 }

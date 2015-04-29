@@ -70,9 +70,9 @@ class pmProcessingElement : public pmHardware
 		pmExecutionStub* GetLocalExecutionStub() const;
 		const pmDeviceInfo& GetDeviceInfo() const;
 
-		static void GetMachines(std::set<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines);
-        static void GetMachines(std::vector<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines);
-        static void GetMachinesInOrder(std::vector<const pmProcessingElement*>& pDevices, std::vector<const pmMachine*>& pMachines);
+		static void GetMachines(const std::set<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines);
+        static void GetMachines(const std::vector<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines);
+        static void GetMachinesInOrder(const std::vector<const pmProcessingElement*>& pDevices, std::vector<const pmMachine*>& pMachines);
 
 	private:
 		pmProcessingElement(const pmMachine* pMachine, pmDeviceType pDeviceType, uint pDeviceIndexInMachine, uint pGlobalDeviceIndex, ushort pNumaDomainId, const communicator::devicePool* pDevicePool);

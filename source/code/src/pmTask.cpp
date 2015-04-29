@@ -415,11 +415,8 @@ const std::vector<const pmMachine*>& pmTask::GetStealListForDevice(const pmProce
     auto lIter = mStealListForDevice.find(pDevice);
     if(lIter == mStealListForDevice.end())
     {
-        std::set<const pmMachine*> lMachines;
+        const std::set<const pmMachine*>& lMachines = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedMachines()) : (((pmRemoteTask*)this)->GetAssignedMachines());
         std::vector<const pmMachine*> lMachinesVector;
-
-        std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
-        pmProcessingElement::GetMachines(lDevices, lMachines);
 
         lMachinesVector.reserve(lMachines.size());
         std::copy(lMachines.begin(), lMachines.end(), std::back_inserter(lMachinesVector));
@@ -1226,8 +1223,7 @@ pmStatus pmLocalTask::InitializeSubtaskManager(scheduler::schedulingModel pSched
 
                 const std::vector<ulong>& lLogicalToPhysicalSubtaskMappings = GetLogicalToPhysicalSubtaskMappings();
                 
-                std::set<const pmMachine*> lMachines;
-                pmProcessingElement::GetMachines(GetAssignedDevices(), lMachines);
+                std::set<const pmMachine*> lMachines = GetAssignedMachines();
                 
                 lMachines.erase(PM_LOCAL_MACHINE);
                 
@@ -1261,10 +1257,22 @@ ulong pmLocalTask::GetTaskTimeOutTriggerTime()
     return mTaskTimeOutTriggerTime;
 }
 
-std::vector<const pmProcessingElement*>& pmLocalTask::GetAssignedDevices()
+const std::vector<const pmProcessingElement*>& pmLocalTask::GetAssignedDevices() const
 {
 	return mDevices;
 }
+    
+const std::set<const pmMachine*>& pmLocalTask::GetAssignedMachines() const
+{
+    return mMachines;
+}
+    
+#ifdef CENTRALIZED_AFFINITY_COMPUTATION
+const std::vector<const pmMachine*>& pmLocalTask::GetAssignedMachinesInOrder() const
+{
+    return mMachinesInOrder;
+}
+#endif
 
 void pmLocalTask::WaitForCompletion()
 {
@@ -1379,12 +1387,16 @@ const std::vector<const pmProcessingElement*>& pmLocalTask::FindCandidateProcess
 
     if(!mDevices.empty())
     {
-        pmProcessingElement::GetMachines(mDevices, pMachines);
+        pmProcessingElement::GetMachines(mDevices, mMachines);
+        
+    #ifdef CENTRALIZED_AFFINITY_COMPUTATION
+        pmProcessingElement::GetMachinesInOrder(mDevices, mMachinesInOrder);
+    #endif
         
         FINALIZE_RESOURCE_PTR(dCompletionLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCompletionLock, Lock(), Unlock());
 
-        mPendingCompletions = pMachines.size();
-        if(pMachines.find(PM_LOCAL_MACHINE) == pMachines.end())
+        mPendingCompletions = mMachines.size();
+        if(mMachines.find(PM_LOCAL_MACHINE) == mMachines.end())
             ++mPendingCompletions;
     }
 
@@ -1416,6 +1428,8 @@ pmRemoteTask::pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTa
     SetSequenceNumber(pSequenceNumber);
 
     CreateReducerAndRedistributors();
+    
+    pmProcessingElement::GetMachines(mDevices, mMachines);
 }
 
 pmRemoteTask::~pmRemoteTask()
@@ -1428,9 +1442,14 @@ void pmRemoteTask::DoPostInternalCompletion()
     UnlockMemories();
 }
 
-std::vector<const pmProcessingElement*>& pmRemoteTask::GetAssignedDevices()
+const std::vector<const pmProcessingElement*>& pmRemoteTask::GetAssignedDevices() const
 {
 	return mDevices;
+}
+    
+const std::set<const pmMachine*>& pmRemoteTask::GetAssignedMachines() const
+{
+    return mMachines;
 }
 
 void pmRemoteTask::TerminateTask()

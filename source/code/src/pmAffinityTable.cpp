@@ -216,11 +216,23 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
     for_each_with_index(lVector, [&] (const typename decltype(lVector)::value_type& pEntry, size_t pIndex)
     {
     #ifdef MACHINES_PICK_BEST_SUBTASKS
-        std::vector<ulong> lTableRow;
-        lTableRow.reserve(lSubtaskCount);
-        
-        std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<T, ulong>());
-        mTable.AddRow((uint)(*pMachinesVector[pIndex]), std::move(lTableRow));
+        #ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
+            std::vector<double> lTableRow;
+            lTableRow.reserve(lSubtaskCount);
+
+            for_each(pEntry, [&] (const std::pair<T, ulong>& pMapEntry)
+            {
+                lTableRow[pMapEntry.second] = GetProfitValue(pMapEntry.first);
+            });
+
+            mTable.AddRow((uint)(*pMachinesVector[pIndex]), std::move(lTableRow));
+        #else
+            std::vector<ulong> lTableRow;
+            lTableRow.reserve(lSubtaskCount);
+            
+            std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<T, ulong>());
+            mTable.AddRow((uint)(*pMachinesVector[pIndex]), std::move(lTableRow));
+        #endif
     #else
         std::vector<const pmMachine*> lTableRow;
         lTableRow.reserve(lMachines);
@@ -250,50 +262,139 @@ void pmAffinityTable::CreateSubtaskMappings()
     std::map<uint, std::pair<ulong, ulong>> lMap = lManager->ComputeMachineVersusInitialSubtaskCountMap(lLogicalSubtaskIdsVector);
     
 #ifdef MACHINES_PICK_BEST_SUBTASKS
-    std::set<ulong> lSubtasksAllotted;
-    auto lSubtasksAllottedEndIter = lSubtasksAllotted.end();
-
-    std::map<uint, std::vector<ulong>::const_iterator> lSubtasksIterMap;
-    for_each(lMap, [&] (const decltype(lMap)::value_type& pPair)
-    {
-        lSubtasksIterMap.emplace(pPair.first, mTable.GetRow(pPair.first).begin());
-    });
-
-    auto lIter = lMap.begin(), lEndIter = lMap.end();
-    while(lSubtasksAllotted.size() != lSubtaskCount)
-    {
-        // Get next available machine
-        bool lMachineFound = false;
-        
-        while(!lMachineFound)
+    #ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
+        std::vector<long> lSubtaskAssignment;
+        lSubtaskAssignment.resize(lSubtaskCount, -1);
+    
+        uint lMachines = (uint)mTable.GetRowCount();
+        for(uint i = 0; i < lMachines; ++i)
         {
-            if(lIter == lEndIter)
-                lIter = lMap.begin();
+            std::multimap<double, ulong, std::greater<double>> lResidualProfitsMap;
+            const std::vector<double>& lRow = mTable.GetRow(i);
+            
+            for(ulong j = 0; j < lSubtaskCount; ++j)
+            {
+                long lCurrentMachine = lSubtaskAssignment[j];
+                double lResidualProfitValue = lRow[j] - ((lCurrentMachine == -1) ? 0 : mTable.GetRow((uint)lCurrentMachine)[j]);
+                
+                lResidualProfitsMap.emplace(lResidualProfitValue, j);
+            }
 
-            if(lIter->second.second)
-                lMachineFound = true;
-            else
-                ++lIter;
+            ulong lMachineAssignments = lMap[i].second;
+            auto lIter = lResidualProfitsMap.begin();
+            for(ulong k = 0; k < lMachineAssignments; ++lIter, ++k)
+                lSubtaskAssignment[lIter->second] = i;
+            
+            std::vector<ulong> lUnassignedSubtasks;
+            lUnassignedSubtasks.reserve(lSubtaskCount);
+            
+            for_each_with_index(lSubtaskAssignment, [&] (long pSubtaskMachine, size_t pSubtaskId)
+            {
+                if(pSubtaskMachine == -1)
+                {
+                    lUnassignedSubtasks.emplace_back(pSubtaskId);
+                }
+                else
+                {
+                    auto lMapIter = lMap.find((uint)pSubtaskMachine);
+                    EXCEPTION_ASSERT(lMapIter != lMap.end());
+                    EXCEPTION_ASSERT(lMapIter->second.second);
+
+                    ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lMapIter->second.first];
+
+                    // Assign the selected subtask to the selected machine
+                    lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = pSubtaskId;
+                    lPhysicalToLogicalSubtaskMapping[pSubtaskId] = lLogicalSubtaskId;
+
+                    ++lMapIter->second.first;
+                    --lMapIter->second.second;
+                }
+            });
+            
+            for_each(lMap, [&] (decltype(lMap)::value_type& pPair)
+            {
+                const std::vector<double>& lProfitsRow = mTable.GetRow(pPair.first);
+
+                while(pPair.second.second)
+                {
+                    std::vector<ulong>::iterator lSelectedSubtaskIter = lUnassignedSubtasks.end();
+                    double lSelectedSubtaskProfit = std::numeric_limits<double>::min();
+
+                    // Find best subtask from the unassigned ones
+                    auto lSubtaskIter = lUnassignedSubtasks.begin(), lSubtaskEndIter = lUnassignedSubtasks.end();
+                    for(; lSubtaskIter != lSubtaskEndIter; ++lSubtaskIter)
+                    {
+                        if(lProfitsRow[*lSubtaskIter] > lSelectedSubtaskProfit)
+                        {
+                            lSelectedSubtaskProfit = lProfitsRow[*lSubtaskIter];
+                            lSelectedSubtaskIter = lSubtaskIter;
+                        }
+                    }
+                    
+                    EXCEPTION_ASSERT(lSelectedSubtaskIter != lSubtaskEndIter);
+                    
+                    ulong lSelectedSubtask = *lSelectedSubtaskIter;
+                    ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[pPair.second.first];
+
+                    // Assign the selected subtask to the selected machine
+                    lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = lSelectedSubtask;
+                    lPhysicalToLogicalSubtaskMapping[lSelectedSubtask] = lLogicalSubtaskId;
+                    
+                    lUnassignedSubtasks.erase(lSelectedSubtaskIter);
+                    
+                    ++pPair.second.first;
+                    --pPair.second.second;
+                }
+            });
+            
+            EXCEPTION_ASSERT(lUnassignedSubtasks.empty());
         }
-        
-        uint lMachine = lIter->first;
-        
-        // Find next best subtask for this machine
-        auto lSubtasksIter = lSubtasksIterMap.find(lMachine)->second;
-        while(lSubtasksAllotted.find(*lSubtasksIter) != lSubtasksAllottedEndIter)
-            ++lSubtasksIter;
+    #else
+        std::set<ulong> lSubtasksAllotted;
+        auto lSubtasksAllottedEndIter = lSubtasksAllotted.end();
 
-        ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lIter->second.first];
+        std::map<uint, std::vector<ulong>::const_iterator> lSubtasksIterMap;
+        for_each(lMap, [&] (const decltype(lMap)::value_type& pPair)
+        {
+            lSubtasksIterMap.emplace(pPair.first, mTable.GetRow(pPair.first).begin());
+        });
 
-        // Assign the selected subtask to the selected machine
-        lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = *lSubtasksIter;
-        lPhysicalToLogicalSubtaskMapping[*lSubtasksIter] = lLogicalSubtaskId;
+        auto lIter = lMap.begin(), lEndIter = lMap.end();
+        while(lSubtasksAllotted.size() != lSubtaskCount)
+        {
+            // Get next available machine
+            bool lMachineFound = false;
+            
+            while(!lMachineFound)
+            {
+                if(lIter == lEndIter)
+                    lIter = lMap.begin();
 
-        lSubtasksAllotted.emplace(*lSubtasksIter);
-        ++lIter->second.first;
-        --lIter->second.second;
-        ++lIter;    // change machine every iteration
-    }
+                if(lIter->second.second)
+                    lMachineFound = true;
+                else
+                    ++lIter;
+            }
+            
+            uint lMachine = lIter->first;
+            
+            // Find next best subtask for this machine
+            auto lSubtasksIter = lSubtasksIterMap.find(lMachine)->second;
+            while(lSubtasksAllotted.find(*lSubtasksIter) != lSubtasksAllottedEndIter)
+                ++lSubtasksIter;
+
+            ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lIter->second.first];
+
+            // Assign the selected subtask to the selected machine
+            lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = *lSubtasksIter;
+            lPhysicalToLogicalSubtaskMapping[*lSubtasksIter] = lLogicalSubtaskId;
+
+            lSubtasksAllotted.emplace(*lSubtasksIter);
+            ++lIter->second.first;
+            --lIter->second.second;
+            ++lIter;    // change machine every iteration
+        }
+    #endif
 #else
     for(ulong i = 0; i < lSubtaskCount; ++i)
     {
@@ -352,6 +453,14 @@ void pmAffinityTable::CreateSubtaskMappings()
 
     mLocalTask->SetAffinityMappings(std::move(lLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
 }
+    
+#ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
+template<typename T>
+double pmAffinityTable::GetProfitValue(T& pData)
+{
+    return 0;
+}
+#endif
 
 #ifdef USE_AFFINITY_IN_STEAL
 std::vector<ulong> pmAffinityTable::FindSubtasksWithBestAffinity(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine)

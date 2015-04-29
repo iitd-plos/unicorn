@@ -251,9 +251,12 @@ class pmSubscriptionManager : public pmBase
         uint FindRemoteDataSourcesForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
         ulong FindRemoteTransferEventsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
         float FindRemoteTransferEstimateForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
-    
-    #if 0
-        float FindDerivedAffinityValueForSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
+
+    #ifdef CENTRALIZED_AFFINITY_COMPUTATION
+        void FindLocalInputDataSizeForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, ulong* pDataArray, size_t pStepSizeInBytes = 0);
+        void FindRemoteDataSourcesForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, uint* pDataArray, size_t pStepSizeInBytes = 0);
+        void FindRemoteTransferEventsForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, ulong* pDataArray, size_t pStepSizeInBytes = 0);
+        void FindRemoteTransferEstimateForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, float* pDataArray, size_t pStepSizeInBytes = 0);
     #endif
     
         pmSubscriptionFormat GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);

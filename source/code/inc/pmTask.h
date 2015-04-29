@@ -321,7 +321,12 @@ class pmLocalTask : public pmTask
     
 		pmStatus GetStatus();
 
-		std::vector<const pmProcessingElement*>& GetAssignedDevices();
+        const std::vector<const pmProcessingElement*>& GetAssignedDevices() const;
+        const std::set<const pmMachine*>& GetAssignedMachines() const;
+    
+    #ifdef CENTRALIZED_AFFINITY_COMPUTATION
+        const std::vector<const pmMachine*>& GetAssignedMachinesInOrder() const;
+    #endif
 
 		pmStatus InitializeSubtaskManager(scheduler::schedulingModel pSchedulingModel);
 		pmSubtaskManager* GetSubtaskManager();
@@ -333,8 +338,12 @@ class pmLocalTask : public pmTask
 		finalize_ptr<pmSubtaskManager> mSubtaskManager;
         finalize_ptr<pmAffinityTable> mAffinityTable;
 		std::vector<const pmProcessingElement*> mDevices;
+        std::set<const pmMachine*> mMachines;
+    #ifdef CENTRALIZED_AFFINITY_COMPUTATION
+        std::vector<const pmMachine*> mMachinesInOrder;
+    #endif
+    
         ulong mTaskTimeOutTriggerTime;
-
         ulong mPendingCompletions;
         bool mUserSideTaskCompleted;
         bool mLocalStubsFreeOfCancellations, mLocalStubsFreeOfShadowMemCommits;
@@ -353,7 +362,8 @@ class pmRemoteTask : public pmTask
 
         virtual ~pmRemoteTask();
 
-		std::vector<const pmProcessingElement*>& GetAssignedDevices();
+        const std::vector<const pmProcessingElement*>& GetAssignedDevices() const;
+        const std::set<const pmMachine*>& GetAssignedMachines() const;
 
         virtual void MarkSubtaskExecutionFinished();
         virtual void TerminateTask();
@@ -373,7 +383,8 @@ class pmRemoteTask : public pmTask
         bool mLocalStubsFreeOfCancellations, mLocalStubsFreeOfShadowMemCommits;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mCompletionLock;
 
-        std::vector<const pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined
+        const std::vector<const pmProcessingElement*> mDevices;	// Only maintained for pull scheduling policy or if reduction is defined
+        std::set<const pmMachine*> mMachines;
         pmAddressSpace* mAffinityAddressSpace;
     
     #ifdef USE_AFFINITY_IN_STEAL

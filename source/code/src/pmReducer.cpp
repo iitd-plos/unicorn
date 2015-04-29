@@ -47,12 +47,8 @@ pmReducer::pmReducer(pmTask* pTask)
 
 void pmReducer::PopulateExternalMachineList()
 {
-	std::set<const pmMachine*> lMachines;
-	if(dynamic_cast<pmLocalTask*>(mTask))
-		pmProcessingElement::GetMachines(((pmLocalTask*)mTask)->GetAssignedDevices(), lMachines);
-	else
-		pmProcessingElement::GetMachines(((pmRemoteTask*)mTask)->GetAssignedDevices(), lMachines);
-    
+    std::set<const pmMachine*> lMachines = (dynamic_cast<pmLocalTask*>(mTask) ? ((pmLocalTask*)mTask)->GetAssignedMachines() : ((pmRemoteTask*)mTask)->GetAssignedMachines());
+
     if(lMachines.find(mTask->GetOriginatingHost()) == lMachines.end())
         lMachines.insert(mTask->GetOriginatingHost());
     

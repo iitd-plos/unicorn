@@ -8,6 +8,7 @@ namespace imageFiltering
 #define IMAGE_SIZE ((size_t)gImageWidth * gImageHeight * PIXEL_COUNT)
     
 #define LOAD_IMAGE_INTO_ADDRESS_SPACE
+#define USE_ELLIPTICAL_FILTER
     
 #define TILE_DIM 2048
 #define GPU_BLOCK_DIM 32
@@ -16,8 +17,11 @@ namespace imageFiltering
 #define MIN_FILTER_RADIUS 1
 #define MAX_FILTER_RADIUS 15
 #define MAX_FILTER_DIM 32
+    
+#define DEFAULT_FILTER_RADIUS_STEP 1
 
 #define DEFAULT_ITERATION_COUNT 10
+#define MAX_ITERATIONS 25
 
 #define DO_MULTIPLE_CONVOLUTIONS
 

@@ -146,6 +146,11 @@ class pmAddressSpace : public pmBase
         ulong FindLocalDataSizeUnprotected(ulong pOffset, ulong pLength);
         std::set<const pmMachine*> FindRemoteDataSourcesUnprotected(ulong pOffset, ulong pLength);
     
+    #ifdef CENTRALIZED_AFFINITY_COMPUTATION
+        void FindLocalDataSizeOnMachinesUnprotected(ulong pOffset, ulong pLength, const std::vector<const pmMachine*>& pMachinesVector, ulong* pDataArray, size_t pStepSizeInBytes);
+        void FindRemoteDataSourcesOnMachinesUnprotected(ulong pOffset, ulong pLength, const std::vector<const pmMachine*>& pMachinesVector, uint* pDataArray, size_t pStepSizeInBytes);
+    #endif
+    
         void ChangeOwnership(std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>& pOwnershipData);
     
         void UserDelete();

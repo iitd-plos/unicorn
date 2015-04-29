@@ -475,11 +475,12 @@ void pmLinuxMemoryManager::FindRegionsNotInFlight(linuxMemManager::pmInFlightReg
 /* Helper structure for scattered memory transfers */
 struct localFilter
 {
-    localFilter(pmScatteredSubscriptionFilter& pGlobalFilter, pmAddressSpace* pAddressSpace, bool pUnprotected)
+    localFilter(pmScatteredSubscriptionFilter& pGlobalFilter, pmAddressSpace* pAddressSpace, bool pUnprotected, const pmMachine* pFilteredMachine = PM_LOCAL_MACHINE)
     : mGlobalFilter(pGlobalFilter)
     , mAddressSpace(pAddressSpace)
     , mMem(reinterpret_cast<ulong>(pAddressSpace->GetMem()))
     , mUnprotected(pUnprotected)
+    , mFilteredMachine(pFilteredMachine)
     {}
     
     void emplace_back(ulong pStartAddr, ulong pLastAddr)
@@ -497,7 +498,7 @@ struct localFilter
         {
             pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
 
-            if(lRangeOwner.host != PM_LOCAL_MACHINE)
+            if(lRangeOwner.host != mFilteredMachine)
                 mGlobalFilter.AddNextSubRow(pPair.first, pPair.second.first, lRangeOwner);
         });
     }
@@ -507,6 +508,7 @@ private:
     pmAddressSpace* mAddressSpace;
     ulong mMem;
     bool mUnprotected;
+    const pmMachine* mFilteredMachine;
 };
 
 // This method assumes nothing is in flight
@@ -567,6 +569,66 @@ ulong pmLinuxMemoryManager::GetScatteredMemoryFetchPages(pmAddressSpace* pAddres
     return lPages;
 }
 
+#ifdef CENTRALIZED_AFFINITY_COMPUTATION
+// This method assumes nothing is in flight
+uint pmLinuxMemoryManager::GetScatteredMemoryFetchEventsForMachine(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, const pmMachine* pMachine)
+{
+    EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
+
+    void* lMem = pAddressSpace->GetMem();
+
+	pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
+    localFilter lLocalFilter(lBlocksFilter, pAddressSpace, true, pMachine);
+
+    auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
+    {
+        ulong lStartAddr = (ulong)((char*)lMem + pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step);
+
+        lLocalFilter.emplace_back(lStartAddr, lStartAddr + pScatteredSubscriptionInfo.size - 1);
+    });
+
+    size_t lCount = 0;
+    for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
+    {
+        lCount += pMapKeyValue.second.size();
+    });
+    
+    return (uint)lCount;
+}
+
+// This method assumes nothing is in flight
+ulong pmLinuxMemoryManager::GetScatteredMemoryFetchPagesForMachine(pmAddressSpace* pAddressSpace, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, const pmMachine* pMachine)
+{
+    EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);
+    
+    void* lMem = pAddressSpace->GetMem();
+    size_t lPageSize = GetVirtualMemoryPageSize();
+
+    pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
+    localFilter lLocalFilter(lBlocksFilter, pAddressSpace, true, pMachine);
+    
+    auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
+    {
+        ulong lStartAddr = (ulong)((char*)lMem + pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step);
+
+        lLocalFilter.emplace_back(lStartAddr, lStartAddr + pScatteredSubscriptionInfo.size - 1);
+    });
+
+    ulong lPages = 0;
+    for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
+    {
+        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>& pPair)
+        {
+            DEBUG_EXCEPTION_ASSERT(pPair.first.size && pPair.first.step && pPair.first.count);
+            
+            lPages += ((pPair.first.size * pPair.first.count) + lPageSize - 1) / lPageSize;
+        });
+    });
+
+    return lPages;
+}
+#endif
+    
 void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSpace, ushort pPriority, const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, std::vector<pmCommandPtr>& pCommandVector)
 {
     EXCEPTION_ASSERT(pScatteredSubscriptionInfo.size && pScatteredSubscriptionInfo.step && pScatteredSubscriptionInfo.count);

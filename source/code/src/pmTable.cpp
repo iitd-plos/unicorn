@@ -43,6 +43,12 @@ const rowType& pmTable<rowHeaderType, rowType>::GetRow(const rowHeaderType& pRow
     
     return lRowIter->second;
 }
+
+template<typename rowHeaderType, typename rowType>
+size_t pmTable<rowHeaderType, rowType>::GetRowCount() const
+{
+    return mTable.size();
+}
     
 }
 

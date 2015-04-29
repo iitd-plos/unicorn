@@ -195,7 +195,7 @@ public:
     virtual void AssignSubtasksToDevice(const pmProcessingElement* pDevice, ulong& pSubtaskCount, ulong& pStartingSubtask, const pmProcessingElement*& pOriginalAllottee);
     
 private:
-    pmStatus ReadConfigurationFile(std::vector<const pmProcessingElement*>& pDevices);
+    pmStatus ReadConfigurationFile(const std::vector<const pmProcessingElement*>& pDevices);
     uint GetDevicePower(const pmProcessingElement* pDevice);
     ulong FindDeviceAssignment(const pmProcessingElement* pDevice, ulong pSubtaskCount);
 

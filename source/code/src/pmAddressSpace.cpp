@@ -141,15 +141,11 @@ pmAddressSpace::~pmAddressSpace()
     
 std::vector<uint> pmAddressSpace::GetMachinesForDistribution(bool pRandomize)
 {
-    std::set<const pmMachine*> lMachinesSet;
     std::map<uint, const pmMachine*> lMachinesMap;
     std::vector<uint> lMachinesVector;
 
-    if(dynamic_cast<pmLocalTask*>(mLockingTask))
-        pmProcessingElement::GetMachines(((pmLocalTask*)mLockingTask)->GetAssignedDevices(), lMachinesSet);
-    else
-        pmProcessingElement::GetMachines(((pmRemoteTask*)mLockingTask)->GetAssignedDevices(), lMachinesSet);
-    
+    std::set<const pmMachine*> lMachinesSet = (dynamic_cast<pmLocalTask*>(mLockingTask) ? ((pmLocalTask*)mLockingTask)->GetAssignedMachines() : ((pmRemoteTask*)mLockingTask)->GetAssignedMachines());
+
     lMachinesSet.emplace(mOwner);
     
     for_each(lMachinesSet, [&lMachinesMap] (const pmMachine* pMachine)
@@ -786,11 +782,7 @@ void pmAddressSpace::FlushOwnerships()
     
     if(lOwnershipTransferRequired)
     {
-        std::set<const pmMachine*> lMachines;
-        if(dynamic_cast<pmLocalTask*>(lTask))
-            pmProcessingElement::GetMachines(((pmLocalTask*)lTask)->GetAssignedDevices(), lMachines);
-        else
-            pmProcessingElement::GetMachines(((pmRemoteTask*)lTask)->GetAssignedDevices(), lMachines);
+        const std::set<const pmMachine*>& lMachines = (dynamic_cast<pmLocalTask*>(lTask) ? ((pmLocalTask*)lTask)->GetAssignedMachines() : ((pmRemoteTask*)lTask)->GetAssignedMachines());
         
         // All machines that have locked task memory expect an ownership change message
         for_each(lMachines, [&] (const pmMachine* pMachine)
@@ -908,6 +900,30 @@ ulong pmAddressSpace::FindLocalDataSizeUnprotected(ulong pOffset, ulong pLength)
     
     return lLocalDataSize;
 }
+    
+#ifdef CENTRALIZED_AFFINITY_COMPUTATION
+/* This method does not acquire mOwnershipLock (directly calls GetOwnersInternal instead of GetOwners).
+ It is only meant to be called by preprocessor task as it does not actually fetch data on user task's
+ address spaces, but just determines its current ownership.
+ */
+void pmAddressSpace::FindLocalDataSizeOnMachinesUnprotected(ulong pOffset, ulong pLength, const std::vector<const pmMachine*>& pMachinesVector, ulong* pDataArray, size_t pStepSizeInBytes)
+{
+    pmAddressSpace::pmMemOwnership lOwners;
+    GetOwnersInternal(mOwnershipMap, pOffset, pLength, lOwners);
+
+    std::vector<ulong> lLocalDataSize(pmGetHostCount(), 0);
+    
+    for_each(lOwners, [&] (const typename decltype(lOwners)::value_type& pPair)
+    {
+        lLocalDataSize[(uint)(*pPair.second.second.host)] += pPair.second.first;
+    });
+
+    for_each_with_index(pMachinesVector, [&] (const pmMachine* pMachine, size_t pIndex)
+    {
+        *((ulong*)((char*)pDataArray + (pStepSizeInBytes * pIndex))) = lLocalDataSize[(uint)(*pMachine)];
+    });
+}
+#endif
 
 /* This method does not acquire mOwnershipLock (directly calls GetOwnersInternal instead of GetOwners).
  It is only meant to be called by preprocessor task as it does not actually fetch data on user task's
@@ -928,6 +944,35 @@ std::set<const pmMachine*> pmAddressSpace::FindRemoteDataSourcesUnprotected(ulon
     return lSet;
 }
 
+#ifdef CENTRALIZED_AFFINITY_COMPUTATION
+/* This method does not acquire mOwnershipLock (directly calls GetOwnersInternal instead of GetOwners).
+ It is only meant to be called by preprocessor task as it does not actually fetch data on user task's
+ address spaces, but just determines its current ownership.
+ */
+void pmAddressSpace::FindRemoteDataSourcesOnMachinesUnprotected(ulong pOffset, ulong pLength, const std::vector<const pmMachine*>& pMachinesVector, uint* pDataArray, size_t pStepSizeInBytes)
+{
+    pmAddressSpace::pmMemOwnership lOwners;
+    GetOwnersInternal(mOwnershipMap, pOffset, pLength, lOwners);
+    
+    uint lHosts = pmGetHostCount();
+    std::vector<std::set<const pmMachine*>> lRemoteDataSources(lHosts);
+    
+    for_each(lOwners, [&] (const typename decltype(lOwners)::value_type& pPair)
+    {
+        for(uint i = 0; i < lHosts; ++i)
+        {
+            if(i != (uint)(*pPair.second.second.host))
+                lRemoteDataSources[i].emplace(pPair.second.second.host);
+        }
+    });
+    
+    for_each_with_index(pMachinesVector, [&] (const pmMachine* pMachine, size_t pIndex)
+    {
+        *((uint*)((char*)pDataArray + (pStepSizeInBytes * pIndex))) = (uint)(lRemoteDataSources[(uint)(*pMachine)].size());
+    });
+}
+#endif
+    
 bool pmAddressSpace::IsRegionLocallyOwned(ulong pOffset, ulong pLength)
 {
     pmAddressSpace::pmMemOwnership lOwners;

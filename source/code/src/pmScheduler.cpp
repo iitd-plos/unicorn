@@ -1105,7 +1105,7 @@ void pmScheduler::AssignSubtasksToDevice(const pmProcessingElement* pDevice, pmL
 
 void pmScheduler::AssignSubtasksToDevices(pmLocalTask* pLocalTask)
 {
-	std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
+	const std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
 
     for_each(lDevices, [&] (const pmProcessingElement* pDevice)
              {
@@ -1153,14 +1153,10 @@ void pmScheduler::AssignTaskToMachines(pmLocalTask* pLocalTask, std::set<const p
 
 void pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 {
-	std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
-	std::set<const pmMachine*> lMachines;
-
-	pmProcessingElement::GetMachines(lDevices, lMachines);
+    std::set<const pmMachine*> lMachines = pLocalTask->GetAssignedMachines();
 
     // Task master host must always be on the list even if none of it's devices were used in execution
-    if(lMachines.find(PM_LOCAL_MACHINE) == lMachines.end())
-        lMachines.insert(PM_LOCAL_MACHINE);
+    lMachines.emplace(PM_LOCAL_MACHINE);
 
 	std::set<const pmMachine*>::iterator lIter;
 	for(lIter = lMachines.begin(); lIter != lMachines.end(); ++lIter)
@@ -1184,10 +1180,7 @@ void pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 
 void pmScheduler::SendReductionTerminationToMachines(pmLocalTask* pLocalTask)
 {
-	std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
-	std::set<const pmMachine*> lMachines;
-
-	pmProcessingElement::GetMachines(lDevices, lMachines);
+    std::set<const pmMachine*> lMachines = pLocalTask->GetAssignedMachines();
 
     lMachines.erase(PM_LOCAL_MACHINE);  // Master host is not to be sent the reduction termination event
     
@@ -1224,12 +1217,9 @@ void pmScheduler::SendTaskCompleteToTaskOwner(pmTask* pTask)
 
 void pmScheduler::CancelTask(pmLocalTask* pLocalTask)
 {
-	std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
-	std::set<const pmMachine*> lMachines;
+    const std::set<const pmMachine*>& lMachines = pLocalTask->GetAssignedMachines();
 
-	pmProcessingElement::GetMachines(lDevices, lMachines);
-
-	std::set<const pmMachine*>::iterator lIter;
+	std::set<const pmMachine*>::const_iterator lIter;
 	for(lIter = lMachines.begin(); lIter != lMachines.end(); ++lIter)
 	{
 		const pmMachine* lMachine = *lIter;
@@ -1260,7 +1250,7 @@ pmStatus pmScheduler::StartLocalTaskExecution(pmLocalTask* pLocalTask)
     
     pmTimedEventManager::GetTimedEventManager()->AddTaskTimeOutEvent(pLocalTask, lTriggerTime);
     
-	std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
+	const std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
     
     if(lDevices.empty())
     {

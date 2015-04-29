@@ -1065,6 +1065,25 @@ ulong pmSubscriptionManager::FindLocalInputDataSizeForSubtask(pmExecutionStub* p
     return lLocalDataSize;
 }
 
+#ifdef CENTRALIZED_AFFINITY_COMPUTATION
+void pmSubscriptionManager::FindLocalInputDataSizeForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, ulong* pDataArray, size_t pStepSizeInBytes /* = 0 */)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
+
+    filtered_for_each_with_index(mTask->GetAddressSpaces(), [&] (pmAddressSpace* pAddressSpace) { return mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace); },
+    [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pFilteredIndex)
+    {
+        uint lMemIndex = (uint)pAddressSpaceIndex;
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        GetNonConsolidatedReadSubscriptionsInternal(lSubtask, lMemIndex, lBeginIter, lEndIter);
+        
+        for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+            pAddressSpace->FindLocalDataSizeOnMachinesUnprotected(lIter->first, lIter->second.first, pMachinesVector, pDataArray, pStepSizeInBytes);
+    });
+}
+#endif
+    
 uint pmSubscriptionManager::FindRemoteDataSourcesForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
@@ -1097,6 +1116,25 @@ uint pmSubscriptionManager::FindRemoteDataSourcesForSubtask(pmExecutionStub* pSt
     return (uint)lRemoteDataSources.size();
 }
 
+#ifdef CENTRALIZED_AFFINITY_COMPUTATION
+void pmSubscriptionManager::FindRemoteDataSourcesForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, uint* pDataArray, size_t pStepSizeInBytes /* = 0 */)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
+
+    filtered_for_each_with_index(mTask->GetAddressSpaces(), [&] (pmAddressSpace* pAddressSpace) { return mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace); },
+    [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pFilteredIndex)
+    {
+        uint lMemIndex = (uint)pAddressSpaceIndex;
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        GetNonConsolidatedReadSubscriptionsInternal(lSubtask, lMemIndex, lBeginIter, lEndIter);
+        
+        for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
+            pAddressSpace->FindRemoteDataSourcesOnMachinesUnprotected(lIter->first, lIter->second.first, pMachinesVector, pDataArray, pStepSizeInBytes);
+    });
+}
+#endif
+    
 ulong pmSubscriptionManager::FindRemoteTransferEventsForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
@@ -1123,6 +1161,38 @@ ulong pmSubscriptionManager::FindRemoteTransferEventsForSubtask(pmExecutionStub*
 
     return lRemoteTransferEvents;
 }
+
+#ifdef CENTRALIZED_AFFINITY_COMPUTATION
+void pmSubscriptionManager::FindRemoteTransferEventsForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, ulong* pDataArray, size_t pStepSizeInBytes /* = 0 */)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
+
+    for_each_with_index(pMachinesVector, [&] (const pmMachine* pMachine, size_t pIndex)
+    {
+        ulong lRemoteTransferEvents = 0;
+
+        multi_for_each(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
+        {
+            if(mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace))
+            {
+                // Fetch exact scattered subscriptions (these subscriptions are packed at the sender side before transfer and then unpacked by the receiver)
+                for_each(pAddressSpaceData.mScatteredReadSubscriptionInfoVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+                {
+                    lRemoteTransferEvents += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetScatteredMemoryFetchEvents(pAddressSpace, pScatteredSubscriptionInfo);
+                });
+                
+                // For non-scattered subscriptions, we fetch entire memory pages (no packing/unpacking happens here)
+                for_each(pAddressSpaceData.mReadSubscriptionInfoVector, [&] (const pmSubscriptionInfo& pSubscriptionInfo)
+                {
+                    lRemoteTransferEvents += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetMemoryFetchEvents(pAddressSpace, pSubscriptionInfo.offset, pSubscriptionInfo.length);
+                });
+            }
+        });
+
+        *((ulong*)((char*)pDataArray + (pStepSizeInBytes * pIndex))) = lRemoteTransferEvents;
+    });
+}
+#endif
     
 float pmSubscriptionManager::FindRemoteTransferEstimateForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 {
@@ -1155,36 +1225,39 @@ float pmSubscriptionManager::FindRemoteTransferEstimateForSubtask(pmExecutionStu
     return (float)(lScatteredPages * lLatencyPerScatteredPageFetch + lNonScatteredPages * lLatencyPerNonScatteredPageFetch);
 }
 
-#if 0
-float pmSubscriptionManager::FindDerivedAffinityValueForSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
+#ifdef CENTRALIZED_AFFINITY_COMPUTATION
+void pmSubscriptionManager::FindRemoteTransferEstimateForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, float* pDataArray, size_t pStepSizeInBytes /* = 0 */)
 {
     const double lLatencyPerNonScatteredPageFetch = 1.0;
     const double lLatencyPerScatteredPageFetch = 1.3;
 
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, (pmSplitInfo*)NULL);
 
-    double lScatteredPages = 0;
-    double lNonScatteredPages = 0;
-
-    multi_for_each(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
+    for_each_with_index(pMachinesVector, [&] (const pmMachine* pMachine, size_t pIndex)
     {
-        if(mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace))
-        {
-            // Fetch exact scattered subscriptions (these subscriptions are packed at the sender side before transfer and then unpacked by the receiver)
-            for_each(pAddressSpaceData.mScatteredReadSubscriptionInfoVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
-            {
-                lScatteredPages += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetScatteredMemoryFetchPages(pAddressSpace, pScatteredSubscriptionInfo);
-            });
-            
-            // For non-scattered subscriptions, we fetch entire memory pages (no packing/unpacking happens here)
-            for_each(pAddressSpaceData.mReadSubscriptionInfoVector, [&] (const pmSubscriptionInfo& pSubscriptionInfo)
-            {
-                lNonScatteredPages += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetMemoryFetchPages(pAddressSpace, pSubscriptionInfo.offset, pSubscriptionInfo.length);
-            });
-        }
-    });
+        double lScatteredPages = 0;
+        double lNonScatteredPages = 0;
 
-    return (float)(lScatteredPages * lLatencyPerScatteredPageFetch + lNonScatteredPages * lLatencyPerNonScatteredPageFetch);
+        multi_for_each(mTask->GetAddressSpaces(), lSubtask.mAddressSpacesData, [&] (pmAddressSpace* pAddressSpace, pmSubtaskAddressSpaceData& pAddressSpaceData)
+        {
+            if(mTask->IsReadOnly(pAddressSpace) || mTask->IsReadWrite(pAddressSpace))
+            {
+                // Fetch exact scattered subscriptions (these subscriptions are packed at the sender side before transfer and then unpacked by the receiver)
+                for_each(pAddressSpaceData.mScatteredReadSubscriptionInfoVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+                {
+                    lScatteredPages += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetScatteredMemoryFetchPages(pAddressSpace, pScatteredSubscriptionInfo);
+                });
+                
+                // For non-scattered subscriptions, we fetch entire memory pages (no packing/unpacking happens here)
+                for_each(pAddressSpaceData.mReadSubscriptionInfoVector, [&] (const pmSubscriptionInfo& pSubscriptionInfo)
+                {
+                    lNonScatteredPages += MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->GetMemoryFetchPages(pAddressSpace, pSubscriptionInfo.offset, pSubscriptionInfo.length);
+                });
+            }
+        });
+
+        *((float*)((char*)pDataArray + (pStepSizeInBytes * pIndex))) = (float)(lScatteredPages * lLatencyPerScatteredPageFetch + lNonScatteredPages * lLatencyPerNonScatteredPageFetch);
+    });
 }
 #endif
     

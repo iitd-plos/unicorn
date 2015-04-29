@@ -37,6 +37,7 @@ public:
     void AddRow(const rowHeaderType& pRowHeader, rowType&& pRow);    
     const rowType& GetRow(const rowHeaderType& pRowHeader);
 
+    size_t GetRowCount() const;
 private:
     std::map<rowHeaderType, rowType> mTable;
 };

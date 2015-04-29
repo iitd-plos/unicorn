@@ -232,7 +232,7 @@ void pmSubtaskSplitter::MakeDeviceGroups(const std::vector<const pmProcessingEle
 std::vector<std::pair<std::vector<const pmProcessingElement*>, std::pair<ulong, ulong>>> pmSubtaskSplitter::MakeInitialSchedulingAllotments(pmLocalTask* pLocalTask)
 {
     std::vector<std::pair<std::vector<const pmProcessingElement*>, std::pair<ulong, ulong>>> lDeviceGroupAndAllotmentVector;
-	std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
+	const std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
     std::vector<std::vector<const pmProcessingElement*>> lDeviceGroups;
     std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>*> lQueryMap;
     ulong lUnsplittedDevices = 0, lFirstSubtask = 0, lLastSubtask = 0;

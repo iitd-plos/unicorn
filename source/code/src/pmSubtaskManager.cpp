@@ -220,9 +220,9 @@ pmPushSchedulingManager::pmPushSchedulingManager(pmLocalTask* pLocalTask)
         ulong lLeftoverSubtasks = lSubtaskCount - lPartitionSize * lPartitionCount;
         ulong lFirstSubtask = 0, lLastSubtask = 0;
 
-        std::vector<const pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
+        const std::vector<const pmProcessingElement*>& lDevices = mLocalTask->GetAssignedDevices();
 
-        std::vector<const pmProcessingElement*>::iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
+        std::vector<const pmProcessingElement*>::const_iterator lIter = lDevices.begin(), lEndIter = lDevices.end();
         for(ulong i = 0; i < lPartitionCount; ++i, ++lIter)
         {
             size_t lCount = ((i < lLeftoverSubtasks) ? (lPartitionSize + 1) : (lPartitionSize));
@@ -763,7 +763,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
 	ulong lDeviceCount = mLocalTask->GetAssignedDeviceCount();
     ulong lPartitionCount = std::min(lSubtaskCount, lDeviceCount);
 
-    std::vector<const pmProcessingElement*>& lAssignedDevices = mLocalTask->GetAssignedDevices();
+    const std::vector<const pmProcessingElement*>& lAssignedDevices = mLocalTask->GetAssignedDevices();
 
     EXCEPTION_ASSERT(lSubtaskCount != 0 && lDeviceCount != 0);
     
@@ -1003,7 +1003,7 @@ pmNodeEqualStaticSchedulingManager::pmNodeEqualStaticSchedulingManager(pmLocalTa
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 	ulong lDeviceCount = mLocalTask->GetAssignedDeviceCount();
 
-    std::vector<const pmProcessingElement*>& lAssignedDevices = mLocalTask->GetAssignedDevices();
+    const std::vector<const pmProcessingElement*>& lAssignedDevices = mLocalTask->GetAssignedDevices();
 
     std::map<const pmMachine*, std::vector<const pmProcessingElement*>> lMachineVersusDevicesMap;
     for_each(lAssignedDevices, [&] (const pmProcessingElement* pDevice)
@@ -1087,7 +1087,7 @@ pmProportionalSchedulingManager::pmProportionalSchedulingManager(pmLocalTask* pL
 {
 	ulong lSubtaskCount = mLocalTask->GetSubtaskCount();
 
-    std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
+    const std::vector<const pmProcessingElement*>& lDevices = pLocalTask->GetAssignedDevices();
     ulong lDeviceCount = (ulong)(lDevices.size());
     
     if(lSubtaskCount == 0 || lDeviceCount == 0 || lSubtaskCount < lDeviceCount)
@@ -1130,7 +1130,7 @@ void pmProportionalSchedulingManager::AssignSubtasksToDevice(const pmProcessingE
     pOriginalAllottee = NULL;
 }
 
-pmStatus pmProportionalSchedulingManager::ReadConfigurationFile(std::vector<const pmProcessingElement*>& pDevices)
+pmStatus pmProportionalSchedulingManager::ReadConfigurationFile(const std::vector<const pmProcessingElement*>& pDevices)
 {
     FILE* fp = fopen(PROPORTIONAL_SCHEDULING_CONF_FILE, "r");
     if(!fp)

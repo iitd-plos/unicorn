@@ -123,11 +123,19 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 #define GET_VM_PAGE_START_ADDRESS(memAddr, pageSize) (memAddr - (memAddr % pageSize))
 
 
+/* Pull scheduling controls */
+//#define RANDOMIZE_PULL_ASSIGNMENTS
+
+
 /* Lazy address space controls */
 //#define SUPPORT_LAZY_MEMORY
 #ifdef SUPPORT_LAZY_MEMORY
     #define LAZY_FORWARD_PREFETCH_PAGE_COUNT 5
 #endif
+
+
+/* Memory transfer controls */
+//#define GROUP_SCATTERED_REQUESTS
 
 
 /* Subtask splitting controls */
@@ -155,7 +163,6 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 #ifndef ENABLE_TWO_LEVEL_STEALING
 //    #define ENABLE_ROUND_ROBIN_VICTIM_SELECTION
 //    #define ENABLE_CPU_FIRST_VICTIM_SELECTION
-
     #ifdef SUPPORT_CUDA
 //        #define ENABLE_GPU_FIRST_VICTIM_SELECTION
     #endif
@@ -174,6 +181,13 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 
 /* Affinity Controls */
 #define MACHINES_PICK_BEST_SUBTASKS // defines whether subtasks choose best machines or vice versa
+#ifdef MACHINES_PICK_BEST_SUBTASKS
+    #define GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
+#endif
+#define CENTRALIZED_AFFINITY_COMPUTATION
+#ifdef USE_STEAL_AGENT_PER_NODE
+//    #define USE_DYNAMIC_AFFINITY
+#endif
 
 
 /* Utility controls */

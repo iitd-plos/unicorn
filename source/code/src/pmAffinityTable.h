@@ -117,6 +117,11 @@ private:
     template<typename T, typename S>
     void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, T pSentinelValue);
 
+#ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
+    template<typename T>
+    double GetProfitValue(T& pData);
+#endif
+    
 #ifdef USE_AFFINITY_IN_STEAL
     template<typename T, typename S>
     static std::vector<ulong> FindSubtasksWithBestAffinity(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, size_t pMachineIndex, ulong pSubtaskCount);
@@ -129,7 +134,11 @@ private:
     pmAffinityCriterion mAffinityCriterion;
     
 #ifdef MACHINES_PICK_BEST_SUBTASKS
-    pmTable<uint, std::vector<ulong>> mTable; // machine index versus subtasks in order of preference
+    #ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
+        pmTable<uint, std::vector<double>> mTable; // machine index versus vector of profit (vector index is subtask id)
+    #else
+        pmTable<uint, std::vector<ulong>> mTable; // machine index versus subtasks in order of preference
+    #endif
 #else
     pmTable<ulong, std::vector<const pmMachine*>> mTable; // subtask id versus machines in order of preference
 #endif

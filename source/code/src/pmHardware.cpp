@@ -111,19 +111,19 @@ const pmDeviceInfo& pmProcessingElement::GetDeviceInfo() const
     return mDeviceInfo;
 }
 
-void pmProcessingElement::GetMachines(std::set<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines)
+void pmProcessingElement::GetMachines(const std::set<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines)
 {
 	for(auto lDevice: pDevices)
 		pMachines.insert(lDevice->GetMachine());
 }
 
-void pmProcessingElement::GetMachines(std::vector<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines)
+void pmProcessingElement::GetMachines(const std::vector<const pmProcessingElement*>& pDevices, std::set<const pmMachine*>& pMachines)
 {
 	for(auto lDevice: pDevices)
 		pMachines.insert(lDevice->GetMachine());
 }
 
-void pmProcessingElement::GetMachinesInOrder(std::vector<const pmProcessingElement*>& pDevices, std::vector<const pmMachine*>& pMachines)
+void pmProcessingElement::GetMachinesInOrder(const std::vector<const pmProcessingElement*>& pDevices, std::vector<const pmMachine*>& pMachines)
 {
     std::map<uint, const pmMachine*> lMap;
 
