@@ -1988,7 +1988,7 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pCurrentRange.task->GetTaskProfiler(), taskProfiler::SUBTASK_EXECUTION);
 #endif
-
+    
     // Lambda arguments are passed by reference so that the values are loaded at the time of actual function call
     auto lCleanupLambda = [&] () { CleanupPostSubtaskRangeExecution(pCurrentRange.task, lStartSubtask, lEndSubtask, lCleanupEndSubtask, NULL); };
     scope_exit<decltype(lCleanupLambda)> lScopeExitStatement(lCleanupLambda);
@@ -2410,17 +2410,25 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetw
     }
 #endif
     
-#ifdef ENABLE_TASK_PROFILING
     pmTask* lTask = NULL;
+    ulong lSubtaskId = std::numeric_limits<ulong>::max();
 
+#if defined(ENABLE_TASK_PROFILING) || defined(DUMP_EVENT_TIMELINE)
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
 
         lTask = mCurrentSubtaskRangeStats->task;
+        lSubtaskId = mCurrentSubtaskRangeStats->currentSubtaskId;
     }
+#endif
 
+#ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::STUB_WAIT_ON_NETWORK);
+#endif
+    
+#ifdef DUMP_EVENT_TIMELINE
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(lTask, mEventTimelineAutoPtr.get(), lSubtaskId, "WaitOnNetwork");
 #endif
 
     pmCommandPtr lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
@@ -2535,6 +2543,10 @@ void pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ul
     
     const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo);
     
+#ifdef DUMP_EVENT_TIMELINE
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, "SubtaskExecution");
+#endif
+
 	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, pTask->GetTaskInfo(), lSubtaskInfo);
 }
 
@@ -3031,6 +3043,10 @@ void pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, u
         lIter->second.taskConf = CreateTaskConf(pTask->GetTaskInfo());
     }
 
+#ifdef DUMP_EVENT_TIMELINE
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, "SubtaskExecution");
+#endif
+
 	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, &lHostToDeviceCommands, &lDeviceToHostCommands, mCudaStreams[pSubtaskId].get());
 }
 
@@ -3374,6 +3390,10 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::COPY_TO_PINNED_MEMORY);
 #endif
 
+#ifdef DUMP_EVENT_TIMELINE
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, "CopyToPinnedMemory");
+#endif
+
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
 
     uint lAddressSpaceCount = pTask->GetAddressSpaceCount();
@@ -3465,6 +3485,10 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::COPY_FROM_PINNED_MEMORY);
+#endif
+
+#ifdef DUMP_EVENT_TIMELINE
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, "CopyFromPinnedMemory");
 #endif
 
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();

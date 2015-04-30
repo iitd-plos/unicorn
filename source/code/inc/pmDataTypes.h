@@ -503,6 +503,20 @@ namespace pm
             bool mRangeCancelledOrException;
             ulong mSubtasksInitialized;
     };
+    
+    class pmEventTimelineAutoPtr
+    {
+        public:
+            pmEventTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pSubtaskId, const std::string& pEventNameSuffix);
+            ~pmEventTimelineAutoPtr();
+        
+        private:
+            std::string GetEventName(ulong pSubtaskId, const std::string& pEventNameSuffix);
+
+            pmTask* mTask;
+            pmEventTimeline* mEventTimeline;
+            std::string mEventName;
+    };
 #endif
 
     typedef struct pmSubtaskRange

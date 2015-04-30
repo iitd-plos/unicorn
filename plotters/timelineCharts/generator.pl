@@ -37,18 +37,18 @@ sub plotFile
 	
 	open(FH, "$file") || die "Unable to read input file $file\n";
 
-	while(<FH>)
-	{
-		chomp;
+    while(<FH>)
+    {
+	chomp;
         next if(/^\s*$/);
     
-		if(/^PMLIB \[Host [0-9]+\] Event Timeline /)
-		{
+	if(/^PMLIB \[Host [0-9]+\] Event Timeline /)
+	{
             my $timelineName = $';
         
             if($timelineDefined == 1)
             {
-                storeInGraphCache($title, $host, \@events);
+                storeInGraphCache($title, $host, \@events) if($#events != -1);
                 $#events = -1;
             }
             else
@@ -63,45 +63,31 @@ sub plotFile
         }
         else
         {
-            if(/[0-9.]+\s*$/)
+            if(/^(Task \[[0-9]+, [0-9]+\] Subtask [0-9]+) ([0-9.]+) ([0-9.]+)$/ || /^(Task \[[0-9]+, [0-9]+\] Subtask [0-9]+_Cancelled) ([0-9.]+) ([0-9.]+)$/)
             {
-                my $rem = $`;
-                my $endTime = removeExtraSpaces($&);
+                my $endTime = $3;
             
-                if($rem =~ /[0-9.]+\s*$/)
+                my $startTime = $2;
+                my $eventName = $1;
+                
+                setMinMaxVals(\$minVal, \$maxVal, $startTime, $endTime);
+                
+                my $rec = {
+                    EVENT => $eventName,
+                    STARTTIME => $startTime,
+                    ENDTIME => $endTime
+                };
+                
+                if($rec->{EVENT} =~ /([0-9]+)_Cancelled/)
                 {
-                    my $startTime = $&;
-                    my $eventName = $`;
-                    $startTime = removeExtraSpaces($startTime);
-                    $eventName = removeExtraSpaces($eventName);
-                
-                    setMinMaxVals(\$minVal, \$maxVal, $startTime, $endTime);
-                
-                    my $rec = {
-                        EVENT => $eventName,
-                        STARTTIME => $startTime,
-                        ENDTIME => $endTime
-                    };
-                
-                    if($rec->{EVENT} =~ /([0-9]+)_Cancelled/)
-                    {
-                        my $subtask = $1;
-                        $cancelledSubtasks{$1} = 1;
-                    }
-                
-                    push(@events, $rec);
+                    my $subtask = $1;
+                    $cancelledSubtasks{$1} = 1;
                 }
-                else
-                {
-                    die "Error in data\n";
-                }
-            }
-            else
-            {
-				die "Error in data\n";
-            }
-		}
+                
+                push(@events, $rec);
+	    }
 	}
+    }
 
     if($timelineDefined == 1)
     {

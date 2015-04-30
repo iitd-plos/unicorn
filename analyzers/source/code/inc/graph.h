@@ -55,17 +55,25 @@ struct RectGroup
     RectGroup();
 };
 
+struct Gantt
+{
+    std::string name;
+    std::vector<std::pair<size_t, std::pair<double, double>>> variantStartEnd;
+    
+    Gantt();
+};
+
 class Graph
 {
 public:
-    Graph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY);
-
     size_t GetWidth() const;
     size_t GetHeight() const;
     
     virtual const std::string& GetSvg() = 0;
 
 protected:
+    Graph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY);
+
     void GetPreSvg();
     void GetPostSvg(size_t pMaxDataPoints);
 
@@ -114,6 +122,23 @@ private:
     bool mGroupsOnXAxis;
     std::vector<std::string> mRectNames;
     std::vector<RectGroup> mRectGroups;
+};
+
+class GanttGraph : public Graph
+{
+public:
+    GanttGraph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY, size_t pGanttCount, size_t pVariantsPerGantt);
+
+    void SetGanttName(size_t pGanttIndex, const std::string& pGanttName);
+    void SetGanttVariantName(size_t pVariantIndexInEachGantt, const std::string& pVariantName);
+    void AddGanttVariant(size_t pGanttIndex, size_t pVariantIndex, const std::pair<double, double>& pStartEnd);
+
+    virtual const std::string& GetSvg();
+
+private:
+    size_t mVariantsPerGantt;
+    std::vector<std::string> mGanttVariantNames;
+    std::vector<Gantt> mGantts;
 };
 
 #endif

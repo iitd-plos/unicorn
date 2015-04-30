@@ -32,9 +32,19 @@
 struct StandardCurve
 {
     std::string name;
-    std::vector<std::pair<double, double> > points;     // For rect graphs, the first member of pair is the group number
+    std::vector<std::pair<double, double>> points;     // For rect graphs, the first member of pair is the group number
     
     StandardCurve(const std::string& pName)
+    : name(pName)
+    {}
+};
+
+struct StandardGantt
+{
+    std::string name;
+    std::vector<std::pair<size_t, std::pair<double, double>>> data;
+    
+    StandardGantt(const std::string& pName)
     : name(pName)
     {}
 };
@@ -44,8 +54,9 @@ struct StandardChart
     std::unique_ptr<Axis> xAxis;
     std::unique_ptr<Axis> yAxis;
     
-    std::vector<std::string> groups;    // Only used for rect graphs
+    std::vector<std::string> groups;    // Only used for rect/gantt graphs
     std::vector<StandardCurve> curves;
+    std::vector<StandardGantt> gantts;
     
     StandardChart(std::unique_ptr<Axis> pXAxis, std::unique_ptr<Axis> pYAxis)
     : xAxis(std::move(pXAxis))
@@ -63,6 +74,16 @@ struct StandardChart
     std::unique_ptr<Graph> graph;
 };
 
+/* Define names of each type in array EventTypeNames in file benchmark.cpp */
+enum EventTypes
+{
+    SUBTASK_EXECUTION,
+    WAIT_ON_NETWORK,
+    COPY_TO_PINNED_MEMORY,
+    COPY_FROM_PINNED_MEMORY,
+    MAX_EVENT_TYPES
+};
+
 struct DeviceStats
 {
     size_t subtasksExecuted;
@@ -71,7 +92,8 @@ struct DeviceStats
     size_t stealSuccesses;  // Only valid in PULL policy
     size_t stealFailures;   // Only valid in PULL policy
 
-    std::map<size_t, std::pair<double, double> > eventTimeline; // Subtask Id versus pair of subtask start and end time
+    std::map<size_t, std::pair<double, double>> subtaskTimeline; // Subtask Id versus pair of subtask start and end time
+    std::vector<std::pair<EventTypes, std::pair<double, double>>> eventTimeline;
     std::pair<double, double> lastEventTimings;
     
     DeviceStats()
@@ -292,12 +314,14 @@ private:
     size_t GenerateLoadBalancingGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     size_t GenerateMultiAssignComparisonGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     size_t GenerateOverlapComparisonGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
+    size_t GenerateTimelineGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream);
     
     void GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, SchedulingPolicy pPolicy, size_t pVarying2Val = 0);
     void GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, size_t pVarying1Val, size_t pVarying2Val);
     void GenerateLoadBalancingGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy, const Level2InnerTaskKey& pInnerTask);
     void GenerateMultiAssignComparisonGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, size_t pVarying1Val, size_t pVarying2Val, bool pOverlap);
     void GenerateOverlapComparisonGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, size_t pVarying1Val, size_t pVarying2Val, bool pMA);
+    void GenerateTimelineGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy, const Level2InnerTaskKey& pInnerTask);
     
     void GenerateSelectionGroup(size_t pPanelIndex, const panelConfigurationType& pPanelConf, std::ofstream& pHtmlStream);
 

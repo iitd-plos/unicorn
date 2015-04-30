@@ -69,6 +69,14 @@
 
 Benchmark::keyValuePairs mGlobalConfiguration;
 
+const char* EventTypeNames[] =
+{
+    "Sutask_Execution",
+    "Wait_On_Network",
+    "Copy_To_Pinned_Memory",
+    "Copy_From_Pinned_Memory"
+};
+
 template<typename calleeType>
 struct ConfIterator
 {
@@ -956,6 +964,9 @@ void Benchmark::GeneratePlots(std::ofstream& pHtmlStream, std::vector<size_t>& p
 
     BeginHtmlSection(pHtmlStream, "Compute Communication Overlap Comparison Graphs");
     pRadioSetCount.push_back( GenerateOverlapComparisonGraphs(lPanelIndex + 4, lPlotWidth, lPlotHeight, pHtmlStream) );
+
+    BeginHtmlSection(pHtmlStream, "Timeline Graphs");
+    pRadioSetCount.push_back( GenerateTimelineGraphs(lPanelIndex + 5, lPlotWidth, lPlotHeight, pHtmlStream) );
 }
 
 Graph& Benchmark::GenerateStandardChart(size_t pPlotWidth, size_t pPlotHeight, StandardChart& pChart)
@@ -978,21 +989,43 @@ Graph& Benchmark::GenerateStandardChart(size_t pPlotWidth, size_t pPlotHeight, S
         return *lGraph;
     }
     
-    pChart.graph.reset(new RectGraph(pPlotWidth, pPlotHeight, pChart.xAxis, pChart.yAxis, pChart.groups.size(), pChart.curves.size()));
-    RectGraph* lGraph = static_cast<RectGraph*>(pChart.graph.get());
+    if(pChart.gantts.empty())
+    {
+        pChart.graph.reset(new RectGraph(pPlotWidth, pPlotHeight, pChart.xAxis, pChart.yAxis, pChart.groups.size(), pChart.curves.size()));
+        RectGraph* lGraph = static_cast<RectGraph*>(pChart.graph.get());
+        
+        std::vector<std::string>::iterator lGroupIter = pChart.groups.begin(), lGroupEndIter = pChart.groups.end();
+        for(size_t i = 0; lGroupIter != lGroupEndIter; ++lGroupIter, ++i)
+            lGraph->SetGroupName(i, *lGroupIter);
+            
+        std::vector<StandardCurve>::iterator lIter = pChart.curves.begin(), lEndIter = pChart.curves.end();
+        for(size_t i = 0; lIter != lEndIter; ++lIter, ++i)
+        {
+            lGraph->SetRectName(i, (*lIter).name);
+            
+            std::vector<std::pair<double, double> >::iterator lInnerIter = (*lIter).points.begin(), lInnerEndIter = (*lIter).points.end();
+            for(; lInnerIter != lInnerEndIter; ++lInnerIter)
+                lGraph->AddRect((size_t)((*lInnerIter).first), Rect(i, 0, i+1, (*lInnerIter).second));
+        }
+
+        return *lGraph;
+    }
+    
+    pChart.graph.reset(new GanttGraph(pPlotWidth, pPlotHeight, pChart.xAxis, pChart.yAxis, pChart.gantts.size(), pChart.groups.size()));
+    GanttGraph* lGraph = static_cast<GanttGraph*>(pChart.graph.get());
     
     std::vector<std::string>::iterator lGroupIter = pChart.groups.begin(), lGroupEndIter = pChart.groups.end();
     for(size_t i = 0; lGroupIter != lGroupEndIter; ++lGroupIter, ++i)
-        lGraph->SetGroupName(i, *lGroupIter);
+        lGraph->SetGanttVariantName(i, *lGroupIter);
         
-    std::vector<StandardCurve>::iterator lIter = pChart.curves.begin(), lEndIter = pChart.curves.end();
+    std::vector<StandardGantt>::iterator lIter = pChart.gantts.begin(), lEndIter = pChart.gantts.end();
     for(size_t i = 0; lIter != lEndIter; ++lIter, ++i)
     {
-        lGraph->SetRectName(i, (*lIter).name);
+        lGraph->SetGanttName(i, (*lIter).name);
         
-        std::vector<std::pair<double, double> >::iterator lInnerIter = (*lIter).points.begin(), lInnerEndIter = (*lIter).points.end();
+        std::vector<std::pair<size_t, std::pair<double, double>>>::iterator lInnerIter = (*lIter).data.begin(), lInnerEndIter = (*lIter).data.end();
         for(; lInnerIter != lInnerEndIter; ++lInnerIter)
-            lGraph->AddRect((size_t)((*lInnerIter).first), Rect(i, 0, i+1, (*lInnerIter).second));
+            lGraph->AddGanttVariant(i, (*lInnerIter).first, (*lInnerIter).second);
     }
 
     return *lGraph;
@@ -1436,6 +1469,145 @@ size_t Benchmark::GenerateOverlapComparisonGraphs(size_t pPanelIndex, size_t pPl
     pHtmlStream << "</div>" << std::endl;
     
     return lPanelConf.size();    
+}
+
+size_t Benchmark::GenerateTimelineGraphs(size_t pPanelIndex, size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream)
+{
+    panelConfigurationType lPanelConf;
+    
+    bool lHasInnerTasks = (mInnerTasks.size() > 1);
+    
+    std::vector<std::string> lHostsVector;
+    std::map<size_t, size_t>::const_iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
+    for(; lHostsIter != lHostsEndIter; ++lHostsIter)
+    {
+        std::stringstream lHostsStream;
+        lHostsStream << lHostsIter->first;
+        
+        lHostsVector.push_back(lHostsStream.str());
+    }
+
+    std::string lVarying1Str("Varying_1");
+    std::string lVarying2Str("Varying_2");
+    
+    lPanelConf.push_back(std::make_pair("Hosts", lHostsVector));
+    lPanelConf.push_back(std::make_pair(mConfiguration["Varying1_Name"][0], mConfiguration[lVarying1Str]));
+    
+    if(!mConfiguration[lVarying2Str].empty())
+        lPanelConf.push_back(std::make_pair(mConfiguration["Varying2_Name"][0], mConfiguration[lVarying2Str]));
+
+    const char* lPolicies[] = {"PUSH", "PULL"};
+    lPanelConf.push_back(std::make_pair("Scheduling&nbsp;Policy", std::vector<std::string>(lPolicies, lPolicies + sizeof(lPolicies)/sizeof(lPolicies[0]))));
+
+    const char* lMaOptions[] = {"Yes", "No"};
+    lPanelConf.push_back(std::make_pair("Multi&nbsp;Assign", std::vector<std::string>(lMaOptions, lMaOptions + (sizeof(lMaOptions)/sizeof(lMaOptions[0])))));
+
+    const char* lOverlapOptions[] = {"Yes", "No"};
+    lPanelConf.push_back(std::make_pair("Overlap&nbsp;Comp/Comm", std::vector<std::string>(lOverlapOptions, lOverlapOptions + (sizeof(lOverlapOptions)/sizeof(lOverlapOptions[0])))));
+
+    if(lHasInnerTasks)
+        lPanelConf.push_back(std::make_pair("Inner&nbsp;Task", mConfiguration["Inner_Task_Names"]));
+
+    pHtmlStream << "<div id='p" << pPanelIndex << "' value='" << lPanelConf.size() << "'>" << std::endl;
+    
+    GenerateSelectionGroup(pPanelIndex, lPanelConf, pHtmlStream);
+
+    lHostsIter = mResults.hostsMap.begin();
+    for(size_t lHostIndex = 1; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
+    {
+        if(!mConfiguration[lVarying2Str].empty())
+        {
+            std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying1Str].begin(), lEndIter = mConfiguration[lVarying1Str].end();
+            for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+            {
+                std::vector<std::string>::const_iterator lInnerIter = mConfiguration[lVarying2Str].begin(), lInnerEndIter = mConfiguration[lVarying2Str].end();
+                for(size_t lInnerIndex = 1; lInnerIter != lInnerEndIter; ++lInnerIter, ++lInnerIndex)
+                {
+                    for(int maVal = 1; maVal >= 0; --maVal)   // Multi Assign
+                    {
+                        std::string lMaStr((maVal == 0) ? "2" : "1");
+                        
+                        for(int overlap = 1; overlap >= 0; --overlap)   // Compute Communication Overlap
+                        {
+                            std::string lOverlapStr((overlap == 0) ? "2" : "1");
+
+                            std::vector<Level2InnerTaskKey>::const_iterator lInnerTaskIter = mInnerTasks.begin(), lInnerTaskEndIter = mInnerTasks.end();
+                            for(size_t lInnerTaskIndex = 1; lInnerTaskIter != lInnerTaskEndIter; ++lInnerTaskIter, ++lInnerTaskIndex)
+                            {
+                                pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 1 << "_" << lMaStr << "_" << lOverlapStr;
+                                
+                                if(lHasInnerTasks)
+                                    pHtmlStream << "_" << lInnerTaskIndex;
+
+                                pHtmlStream << "' style='display:none'>" << std::endl;
+                                
+                                GenerateTimelineGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (bool)overlap, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PUSH, *lInnerTaskIter);
+
+                                pHtmlStream << "</div>" << std::endl;
+
+                                pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 2 << "_" << lMaStr << "_" << lOverlapStr;
+                                
+                                if(lHasInnerTasks)
+                                    pHtmlStream << "_" << lInnerTaskIndex;
+                                
+                                pHtmlStream << "' style='display:none'>" << std::endl;
+                                
+                                GenerateTimelineGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (bool)overlap, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PULL, *lInnerTaskIter);
+                                
+                                pHtmlStream << "</div>" << std::endl;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        else
+        {
+            std::vector<std::string>::const_iterator lIter = mConfiguration[lVarying1Str].begin(), lEndIter = mConfiguration[lVarying1Str].end();
+            for(size_t lIndex = 1; lIter != lEndIter; ++lIter, ++lIndex)
+            {
+                for(int maVal = 1; maVal >= 0; --maVal)   // Multi Assign
+                {
+                    std::string lMaStr((maVal == 0) ? "2" : "1");
+                
+                    for(int overlap = 1; overlap >= 0; --overlap)   // Compute Communication Overlap
+                    {
+                        std::string lOverlapStr((overlap == 0) ? "2" : "1");
+
+                        std::vector<Level2InnerTaskKey>::const_iterator lInnerTaskIter = mInnerTasks.begin(), lInnerTaskEndIter = mInnerTasks.end();
+                        for(size_t lInnerTaskIndex = 1; lInnerTaskIter != lInnerTaskEndIter; ++lInnerTaskIter, ++lInnerTaskIndex)
+                        {
+                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 1 << "_" << lMaStr << "_" << lOverlapStr;
+                         
+                            if(lHasInnerTasks)
+                                pHtmlStream << "_" << lInnerTaskIndex;
+                            
+                            pHtmlStream << "' style='display:none'>" << std::endl;
+                            
+                            GenerateTimelineGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (bool)overlap, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PUSH, *lInnerTaskIter);
+                            
+                            pHtmlStream << "</div>" << std::endl;
+
+                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 2 << "_" << lMaStr << "_" << lOverlapStr;
+                            
+                            if(lHasInnerTasks)
+                                pHtmlStream << "_" << lInnerTaskIndex;
+                            
+                            pHtmlStream << "' style='display:none'>" << std::endl;
+                            
+                            GenerateTimelineGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (bool)overlap, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PULL, *lInnerTaskIter);
+                            
+                            pHtmlStream << "</div>" << std::endl;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    pHtmlStream << "</div>" << std::endl;
+    
+    return lPanelConf.size();
 }
 
 void Benchmark::GeneratePerformanceGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, SchedulingPolicy pPolicy, size_t pVarying2Val /* = 0 */)
@@ -1934,6 +2106,105 @@ void Benchmark::GenerateOverlapComparisonGraphsInternal(size_t pPlotWidth, size_
     }    
 }
 
+void Benchmark::GenerateTimelineGraphsInternal(size_t pPlotWidth, size_t pPlotHeight, std::ofstream& pHtmlStream, bool pMA, bool pOverlap, size_t pHosts, size_t pVarying1Val, size_t pVarying2Val, SchedulingPolicy pPolicy, const Level2InnerTaskKey& pInnerTask)
+{
+    size_t lCount = 0;
+
+    const char* lChartTitle[] = {"CPUs", "GPUs", "CPUs+GPUs"};
+
+    pHtmlStream << "<table align=center>" << std::endl;
+    pHtmlStream << "<tr class=horizSpacing>" << std::endl;
+
+    std::stringstream lGraphDisplayNameStream;
+    lGraphDisplayNameStream << "Time (in s) [";
+    
+    lGraphDisplayNameStream << mConfiguration["Varying1_Name"][0] << "=" << pVarying1Val;
+
+    if(!mConfiguration["Varying_2"].empty())
+        lGraphDisplayNameStream << ", " << mConfiguration["Varying2_Name"][0] << "=" << pVarying2Val;
+
+#if 0
+    if(pMA)
+        lGraphDisplayNameStream << ", MA";
+    
+    if(pOverlap)
+        lGraphDisplayNameStream << ", Overlap";
+
+    lGraphDisplayNameStream << ", Hosts=" << pHosts;
+    lGraphDisplayNameStream << ", " << ((pPolicy == PUSH) ? "Push" : "Pull");
+#endif
+    
+    lGraphDisplayNameStream << "] --->" << std::endl;
+
+    BenchmarkResults::mapType::const_iterator lIter = mResults.results.begin(), lEndIter = mResults.results.end();
+    for(; lIter != lEndIter; ++lIter)
+    {
+        if(lIter->first.varying1 != pVarying1Val || lIter->first.varying2 != pVarying2Val)
+            continue;
+
+        const std::map<Level2Key, Level2Value>& lMap = lIter->second.second;
+        std::map<Level2Key, Level2Value>::const_iterator lInnerIter = lMap.begin(), lInnerEndIter = lMap.end();
+        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
+        {
+            if(lInnerIter->first.lazyMem)
+                continue;
+            
+            if(lInnerIter->first.hosts != pHosts || lInnerIter->first.policy != pPolicy || lInnerIter->first.multiAssign != pMA || lInnerIter->first.overlapComputeCommunication != pOverlap)
+                continue;
+
+            if(lCount && (lCount % 3 == 0))
+            {
+                pHtmlStream << "</tr>" << std::endl;
+                pHtmlStream << "</table>" << std::endl;
+                pHtmlStream << "<br>" << std::endl;
+                pHtmlStream << "<table align=center>" << std::endl;
+                pHtmlStream << "<tr class=horizSpacing>" << std::endl;
+            }
+            
+            StandardChart lGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str())), std::unique_ptr<Axis>(new Axis("", false)));
+
+            std::set<EventTypes> lRegisteredEvents;
+            
+            const std::map<Level2InnerTaskKey, Level2InnerTaskValue>& lInnerTaskMap = lInnerIter->second.innerTaskMap;
+            if(lInnerTaskMap.find(pInnerTask) != lInnerTaskMap.end())
+            {
+                const Level2InnerTaskValue& lInnerTaskVal = lInnerTaskMap.find(pInnerTask)->second;
+                std::map<size_t, DeviceStats>::const_iterator lDeviceIter = lInnerTaskVal.deviceStats.begin(), lDeviceEndIter = lInnerTaskVal.deviceStats.end();
+                
+                for(; lDeviceIter != lDeviceEndIter; ++lDeviceIter)
+                {
+                    std::stringstream lDeviceName;
+                    lDeviceName << "Device " << lDeviceIter->first;
+                    
+                    lGraph.gantts.emplace_back(lDeviceName.str());
+                    
+                    std::vector<std::pair<EventTypes, std::pair<double, double>>>::const_iterator lTimelineIter = lDeviceIter->second.eventTimeline.begin(), lTimelineEndIter = lDeviceIter->second.eventTimeline.end();
+                    for(; lTimelineIter != lTimelineEndIter; ++lTimelineIter)
+                    {
+                        lRegisteredEvents.emplace((*lTimelineIter).first);
+                        (*(lGraph.gantts.rbegin())).data.emplace_back((size_t)((*lTimelineIter).first), (*lTimelineIter).second);
+                    }
+                }
+
+                std::for_each(lRegisteredEvents.begin(), lRegisteredEvents.end(), [&] (EventTypes pEventType)
+                {
+                    if(pEventType >= MAX_EVENT_TYPES)
+                        throw std::exception();
+
+                    lGraph.groups.push_back(EventTypeNames[(size_t)pEventType]);
+                });
+
+                EmbedPlot(pHtmlStream, GenerateStandardChart(pPlotWidth, pPlotHeight, lGraph), lChartTitle[(size_t)(lInnerIter->first.cluster)]);
+            }
+                
+            ++lCount;
+        }
+    }
+
+    pHtmlStream << "</tr>" << std::endl;
+    pHtmlStream << "</table>" << std::endl;
+}
+
 void Benchmark::EmbedPlot(std::ofstream& pHtmlStream, Graph& pGraph, const std::string& pGraphTitle)
 {
     pHtmlStream << "<td>" << std::endl;
@@ -2010,10 +2281,25 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
     boost::regex lExp8("^Parallel Task ([0-9]+) Execution Time = ([0-9.]+) \\[Scheduling Policy: ([0-9]+)\\]");
     boost::regex lExp9("^PMLIB \\[Host ([0-9]+)\\] Event Timeline Device ([0-9]+)");
     boost::regex lExp10("^Task \\[([0-9]+), ([0-9]+)\\] Subtask ([0-9]+) ([0-9.]+) ([0-9.]+)");
+    boost::regex lExp11("^Task \\[([0-9]+), ([0-9]+)\\] Subtask ([0-9]+) Event ([a-zA-Z]+) ([0-9.]+) ([0-9.]+)");
     
     while(std::getline(lFileStream, lLine))
     {
-        if(boost::regex_search(lLine.c_str(), lResults, lExp10))
+        if(boost::regex_search(lLine.c_str(), lResults, lExp11))
+        {
+            //size_t lSubtaskId = atoi(std::string(lResults[3]).c_str());
+            std::string lEventName = std::string(lResults[4]).c_str();
+            double lStartTime = atof(std::string(lResults[5]).c_str());
+            double lEndTime = atof(std::string(lResults[6]).c_str());
+
+            lCurrentTask.originatingHost = atoi(std::string(lResults[1]).c_str());
+            lCurrentTask.taskSequenceId = atoi(std::string(lResults[2]).c_str());
+            
+            EventTypes lEventType = (!lEventName.compare("SubtaskExecution") ? SUBTASK_EXECUTION : (!lEventName.compare("WaitOnNetwork") ? WAIT_ON_NETWORK : (!lEventName.compare("CopyToPinnedMemory") ? COPY_TO_PINNED_MEMORY : COPY_FROM_PINNED_MEMORY)));
+            
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lCurrentDevice].eventTimeline.emplace_back(lEventType, std::make_pair(lStartTime, lEndTime));
+        }
+        else if(boost::regex_search(lLine.c_str(), lResults, lExp10))
         {
             size_t lSubtaskId = atoi(std::string(lResults[3]).c_str());
             double lStartTime = atof(std::string(lResults[4]).c_str());
@@ -2022,7 +2308,7 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
             lCurrentTask.originatingHost = atoi(std::string(lResults[1]).c_str());
             lCurrentTask.taskSequenceId = atoi(std::string(lResults[2]).c_str());
             
-            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lCurrentDevice].eventTimeline[lSubtaskId] = std::make_pair(lStartTime, lEndTime);
+            mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lCurrentDevice].subtaskTimeline[lSubtaskId] = std::make_pair(lStartTime, lEndTime);
             if(lEndTime > mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lCurrentDevice].lastEventTimings.second)
                 mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key].innerTaskMap[lCurrentTask].deviceStats[lCurrentDevice].lastEventTimings = std::make_pair(lStartTime, lEndTime);
         }
@@ -2191,7 +2477,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
     
     const std::string& lMpiOptions = lMpiOptionsVector.empty() ? std::string("") : lMpiOptionsVector[0];
     
-    const char* lSchedulingModelNames[] = {"Push", "Pull", "StaticEqual", "StaticBest"};
+    const char* lSchedulingModelNames[] = {"Push", "Pull", "StaticEqual", "StaticBest", "PullWithAffinity"};
     const char* lClusterTypeNames[] = {"CPU", "GPU", "CPU+GPU"};
 
     /* Generate PMLIB tasks output */
@@ -2211,7 +2497,7 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                     
                     for(size_t m = 0; m <= 1; ++m)  // Compute Communication Overlap
                     {
-                        size_t lMaxAffinityCriterion = ((i == (size_t)PULL_WITH_AFFINITY) ? 4 : 1);
+                        size_t lMaxAffinityCriterion = ((i == (size_t)PULL_WITH_AFFINITY) ? 5 : 1);
                         for(size_t n = 0; n < lMaxAffinityCriterion; ++n)  // Affinity Criterion (for PULL_WITH_AFFINITY)
                         {
                             if((k == 1 || l == 1 || m == 1) && (((SchedulingPolicy)i == STATIC_BEST) || ((SchedulingPolicy)i == STATIC_EQUAL)))
@@ -2260,6 +2546,10 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
 
                                     case 3:
                                         lDisplayName << "_MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME";
+                                        break;
+
+                                    case 4:
+                                        lDisplayName << "_DERIVED_AFFINITY";
                                         break;
                                 };
                             }

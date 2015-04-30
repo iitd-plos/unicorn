@@ -238,6 +238,29 @@ std::string pmSubtaskRangeExecutionTimelineAutoPtr::GetCancelledEventName(ulong 
 
     return lEventName.str();
 }
+    
+
+/* class pmEventTimelineAutoPtr */
+pmEventTimelineAutoPtr::pmEventTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pSubtaskId, const std::string& pEventNameSuffix)
+    : mTask(pTask)
+    , mEventTimeline(pEventTimeline)
+    , mEventName(GetEventName(pSubtaskId, pEventNameSuffix))
+{
+    mEventTimeline->RecordEvent(mTask, mEventName, true);
+}
+
+pmEventTimelineAutoPtr::~pmEventTimelineAutoPtr()
+{
+    mEventTimeline->RecordEvent(mTask, mEventName, false);
+}
+
+std::string pmEventTimelineAutoPtr::GetEventName(ulong pSubtaskId, const std::string& pEventNameSuffix)
+{
+    std::stringstream lEventName;
+    lEventName << "Task [" << ((uint)(*(mTask->GetOriginatingHost()))) << ", " << (mTask->GetSequenceNumber()) << "] Subtask " << mTask->GetPhysicalSubtaskId(pSubtaskId) << " Event " << pEventNameSuffix;
+    
+    return lEventName.str();
+}
 #endif
 
 

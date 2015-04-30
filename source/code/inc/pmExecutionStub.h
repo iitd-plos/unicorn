@@ -429,10 +429,6 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mDeferredShadowMemCommitsLock;
         std::map<pmTask*, std::vector<std::pair<ulong, pmSplitData> > > mDeferredShadowMemCommits;
-
-    #ifdef DUMP_EVENT_TIMELINE
-        std::unique_ptr<pmEventTimeline> mEventTimelineAutoPtr;
-    #endif
     
         std::queue<ulong> mCurrentSubtaskQueue; // list of subtasks currently executing on the stub
         std::map<ulong, TIMER_IMPLEMENTATION_CLASS> mCurrentSubtaskTimersMap; // timers for subtasks currently executing on the stub
@@ -448,6 +444,11 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     
     #ifdef PROACTIVE_STEAL_REQUESTS
         std::map<pmTask*, bool> mStealRequestIssuedMap;
+    #endif
+    
+    protected:
+    #ifdef DUMP_EVENT_TIMELINE
+        std::unique_ptr<pmEventTimeline> mEventTimelineAutoPtr;
     #endif
 };
 

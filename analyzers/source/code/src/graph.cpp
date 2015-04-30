@@ -41,9 +41,11 @@
 #define INTER_LEGEND_VERTICAL_SPACING_PERCENTAGE 3
 #define MAX_LEGEND_ROWS 2
 #define MAX_LEGEND_COLS 4
+#define MAX_LEGEND_COLS_FOR_GANTT_CHART 3
 #define RECT_GROUPS_SPACING_PERCENTAGE 5
 #define AXIS_STROKE_WIDTH 4     // Should be divisible by 2
-#define TICK_LENGTH 4;
+#define TICK_LENGTH 4
+#define GANTTS_SPACING_PERCENTAGE 1
 
 const char* const gColors[] =
 {
@@ -127,6 +129,11 @@ RectGroup::RectGroup()
 {
 }
 
+
+/* struct Gantt */
+Gantt::Gantt()
+{
+}
 
 
 /* class Graph */
@@ -523,4 +530,121 @@ const std::string& RectGraph::GetSvg()
     return mSvg;
 }
 
+
+/* class GanttGraph */
+GanttGraph::GanttGraph(size_t pWidth, size_t pHeight, std::unique_ptr<Axis>& pAxisX, std::unique_ptr<Axis>& pAxisY, size_t pGanttCount, size_t pVariantsPerGantt)
+: Graph(pWidth, pHeight, pAxisX, pAxisY)
+, mVariantsPerGantt(pVariantsPerGantt)
+{
+    mGanttVariantNames.resize(pVariantsPerGantt);
+    mGantts.resize(pGanttCount);
+}
+
+void GanttGraph::SetGanttName(size_t pGanttIndex, const std::string& pGanttName)
+{
+    if(pGanttIndex >= mGantts.size())
+        throw std::exception();
+
+    mGantts[pGanttIndex].name = pGanttName;
+}
+
+void GanttGraph::SetGanttVariantName(size_t pVariantIndexInEachGantt, const std::string& pVariantName)
+{
+    if(pVariantIndexInEachGantt >= mGanttVariantNames.size())
+        throw std::exception();
+
+    mGanttVariantNames[pVariantIndexInEachGantt] = pVariantName;
+}
+
+void GanttGraph::AddGanttVariant(size_t pGanttIndex, size_t pVariantIndex, const std::pair<double, double>& pStartEnd)
+{
+    if(pGanttIndex >= mGantts.size())
+        throw std::exception();
+    
+    if(pStartEnd.first > pStartEnd.second)
+        throw std::exception();
+
+    Gantt& lGroup = mGantts[pGanttIndex];
+    lGroup.variantStartEnd.emplace_back(pVariantIndex, pStartEnd);
+    
+    mMinX = std::min(mMinX, pStartEnd.first);
+    mMaxX = std::max(mMaxX, pStartEnd.second);
+}
+
+const std::string& GanttGraph::GetSvg()
+{
+    if(!mSvg.empty())
+        return mSvg;
+        
+    Graph::GetPreSvg();
+    
+    std::stringstream lStream;
+    
+    size_t lGanttPixelSpacing = mHeight * GANTTS_SPACING_PERCENTAGE/100.0;
+    size_t lPixelsForGantts = mUsableHeight - (mGantts.size() * lGanttPixelSpacing);
+    size_t lPixelsPerGantt = lPixelsForGantts / mGantts.size();
+    
+    size_t lGanttVariantPixelHeightStep = lPixelsPerGantt / (2 * (mGantts.size() - 1));
+    
+    size_t lGanttX = mLeftMargin;
+    size_t lGanttY = mBottomMargin + lGanttPixelSpacing;
+
+    std::vector<Gantt>::const_iterator lIter = mGantts.begin(), lEndIter = mGantts.end();
+    for(size_t lGanttIndex = 0; lIter != lEndIter; ++lIter, ++lGanttIndex)
+    {
+        const Gantt& lGantt = (*lIter);
+
+        std::vector<std::pair<size_t, std::pair<double, double>>>::const_iterator lInnerIter = lGantt.variantStartEnd.begin(), lInnerEndIter = lGantt.variantStartEnd.end();
+        for(; lInnerIter != lInnerEndIter; ++lInnerIter)
+        {
+            const std::pair<size_t, std::pair<double, double>>& lData = *lInnerIter;
+            size_t lGanttVariantPixelHeight = lPixelsPerGantt - lData.first * lGanttVariantPixelHeightStep;
+            double lGanttVariantHeightMargin = (double)(lPixelsPerGantt - lGanttVariantPixelHeight) / 2.0;
+
+            double lX1 = (lGanttX + (lData.second.first - mMinPlottedX) * mPixelsPerUnitX);
+            double lX2 = (lGanttX + (lData.second.second - mMinPlottedX) * mPixelsPerUnitX);
+            double lY1 = mHeight - (lGanttY + lGanttVariantHeightMargin);
+            double lY2 = mHeight - (lGanttY + (lPixelsPerGantt - lGanttVariantHeightMargin));
+
+            lStream << "<rect x='" << lX1 << "' y='" << lY2 << "' width='" << lX2 - lX1 << "' height='" << lY1 - lY2 << "' fill='" << GetColor(mGanttVariantNames[lData.first]) << "' />" << std::endl;
+        }
+
+        double lLength = AXIS_STROKE_WIDTH + TICK_LENGTH;
+        double lX = mLeftMargin - lLength;
+        double lY = mHeight - (lGanttY + lPixelsPerGantt/2.0);
+        lStream << "<text text-anchor='middle' font-size='60%' x='" << lX - 20 << "' y='" << lY + 2 << "'>" << lGantt.name << "</text>" << std::endl;
+        
+        lGanttY += lPixelsPerGantt + lGanttPixelSpacing;
+    }        
+
+    std::vector<std::string>::iterator lNameIter = mGanttVariantNames.begin(), lNameEndIter = mGanttVariantNames.end();
+    for(size_t lLegendIndex = 0; lNameIter != lNameEndIter; ++lNameIter, ++lLegendIndex)
+    {
+        if(lLegendIndex < MAX_LEGEND_ROWS * MAX_LEGEND_COLS_FOR_GANTT_CHART)
+        {
+            size_t lLegendCountPerRow = std::min((size_t)MAX_LEGEND_COLS_FOR_GANTT_CHART, mGanttVariantNames.size());
+            double lLegendAdjustmentPercentage = 0.75;
+            double lLegendSpace = (100.0 - 2.0 * LEGEND_MARGIN_PERCENTAGE - (lLegendCountPerRow - 1) * INTER_LEGEND_HORIZONTAL_SPACING_PERCENTAGE);
+            double lSpacePerLegend = lLegendSpace / lLegendCountPerRow;
+            size_t lLegendRow = lLegendIndex / MAX_LEGEND_COLS_FOR_GANTT_CHART;
+            size_t lLegendCol = lLegendIndex % MAX_LEGEND_COLS_FOR_GANTT_CHART;
+            
+            double lX1 = mWidth/100.0 * (LEGEND_MARGIN_PERCENTAGE + lLegendCol * (lSpacePerLegend + INTER_LEGEND_HORIZONTAL_SPACING_PERCENTAGE));
+            double lY = mHeight - (mHeight/100.0 * (LEGEND_MARGIN_PERCENTAGE + INTER_LEGEND_VERTICAL_SPACING_PERCENTAGE * lLegendRow));
+            double lWidth = mWidth/100.0 * (lSpacePerLegend/4.0); // one-fourth space for line and three-fourth for label
+            
+            double lHorizLegendAdjustment = mWidth/100.0 * lLegendAdjustmentPercentage;
+            double lVerticalLegendAdjustment = mHeight/100.0 * lLegendAdjustmentPercentage;
+
+            lStream << "<rect x='" << lX1 << "' y='" << lY - lVerticalLegendAdjustment/2.0 << "' width='" << lWidth << "' height='" << lVerticalLegendAdjustment << "' fill='" << GetColor(*lNameIter) << "' />" << std::endl;
+            lStream << "<text font-size='60%' x='" << lX1 + lWidth + lHorizLegendAdjustment << "' y='" << lY + lVerticalLegendAdjustment << "'>" << mGanttVariantNames[lLegendIndex] << "</text>" << std::endl;
+        }
+    }
+
+    mSvg.append(lStream.str());
+    
+    Graph::GetPostSvg(mVariantsPerGantt * mGantts.size());
+    
+    return mSvg;
+}
 
