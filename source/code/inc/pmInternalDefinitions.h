@@ -182,9 +182,9 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 /* Affinity Controls */
 #define MACHINES_PICK_BEST_SUBTASKS // defines whether subtasks choose best machines or vice versa
 #ifdef MACHINES_PICK_BEST_SUBTASKS
-    #define GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
+//    #define GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
 #endif
-#define CENTRALIZED_AFFINITY_COMPUTATION
+//#define CENTRALIZED_AFFINITY_COMPUTATION
 #ifdef USE_STEAL_AGENT_PER_NODE
 //    #define USE_DYNAMIC_AFFINITY
 #endif
@@ -218,7 +218,7 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 //#define DUMP_MPI_CALLS
 #define DUMP_SUBTASK_EXECUTION_PROFILE
 #define DUMP_EXCEPTION_BACKTRACE
-#define DUMP_AFFINITY_DATA
+//#define DUMP_AFFINITY_DATA
 
 #define EXIT_ON_EXCEPTION
 

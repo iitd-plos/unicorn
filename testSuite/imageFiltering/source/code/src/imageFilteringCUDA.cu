@@ -345,10 +345,8 @@ int singleGpuImageFilter(void* pInvertedImageData, size_t pImageWidth, size_t pI
     void* lTextureMem = NULL;
     CUDA_ERROR_CHECK("cudaMallocPitch", cudaMallocPitch(&lTextureMem, &lPitch, lEffectiveTextureWidth, pImageHeight));
 
-#ifdef USE_ELLIPTICAL_FILTER
     unsigned int lTotalSubtasks = ((unsigned int)pImageWidth/TILE_DIM + ((unsigned int)pImageWidth%TILE_DIM ? 1 : 0)) * ((unsigned int)pImageHeight/TILE_DIM + ((unsigned int)pImageHeight%TILE_DIM ? 1 : 0));
     unsigned int lSubtasksPerRow = ((unsigned int)pImageWidth/TILE_DIM + ((unsigned int)pImageWidth%TILE_DIM ? 1 : 0));
-#endif
 
     prepareForLaunch(pImageWidth, pImageHeight, (char*)pInvertedImageData, pImageWidth * PIXEL_COUNT, pFilter, pFilterRadius, lOutputMemCudaPtr, pImageWidth, 0, 0, pImageWidth, pImageHeight, lPitch, lTextureMem, lFilterPtr, NULL, true, false, lSubtasksPerRow, lTotalSubtasks);
     
