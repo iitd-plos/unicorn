@@ -1766,11 +1766,23 @@ void Benchmark::GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t
         StandardChart lGpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
         StandardChart lCpusPlusGpusGraph(std::unique_ptr<Axis>(new Axis(lGraphDisplayNameStream.str(), false)), std::unique_ptr<Axis>(new Axis("Execution Time (in s) --->")));
 
-        const char* lCurveNames[] = {"Push", "Pull", "Static Equal", "Static Best"};
-        const char* lCurveNamesMA[] = {"Push_MA", "Pull_MA", "Static Equal", "Static Best"};
-        lCpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, pMA ? lCurveNamesMA : lCurveNames);
-        lGpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, pMA ? lCurveNamesMA : lCurveNames);
-        lCpusPlusGpusGraph.SetCurves(lGenerateStaticBest ? 4 : 3, pMA ? lCurveNamesMA : lCurveNames);
+        const char* lCurveNamesAffinity[] = {"Push", "Pull", "Static Equal", "Pull With Affinity"};
+        const char* lCurveNamesAffinityMA[] = {"Push_MA", "Pull_MA", "Static Equal", "Pull With Affinity_MA"};
+        const char* lCurveNamesAffinitySB[] = {"Push", "Pull", "Static Equal", "Static Best", "Pull With Affinity"};
+        const char* lCurveNamesAffinitySBMA[] = {"Push_MA", "Pull_MA", "Static Equal", "Static Best", "Pull With Affinity_MA"};
+
+        if(lGenerateStaticBest)
+        {
+            lCpusGraph.SetCurves(5, pMA ? lCurveNamesAffinitySBMA : lCurveNamesAffinitySB);
+            lGpusGraph.SetCurves(5, pMA ? lCurveNamesAffinitySBMA : lCurveNamesAffinitySB);
+            lCpusPlusGpusGraph.SetCurves(5, pMA ? lCurveNamesAffinitySBMA : lCurveNamesAffinitySB);
+        }
+        else
+        {
+            lCpusGraph.SetCurves(4, pMA ? lCurveNamesAffinityMA : lCurveNamesAffinity);
+            lGpusGraph.SetCurves(4, pMA ? lCurveNamesAffinityMA : lCurveNamesAffinity);
+            lCpusPlusGpusGraph.SetCurves(4, pMA ? lCurveNamesAffinityMA : lCurveNamesAffinity);
+        }
 
         std::map<size_t, size_t>::iterator lHostsIter = mResults.hostsMap.begin(), lHostsEndIter = mResults.hostsMap.end();
         for(size_t lHostIndex = 0; lHostsIter != lHostsEndIter; ++lHostsIter, ++lHostIndex)
@@ -1798,20 +1810,25 @@ void Benchmark::GenerateSchedulingModelsGraphsInternal(size_t pPlotWidth, size_t
 
             if(!lInnerIter->first.lazyMem)
             {
+                SchedulingPolicy lPolicy = lInnerIter->first.policy;
+                size_t lPolicyIndex = (size_t)lPolicy;
+                if(lPolicy == PULL_WITH_AFFINITY && !lGenerateStaticBest)
+                    --lPolicyIndex;
+                
                 switch(lInnerIter->first.cluster)
                 {
                     case CPU:
-                        lCpusGraph.curves[(size_t)(lInnerIter->first.policy)].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
+                        lCpusGraph.curves[lPolicyIndex].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
                     
                         break;
                         
                     case GPU:
-                        lGpusGraph.curves[(size_t)(lInnerIter->first.policy)].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
+                        lGpusGraph.curves[lPolicyIndex].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
                     
                         break;
 
                     case CPU_PLUS_GPU:
-                        lCpusPlusGpusGraph.curves[(size_t)(lInnerIter->first.policy)].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
+                        lCpusPlusGpusGraph.curves[lPolicyIndex].points.push_back(std::make_pair(mResults.hostsMap[lInnerIter->first.hosts], lInnerIter->second.execTime));
                     
                         break;
                         
@@ -2257,11 +2274,20 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
         return;
     }
 
-    boost::regex lKeyExp("([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)$");
-    if(!boost::regex_search(pResultsFile.c_str(), lResults, lKeyExp))
-        throw std::exception();
+    int lAffinityCriterion = -1;
+    boost::regex lKeyExpAffinity("([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)$");
+    if(boost::regex_search(pResultsFile.c_str(), lResults, lKeyExpAffinity))
+    {
+        lAffinityCriterion = atoi(std::string(lResults[7]).c_str());
+    }
+    else
+    {
+        boost::regex lKeyExp("([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)_([0-9]+)$");
+        if(!boost::regex_search(pResultsFile.c_str(), lResults, lKeyExp))
+            throw std::exception();
+    }
 
-    Level2Key lLevel2Key((size_t)(atoi(std::string(lResults[1]).c_str())), (enum SchedulingPolicy)(atoi(std::string(lResults[2]).c_str())), (enum clusterType)(atoi(std::string(lResults[3]).c_str())), (bool)(atoi(std::string(lResults[4]).c_str())), (bool)(atoi(std::string(lResults[5]).c_str())), (bool)(atoi(std::string(lResults[6]).c_str())));
+    Level2Key lLevel2Key((size_t)(atoi(std::string(lResults[1]).c_str())), (enum SchedulingPolicy)(atoi(std::string(lResults[2]).c_str())), (enum clusterType)(atoi(std::string(lResults[3]).c_str())), (bool)(atoi(std::string(lResults[4]).c_str())), (bool)(atoi(std::string(lResults[5]).c_str())), (bool)(atoi(std::string(lResults[6]).c_str())), lAffinityCriterion);
     
     static Level2Value lLevel2Value;
     mSamples[pSampleIndex].results[pLevel1Key].second[lLevel2Key] = lLevel2Value;
@@ -2314,7 +2340,7 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp2))
         {
-            if(lLevel2Key.policy != (enum SchedulingPolicy)(atoi(std::string(lResults[3]).c_str())))
+            if(lLevel2Key.policy != (enum SchedulingPolicy)(atoi(std::string(lResults[3]).c_str())) && lAffinityCriterion == -1)
                 throw std::exception();
             
             lCurrentTask.originatingHost = atoi(std::string(lResults[1]).c_str());
@@ -2355,7 +2381,7 @@ void Benchmark::ParseResultsFile(const Level1Key& pLevel1Key, const std::string&
         }
         else if(boost::regex_search(lLine.c_str(), lResults, lExp8))
         {
-            if(lLevel2Key.policy != (enum SchedulingPolicy)(atoi(std::string(lResults[3]).c_str())))
+            if(lLevel2Key.policy != (enum SchedulingPolicy)(atoi(std::string(lResults[3]).c_str())) && lAffinityCriterion == -1)
                 throw std::exception();
 
             if(4 + (size_t)lLevel2Key.cluster != (size_t)(atoi(std::string(lResults[1]).c_str())))

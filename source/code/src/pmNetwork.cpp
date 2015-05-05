@@ -597,7 +597,7 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
             
             EXCEPTION_ASSERT(lData->transferDataElements);
             
-			lLength += 2 * sizeof(uint) + sizeof(ulong) + sizeof(memoryIdentifierStruct) + lData->transferDataElements * sizeof(ulong);
+			lLength += 2 * sizeof(uint) + 2 * sizeof(ulong) + sizeof(memoryIdentifierStruct) + lData->transferDataElements * sizeof(ulong);
             
 			if(lLength > __MAX_SIGNED(int))
 				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
@@ -614,7 +614,10 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 
-			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->affinityAddressSpace, 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->affinityAddressSpaceLength, 1, MPI_UNSIGNED_LONG, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->affinityAddressSpace, 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
 
             if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->transferDataElements, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
@@ -1051,7 +1054,10 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
 			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->sequenceNumber, 1, MPI_UNSIGNED_LONG, lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
-			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->affinityAddressSpace), 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->affinityAddressSpaceLength, 1, MPI_UNSIGNED_LONG, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->affinityAddressSpace), 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
 				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
 
             if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &lPackedData->transferDataElements, 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )

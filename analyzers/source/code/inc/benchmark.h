@@ -173,14 +173,16 @@ struct Level2Key
     bool multiAssign;
     bool lazyMem;
     bool overlapComputeCommunication;
+    int affinityCriterion;
     
-    Level2Key(size_t pHosts, enum SchedulingPolicy pPolicy, enum clusterType pCluster, bool pMultiAssign, bool pLazyMem, bool pOverlapComputeCommunication)
+    Level2Key(size_t pHosts, enum SchedulingPolicy pPolicy, enum clusterType pCluster, bool pMultiAssign, bool pLazyMem, bool pOverlapComputeCommunication, int pAffinityCriterion = -1)
     : hosts(pHosts)
     , policy(pPolicy)
     , cluster(pCluster)
     , multiAssign(pMultiAssign)
     , lazyMem(pLazyMem)
     , overlapComputeCommunication(pOverlapComputeCommunication)
+    , affinityCriterion(pAffinityCriterion)
     {}
 
     friend bool operator< (const Level2Key& pFirst, const Level2Key& pSecond)

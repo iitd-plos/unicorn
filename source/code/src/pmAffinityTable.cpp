@@ -218,7 +218,7 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
     #ifdef MACHINES_PICK_BEST_SUBTASKS
         #ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
             std::vector<double> lTableRow;
-            lTableRow.reserve(lSubtaskCount);
+            lTableRow.resize(lSubtaskCount);
 
             for_each(pEntry, [&] (const std::pair<T, ulong>& pMapEntry)
             {
@@ -284,71 +284,71 @@ void pmAffinityTable::CreateSubtaskMappings()
             auto lIter = lResidualProfitsMap.begin();
             for(ulong k = 0; k < lMachineAssignments; ++lIter, ++k)
                 lSubtaskAssignment[lIter->second] = i;
-            
-            std::vector<ulong> lUnassignedSubtasks;
-            lUnassignedSubtasks.reserve(lSubtaskCount);
-            
-            for_each_with_index(lSubtaskAssignment, [&] (long pSubtaskMachine, size_t pSubtaskId)
-            {
-                if(pSubtaskMachine == -1)
-                {
-                    lUnassignedSubtasks.emplace_back(pSubtaskId);
-                }
-                else
-                {
-                    auto lMapIter = lMap.find((uint)pSubtaskMachine);
-                    EXCEPTION_ASSERT(lMapIter != lMap.end());
-                    EXCEPTION_ASSERT(lMapIter->second.second);
-
-                    ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lMapIter->second.first];
-
-                    // Assign the selected subtask to the selected machine
-                    lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = pSubtaskId;
-                    lPhysicalToLogicalSubtaskMapping[pSubtaskId] = lLogicalSubtaskId;
-
-                    ++lMapIter->second.first;
-                    --lMapIter->second.second;
-                }
-            });
-            
-            for_each(lMap, [&] (decltype(lMap)::value_type& pPair)
-            {
-                const std::vector<double>& lProfitsRow = mTable.GetRow(pPair.first);
-
-                while(pPair.second.second)
-                {
-                    std::vector<ulong>::iterator lSelectedSubtaskIter = lUnassignedSubtasks.end();
-                    double lSelectedSubtaskProfit = std::numeric_limits<double>::min();
-
-                    // Find best subtask from the unassigned ones
-                    auto lSubtaskIter = lUnassignedSubtasks.begin(), lSubtaskEndIter = lUnassignedSubtasks.end();
-                    for(; lSubtaskIter != lSubtaskEndIter; ++lSubtaskIter)
-                    {
-                        if(lProfitsRow[*lSubtaskIter] > lSelectedSubtaskProfit)
-                        {
-                            lSelectedSubtaskProfit = lProfitsRow[*lSubtaskIter];
-                            lSelectedSubtaskIter = lSubtaskIter;
-                        }
-                    }
-                    
-                    EXCEPTION_ASSERT(lSelectedSubtaskIter != lSubtaskEndIter);
-                    
-                    ulong lSelectedSubtask = *lSelectedSubtaskIter;
-                    ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[pPair.second.first];
-
-                    // Assign the selected subtask to the selected machine
-                    lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = lSelectedSubtask;
-                    lPhysicalToLogicalSubtaskMapping[lSelectedSubtask] = lLogicalSubtaskId;
-                    
-                    lUnassignedSubtasks.erase(lSelectedSubtaskIter);
-                    
-                    ++pPair.second.first;
-                    --pPair.second.second;
-                }
-            });
-            
-            EXCEPTION_ASSERT(lUnassignedSubtasks.empty());
         }
+            
+        std::vector<ulong> lUnassignedSubtasks;
+        lUnassignedSubtasks.reserve(lSubtaskCount);
+
+        for_each_with_index(lSubtaskAssignment, [&] (long pSubtaskMachine, size_t pSubtaskId)
+        {
+            if(pSubtaskMachine == -1)
+            {
+                lUnassignedSubtasks.emplace_back(pSubtaskId);
+            }
+            else
+            {
+                auto lMapIter = lMap.find((uint)pSubtaskMachine);
+                EXCEPTION_ASSERT(lMapIter != lMap.end());
+                EXCEPTION_ASSERT(lMapIter->second.second);
+
+                ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lMapIter->second.first];
+
+                // Assign the selected subtask to the selected machine
+                lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = pSubtaskId;
+                lPhysicalToLogicalSubtaskMapping[pSubtaskId] = lLogicalSubtaskId;
+
+                ++lMapIter->second.first;
+                --lMapIter->second.second;
+            }
+        });
+        
+        for_each(lMap, [&] (decltype(lMap)::value_type& pPair)
+        {
+            const std::vector<double>& lProfitsRow = mTable.GetRow(pPair.first);
+
+            while(pPair.second.second)
+            {
+                std::vector<ulong>::iterator lSelectedSubtaskIter = lUnassignedSubtasks.end();
+                double lSelectedSubtaskProfit = std::numeric_limits<double>::lowest();
+
+                // Find best subtask from the unassigned ones
+                auto lSubtaskIter = lUnassignedSubtasks.begin(), lSubtaskEndIter = lUnassignedSubtasks.end();
+                for(; lSubtaskIter != lSubtaskEndIter; ++lSubtaskIter)
+                {
+                    if(lProfitsRow[*lSubtaskIter] > lSelectedSubtaskProfit)
+                    {
+                        lSelectedSubtaskProfit = lProfitsRow[*lSubtaskIter];
+                        lSelectedSubtaskIter = lSubtaskIter;
+                    }
+                }
+                
+                EXCEPTION_ASSERT(lSelectedSubtaskIter != lSubtaskEndIter);
+                
+                ulong lSelectedSubtask = *lSelectedSubtaskIter;
+                ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[pPair.second.first];
+
+                // Assign the selected subtask to the selected machine
+                lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = lSelectedSubtask;
+                lPhysicalToLogicalSubtaskMapping[lSelectedSubtask] = lLogicalSubtaskId;
+                
+                lUnassignedSubtasks.erase(lSelectedSubtaskIter);
+                
+                ++pPair.second.first;
+                --pPair.second.second;
+            }
+        });
+            
+        EXCEPTION_ASSERT(lUnassignedSubtasks.empty());
     #else
         std::set<ulong> lSubtasksAllotted;
         auto lSubtasksAllottedEndIter = lSubtasksAllotted.end();

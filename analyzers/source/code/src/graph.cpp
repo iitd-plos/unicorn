@@ -45,7 +45,6 @@
 #define RECT_GROUPS_SPACING_PERCENTAGE 5
 #define AXIS_STROKE_WIDTH 4     // Should be divisible by 2
 #define TICK_LENGTH 4
-#define GANTTS_SPACING_PERCENTAGE 1
 
 const char* const gColors[] =
 {
@@ -580,9 +579,11 @@ const std::string& GanttGraph::GetSvg()
     
     std::stringstream lStream;
     
-    size_t lGanttPixelSpacing = mHeight * GANTTS_SPACING_PERCENTAGE/100.0;
-    size_t lPixelsForGantts = mUsableHeight - (mGantts.size() * lGanttPixelSpacing);
-    size_t lPixelsPerGantt = lPixelsForGantts / mGantts.size();
+    size_t lGanttPixelSpacing = mUsableHeight / (2.0 * mGantts.size());
+    size_t lPixelsPerGantt = lGanttPixelSpacing;
+    size_t lLeftoverPixels = mUsableHeight - lGanttPixelSpacing * (2.0 * mGantts.size());
+    
+    lPixelsPerGantt += lLeftoverPixels / mGantts.size();
     
     size_t lGanttVariantPixelHeightStep = lPixelsPerGantt / (2 * (mGantts.size() - 1));
     
@@ -612,7 +613,7 @@ const std::string& GanttGraph::GetSvg()
         double lLength = AXIS_STROKE_WIDTH + TICK_LENGTH;
         double lX = mLeftMargin - lLength;
         double lY = mHeight - (lGanttY + lPixelsPerGantt/2.0);
-        lStream << "<text text-anchor='middle' font-size='60%' x='" << lX - 20 << "' y='" << lY + 2 << "'>" << lGantt.name << "</text>" << std::endl;
+        lStream << "<text text-anchor='middle' font-size='15%' x='" << lX - 5 << "' y='" << lY + 2 << "'>" << lGantt.name << "</text>" << std::endl;
         
         lGanttY += lPixelsPerGantt + lGanttPixelSpacing;
     }        

@@ -1124,7 +1124,7 @@ void pmScheduler::SendAffinityDataToMachines(pmLocalTask* pLocalTask, const std:
             pmAddressSpace* lAffinityAddressSpace = pLocalTask->GetAffinityAddressSpace();
 
             finalize_ptr<ulong, deleteArrayDeallocator<ulong>> lDataPtr(lData, false);
-            finalize_ptr<affinityDataTransferPacked> lPackedData(new affinityDataTransferPacked((uint)(*(pLocalTask->GetOriginatingHost())), pLocalTask->GetSequenceNumber(), *lAffinityAddressSpace->GetMemOwnerHost(), lAffinityAddressSpace->GetGenerationNumber(), (uint)pLogicalToPhysicalSubtaskMappings.size(), std::move(lDataPtr)));
+            finalize_ptr<affinityDataTransferPacked> lPackedData(new affinityDataTransferPacked((uint)(*(pLocalTask->GetOriginatingHost())), pLocalTask->GetSequenceNumber(), *lAffinityAddressSpace->GetMemOwnerHost(), lAffinityAddressSpace->GetGenerationNumber(), lAffinityAddressSpace->GetLength(), (uint)pLogicalToPhysicalSubtaskMappings.size(), std::move(lDataPtr)));
 
             pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<affinityDataTransferPacked>::CreateSharedPtr(pLocalTask->GetPriority(), SEND, AFFINITY_DATA_TRANSFER_TAG, pMachine, AFFINITY_DATA_TRANSFER_PACKED, lPackedData, 1);
 
@@ -2076,10 +2076,14 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                     const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
 
                     pmRemoteTask* lRemoteTask = dynamic_cast<pmRemoteTask*>(pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber));
-                    
                     EXCEPTION_ASSERT(lRemoteTask);
                     
+                #ifdef CENTRALIZED_AFFINITY_COMPUTATION
+                    pmAddressSpace* lAffinityAddressSpace = pmAddressSpace::CheckAndCreateAddressSpace(lData->affinityAddressSpaceLength, pmMachinePool::GetMachinePool()->GetMachine(lData->affinityAddressSpace.memOwnerHost), lData->affinityAddressSpace.generationNumber);
+                #else
                     pmAddressSpace* lAffinityAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lData->affinityAddressSpace.memOwnerHost), lData->affinityAddressSpace.generationNumber);
+                #endif
+
                     EXCEPTION_ASSERT(lAffinityAddressSpace);
 
                     std::vector<ulong> lLogicalToPhysicalSubtaskMapping(lData->logicalToPhysicalSubtaskMapping.get_ptr(), lData->logicalToPhysicalSubtaskMapping.get_ptr() + lData->transferDataElements);
