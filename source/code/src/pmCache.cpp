@@ -91,7 +91,7 @@ inline typename pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::
     EXCEPTION_ASSERT(lValue.unique());
     
     if(lValue.get())
-        mEvictor(pIter->first, lValue, true);
+        mEvictor(pIter->first, lValue, false);
     
     mContainer.erase(pIter->second);
 

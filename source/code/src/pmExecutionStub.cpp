@@ -2600,7 +2600,7 @@ void pmStubCUDA::FreeResources()
 {
 #ifdef DUMP_CUDA_CACHE_STATISTICS
     std::stringstream lStream;
-    lStream << "GPU Cache Statistics for Device " << GetProcessingElement()->GetGlobalDeviceIndex() << ": Allocations = " << mCudaCacheAllocationLength << " bytes (" << mCudaCacheAllocationCount << " events)" << "; Evictions = " << mCudaCacheEvictionLength << " bytes (" << mCudaCacheEvictionCount << "events )" << std::endl;
+    lStream << "GPU " << mDeviceIndex << " Cache Statistics: Allocations = " << mCudaCacheAllocationLength << " bytes (" << mCudaCacheAllocationCount << " events)" << "; Evictions = " << mCudaCacheEvictionLength << " bytes (" << mCudaCacheEvictionCount << "events)";
     
     pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str(), true);
 #endif
@@ -2916,6 +2916,10 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                 mCacheKeys[pSubtaskId].push_back(*pPair.first.get());
                 mCudaCache.Insert(*pPair.first.get(), pPair.second);
                 pPreventCachePurgeMap[pSubtaskId].push_back(pPair.second);   // increase ref count to prevent purging
+                
+            #ifdef DUMP_CUDA_CACHE_STATISTICS
+                RecordCudaCacheAllocation(mCacheKeys[pSubtaskId].allocationLength);
+            #endif
             });
         }
     }
@@ -3686,7 +3690,7 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSub
 void pmStubCUDA::TerminateUserModeExecution()
 {
 }
-    
+
 #ifdef DUMP_CUDA_CACHE_STATISTICS
 void pmStubCUDA::RecordCudaCacheAllocation(size_t pLength)
 {
