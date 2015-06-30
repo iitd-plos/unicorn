@@ -513,7 +513,7 @@ class pmStubCUDA : public pmStubGPU
     friend class pmDispatcherCUDA;
 
     public:
-        typedef pmCache<pmCudaCacheKey, pmCudaCacheValue, pmCudaCacheHasher, pmCudaCacheEvictor> pmCudaCacheType;
+        typedef pmCache<pmCudaCacheKey, pmCudaCacheValue, pmCudaCacheHasher, pmCudaCacheEvictor, CUDA_CACHE_EVICTION_POLICY> pmCudaCacheType;
 
         pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine);
 
@@ -544,6 +544,11 @@ class pmStubCUDA : public pmStubGPU
         size_t GetDeviceIndex();
     
         virtual void PurgeAddressSpaceEntriesFromGpuCache(const pmAddressSpace* pAddressSpace);
+    
+    #ifdef DUMP_CUDA_CACHE_STATISTICS
+        void RecordCudaCacheAllocation(size_t pLength);
+        void RecordCudaCacheEviction(size_t pLength);
+    #endif
 
     protected:
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign);
@@ -570,7 +575,7 @@ class pmStubCUDA : public pmStubGPU
         void* AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection);
         bool AllocateMemoryForDeviceCopy(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection);
     
-        std::unique_ptr<pmCudaCacheKey> MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType);
+        std::unique_ptr<pmCudaCacheKey> MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType, size_t pAllocationLength);
     
         ulong PrepareSubtasksForExecution(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo);
         bool InitializeCudaStream(std::shared_ptr<pmCudaStreamAutoPtr>& pSharedPtr);
@@ -598,6 +603,11 @@ class pmStubCUDA : public pmStubGPU
     #else
         const pmStatus mStatusCopySrc;
         pmStatus mStatusCopyDest;
+    #endif
+
+    #ifdef DUMP_CUDA_CACHE_STATISTICS
+        ulong mCudaCacheAllocationLength, mCudaCacheEvictionLength;
+        uint mCudaCacheAllocationCount, mCudaCacheEvictionCount;
     #endif
 };
 #endif

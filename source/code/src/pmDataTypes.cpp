@@ -474,8 +474,13 @@ void pmAccumulatedTimesSorter::Unlock()
 
 #ifdef SUPPORT_CUDA
 /* class pmCudaCacheEvictor */
-void pmCudaCacheEvictor::operator() (const std::shared_ptr<pmCudaCacheValue>& pValue)
+void pmCudaCacheEvictor::operator() (const pmCudaCacheKey& pKey, const std::shared_ptr<pmCudaCacheValue>& pValue, bool pForceEviction)
 {
+#ifdef DUMP_CUDA_CACHE_STATISTICS
+    if(!pForceEviction)
+        mStub->RecordCudaCacheEviction(pKey.allocationLength);
+#endif
+
     mStub->GetCudaChunkCollection()->Deallocate(pValue->cudaPtr);
 }
 

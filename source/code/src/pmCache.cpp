@@ -20,34 +20,44 @@
 
 namespace pm
 {
-
-template<typename __key, typename __value, typename __hasher, typename __evictor>
-inline void pmCache<__key, __value, __hasher, __evictor>::Insert(const __key& pKey, std::shared_ptr<__value>& pValue)
+    
+template<typename __key, typename __value, typename __hasher, typename __evictor, pmCacheEvictionPolicy __evictionPolicy>
+inline void pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::Insert(const __key& pKey, std::shared_ptr<__value>& pValue)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     EXCEPTION_ASSERT(mCacheHash.find(pKey) == mCacheHash.end());
-    
-    mCacheList.emplace_front(pKey, pValue);
-    mCacheHash.emplace(pKey, mCacheList.begin());
+
+    auto lIter = mContainer.emplace(pKey, pValue);
+    mCacheHash.emplace(pKey, lIter);
 }
 
-template<typename __key, typename __value, typename __hasher, typename __evictor>
-inline std::shared_ptr<__value>& pmCache<__key, __value, __hasher, __evictor>::Get(const __key& pKey)
+template<typename __key, typename __value, typename __hasher, typename __evictor, pmCacheEvictionPolicy __evictionPolicy>
+inline std::shared_ptr<__value>& pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::Get(const __key& pKey)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
     typename decltype(mCacheHash)::iterator lIter = mCacheHash.find(pKey);
     if(lIter == mCacheHash.end())
         return mEmptyValue;
-    
-    mCacheList.splice(mCacheList.begin(), mCacheList, lIter->second);
+
+    bool lIterInvalidated = false;
+    auto lReceivedIter = mContainer.onAccess(lIter->second, lIterInvalidated);
+
+    if(lIterInvalidated)
+    {
+        mCacheHash.erase(lIter);
+        mCacheHash.emplace(pKey, lReceivedIter);
+
+        lIter = mCacheHash.find(pKey);
+        EXCEPTION_ASSERT(lIter != mCacheHash.end());
+    }
     
     return lIter->second->second;
 }
 
-template<typename __key, typename __value, typename __hasher, typename __evictor>
-inline void pmCache<__key, __value, __hasher, __evictor>::RemoveKey(const __key& pKey)
+template<typename __key, typename __value, typename __hasher, typename __evictor, pmCacheEvictionPolicy __evictionPolicy>
+inline void pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::RemoveKey(const __key& pKey)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -57,8 +67,8 @@ inline void pmCache<__key, __value, __hasher, __evictor>::RemoveKey(const __key&
     RemoveKeyInternal(lIter);
 }
     
-template<typename __key, typename __value, typename __hasher, typename __evictor>
-inline void pmCache<__key, __value, __hasher, __evictor>::RemoveKeys(const std::function<bool (const __key&)>& pFunction)
+template<typename __key, typename __value, typename __hasher, typename __evictor, pmCacheEvictionPolicy __evictionPolicy>
+inline void pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::RemoveKeys(const std::function<bool (const __key&)>& pFunction)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
@@ -72,50 +82,39 @@ inline void pmCache<__key, __value, __hasher, __evictor>::RemoveKeys(const std::
             ++lIter;
     }
 }
-    
-template<typename __key, typename __value, typename __hasher, typename __evictor>
-inline typename pmCache<__key, __value, __hasher, __evictor>::hashType::iterator pmCache<__key, __value, __hasher, __evictor>::RemoveKeyInternal(typename pmCache<__key, __value, __hasher, __evictor>::hashType::iterator pIter)
+
+// Must be called with mResourceLock acquired
+template<typename __key, typename __value, typename __hasher, typename __evictor, pmCacheEvictionPolicy __evictionPolicy>
+inline typename pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::hashType::iterator pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::RemoveKeyInternal(typename pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::hashType::iterator pIter)
 {
-    EXCEPTION_ASSERT(pIter->second->second.unique());
+    const std::shared_ptr<__value>& lValue = mContainer.getValue(pIter->second);
+    EXCEPTION_ASSERT(lValue.unique());
     
-    if(pIter->second->second.get())
-        mEvictor(pIter->second->second);
+    if(lValue.get())
+        mEvictor(pIter->first, lValue, true);
     
-    mCacheList.erase(pIter->second);
+    mContainer.erase(pIter->second);
+
     return mCacheHash.erase(pIter);
 }
     
-template<typename __key, typename __value, typename __hasher, typename __evictor>
-inline bool pmCache<__key, __value, __hasher, __evictor>::Purge()
+template<typename __key, typename __value, typename __hasher, typename __evictor, pmCacheEvictionPolicy __evictionPolicy>
+inline bool pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::Purge()
 {
     std::shared_ptr<__value> lValue;
 
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-        if(mCacheList.empty())
-            return false;
-
-        typename decltype(mCacheList)::reverse_iterator lIter = mCacheList.rbegin(), lEndIter = mCacheList.rend();
-        for(; lIter != lEndIter; ++lIter)
-        {
-            if(lIter->second.use_count() == 1)
-            {
-                lValue = lIter->second;
-
-                mCacheHash.erase(lIter->first);
-                mCacheList.erase(--lIter.base()); // convert reverse iter to forward
-                
-                break;
-            }
-        }
-    }
-    
-    if(!lValue.get())
+    if(mContainer.empty())
         return false;
     
-    mEvictor(lValue);
+    mContainer.purge(__evictionPolicy, lValue, [&] (const __key& pKey) -> void
+                                               {
+                                                   mCacheHash.erase(pKey);
+                                                   mEvictor(pKey, lValue, false);
+                                               });
+    if(!lValue.get())
+        return false;
     
     return true;
 }

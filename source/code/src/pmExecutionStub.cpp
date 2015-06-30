@@ -2587,11 +2587,24 @@ pmStubCUDA::pmStubCUDA(size_t pDeviceIndex, uint pDeviceIndexOnMachine)
     , mStatusCopySrc(pmStatusUnavailable)
     , mStatusCopyDest(pmStatusUnavailable)
 #endif
+#ifdef DUMP_CUDA_CACHE_STATISTICS
+    , mCudaCacheAllocationLength(0)
+    , mCudaCacheEvictionLength(0)
+    , mCudaCacheAllocationCount(0)
+    , mCudaCacheEvictionCount(0)
+#endif
 {
 }
 
 void pmStubCUDA::FreeResources()
 {
+#ifdef DUMP_CUDA_CACHE_STATISTICS
+    std::stringstream lStream;
+    lStream << "GPU Cache Statistics for Device " << GetProcessingElement()->GetGlobalDeviceIndex() << ": Allocations = " << mCudaCacheAllocationLength << " bytes (" << mCudaCacheAllocationCount << " events)" << "; Evictions = " << mCudaCacheEvictionLength << " bytes (" << mCudaCacheEvictionCount << "events )" << std::endl;
+    
+    pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str(), true);
+#endif
+
     FreeGpuResources();
 }
 
@@ -2664,7 +2677,7 @@ void pmStubCUDA::PurgeAddressSpaceEntriesFromGpuCache(const pmAddressSpace* pAdd
                           });
 }
     
-std::unique_ptr<pmCudaCacheKey> pmStubCUDA::MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType)
+std::unique_ptr<pmCudaCacheKey> pmStubCUDA::MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType, size_t pAllocationLength)
 {
     DEBUG_EXCEPTION_ASSERT(pTask->IsCudaCacheEnabled());
 
@@ -2677,18 +2690,18 @@ std::unique_ptr<pmCudaCacheKey> pmStubCUDA::MakeCudaCacheKey(pmTask* pTask, ulon
     {
         case SUBSCRIPTION_CONTIGUOUS:
             if(pVisibilityType == SUBSCRIPTION_NATURAL)
-                lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex)));
+                lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex), pAllocationLength));
             else    // SUBSCRIPTION_COMPACT
-                lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex).subscriptionInfo));
+                lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex).subscriptionInfo, pAllocationLength));
             
             break;
             
         case SUBSCRIPTION_SCATTERED:
-            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedScatteredSubscriptionInfoVector(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex)));
+            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedScatteredSubscriptionInfoVector(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex), pAllocationLength));
             break;
             
         case SUBSCRIPTION_GENERAL:
-            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetNonConsolidatedReadWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex)));
+            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetNonConsolidatedReadWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex), pAllocationLength));
             break;
             
         default:
@@ -2746,14 +2759,10 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
     // Data is not fetched till this stage and shadow mem is also not created; so not using GetSubtaskInfo call here
     for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
     {
-        bool lNeedsAllocation = true;
-
-        pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
-        
-        if(lCudaCacheEnabledForTask)
-            lCudaCacheKeyPtr = MakeCudaCacheKey(pTask, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex, pAddressSpace, lVisibilityType);
-
         pmSubscriptionInfo lSubscriptionInfo;
+
+        bool lNeedsAllocation = true;
+        pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
         
         /* If address space is read-only, we need to ensure that the GPU copy of data (if any) is latest - need to cross check memory directory - partially done yet (PurgeAddressSpaceEntriesFromGpuCache)
          * If address space is write-only without reduction, we need to reuse the GPU copy of data (if any)
@@ -2774,6 +2783,9 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
             lSubscriptionInfo = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex).subscriptionInfo;
         }
         
+        if(lCudaCacheEnabledForTask)
+            lCudaCacheKeyPtr = MakeCudaCacheKey(pTask, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex, pAddressSpace, lVisibilityType, lSubscriptionInfo.length);
+
         bool lTemporaryAddressSpaceData = ((pTask->IsWriteOnly(pAddressSpace) && pTask->GetCallbackUnit()->GetDataReductionCB()) || (pTask->IsReadWrite(pAddressSpace) && !pTask->HasDisjointReadWritesAcrossSubtasks(pAddressSpace)));
         
         if(lSubscriptionInfo.length && lCudaCacheEnabledForTask && !lTemporaryAddressSpaceData)
@@ -3674,6 +3686,20 @@ void pmStubCUDA::CleanupPostSubtaskRangeExecution(pmTask* pTask, ulong pStartSub
 void pmStubCUDA::TerminateUserModeExecution()
 {
 }
+    
+#ifdef DUMP_CUDA_CACHE_STATISTICS
+void pmStubCUDA::RecordCudaCacheAllocation(size_t pLength)
+{
+    mCudaCacheAllocationLength += pLength;
+    ++mCudaCacheAllocationCount;
+}
+
+void pmStubCUDA::RecordCudaCacheEviction(size_t pLength)
+{
+    mCudaCacheEvictionLength += pLength;
+    ++mCudaCacheEvictionCount;
+}
+#endif
     
 #endif
 
