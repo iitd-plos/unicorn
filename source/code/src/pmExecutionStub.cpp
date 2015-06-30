@@ -2918,7 +2918,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                 pPreventCachePurgeMap[pSubtaskId].push_back(pPair.second);   // increase ref count to prevent purging
                 
             #ifdef DUMP_CUDA_CACHE_STATISTICS
-                RecordCudaCacheAllocation(mCacheKeys[pSubtaskId].allocationLength);
+                RecordCudaCacheAllocation(pPair.first->allocationLength);
             #endif
             });
         }
