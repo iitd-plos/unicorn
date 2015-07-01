@@ -2677,7 +2677,7 @@ void pmStubCUDA::PurgeAddressSpaceEntriesFromGpuCache(const pmAddressSpace* pAdd
                           });
 }
     
-std::unique_ptr<pmCudaCacheKey> pmStubCUDA::MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType, size_t pAllocationLength)
+std::unique_ptr<pmCudaCacheKey> pmStubCUDA::MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType)
 {
     DEBUG_EXCEPTION_ASSERT(pTask->IsCudaCacheEnabled());
 
@@ -2690,18 +2690,18 @@ std::unique_ptr<pmCudaCacheKey> pmStubCUDA::MakeCudaCacheKey(pmTask* pTask, ulon
     {
         case SUBSCRIPTION_CONTIGUOUS:
             if(pVisibilityType == SUBSCRIPTION_NATURAL)
-                lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex), pAllocationLength));
+                lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex)));
             else    // SUBSCRIPTION_COMPACT
-                lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex).subscriptionInfo, pAllocationLength));
+                lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex).subscriptionInfo));
             
             break;
             
         case SUBSCRIPTION_SCATTERED:
-            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedScatteredSubscriptionInfoVector(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex), pAllocationLength));
+            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetUnifiedScatteredSubscriptionInfoVector(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex)));
             break;
             
         case SUBSCRIPTION_GENERAL:
-            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetNonConsolidatedReadWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex), pAllocationLength));
+            lCacheKeyPtr.reset(new pmCudaCacheKey(pAddressSpace, pVisibilityType, lSubscriptionManager.GetNonConsolidatedReadWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex)));
             break;
             
         default:
@@ -2784,7 +2784,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
         }
         
         if(lCudaCacheEnabledForTask)
-            lCudaCacheKeyPtr = MakeCudaCacheKey(pTask, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex, pAddressSpace, lVisibilityType, lSubscriptionInfo.length);
+            lCudaCacheKeyPtr = MakeCudaCacheKey(pTask, pSubtaskId, pSplitInfo, (uint)pAddressSpaceIndex, pAddressSpace, lVisibilityType);
 
         bool lTemporaryAddressSpaceData = ((pTask->IsWriteOnly(pAddressSpace) && pTask->GetCallbackUnit()->GetDataReductionCB()) || (pTask->IsReadWrite(pAddressSpace) && !pTask->HasDisjointReadWritesAcrossSubtasks(pAddressSpace)));
         
@@ -2828,7 +2828,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                 if(lTemporaryAddressSpaceData)
                     lSubtaskMemoryVector[pAddressSpaceIndex].isUncached = true;
                 else
-                    lPendingCacheInsertions.emplace_back(std::move(lCudaCacheKeyPtr), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr)));
+                    lPendingCacheInsertions.emplace_back(std::move(lCudaCacheKeyPtr), std::shared_ptr<pmCudaCacheValue>(new pmCudaCacheValue(lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr, lSubscriptionInfo.length)));
             }
         }
     });
@@ -2918,7 +2918,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                 pPreventCachePurgeMap[pSubtaskId].push_back(pPair.second);   // increase ref count to prevent purging
                 
             #ifdef DUMP_CUDA_CACHE_STATISTICS
-                RecordCudaCacheAllocation(pPair.first->allocationLength);
+                RecordCudaCacheAllocation(pPair.second->allocationLength);
             #endif
             });
         }

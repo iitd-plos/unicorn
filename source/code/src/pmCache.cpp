@@ -91,7 +91,7 @@ inline typename pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::
     EXCEPTION_ASSERT(lValue.unique());
     
     if(lValue.get())
-        mEvictor(pIter->first, lValue, false);
+        mEvictor(lValue);
     
     mContainer.erase(pIter->second);
 
@@ -103,19 +103,24 @@ inline bool pmCache<__key, __value, __hasher, __evictor, __evictionPolicy>::Purg
 {
     std::shared_ptr<__value> lValue;
 
-    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
 
-    if(mContainer.empty())
-        return false;
-    
-    mContainer.purge(__evictionPolicy, lValue, [&] (const __key& pKey) -> void
-                                               {
-                                                   mCacheHash.erase(pKey);
-                                                   mEvictor(pKey, lValue, false);
-                                               });
+        if(mContainer.empty())
+            return false;
+        
+        mContainer.purge(__evictionPolicy, lValue, [&] (const __key& pKey) -> void
+                                                   {
+                                                       mCacheHash.erase(pKey);
+                                                   });
+    }
+
     if(!lValue.get())
         return false;
     
+    mEvictor(lValue);
+
     return true;
 }
 

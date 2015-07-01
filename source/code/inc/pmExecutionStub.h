@@ -575,7 +575,7 @@ class pmStubCUDA : public pmStubGPU
         void* AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection);
         bool AllocateMemoryForDeviceCopy(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection);
     
-        std::unique_ptr<pmCudaCacheKey> MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType, size_t pAllocationLength);
+        std::unique_ptr<pmCudaCacheKey> MakeCudaCacheKey(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pAddressSpaceIndex, const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibilityType);
     
         ulong PrepareSubtasksForExecution(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo);
         bool InitializeCudaStream(std::shared_ptr<pmCudaStreamAutoPtr>& pSharedPtr);

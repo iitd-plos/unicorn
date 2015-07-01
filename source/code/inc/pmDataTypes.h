@@ -267,34 +267,30 @@ namespace pm
         const pmAddressSpace* addressSpace;
         pmSubscriptionVisibilityType visibility;
         pmSubscriptionFormat format;
-        size_t allocationLength;
 
         // Only one of these is meaningful
         pmSubscriptionInfo subscriptionInfo;    // Used for SUBSCRIPTION_CONTIGUOUS
         std::vector<pmScatteredSubscriptionInfo> scatteredSubscriptionVector;  // Used for SUBSCRIPTION_SCATTERED
         std::vector<pmSubscriptionInfo> subscriptionVector; // Used for SUBSCRIPTION_GENERAL
 
-        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const pmSubscriptionInfo& pSubscriptionInfo, size_t pAllocationLength)
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const pmSubscriptionInfo& pSubscriptionInfo)
         : addressSpace(pAddressSpace)
         , visibility(pVisibility)
         , format(SUBSCRIPTION_CONTIGUOUS)
-        , allocationLength(pAllocationLength)
         , subscriptionInfo(pSubscriptionInfo)
         {}
 
-        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const std::vector<pmScatteredSubscriptionInfo>& pScatteredSubscriptionVector, size_t pAllocationLength)
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const std::vector<pmScatteredSubscriptionInfo>& pScatteredSubscriptionVector)
         : addressSpace(pAddressSpace)
         , visibility(pVisibility)
         , format(SUBSCRIPTION_SCATTERED)
-        , allocationLength(pAllocationLength)
         , scatteredSubscriptionVector(pScatteredSubscriptionVector)
         {}
 
-        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const std::vector<pmSubscriptionInfo>& pSubscriptionVector, size_t pAllocationLength)
+        pmCudaCacheKey(const pmAddressSpace* pAddressSpace, pmSubscriptionVisibilityType pVisibility, const std::vector<pmSubscriptionInfo>& pSubscriptionVector)
         : addressSpace(pAddressSpace)
         , visibility(pVisibility)
         , format(SUBSCRIPTION_GENERAL)
-        , allocationLength(pAllocationLength)
         , subscriptionVector(pSubscriptionVector)
         {}
         
@@ -302,7 +298,6 @@ namespace pm
         : addressSpace(pKey.addressSpace)
         , visibility(pKey.visibility)
         , format(pKey.format)
-        , allocationLength(pKey.allocationLength)
         , subscriptionInfo(pKey.subscriptionInfo)
         , scatteredSubscriptionVector(pKey.scatteredSubscriptionVector)
         , subscriptionVector(pKey.subscriptionVector)
@@ -313,7 +308,7 @@ namespace pm
 
         bool operator== (const pmCudaCacheKey& pKey) const
         {
-            if(addressSpace != pKey.addressSpace || visibility != pKey.visibility || format != pKey.format || allocationLength != pKey.allocationLength)
+            if(addressSpace != pKey.addressSpace || visibility != pKey.visibility || format != pKey.format)
                 return false;
             
             if(format == SUBSCRIPTION_CONTIGUOUS && subscriptionInfo == pKey.subscriptionInfo)
@@ -364,9 +359,11 @@ namespace pm
     struct pmCudaCacheValue
     {
         void* cudaPtr;
+        size_t allocationLength;
         
-        pmCudaCacheValue(void* pCudaPtr)
+        pmCudaCacheValue(void* pCudaPtr, size_t pAllocationLength)
         : cudaPtr(pCudaPtr)
+        , allocationLength(pAllocationLength)
         {}
     };
     
@@ -376,7 +373,7 @@ namespace pm
         : mStub(pStub)
         {}
 
-        void operator() (const pmCudaCacheKey& pKey, const std::shared_ptr<pmCudaCacheValue>& pValue, bool pForceEviction);
+        void operator() (const std::shared_ptr<pmCudaCacheValue>& pValue);
         
     private:
         pmStubCUDA* mStub;
