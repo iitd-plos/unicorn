@@ -2600,7 +2600,7 @@ void pmStubCUDA::FreeResources()
 {
 #ifdef DUMP_CUDA_CACHE_STATISTICS
     std::stringstream lStream;
-    lStream << "GPU " << mDeviceIndex << " Cache Statistics: Allocations = " << mCudaCacheAllocationLength << " bytes (" << mCudaCacheAllocationCount << " events)" << "; Evictions = " << mCudaCacheEvictionLength << " bytes (" << mCudaCacheEvictionCount << "events)";
+    lStream << "GPU " << mDeviceIndex << " Cache Statistics: Allocations = " << mCudaCacheAllocationLength << " bytes (" << mCudaCacheAllocationCount << " events)" << "; Evictions = " << mCudaCacheEvictionLength << " bytes (" << mCudaCacheEvictionCount << " events)";
     
     pmLogger::GetLogger()->LogDeferred(pmLogger::DEBUG_INTERNAL, pmLogger::INFORMATION, lStream.str().c_str(), true);
 #endif
