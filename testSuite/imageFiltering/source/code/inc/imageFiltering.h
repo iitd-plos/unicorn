@@ -8,7 +8,16 @@ namespace imageFiltering
 #define IMAGE_SIZE ((size_t)gImageWidth * gImageHeight * PIXEL_COUNT)
     
 #define LOAD_IMAGE_INTO_ADDRESS_SPACE
-#define USE_ELLIPTICAL_FILTER
+//#define USE_ELLIPTICAL_FILTER
+    
+#ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
+#define GENERATE_RANDOM_IMAGE_IN_MEMORY
+#endif
+    
+#ifdef GENERATE_RANDOM_IMAGE_IN_MEMORY
+#define DEFAULT_IMAGE_WIDTH 32768
+#define DEFAULT_IMAGE_HEIGHT 32768
+#endif
     
 #define TILE_DIM 2048
 #define GPU_BLOCK_DIM 32

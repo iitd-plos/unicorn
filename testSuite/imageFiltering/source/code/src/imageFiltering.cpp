@@ -21,6 +21,7 @@ char gFilter[MAX_FILTER_DIM][MAX_FILTER_DIM];
     
 size_t gImageWidth, gImageHeight, gImageOffset, gImageBytesPerLine;
 
+#ifndef GENERATE_RANDOM_IMAGE_IN_MEMORY
 void readImageMetaData(char* pImagePath)
 {
 	FILE* fp = fopen(pImagePath, "rb");
@@ -99,6 +100,7 @@ void readImage(char* pImagePath, void* pImageData, bool pInverted)
     
 	fclose(fp);
 }
+#endif
     
 void serialImageFilter(void* pImageData, size_t pFilterRadius, char* pSerialOutput, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM])
 {
@@ -400,6 +402,22 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
     
 #ifdef DO_MULTIPLE_CONVOLUTIONS
 
+#ifdef GENERATE_RANDOM_IMAGE_IN_MEMORY
+    
+#define READ_NON_COMMON_ARGS \
+    int lFilterRadius = DEFAULT_FILTER_RADIUS; \
+    int lFilterRadiusStep = DEFAULT_FILTER_RADIUS_STEP; \
+    gImageWidth = DEFAULT_IMAGE_WIDTH; \
+    gImageHeight = DEFAULT_IMAGE_HEIGHT; \
+    int lIterations = DEFAULT_ITERATION_COUNT; \
+    FETCH_INT_ARG(lFilterRadius, pCommonArgs, argc, argv); \
+    FETCH_INT_ARG(lFilterRadiusStep, pCommonArgs + 1, argc, argv); \
+    FETCH_INT_ARG(gImageWidth, pCommonArgs + 2, argc, argv); \
+    FETCH_INT_ARG(gImageHeight, pCommonArgs + 3, argc, argv); \
+    FETCH_INT_ARG(lIterations, pCommonArgs + 4, argc, argv);
+
+#else
+    
 #define READ_NON_COMMON_ARGS \
     int lFilterRadius = DEFAULT_FILTER_RADIUS; \
     int lFilterRadiusStep = DEFAULT_FILTER_RADIUS_STEP; \
@@ -410,6 +428,20 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
     FETCH_STR_ARG(lImagePath, pCommonArgs + 2, argc, argv); \
     FETCH_INT_ARG(lIterations, pCommonArgs + 3, argc, argv);
     
+#endif
+    
+#else
+
+#ifdef GENERATE_RANDOM_IMAGE_IN_MEMORY
+    
+#define READ_NON_COMMON_ARGS \
+    int lFilterRadius = DEFAULT_FILTER_RADIUS; \
+    gImageWidth = DEFAULT_IMAGE_WIDTH; \
+    gImageHeight = DEFAULT_IMAGE_HEIGHT; \
+    FETCH_INT_ARG(lFilterRadius, pCommonArgs, argc, argv); \
+    FETCH_INT_ARG(gImageWidth, pCommonArgs + 1, argc, argv); \
+    FETCH_INT_ARG(gImageHeight, pCommonArgs + 2, argc, argv); \
+
 #else
     
 #define READ_NON_COMMON_ARGS \
@@ -417,6 +449,8 @@ pmStatus imageFilter_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubta
 	char* lImagePath = DEFAULT_IMAGE_PATH; \
     FETCH_INT_ARG(lFilterRadius, pCommonArgs, argc, argv); \
 	FETCH_STR_ARG(lImagePath, pCommonArgs + 1, argc, argv);
+    
+#endif
 
 #endif
 
@@ -426,7 +460,12 @@ double DoSerialProcess(int argc, char** argv, int pCommonArgs)
 	READ_NON_COMMON_ARGS
 
     void* lImageData = malloc(IMAGE_SIZE);
+
+#ifdef GENERATE_RANDOM_IMAGE_IN_MEMORY
+    memcpy(lImageData, gSampleInput, IMAGE_SIZE);
+#else
     readImage(lImagePath, lImageData, true);
+#endif
     
 	double lStartTime = getCurrentTimeInSecs();
 
@@ -458,7 +497,12 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 	READ_NON_COMMON_ARGS
 
     void* lImageData = malloc(IMAGE_SIZE);
+
+#ifdef GENERATE_RANDOM_IMAGE_IN_MEMORY
+    memcpy(lImageData, gSampleInput, IMAGE_SIZE);
+#else
     readImage(lImagePath, lImageData, true);
+#endif
 
 	double lStartTime = getCurrentTimeInSecs();
 
@@ -502,8 +546,13 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
 
+#ifdef GENERATE_RANDOM_IMAGE_IN_MEMORY
+    const char* lImagePath = "";
+    memcpy(lRawInputPtr, gSampleInput, IMAGE_SIZE);
+#else
     readImage(lImagePath, lRawInputPtr, true);
-    
+#endif
+
     DistributeMemory(lInputMemHandle, BLOCK_DIST_2D_RANDOM, TILE_DIM, (unsigned int)gImageWidth, (unsigned int)gImageHeight, PIXEL_COUNT, false);
 #else
     if(pmMapFile(lImagePath) != pmSuccess)
@@ -578,19 +627,30 @@ int DoInit(int argc, char** argv, int pCommonArgs)
     if(lIterations > MAX_ITERATIONS)
         exit(1);
 #endif
-    
-    readImageMetaData(lImagePath);
 
-	gSerialOutput = malloc(IMAGE_SIZE);
-	gParallelOutput = malloc(IMAGE_SIZE);
+    size_t lImageSize = IMAGE_SIZE;
+
+    gSerialOutput = malloc(lImageSize);
+	gParallelOutput = malloc(lImageSize);
 
     srand((unsigned int)time(NULL));
+
+#ifdef GENERATE_RANDOM_IMAGE_IN_MEMORY
+    gSampleInput = malloc(lImageSize);
+    gImageBytesPerLine = gImageWidth * PIXEL_COUNT;
+    gImageOffset = 0;
+
+	for(size_t i = 0; i < lImageSize; ++i)
+		((char*)gSampleInput)[i] = rand();
+#else
+    readImageMetaData(lImagePath);
 
     if(strlen(lImagePath) >= MAX_IMAGE_PATH_LENGTH)
     {
         std::cout << "Image path too long" << std::endl;
         exit(1);
     }
+#endif
     
 #ifdef DO_MULTIPLE_CONVOLUTIONS
     for(uint k = 0; k < lIterations; ++k)
@@ -626,6 +686,10 @@ int DoInit(int argc, char** argv, int pCommonArgs)
 // Returns 0 on success; non-zero on failure
 int DoDestroy()
 {
+#ifdef GENERATE_RANDOM_IMAGE_IN_MEMORY
+    free(gSampleInput);
+#endif
+
 	free(gSerialOutput);
 	free(gParallelOutput);
 
