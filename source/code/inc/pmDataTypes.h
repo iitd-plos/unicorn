@@ -509,11 +509,11 @@ namespace pm
     class pmEventTimelineAutoPtr
     {
         public:
-            pmEventTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pSubtaskId, const std::string& pEventNameSuffix);
+            pmEventTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pSubtaskId, const pmSplitData& pSplitData, uint pDeviceId, const std::string& pEventNameSuffix);
             ~pmEventTimelineAutoPtr();
         
         private:
-            std::string GetEventName(ulong pSubtaskId, const std::string& pEventNameSuffix);
+            std::string GetEventName(ulong pSubtaskId, const pmSplitData& pSplitData, uint pDeviceId, const std::string& pEventNameSuffix);
 
             pmTask* mTask;
             pmEventTimeline* mEventTimeline;

@@ -241,10 +241,10 @@ std::string pmSubtaskRangeExecutionTimelineAutoPtr::GetCancelledEventName(ulong 
     
 
 /* class pmEventTimelineAutoPtr */
-pmEventTimelineAutoPtr::pmEventTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pSubtaskId, const std::string& pEventNameSuffix)
+pmEventTimelineAutoPtr::pmEventTimelineAutoPtr(pmTask* pTask, pmEventTimeline* pEventTimeline, ulong pSubtaskId, const pmSplitData& pSplitData, uint pDeviceId, const std::string& pEventNameSuffix)
     : mTask(pTask)
     , mEventTimeline(pEventTimeline)
-    , mEventName(GetEventName(pSubtaskId, pEventNameSuffix))
+    , mEventName(GetEventName(pSubtaskId, pSplitData, pDeviceId, pEventNameSuffix))
 {
     mEventTimeline->RecordEvent(mTask, mEventName, true);
 }
@@ -254,10 +254,14 @@ pmEventTimelineAutoPtr::~pmEventTimelineAutoPtr()
     mEventTimeline->RecordEvent(mTask, mEventName, false);
 }
 
-std::string pmEventTimelineAutoPtr::GetEventName(ulong pSubtaskId, const std::string& pEventNameSuffix)
+std::string pmEventTimelineAutoPtr::GetEventName(ulong pSubtaskId, const pmSplitData& pSplitData, uint pDeviceId, const std::string& pEventNameSuffix)
 {
     std::stringstream lEventName;
-    lEventName << "Task [" << ((uint)(*(mTask->GetOriginatingHost()))) << ", " << (mTask->GetSequenceNumber()) << "] Subtask " << mTask->GetPhysicalSubtaskId(pSubtaskId) << " Event " << pEventNameSuffix;
+    
+    if(pSplitData.valid)
+        lEventName << "Task [" << ((uint)(*(mTask->GetOriginatingHost()))) << ", " << (mTask->GetSequenceNumber()) << "] Subtask " << mTask->GetPhysicalSubtaskId(pSubtaskId) << " Sp" << pSplitData.splitId << " D" << pDeviceId << " Event " << pEventNameSuffix;
+    else
+        lEventName << "Task [" << ((uint)(*(mTask->GetOriginatingHost()))) << ", " << (mTask->GetSequenceNumber()) << "] Subtask " << mTask->GetPhysicalSubtaskId(pSubtaskId) << " D" << pDeviceId << " Event " << pEventNameSuffix;
     
     return lEventName.str();
 }

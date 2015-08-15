@@ -2412,6 +2412,7 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetw
     
     pmTask* lTask = NULL;
     ulong lSubtaskId = std::numeric_limits<ulong>::max();
+    std::unique_ptr<pmSplitData> lSplitDataPtr;
 
 #if defined(ENABLE_TASK_PROFILING) || defined(DUMP_EVENT_TIMELINE)
     // Auto lock/unlock scope
@@ -2420,6 +2421,9 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetw
 
         lTask = mCurrentSubtaskRangeStats->task;
         lSubtaskId = mCurrentSubtaskRangeStats->currentSubtaskId;
+#ifdef SUPPORT_SPLIT_SUBTASKS
+        lSplitDataPtr.reset(new pmSplitData(mCurrentSubtaskRangeStats->splitData));
+#endif
     }
 #endif
 
@@ -2428,7 +2432,7 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetw
 #endif
     
 #ifdef DUMP_EVENT_TIMELINE
-    pmEventTimelineAutoPtr lEventTimelineAutoPtr(lTask, mEventTimelineAutoPtr.get(), lSubtaskId, "WaitOnNetwork");
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(lTask, mEventTimelineAutoPtr.get(), lSubtaskId, *lSplitDataPtr.get(), GetProcessingElement()->GetGlobalDeviceIndex(), "WaitOnNetwork");
 #endif
 
     pmCommandPtr lAccumulatorCommand = pmAccumulatorCommand::CreateSharedPtr(pNetworkCommands);
@@ -2544,7 +2548,7 @@ void pmStubCPU::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, ul
     const pmSubtaskInfo& lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo);
     
 #ifdef DUMP_EVENT_TIMELINE
-    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, "SubtaskExecution");
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, pSplitInfo, GetProcessingElement()->GetGlobalDeviceIndex(), "SubtaskExecution");
 #endif
 
 	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, pTask->GetTaskInfo(), lSubtaskInfo);
@@ -3060,7 +3064,7 @@ void pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, u
     }
 
 #ifdef DUMP_EVENT_TIMELINE
-    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, "SubtaskExecution");
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, pSplitInfo, GetProcessingElement()->GetGlobalDeviceIndex(), "SubtaskExecution");
 #endif
 
 	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, &lHostToDeviceCommands, &lDeviceToHostCommands, mCudaStreams[pSubtaskId].get());
@@ -3407,7 +3411,7 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
 #endif
 
 #ifdef DUMP_EVENT_TIMELINE
-    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, "CopyToPinnedMemory");
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, pSplitInfo, GetProcessingElement()->GetGlobalDeviceIndex(), "CopyToPinnedMemory");
 #endif
 
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
@@ -3504,7 +3508,7 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
 #endif
 
 #ifdef DUMP_EVENT_TIMELINE
-    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, "CopyFromPinnedMemory");
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, pSplitInfo, GetProcessingElement()->GetGlobalDeviceIndex(), "CopyFromPinnedMemory");
 #endif
 
     pmSubscriptionManager& lSubscriptionManager = pTask->GetSubscriptionManager();
