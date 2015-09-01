@@ -15,6 +15,7 @@ typedef struct complex
 
 typedef enum memDistributionType
 {
+    LINEAR_DIST,
     BLOCK_DIST_1D_ROW,
     BLOCK_DIST_1D_COL,
     BLOCK_DIST_2D,

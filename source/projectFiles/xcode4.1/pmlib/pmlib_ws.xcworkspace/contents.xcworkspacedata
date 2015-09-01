@@ -60,6 +60,9 @@
          location = "group:ImageFiltering/ImageFiltering.xcodeproj">
       </FileRef>
       <FileRef
+         location = "group:SparseSolver/SparseSolver.xcodeproj">
+      </FileRef>
+      <FileRef
          location = "group:LUDecomposition/LUDecomposition.xcodeproj">
       </FileRef>
    </Group>

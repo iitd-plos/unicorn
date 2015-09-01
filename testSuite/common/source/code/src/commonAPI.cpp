@@ -281,6 +281,31 @@ bool memoryDistributionTask_deviceSelectionCallback(pmTaskInfo pTaskInfo, pmDevi
     return (pDeviceInfo.deviceIdOnHost == 0);
 }
 
+void DoLinearDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
+{
+    unsigned int lElemsPerMachine = pMatrixWidth / pMachinesCount;
+    unsigned int lLeftoverElems = pMatrixWidth - (lElemsPerMachine * pMachinesCount);
+    size_t lLengthPerMachine = lElemsPerMachine * pElemSize;
+    
+    unsigned int lMachineIndex = pMachineId;
+    for(uint i = 0; i < pMachinesCount; ++i)
+    {
+        if(pMachinesList[i] == pMachineId)
+        {
+            lMachineIndex = i;
+            break;
+        }
+    }
+    
+    if(pMachinesList[lMachineIndex] != pMachineId)
+        exit(1);
+    
+    size_t lOffset = lLengthPerMachine * lMachineIndex + pElemSize * std::min(lLeftoverElems, lMachineIndex);
+    size_t lTotalLength = lLengthPerMachine + ((lLeftoverElems > lMachineIndex) ? 1 : 0);
+    
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmSubscriptionInfo(lOffset, lTotalLength));
+}
+
 void Do1DBlockRowDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
 {
     unsigned int lBlockRows = pMatrixHeight / pBlockDim;
@@ -399,6 +424,10 @@ pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, p
 
     switch(lTaskConf->distType)
     {
+        case LINEAR_DIST:
+            DoLinearDistribution(pTaskInfo, pDeviceInfo, pSubtaskInfo, lTaskConf->blockDim, lTaskConf->matrixWidth, lTaskConf->matrixHeight, lTaskConf->elemSize, lMachinesList, (unsigned int)pSubtaskInfo.subtaskId, (unsigned int)pTaskInfo.subtaskCount);
+            break;
+
         case BLOCK_DIST_1D_ROW:
             Do1DBlockRowDistribution(pTaskInfo, pDeviceInfo, pSubtaskInfo, lTaskConf->blockDim, lTaskConf->matrixWidth, lTaskConf->matrixHeight, lTaskConf->elemSize, lMachinesList, (unsigned int)pSubtaskInfo.subtaskId, (unsigned int)pTaskInfo.subtaskCount);
             break;
@@ -422,7 +451,9 @@ pmStatus memoryDistributionTask_dataDistributionCallback(pmTaskInfo pTaskInfo, p
     return pmSuccess;
 }
 
-// pRandomize is ignored when pDistType is BLOCK_DIST_2D_RANDOM
+/* pRandomize is ignored when pDistType is BLOCK_DIST_2D_RANDOM
+ * pBlockDim and pMatrixHeight are ignored when pDistType is LINEAR_DIST
+ */
 void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, bool pRandomize)
 {
     using namespace pm;
