@@ -23,7 +23,9 @@ OBJECTS= $(SAMPLE_NAME).o
 
 CUDA_OBJECTS = $(SAMPLE_NAME)CUDA.o
 
-LIBRARIES = -lcusparse
+LIBRARIES = -lcusparse -L/opt/intel/mkl/lib -lmkl_rt
+
+INCLUDES += -I/opt/intel/mkl/include
 
 include ../../../common/build/linux/Makefile.common
 

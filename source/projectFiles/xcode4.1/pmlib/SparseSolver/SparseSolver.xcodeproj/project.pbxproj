@@ -9,7 +9,7 @@
 /* Begin PBXBuildFile section */
 		0E4016D316A9C36F0099CF5B /* pmlib.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E4016D216A9C36F0099CF5B /* pmlib.dylib */; };
 		0EBCECEA16772C5700479DB9 /* commonAPI.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EBCECE916772C5700479DB9 /* commonAPI.cpp */; };
-		2BA74842182CCE9000A1EB30 /* Accelerate.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2BA74841182CCE9000A1EB30 /* Accelerate.framework */; };
+		2BA3E1621B9AFE1E00E866D0 /* libmkl_rt.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 2BA3E1611B9AFE1C00E866D0 /* libmkl_rt.dylib */; };
 		2BD15E1317D64DB400B98367 /* sparseSolver.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BD15E1117D64DB400B98367 /* sparseSolver.cpp */; };
 /* End PBXBuildFile section */
 
@@ -30,7 +30,8 @@
 		0E8178D2166F894F0092C7D4 /* SparseSolver */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = SparseSolver; sourceTree = BUILT_PRODUCTS_DIR; };
 		0EBCECE916772C5700479DB9 /* commonAPI.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = commonAPI.cpp; path = ../../../../../testSuite/common/source/code/src/commonAPI.cpp; sourceTree = "<group>"; };
 		2B3D2C8817D618B1003F1849 /* libcblas.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libcblas.dylib; path = usr/lib/libcblas.dylib; sourceTree = SDKROOT; };
-		2BA74841182CCE9000A1EB30 /* Accelerate.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Accelerate.framework; path = System/Library/Frameworks/Accelerate.framework; sourceTree = SDKROOT; };
+		2BA3E1611B9AFE1C00E866D0 /* libmkl_rt.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmkl_rt.dylib; path = ../../../../../../../../../../opt/intel/compilers_and_libraries_2016.0.083/mac/mkl/lib/libmkl_rt.dylib; sourceTree = "<group>"; };
+		2BAEAA4B1B98B64800CA3E54 /* libmkl_intel.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmkl_intel.dylib; path = ../../../../../../../../../../opt/intel/compilers_and_libraries_2016.0.083/mac/mkl/lib/libmkl_intel.dylib; sourceTree = "<group>"; };
 		2BD15E0F17D64DB400B98367 /* sparseSolver.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = sparseSolver.h; sourceTree = "<group>"; };
 		2BD15E1117D64DB400B98367 /* sparseSolver.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = sparseSolver.cpp; sourceTree = "<group>"; };
 		2BD15E1217D64DB400B98367 /* sparseSolverCUDA.cu */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; path = sparseSolverCUDA.cu; sourceTree = "<group>"; };
@@ -41,7 +42,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				2BA74842182CCE9000A1EB30 /* Accelerate.framework in Frameworks */,
+				2BA3E1621B9AFE1E00E866D0 /* libmkl_rt.dylib in Frameworks */,
 				0E4016D316A9C36F0099CF5B /* pmlib.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -52,7 +53,8 @@
 		0E8178C7166F894F0092C7D4 = {
 			isa = PBXGroup;
 			children = (
-				2BA74841182CCE9000A1EB30 /* Accelerate.framework */,
+				2BA3E1611B9AFE1C00E866D0 /* libmkl_rt.dylib */,
+				2BAEAA4B1B98B64800CA3E54 /* libmkl_intel.dylib */,
 				2B3D2C8817D618B1003F1849 /* libcblas.dylib */,
 				0E4016D216A9C36F0099CF5B /* pmlib.dylib */,
 				0EBCECE916772C5700479DB9 /* commonAPI.cpp */,
@@ -218,8 +220,12 @@
 				HEADER_SEARCH_PATHS = (
 					$SRCROOT/../../../../../source/code/inc/,
 					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
+					/opt/intel/mkl/include,
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = (
+					/opt/intel/mkl/lib/,
+					/opt/intel/compilers_and_libraries_2016.0.083/mac/mkl/lib,
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
 			name = Debug;
@@ -235,8 +241,12 @@
 				HEADER_SEARCH_PATHS = (
 					$SRCROOT/../../../../../source/code/inc/,
 					$SRCROOT/../../../../../testsuite/common/source/code/inc/,
+					/opt/intel/mkl/include,
 				);
-				LIBRARY_SEARCH_PATHS = "";
+				LIBRARY_SEARCH_PATHS = (
+					/opt/intel/mkl/lib/,
+					/opt/intel/compilers_and_libraries_2016.0.083/mac/mkl/lib,
+				);
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				"USER_HEADER_SEARCH_PATHS[arch=*]" = "";
 			};
