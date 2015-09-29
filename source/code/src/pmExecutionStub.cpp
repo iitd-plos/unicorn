@@ -1035,11 +1035,6 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
             // Currently subtask splitter does not execute multi-assign ranges
             if(pTask->GetSubtaskSplitter().IsSplitting(pRequestingDevice->GetType()))
                 lShouldMultiAssign = false;
-
-            // Do not multi-assign to GPU in case the victim stub is splitting and more than half the splits have been executed.
-            // This is done because subtasks multi-assigned to GPUs can not be cancelled and in this case there is a higher probability of victim stub completing them faster
-            if(pRequestingDevice->GetType() == GPU_CUDA && pTask->GetSubtaskSplitter().IsSplitting(GetType()) && mCurrentSubtaskRangeStats->splitData.valid && pTask->GetSubtaskSplitter().GetProgress(mCurrentSubtaskRangeStats->startSubtaskId, lSecondaryAllotteeMapStub) > 0.5)
-                lShouldMultiAssign = false;
         #endif
 
             if(lShouldMultiAssign)
@@ -1051,6 +1046,20 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
                 double lExpectedRemoteTimeToExecute = (lMultiAssignSubtaskCount/pRequestingDeviceExecutionRate);
                 double lExpectedLocalTimeToFinish = (lLocalRateZero ? 0.0 : ((lMultiAssignSubtaskCount/lLocalRate) - lElapsedTime));
             
+            #ifdef SUPPORT_SPLIT_SUBTASKS
+                if(lLocalRateZero)
+                {
+                    // Compute expected local time to finish based upon the number of splits executed
+                    if(pRequestingDevice->GetType() == GPU_CUDA && pTask->GetSubtaskSplitter().IsSplitting(GetType()) && mCurrentSubtaskRangeStats->splitData.valid)
+                    {
+                        float lProgress = pTask->GetSubtaskSplitter().GetProgress(mCurrentSubtaskRangeStats->startSubtaskId, lSecondaryAllotteeMapStub);
+                        
+                        if(lProgress > 0.0)
+                            lExpectedLocalTimeToFinish = ((1 - lProgress) / lProgress) * lElapsedTime;
+                    }
+                }
+            #endif
+
                 double lFactor = MA_WAIT_FACTOR;
                 
                 // Be more lenient to multi-assign to different device type on the same node
