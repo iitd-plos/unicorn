@@ -124,6 +124,8 @@ public:
     void FreezeDummyEvents();
     void PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pStub, ulong pSubtaskId);
 
+    float GetProgress(ulong pSubtaskId);
+
 private:
     void AddDummyEventToRequiredStubs();
     void AddDummyEventToStub(pmExecutionStub* pStub);
@@ -164,6 +166,8 @@ public:
     void MakeDeviceGroups(const std::vector<const pmProcessingElement*>& pDevices, std::vector<std::vector<const pmProcessingElement*>>& pDeviceGroups, std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>*>& pQueryMap, ulong& pUnsplittedDevices);
 
     std::vector<std::pair<std::vector<const pmProcessingElement*>, std::pair<ulong, ulong>>> MakeInitialSchedulingAllotments(pmLocalTask* pLocalTask);
+    
+    float GetProgress(ulong pSubtaskId, pmExecutionStub* pStub);
 
 private:
     pmTask* mTask;

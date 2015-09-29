@@ -1035,6 +1035,11 @@ void pmExecutionStub::StealSubtasks(pmTask* pTask, const pmProcessingElement* pR
             // Currently subtask splitter does not execute multi-assign ranges
             if(pTask->GetSubtaskSplitter().IsSplitting(pRequestingDevice->GetType()))
                 lShouldMultiAssign = false;
+
+            // Do not multi-assign to GPU in case the victim stub is splitting and more than half the splits have been executed.
+            // This is done because subtasks multi-assigned to GPUs can not be cancelled and in this case there is a higher probability of victim stub completing them faster
+            if(pRequestingDevice->GetType() == GPU_CUDA && pTask->GetSubtaskSplitter().IsSplitting(GetType()) && mCurrentSubtaskRangeStats->splitData.valid && pTask->GetSubtaskSplitter().GetProgress(mCurrentSubtaskRangeStats->startSubtaskId, lSecondaryAllotteeMapStub) > 0.5)
+                lShouldMultiAssign = false;
         #endif
 
             if(lShouldMultiAssign)

@@ -173,6 +173,11 @@ void pmSubtaskSplitter::PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStu
 {
     mSplitGroupVector[mSplitGroupMap[pStub]].PrefetchSubscriptionsForUnsplittedSubtask(pStub, pSubtaskId);
 }
+    
+float pmSubtaskSplitter::GetProgress(ulong pSubtaskId, pmExecutionStub* pStub)
+{
+    return mSplitGroupVector[mSplitGroupMap[pStub]].GetProgress(pSubtaskId);
+}
 
 void pmSubtaskSplitter::MakeDeviceGroups(const std::vector<const pmProcessingElement*>& pDevices, std::vector<std::vector<const pmProcessingElement*>>& pDeviceGroups, std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>*>& pQueryMap, ulong& pUnsplittedDevices)
 {
@@ -569,6 +574,19 @@ void pmSplitGroup::PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pS
         
         (*lIter)->prefetched = true;
     }
+}
+
+float pmSplitGroup::GetProgress(ulong pSubtaskId)
+{
+    FINALIZE_RESOURCE_PTR(dSplitRecordListLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSplitRecordListLock, Lock(), Unlock());
+    
+    const auto lMapIter = mSplitRecordMap.find(pSubtaskId);
+    
+    EXCEPTION_ASSERT(lMapIter != mSplitRecordMap.end());
+
+    const std::list<std::shared_ptr<splitRecord>>::iterator lIter = lMapIter->second;
+    
+    return (*lIter)->pendingCompletions / (*lIter)->splitCount;
 }
 
 
