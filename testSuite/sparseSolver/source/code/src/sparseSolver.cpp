@@ -135,7 +135,10 @@ pmStatus sparseMatrixMultiplyDataDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX1_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo1);
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_ROW_INDICES1_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo2);
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_COL_INDICES1_MEM_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo2);
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_NNZ1_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo3);
+
+        // Only required for split subtasks
+        if(pDeviceInfo.deviceType != pm::GPU_CUDA)
+            pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MEM_NNZ1_INDEX, READ_SUBSCRIPTION, lSubscriptionInfo3);
 
         // Subscribe to entire lBlockCol of the second matrix
         pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, INPUT_MATRIX2_MEM_INDEX, READ_SUBSCRIPTION, pmScatteredSubscriptionInfo((lBlockCol * lTaskConf->blockDim) * sizeof(MATRIX_DATA_TYPE), lTaskConf->blockDim * sizeof(MATRIX_DATA_TYPE), lTaskConf->matrixDim * sizeof(MATRIX_DATA_TYPE), lTaskConf->matrixDim));

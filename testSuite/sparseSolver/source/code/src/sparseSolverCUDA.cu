@@ -191,7 +191,7 @@ pmStatus sparseMatrixMultiply_cudaLaunchFunc(pmTaskInfo pTaskInfo, pmDeviceInfo 
     {
         INDICES_TYPE* lRowIndices1CudaPtr = (INDICES_TYPE*)(pSubtaskInfo.memInfo[INPUT_ROW_INDICES1_MEM_INDEX].ptr);
         INDICES_TYPE* lColIndices1CudaPtr = (INDICES_TYPE*)(pSubtaskInfo.memInfo[INPUT_COL_INDICES1_MEM_INDEX].ptr);
-        COUNT_TYPE* lNnz1CudaPtr = (COUNT_TYPE*)(pSubtaskInfo.memInfo[INPUT_MEM_NNZ1_INDEX].ptr);
+//        COUNT_TYPE* lNnz1CudaPtr = (COUNT_TYPE*)(pSubtaskInfo.memInfo[INPUT_MEM_NNZ1_INDEX].ptr);
 
         MATRIX_DATA_TYPE* lMatrix1CudaPtr = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX1_MEM_INDEX].ptr);
         MATRIX_DATA_TYPE* lMatrix2CudaPtr = (MATRIX_DATA_TYPE*)(pSubtaskInfo.memInfo[INPUT_MATRIX2_MEM_INDEX].ptr);

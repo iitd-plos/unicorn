@@ -486,8 +486,23 @@ void DistributeMemory(pmMemHandle pMemHandle, memDistributionType pDistType, uns
     unsigned int* lMachinesList = (unsigned int*)((char*)(&lTaskConf[0]) + sizeof(distributeMemoryTaskConf));
     if(pDistType == BLOCK_DIST_2D_RANDOM)
     {
+        uint lAssignmentsPerMachine = lTaskConfDynamicEntries / lMachines;
+        uint lLeftoverAssignments = lTaskConfDynamicEntries - lMachines * lAssignmentsPerMachine;
+
+        uint lCurrentIndex = 0;
+        
+        for(uint i = 0; i < lMachines; ++i)
+        {
+            uint lMachineAssignments = lAssignmentsPerMachine + ((i < lLeftoverAssignments) ? 1 : 0);
+            
+            for(uint j = lCurrentIndex; j < (lCurrentIndex + lMachineAssignments); ++j)
+                lMachinesList[j] = i;
+            
+            lCurrentIndex += lMachineAssignments;
+        }
+
         std::srand((unsigned int)time(NULL));
-        std::generate_n(lMachinesList, lTaskConfDynamicEntries, [&] () {return (std::rand() % lMachines);});
+        std::random_shuffle(lMachinesList, lMachinesList + lTaskConfDynamicEntries);
     }
     else
     {
