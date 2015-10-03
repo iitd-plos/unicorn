@@ -791,6 +791,14 @@ pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle,
     SAFE_EXECUTE_ON_CONTROLLER(pmReduceFloats_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
 }
 
+pmStatus pmReduceDoubles(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
+{
+    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
+    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
+
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceDoubles_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
+}
+
 void* pmGetMappedFile(const char* pPath)
 {
 	try

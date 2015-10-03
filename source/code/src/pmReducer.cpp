@@ -337,5 +337,10 @@ void pmReducer::ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplit
     ReduceSubtasks<float>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
 }
 
+void pmReducer::ReduceDoubles(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+{
+    ReduceSubtasks<double>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
+}
+
 }
 

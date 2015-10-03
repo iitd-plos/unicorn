@@ -46,6 +46,8 @@ namespace pm
 
     pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType);
 
+    pmStatus pmReduceDoubles(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType);
+
     const size_t MAX_FILE_SIZE_LEN = 2048;
 
     /** This function returns the starting address of the file specified by pPath and memory mapped by the call pmMapFile.

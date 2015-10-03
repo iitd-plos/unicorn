@@ -448,6 +448,14 @@ void pmController::pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandl
     (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceFloats(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
 }
 
+void pmController::pmReduceDoubles_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+{
+    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
+        PMTHROW(pmFatalErrorException());
+
+    (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceDoubles(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
+}
+
 void pmController::MapFile_Public(const char* pPath)
 {
     pmUtility::MapFileOnAllMachines(pPath);
