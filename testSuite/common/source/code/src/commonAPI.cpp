@@ -300,7 +300,7 @@ void DoLinearDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubt
     if(pMachinesList[lMachineIndex] != pMachineId)
         exit(1);
     
-    size_t lOffset = lLengthPerMachine * lMachineIndex + pElemSize * std::min(lLeftoverElems, lMachineIndex);
+    size_t lOffset = lLengthPerMachine * lMachineIndex + (size_t)pElemSize * std::min(lLeftoverElems, lMachineIndex);
     size_t lTotalLength = lLengthPerMachine + ((lLeftoverElems > lMachineIndex) ? 1 : 0);
     
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmSubscriptionInfo(lOffset, lTotalLength));
@@ -327,8 +327,8 @@ void Do1DBlockRowDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pm
     if(pMachinesList[lMachineIndex] != pMachineId)
         exit(1);
     
-    size_t lFirstRowOffset = lLengthPerMachine * lMachineIndex + pBlockDim * pMatrixWidth * pElemSize * std::min(lLeftoverBlockRows, lMachineIndex);
-    size_t lTotalLength = ((lLeftoverBlockRows > lMachineIndex) ? (lLengthPerMachine + pBlockDim * pMatrixWidth * pElemSize) : lLengthPerMachine);
+    size_t lFirstRowOffset = lLengthPerMachine * lMachineIndex + (size_t)pBlockDim * pMatrixWidth * pElemSize * std::min(lLeftoverBlockRows, lMachineIndex);
+    size_t lTotalLength = ((lLeftoverBlockRows > lMachineIndex) ? (lLengthPerMachine + (size_t)pBlockDim * pMatrixWidth * pElemSize) : lLengthPerMachine);
 
     pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmSubscriptionInfo(lFirstRowOffset, lTotalLength));
 }
@@ -354,10 +354,10 @@ void Do1DBlockColDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pm
     if(pMachinesList[lMachineIndex] != pMachineId)
         exit(1);
 
-    size_t lFirstColOffset = lColLengthPerMachine * lMachineIndex + pBlockDim * pElemSize * std::min(lLeftoverBlockCols, lMachineIndex);
-    size_t lTotalColLength = ((lLeftoverBlockCols > lMachineIndex) ? (lColLengthPerMachine + pBlockDim * pElemSize) : lColLengthPerMachine);
+    size_t lFirstColOffset = lColLengthPerMachine * lMachineIndex + (size_t)pBlockDim * pElemSize * std::min(lLeftoverBlockCols, lMachineIndex);
+    size_t lTotalColLength = ((lLeftoverBlockCols > lMachineIndex) ? (lColLengthPerMachine + (size_t)pBlockDim * pElemSize) : lColLengthPerMachine);
     
-    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lFirstColOffset, lTotalColLength, pMatrixWidth * pElemSize, pMatrixHeight));
+    pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lFirstColOffset, lTotalColLength, (size_t)pMatrixWidth * pElemSize, pMatrixHeight));
 }
 
 void Do2DBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo pSubtaskInfo, unsigned int pBlockDim, unsigned int pMatrixWidth, unsigned int pMatrixHeight, unsigned int pElemSize, unsigned int* pMachinesList, unsigned int pMachineId, unsigned int pMachinesCount)
@@ -391,9 +391,9 @@ void Do2DBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSub
         unsigned int lBlockRow = lBlockId / lBlockCols;
         unsigned int lBlockCol = lBlockId % lBlockCols;
         
-        size_t lBlockOffset = (lBlockRow * pMatrixWidth + lBlockCol) * pBlockDim * pElemSize;
+        size_t lBlockOffset = ((size_t)lBlockRow * pMatrixWidth + lBlockCol) * (size_t)pBlockDim * pElemSize;
 
-        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lBlockRowLength, pMatrixWidth * pElemSize, pBlockDim));
+        pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lBlockRowLength, (size_t)pMatrixWidth * pElemSize, pBlockDim));
     }
 }
 
@@ -409,9 +409,9 @@ void Do2DRandomBlockDistribution(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo,
         {
             if(pMachinesList[i * lBlockCols + j] == pMachineId)
             {
-                size_t lBlockOffset = (i * pMatrixWidth + j) * pBlockDim * pElemSize;
+                size_t lBlockOffset = (i * (size_t)pMatrixWidth + j) * (size_t)pBlockDim * pElemSize;
 
-                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lBlockRowLength, pMatrixWidth * pElemSize, pBlockDim));
+                pmSubscribeToMemory(pTaskInfo.taskHandle, pDeviceInfo.deviceHandle, pSubtaskInfo.subtaskId, pSubtaskInfo.splitInfo, 0, READ_WRITE_SUBSCRIPTION, pmScatteredSubscriptionInfo(lBlockOffset, lBlockRowLength, (size_t)pMatrixWidth * pElemSize, pBlockDim));
             }
         }
     }
