@@ -519,11 +519,14 @@ void pmSubscriptionManager::InsertScatteredSubscriptionsToSubtaskMapsInternal(su
         namespace bgi = boost::geometry::index;
 
         bgi::rtree<bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>>, bgi::quadratic<16>> lRtree;
-        
-        for_each(pVector, [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+
+        auto lIter = pVector.begin(), lEndIter = pVector.end();
+        for(; lIter != lEndIter; ++lIter)
         {
-            bg::model::point<ulong, 2, bg::cs::cartesian> lPoint1(pScatteredSubscriptionInfo.offset % pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.offset / pScatteredSubscriptionInfo.step);
-            bg::model::point<ulong, 2, bg::cs::cartesian> lPoint2(lPoint1.get<0>() + pScatteredSubscriptionInfo.size - 1, lPoint1.get<1>() + pScatteredSubscriptionInfo.count - 1);
+            const pmScatteredSubscriptionInfo& lScatteredSubscriptionInfo = *lIter;
+
+            bg::model::point<ulong, 2, bg::cs::cartesian> lPoint1(lScatteredSubscriptionInfo.offset % lScatteredSubscriptionInfo.step, lScatteredSubscriptionInfo.offset / lScatteredSubscriptionInfo.step);
+            bg::model::point<ulong, 2, bg::cs::cartesian> lPoint2(lPoint1.get<0>() + lScatteredSubscriptionInfo.size - 1, lPoint1.get<1>() + lScatteredSubscriptionInfo.count - 1);
             
             bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>> lBox(lPoint1, lPoint2);
 
@@ -538,9 +541,9 @@ void pmSubscriptionManager::InsertScatteredSubscriptionsToSubtaskMapsInternal(su
             {
                 // This code needs to be improved by breaking overlapping rects into non-overlapping ones
                 lExhaustiveLambda(pMap, pVector);
-                return; // return from lambda
+                return;
             }
-        });
+        }
         
         std::vector<bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>>> lResolvedSubscriptions;
         bg::model::box<bg::model::point<ulong, 2, bg::cs::cartesian>> lBox(bg::model::point<ulong, 2, bg::cs::cartesian>(0, 0), bg::model::point<ulong, 2, bg::cs::cartesian>(std::numeric_limits<ulong>::max(), std::numeric_limits<ulong>::max()));
