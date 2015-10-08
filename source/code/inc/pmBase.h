@@ -52,9 +52,9 @@ class pmBase
         static ulong GetIntegralCurrentTimeInSecs();
         static double GetCurrentTimeInSecs();
     
-	private:
 		static void* AllocateMemory(size_t pSize);
 		static void DeallocateMemory(void* pPtr);
+private:
 };
 
 } // end namespace pm

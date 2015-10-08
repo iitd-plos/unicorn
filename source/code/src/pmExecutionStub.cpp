@@ -2426,7 +2426,7 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetw
     
     pmTask* lTask = NULL;
     ulong lSubtaskId = std::numeric_limits<ulong>::max();
-    std::unique_ptr<pmSplitData> lSplitDataPtr;
+    std::unique_ptr<pmSplitData> lSplitDataPtr(new pmSplitData(NULL));
 
 #if defined(ENABLE_TASK_PROFILING) || defined(DUMP_EVENT_TIMELINE)
     // Auto lock/unlock scope
@@ -3397,13 +3397,13 @@ void pmStubCUDA::ReserveMemory(size_t pPhysicalMemory, size_t pTotalStubCount)
     lScratchChunkSizeMultiplier = ((lScratchChunkSizeMultiplier / lPageSize) + ((lScratchChunkSizeMultiplier % lPageSize) ? 1 : 0)) * lPageSize;
 
     mCudaChunkCollection.SetChunkSizeMultiplier(lCudaChunkSizeMultiplier);
-    mScratchChunkCollection.SetChunkSizeMultiplier(SCRATCH_CHUNK_SIZE_MULTIPLIER_PER_GB * lGBs);
+    mScratchChunkCollection.SetChunkSizeMultiplier(lScratchChunkSizeMultiplier);
 
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     size_t lPinnedChunkSizeMultiplier = PINNED_CHUNK_SIZE_MULTIPLIER_PER_GB * lGBs;
     lPinnedChunkSizeMultiplier = ((lPinnedChunkSizeMultiplier / lPageSize) + ((lPinnedChunkSizeMultiplier % lPageSize) ? 1 : 0)) * lPageSize;
 
-    mPinnedChunkCollection.SetChunkSizeMultiplier(PINNED_CHUNK_SIZE_MULTIPLIER_PER_GB * lGBs);
+    mPinnedChunkCollection.SetChunkSizeMultiplier(lPinnedChunkSizeMultiplier);
 #endif
 }
     

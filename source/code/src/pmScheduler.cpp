@@ -1572,7 +1572,7 @@ const pmProcessingElement* pmScheduler::RandomlySelectSecondLevelStealTarget(con
     
     return lStub->GetProcessingElement();
 #else
-    std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(pTask) != NULL) ? (((pmLocalTask*)pTask)->GetAssignedDevices()) : (((pmRemoteTask*)pTask)->GetAssignedDevices());
+    const std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(pTask) != NULL) ? (((pmLocalTask*)pTask)->GetAssignedDevices()) : (((pmRemoteTask*)pTask)->GetAssignedDevices());
 
     std::vector<const pmProcessingElement*> lLocalDevices;
 

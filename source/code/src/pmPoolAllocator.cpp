@@ -48,7 +48,7 @@ pmPoolAllocator::~pmPoolAllocator()
         if(mPageAlignedAllocations)
             MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->DeallocateMemory(mMasterAllocation);
         else
-            free(mMasterAllocation);
+            pmBase::DeallocateMemory(mMasterAllocation);
     }
 }
     
@@ -68,7 +68,7 @@ void* pmPoolAllocator::Allocate(size_t pSize)
         if(mPageAlignedAllocations)
             mMasterAllocation = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CreateCheckOutMemory(mMaxAllocations * mIndividualAllocationSize);
         else
-            mMasterAllocation = malloc(mMaxAllocations * mIndividualAllocationSize);
+            mMasterAllocation = pmBase::AllocateMemory(mMaxAllocations * mIndividualAllocationSize);
 
         mUnallocatedPool.reserve(mMaxAllocations);
         for(size_t i = 0, lAddr = reinterpret_cast<size_t>(mMasterAllocation); i < mMaxAllocations; ++i, lAddr += mIndividualAllocationSize)

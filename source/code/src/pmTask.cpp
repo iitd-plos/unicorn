@@ -109,7 +109,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
 {
     if(mTaskConfLength)
     {
-        mTaskConf = malloc(mTaskConfLength);
+        mTaskConf = pmBase::AllocateMemory(mTaskConfLength);
         memcpy(mTaskConf, pTaskConf, mTaskConfLength);
     }
 
@@ -157,7 +157,7 @@ pmTask::~pmTask()
     mSubscriptionManager.DropAllSubscriptions();
 
     if(mTaskConf)
-        free(mTaskConf);
+        pmBase::DeallocateMemory(mTaskConf);
 }
     
 void pmTask::LockAddressSpaces()
