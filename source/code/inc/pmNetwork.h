@@ -37,6 +37,7 @@ namespace pm
 {
 
 class pmCluster;
+class pmMachine;
 
 namespace network
 {
@@ -65,6 +66,9 @@ class pmNetwork : public pmBase
 		virtual void SendNonBlocking(pmCommunicatorCommandPtr& pCommand) = 0;
 		virtual void ReceiveNonBlocking(pmCommunicatorCommandPtr& pCommand) = 0;
 
+        virtual void SendMemory(pmCommunicatorCommandPtr& pCommand) = 0;
+        virtual void ReceiveMemory(pmCommunicatorCommandPtr& pCommand) = 0;
+    
         virtual void BroadcastNonBlocking(pmCommunicatorCommandPtr& pCommand) = 0;
 		virtual void All2AllNonBlocking(pmCommunicatorCommandPtr& pCommand) = 0;
 
@@ -97,8 +101,19 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 			PM_MPI_DUMMY_TAG = communicator::MAX_COMMUNICATOR_COMMAND_TAGS,
 			PM_MPI_REVERSE_DUMMY_TAG = communicator::MAX_COMMUNICATOR_COMMAND_TAGS
 		};
+    
+        class pmDynamicMpiTagProducer
+        {
+            public:
+                pmDynamicMpiTagProducer();
+                int GetNextTag(const pmMachine* pMachine);
+            
+            private:
+                RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
+                std::map<const pmMachine*, int> mMachineVersusNextTagMap;
+        };
 
-		typedef class pmUnknownLengthReceiveThread : public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
+		class pmUnknownLengthReceiveThread : public THREADING_IMPLEMENTATION_CLASS<network::networkEvent>
 		{
 			public:
 				pmUnknownLengthReceiveThread(pmMPI* mMPI);
@@ -117,12 +132,27 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
                 finalize_ptr<pmSignalWait> mSignalWait;
 				std::vector<pmCommunicatorCommandPtr> mReceiveCommands;
 				RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
-		} pmUnknownLengthReceiveThread;
+		};
+    
+        class pmMpiSubArrayManager
+        {
+            public:
+                pmMpiSubArrayManager(int pMatrixRows, int pMatrixCols, int pSubArrayRows, int pSubArrayCols);
+                ~pmMpiSubArrayManager();
+            
+                MPI_Datatype GetMpiType() const;
+            
+            private:
+                MPI_Datatype mSubArrayType;
+        };
 
 		static pmNetwork* GetNetwork();
 
 		virtual void SendNonBlocking(pmCommunicatorCommandPtr& pCommand);
 		virtual void ReceiveNonBlocking(pmCommunicatorCommandPtr& pCommand);
+
+        virtual void SendMemory(pmCommunicatorCommandPtr& pCommand);
+        virtual void ReceiveMemory(pmCommunicatorCommandPtr& pCommand);
 
         /* MPI 2 currently does not support non-blocking collective messages */
         virtual void BroadcastNonBlocking(pmCommunicatorCommandPtr& pCommand);
@@ -155,15 +185,16 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		void StopThreadExecution();
 
         bool IsUnknownLengthTag(communicator::communicatorCommandTags pTag);
-        void SendNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength);
-		void ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength);
+        void SendNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength, MPI_Datatype pDynamicDataType = MPI_DATATYPE_NULL);
+        void ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength);
+        void ReceiveNonBlockingInternalForMemoryReceive(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength, MPI_Datatype pDynamicDataType);
 
 		MPI_Request GetPersistentSendRequest(pmCommunicatorCommandPtr& pCommand);
 		MPI_Request GetPersistentRecvRequest(pmCommunicatorCommandPtr& pCommand);
 
         MPI_Request GetPersistentSendRequestInternal(pmCommunicatorCommandPtr& pCommand);
         MPI_Request GetPersistentRecvRequestInternal(pmCommunicatorCommandPtr& pCommand);
-
+    
 		void SetupDummyRequest();
 		void CancelDummyRequest();
 
@@ -194,6 +225,7 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		bool mThreadTerminationFlag;
     
 		pmUnknownLengthReceiveThread* mReceiveThread;
+        pmDynamicMpiTagProducer mDynamicMpiTagProducer;
 };
 
 } // end namespace pm

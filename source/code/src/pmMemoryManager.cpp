@@ -794,7 +794,7 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, usho
 void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, const pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommandPtr& pCommand)
 {
     using namespace linuxMemManager;
-    
+
     pmTask* lLockingTask = pAddressSpace->GetLockingTask();
     
     uint lOriginatingHost = lLockingTask ? (uint)(*(lLockingTask->GetOriginatingHost())) : std::numeric_limits<uint>::max();
@@ -907,10 +907,29 @@ void pmLinuxMemoryManager::CopyReceivedMemory(pmAddressSpace* pAddressSpace, ulo
 
     FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
     
-    CopyReceivedMemoryInternal(pAddressSpace, lMap, lLockingTask, pOffset, pLength, pDataSource);
+    CopyOrUpdateReceivedMemoryInternal(pAddressSpace, lMap, lLockingTask, pOffset, pLength, &pDataSource);
 }
 
-void pmLinuxMemoryManager::CopyReceivedScatteredMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, std::function<void (char*, ulong)>& pDataSource, pmTask* pRequestingTask)
+void pmLinuxMemoryManager::UpdateReceivedMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, pmTask* pRequestingTask)
+{
+    using namespace linuxMemManager;
+
+    EXCEPTION_ASSERT(pLength);
+
+    pmTask* lLockingTask = pAddressSpace->GetLockingTask();
+    if(lLockingTask != pRequestingTask)
+        return;
+
+    addressSpaceSpecifics& lSpecifics = GetAddressSpaceSpecifics(pAddressSpace);
+    pmInFlightRegions& lMap = lSpecifics.mInFlightMemoryMap;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = lSpecifics.mInFlightLock;
+
+    FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
+
+    CopyOrUpdateReceivedMemoryInternal(pAddressSpace, lMap, lLockingTask, pOffset, pLength);
+}
+
+void pmLinuxMemoryManager::UpdateReceivedScatteredMemory(pmAddressSpace* pAddressSpace, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmTask* pRequestingTask)
 {
     using namespace linuxMemManager;
 
@@ -927,11 +946,11 @@ void pmLinuxMemoryManager::CopyReceivedScatteredMemory(pmAddressSpace* pAddressS
     FINALIZE_RESOURCE_PTR(dInFlightLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
     
     for(ulong i = 0; i < pCount; ++i)
-        CopyReceivedMemoryInternal(pAddressSpace, lMap, lLockingTask, pOffset + i * pStep, pLength, pDataSource);
+        CopyOrUpdateReceivedMemoryInternal(pAddressSpace, lMap, lLockingTask, pOffset + i * pStep, pLength);
 }
 
 // This method must be called with mInFlightLock on mInFlightMap of the address space acquired
-void pmLinuxMemoryManager::CopyReceivedMemoryInternal(pmAddressSpace* pAddressSpace, linuxMemManager::pmInFlightRegions& pInFlightMap, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>& pDataSource)
+void pmLinuxMemoryManager::CopyOrUpdateReceivedMemoryInternal(pmAddressSpace* pAddressSpace, linuxMemManager::pmInFlightRegions& pInFlightMap, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource /* = NULL */)
 {
     using namespace linuxMemManager;
 
@@ -942,7 +961,9 @@ void pmLinuxMemoryManager::CopyReceivedMemoryInternal(pmAddressSpace* pAddressSp
     if((lIter != pInFlightMap.end()) && (lIter->second.first == pLength))
     {
         std::pair<size_t, regionFetchData>& lPair = lIter->second;
-        pDataSource(lAddr, pLength);
+        
+        if(pDataSource)
+            (*pDataSource)(lAddr, pLength);
 
         regionFetchData& lData = lPair.second;
         pAddressSpace->AcquireOwnershipImmediate(pOffset, lPair.first);
@@ -992,7 +1013,8 @@ void pmLinuxMemoryManager::CopyReceivedMemoryInternal(pmAddressSpace* pAddressSp
 
         if(lTransferComplete)
         {
-            pDataSource(lAddr, pLength);
+            if(pDataSource)
+                (*pDataSource)(lAddr, pLength);
 
             size_t lOffset = lStartAddr - reinterpret_cast<size_t>(lDestMem);
             pAddressSpace->AcquireOwnershipImmediate(lOffset, lPair.first);
@@ -1012,7 +1034,8 @@ void pmLinuxMemoryManager::CopyReceivedMemoryInternal(pmAddressSpace* pAddressSp
             // Make partial receive entry
             lPartialReceiveRecordMap[lRecvAddr] = pLength;
             
-            pDataSource(lAddr, pLength);
+            if(pDataSource)
+                (*pDataSource)(lAddr, pLength);
 
             size_t lOffset = lRecvAddr - reinterpret_cast<size_t>(lDestMem);
             pAddressSpace->AcquireOwnershipImmediate(lOffset, pLength);

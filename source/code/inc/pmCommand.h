@@ -167,6 +167,11 @@ public:
         return mPersistent;
     }
     
+    void SetTag(communicator::communicatorCommandTags pTag)
+    {
+        mTag = pTag;
+    }
+    
 protected:
     pmCommunicatorCommandBase(ushort pPriority, ushort pType, communicator::communicatorCommandTags pTag, communicator::communicatorDataTypes pDataType, const pmHardware* pDestination, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier = NULL)
     : pmCommand(pPriority, pType, pCallback, pUserIdentifier)

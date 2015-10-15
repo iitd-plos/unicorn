@@ -69,6 +69,17 @@ void pmCommunicator::SendPacked(pmCommunicatorCommandPtr&& pCommand, bool pBlock
 		lCommand->WaitForFinish();
 }
 
+// This method is called by heavy operations thread
+void pmCommunicator::SendMemory(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* = false */)
+{
+	SAFE_GET_NETWORK(lNetwork);
+
+	lNetwork->SendMemory(pCommand);
+
+	if(pBlocking)
+		pCommand->WaitForFinish();
+}
+
 void pmCommunicator::Broadcast(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* = false */)
 {
 	SAFE_GET_NETWORK(lNetwork);
@@ -85,6 +96,16 @@ void pmCommunicator::Receive(pmCommunicatorCommandPtr& pCommand, bool pBlocking 
 	SAFE_GET_NETWORK(lNetwork);
 	
 	lNetwork->ReceiveNonBlocking(pCommand);
+
+	if(pBlocking)
+		pCommand->WaitForFinish();
+}
+
+void pmCommunicator::ReceiveMemory(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* = false */)
+{
+	SAFE_GET_NETWORK(lNetwork);
+	
+	lNetwork->ReceiveMemory(pCommand);
 
 	if(pBlocking)
 		pCommand->WaitForFinish();
@@ -361,21 +382,7 @@ ownershipTransferPacked::ownershipTransferPacked(pmAddressSpace* pAddressSpace, 
     , transferData(pChangeData)
 {}
  
-    
-/* struct memoryReceivePacked */
-memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, std::function<char* (ulong)>& pDataProducer, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
-    : receiveStruct(pMemOwnerHost, pGenerationNumber, pOffset, pLength, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber)
-    , mDataProducer(pDataProducer)
-{
-}
 
-memoryReceivePacked::memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, std::function<char* (ulong)>& pDataProducer, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber)
-    : receiveStruct(pMemOwnerHost, pGenerationNumber, pOffset, pLength, pStep, pCount, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber)
-    , mDataProducer(pDataProducer)
-{
-}
-
-    
 /* struct sendAcknowledgementPacked */
 sendAcknowledgementPacked::sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
     : ackStruct(pSourceDevice->GetGlobalDeviceIndex(), *pRange.task->GetOriginatingHost(), pRange.task->GetSequenceNumber(), pRange.startSubtask, pRange.endSubtask, pExecStatus, (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pSourceDevice->GetGlobalDeviceIndex()), (uint)pOwnershipVector.size(), (uint)pAddressSpaceIndexVector.size())

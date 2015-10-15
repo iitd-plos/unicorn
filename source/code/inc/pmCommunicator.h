@@ -766,13 +766,15 @@ struct memoryReceiveStruct
     ulong count;
     ushort isTaskOriginated;    // Tells whether a task has demanded this memory or user has explicitly requested it
     uint originatingHost;       // Valid only if isTaskOriginated is true
-    ulong sequenceNumber;       // Valid only if isTaskOriginated is true; sequence number of local task object (on originating host)            
+    ulong sequenceNumber;       // Valid only if isTaskOriginated is true; sequence number of local task object (on originating host)
+    int mpiTag;                 // MPI tag of the upcoming message that contains actual memory
+    uint senderHost;            // Id of the host sending this message (memory can come from forwarded messages, this is the host that is actually transmitting memory)
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 10
+        FIELD_COUNT_VALUE = 12
     } fieldCount;
-    
+
     memoryReceiveStruct()
     : memOwnerHost(std::numeric_limits<uint>::max())
     , generationNumber(0)
@@ -784,9 +786,11 @@ struct memoryReceiveStruct
     , isTaskOriginated(true)
     , originatingHost(std::numeric_limits<uint>::max())
     , sequenceNumber(0)
+    , mpiTag(0)
+    , senderHost(std::numeric_limits<uint>::max())
     {}
 
-    memoryReceiveStruct(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber)
+    memoryReceiveStruct(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber, int pMpiTag, uint pSenderHost)
     : memOwnerHost(pMemOwnerHost)
     , generationNumber(pGenerationNumber)
     , transferType(TRANSFER_GENERAL)
@@ -797,9 +801,11 @@ struct memoryReceiveStruct
     , isTaskOriginated(pIsTaskOriginated)
     , originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
+    , mpiTag(pMpiTag)
+    , senderHost(pSenderHost)
     {}
 
-    memoryReceiveStruct(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber)
+    memoryReceiveStruct(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, ushort pIsTaskOriginated, uint pOriginatingHost, ulong pSequenceNumber, int pMpiTag, uint pSenderHost)
     : memOwnerHost(pMemOwnerHost)
     , generationNumber(pGenerationNumber)
     , transferType(TRANSFER_SCATTERED)
@@ -810,22 +816,24 @@ struct memoryReceiveStruct
     , isTaskOriginated(pIsTaskOriginated)
     , originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
-    {}
-};
-    
-struct memoryReceivePacked
-{
-    memoryReceiveStruct receiveStruct;
-
-    std::function<char* (ulong)> mDataProducer;  // Takes an index and returns a pointer to scattered data for that index (for non-scattered transfers, index is 0)
-    std::function<void (char*, ulong)> mDataReceiver;   // Takes a mem and length and unpacks data into the provided mem.
-    
-    memoryReceivePacked()
-    : receiveStruct()
+    , mpiTag(pMpiTag)
+    , senderHost(pSenderHost)
     {}
     
-    memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, std::function<char* (ulong)>& pDataProducer, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
-    memoryReceivePacked(uint pMemOwnerHost, ulong pGenerationNumber, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, std::function<char* (ulong)>& pDataProducer, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
+    memoryReceiveStruct(const memoryReceiveStruct& pStruct)
+    : memOwnerHost(pStruct.memOwnerHost)
+    , generationNumber(pStruct.generationNumber)
+    , transferType(pStruct.transferType)
+    , offset(pStruct.offset)
+    , length(pStruct.length)
+    , step(pStruct.step)
+    , count(pStruct.count)
+    , isTaskOriginated(pStruct.isTaskOriginated)
+    , originatingHost(pStruct.originatingHost)
+    , sequenceNumber(pStruct.sequenceNumber)
+    , mpiTag(pStruct.mpiTag)
+    , senderHost(pStruct.senderHost)
+    {}
 };
 
 struct hostFinalizationStruct
@@ -1154,7 +1162,10 @@ class pmCommunicator : public pmBase
         void Broadcast(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
 		void All2All(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
 		
-	private:
+        void SendMemory(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
+        void ReceiveMemory(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
+
+    private:
 		pmCommunicator();
 
 		void SendPacked(pmCommunicatorCommandPtr&& pCommand, bool pBlocking = false);
