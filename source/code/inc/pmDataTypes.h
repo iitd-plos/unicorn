@@ -541,6 +541,28 @@ namespace pm
         , endSubtask(pRange.endSubtask)
         {}
     } pmSubtaskRange;
+    
+#ifdef TRACK_MEM_COPIES
+    class pmMemCopyTracker
+    {
+        public:
+            pmMemCopyTracker();
+            ~pmMemCopyTracker();
+
+            void SetHostId(uint pHostId);
+            void Add(size_t pBytes);
+
+        private:
+            ulong mBytesCopied;
+            uint mHostId;
+    };
+    
+    extern pmMemCopyTracker gMemCopyTracker;
+
+#define PMLIB_MEMCPY(a, b, c) { gMemCopyTracker.Add(c); memcpy(a, b, c);}
+#else
+#define PMLIB_MEMCPY(a, b, c) memcpy(a, b, c)
+#endif
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
     typedef struct pmSplitSubtask

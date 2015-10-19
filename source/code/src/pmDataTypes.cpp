@@ -562,6 +562,32 @@ bool pmDestroyOnException::ShouldDelete()
 }
 
 
+#ifdef TRACK_MEM_COPIES
+pmMemCopyTracker gMemCopyTracker;
+    
+pmMemCopyTracker::pmMemCopyTracker()
+    : mBytesCopied(0)
+    , mHostId(std::numeric_limits<uint>::max())
+{
+}
+    
+pmMemCopyTracker::~pmMemCopyTracker()
+{
+    std::cout << "Host " << mHostId << " mem-copied " << mBytesCopied << " bytes !!!" << std::endl;
+}
+
+void pmMemCopyTracker::SetHostId(uint pHostId)
+{
+    mHostId = pHostId;
+}
+
+void pmMemCopyTracker::Add(size_t pBytes)
+{
+    mBytesCopied += (ulong)pBytes;
+}
+#endif
+
+    
 #ifdef SUPPORT_SPLIT_SUBTASKS
 bool operator<(const pmSplitInfo& pInfo1, const pmSplitInfo& pInfo2)
 {

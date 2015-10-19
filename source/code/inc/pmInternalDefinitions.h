@@ -136,6 +136,7 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 
 /* Memory transfer controls */
 //#define GROUP_SCATTERED_REQUESTS
+//#define PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
 
 
 /* Subtask splitting controls */
@@ -206,6 +207,7 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 //#define TRACK_SUBTASK_STEALS
 //#define TRACK_MULTI_ASSIGN
 //#define TRACK_MUTEX_TIMINGS
+//#define TRACK_MEM_COPIES
 //#define ENABLE_TASK_PROFILING
 //#define ENABLE_MEM_PROFILING
 //#define ENABLE_ACCUMULATED_TIMINGS

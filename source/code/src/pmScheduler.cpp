@@ -127,7 +127,8 @@ void SchedulerCommandCompletionCallback(const pmCommandPtr& pCommand)
 	lScheduler->CommandCompletionEvent(pCommand);
 }
 
-// This function is executed directly on network thread's context. This is because memory is received in two MPI messages
+// If the macro PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD is defined, then this function is
+// executed directly in network thread's context. This is because memory is received in two MPI messages
 // where the first message contains the metadata while the second contains actual memory. By executing this callback on
 // network thread, we omit the time this message would have taken through the scheduler queue and post an MPI_recv for
 // the actual data quickly. Also, note that since this method is executed on network thread, it has its lock acquired at
@@ -252,14 +253,20 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     finalize_ptr<communicator::noReductionReqdStruct> lNoReductionReqdData(new noReductionReqdStruct());
 
 #define PERSISTENT_RECV_COMMAND(tag, structEnumType, structType, recvDataPtr) pmCommunicatorCommand<structType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structEnumType, recvDataPtr, 1, SchedulerCommandCompletionCallback)
-    
+
+#ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
 #define PERSISTENT_MEMORY_RECV_COMMAND(tag, structEnumType, structType, recvDataPtr) pmCommunicatorCommand<structType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structEnumType, recvDataPtr, 1, MemoryMetaDataReceiveCommandCompletionCallback)
+#endif
 
 	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT_TAG, REMOTE_SUBTASK_ASSIGN_STRUCT, remoteSubtaskAssignStruct, lSubtaskAssignRecvData);
 	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, taskEventStruct, lTaskEventRecvData);
 	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	stealRequestStruct, lStealRequestRecvData);
     mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, stealResponseStruct, lStealResponseRecvData);
+#ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
     mMemoryReceiveRecvCommand = PERSISTENT_MEMORY_RECV_COMMAND(MEMORY_RECEIVE_TAG, MEMORY_RECEIVE_STRUCT, memoryReceiveStruct, lMemoryReceiveRecvData);
+#else
+    mMemoryReceiveRecvCommand = PERSISTENT_RECV_COMMAND(MEMORY_RECEIVE_TAG, MEMORY_RECEIVE_STRUCT, memoryReceiveStruct, lMemoryReceiveRecvData);
+#endif
     mSubtaskRangeCancelCommand = PERSISTENT_RECV_COMMAND(SUBTASK_RANGE_CANCEL_TAG, SUBTASK_RANGE_CANCEL_STRUCT, subtaskRangeCancelStruct, lSubtaskRangeCancelData);
 	mNoReductionReqdCommand = PERSISTENT_RECV_COMMAND(NO_REDUCTION_REQD_TAG, NO_REDUCTION_REQD_STRUCT, noReductionReqdStruct, lNoReductionReqdData);
 
@@ -1902,10 +1909,14 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 
 				case MEMORY_RECEIVE_TAG:
 				{
+                #ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
                     // Since memory transfers are received in two MPI messages (the first one contains size of the upcoming memory in the second one),
                     // the first message is not handled in this callback as it is executed on scheduler thread. Rather, in order to reduce the turnaround
                     // time, the callback is executed in network thread's context and an MPI_Irecv for the upcoming second message is immediately posted
                     PMTHROW(pmFatalErrorException());
+                #else
+                    MemoryMetaDataReceiveCommandCompletionCallback(pCommand);
+                #endif
 
 					break;
 				}

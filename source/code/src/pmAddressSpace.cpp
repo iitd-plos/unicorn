@@ -221,7 +221,7 @@ ulong pmAddressSpace::GetNextGenerationNumber()
 void pmAddressSpace::Update(size_t pOffset, size_t pLength, void* pSrcAddr)
 {
 	void* lDestAddr = (void*)((char*)GetMem() + pOffset);
-	memcpy(lDestAddr, pSrcAddr, pLength);
+	PMLIB_MEMCPY(lDestAddr, pSrcAddr, pLength);
 }
 
 void pmAddressSpace::UserDelete()

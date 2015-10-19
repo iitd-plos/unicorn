@@ -266,7 +266,7 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
                     *lPageRanges++ = (uint)lIter->second;
                     
                     uint lMemSize = std::min((uint)(lIter->second * lPageSize), (uint)(lUnifiedSubscriptionInfo.length - lIter->first * lPageSize));
-                    memcpy(lMem, ((char*)lShadowMem) + (lIter->first * lPageSize), lMemSize);
+                    PMLIB_MEMCPY(lMem, ((char*)lShadowMem) + (lIter->first * lPageSize), lMemSize);
                     lMem += lMemSize;
                 }
             }
@@ -297,7 +297,7 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
                     for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter)
                     {
                         void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + lBeginIter->first - lUnifiedSubscriptionInfo.offset);
-                        memcpy((char*)(shadowMemTransfer.shadowMem.get_ptr()) + lLocation, lSrcPtr, lBeginIter->second.first);
+                        PMLIB_MEMCPY((char*)(shadowMemTransfer.shadowMem.get_ptr()) + lLocation, lSrcPtr, lBeginIter->second.first);
                     
                         lLocation += (uint)lBeginIter->second.first;
                     }
@@ -331,7 +331,7 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
                     *lPageRanges++ = (uint)lIter->second;
                     
                     uint lMemSize = std::min((uint)(lIter->second * lPageSize), (uint)(lCompactViewData.subscriptionInfo.length - lIter->first * lPageSize));
-                    memcpy(lMem, ((char*)lShadowMem) + (lIter->first * lPageSize), lMemSize);
+                    PMLIB_MEMCPY(lMem, ((char*)lShadowMem) + (lIter->first * lPageSize), lMemSize);
                     lMem += lMemSize;
                 }
             }
@@ -364,7 +364,7 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
                     for(auto lIter = lBeginIter; lIter != lEndIter; ++lIter, ++lCompactWriteIter)
                     {
                         void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lShadowMem) + *lCompactWriteIter);
-                        memcpy((char*)(shadowMemTransfer.shadowMem.get_ptr()) + lLocation, lSrcPtr, lBeginIter->second.first);
+                        PMLIB_MEMCPY((char*)(shadowMemTransfer.shadowMem.get_ptr()) + lLocation, lSrcPtr, lBeginIter->second.first);
                     
                         lLocation += (uint)lBeginIter->second.first;
                     }

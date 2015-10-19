@@ -188,6 +188,10 @@ pmMPI::pmMPI()
 	SwitchThread(std::shared_ptr<networkEvent>(new networkEvent()), MAX_PRIORITY_LEVEL);
 
 	mReceiveThread = new pmUnknownLengthReceiveThread(this);
+
+#ifdef TRACK_MEM_COPIES
+    gMemCopyTracker.SetHostId(mHostId);
+#endif
 }
 
 pmMPI::~pmMPI()
@@ -1152,8 +1156,9 @@ void pmMPI::SendMemory(pmCommunicatorCommandPtr& pCommand)
     SendNonBlockingInternal(lClonePtr, lTargetMem, 1, lSubArrayManager.GetMpiType());
 }
 
-// This method is called on network thread through MemoryMetaDataReceiveCommandCompletionCallback
-// mResourceLock is acquired at that time.
+// If the macro PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD is defined, then this
+// method is called on network thread through MemoryMetaDataReceiveCommandCompletionCallback
+// and mResourceLock is acquired at that time.
 void pmMPI::ReceiveMemory(pmCommunicatorCommandPtr& pCommand)
 {
     memoryReceiveStruct* lData = (memoryReceiveStruct*)(pCommand->GetData());
@@ -1175,7 +1180,12 @@ void pmMPI::ReceiveMemory(pmCommunicatorCommandPtr& pCommand)
     pmMPI::pmMpiSubArrayManager lSubArrayManager(lRows, lCols, lRows, (int)lData->length);
 
     char* lTargetMem = static_cast<char*>(const_cast<void*>(pCommand->GetUserIdentifier()));
+
+#ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
     ReceiveNonBlockingInternalForMemoryReceive(pCommand, lTargetMem, 1, lSubArrayManager.GetMpiType());
+#else
+    ReceiveNonBlockingInternal(pCommand, lTargetMem, 1, lSubArrayManager.GetMpiType());
+#endif
 }
     
 /* MPI 2 currently does not support non-blocking collective messages */
@@ -1328,7 +1338,7 @@ void pmMPI::SendNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pD
     }
 }
 
-void pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength)
+void pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength, MPI_Datatype pDynamicDataType /* = MPI_DATATYPE_NULL */)
 {
 	MPI_Request lRequest = MPI_REQUEST_NULL;
 	MPI_Comm lCommunicator;
@@ -1345,7 +1355,7 @@ void pmMPI::ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void*
 	else
 	{
 		SAFE_GET_MPI_COMMUNICATOR_AND_DESTINATION(lCommunicator, lDest, pCommand->GetDestination());
-		MPI_Datatype lDataType = GetDataTypeMPI((communicatorDataTypes)(pCommand->GetDataType()));
+        MPI_Datatype lDataType = ((pDynamicDataType == MPI_DATATYPE_NULL) ? GetDataTypeMPI((communicatorDataTypes)(pCommand->GetDataType())) : pDynamicDataType);
 
 		if( MPI_CALL("MPI_Irecv", (MPI_Irecv(pData, pLength, lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, &lRequest) != MPI_SUCCESS)) )
 			PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));

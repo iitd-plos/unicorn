@@ -1144,9 +1144,9 @@ void pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubt
         size_t lMaxCopyAddr = reinterpret_cast<size_t>(lSrcAddr) + lPageSize;
 
         if(lMaxCopyAddr > lMaxSrcAddr)
-            ::memcpy(lDestAddr, lSrcAddr, lMaxSrcAddr - reinterpret_cast<size_t>(lSrcAddr));
+            PMLIB_MEMCPY(lDestAddr, lSrcAddr, lMaxSrcAddr - reinterpret_cast<size_t>(lSrcAddr));
         else
-            ::memcpy(lDestAddr, lSrcAddr, lPageSize);
+            PMLIB_MEMCPY(lDestAddr, lSrcAddr, lPageSize);
     }
     else    // SUBSCRIPTION_COMPACT
     {
@@ -1170,9 +1170,9 @@ void pmLinuxMemoryManager::CopyShadowMemPage(pmExecutionStub* pStub, ulong pSubt
             size_t lMaxCopyAddr = reinterpret_cast<size_t>(lSrcAddr) + std::min(lPageSize, pInfo.length);
 
             if(lMaxCopyAddr > lMaxSrcAddr)
-                ::memcpy(lCopyAddr, lSrcAddr, lMaxSrcAddr - reinterpret_cast<size_t>(lSrcAddr));
+                PMLIB_MEMCPY(lCopyAddr, lSrcAddr, lMaxSrcAddr - reinterpret_cast<size_t>(lSrcAddr));
             else
-                ::memcpy(lCopyAddr, lSrcAddr, std::min(lPageSize, pInfo.length));
+                PMLIB_MEMCPY(lCopyAddr, lSrcAddr, std::min(lPageSize, pInfo.length));
         });
     }
 }

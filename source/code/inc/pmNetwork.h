@@ -185,8 +185,9 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 		void StopThreadExecution();
 
         bool IsUnknownLengthTag(communicator::communicatorCommandTags pTag);
+
         void SendNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength, MPI_Datatype pDynamicDataType = MPI_DATATYPE_NULL);
-        void ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength);
+        void ReceiveNonBlockingInternal(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength, MPI_Datatype pDynamicDataType = MPI_DATATYPE_NULL);
         void ReceiveNonBlockingInternalForMemoryReceive(pmCommunicatorCommandPtr& pCommand, void* pData, int pLength, MPI_Datatype pDynamicDataType);
 
 		MPI_Request GetPersistentSendRequest(pmCommunicatorCommandPtr& pCommand);
