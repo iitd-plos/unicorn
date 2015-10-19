@@ -137,6 +137,7 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 /* Memory transfer controls */
 //#define GROUP_SCATTERED_REQUESTS
 //#define PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
+#define BLOCK_PREFETCH_OF_ANTICIPATED_SUBTASKS
 
 
 /* Subtask splitting controls */

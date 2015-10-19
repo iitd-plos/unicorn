@@ -2287,6 +2287,7 @@ void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, boo
     
     if(pPrefetch)
     {
+#ifndef BLOCK_PREFETCH_OF_ANTICIPATED_SUBTASKS
     #ifdef SUPPORT_SPLIT_SUBTASKS
         if(!pSplitInfo || pSplitInfo->splitId == 0)
     #endif
@@ -2294,11 +2295,17 @@ void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, boo
             lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, NULL);
             lSubscriptionManager.FetchSubtaskSubscriptions(this, pSubtaskId, NULL, GetType(), pPrefetch);
         }
+#endif
     }
     else
     {
         lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, NULL);
-        lSubscriptionManager.FetchSubtaskSubscriptions(this, pSubtaskId, NULL, GetType(), pPrefetch);
+        lSubscriptionManager.FetchSubtaskSubscriptions(this, pSubtaskId, pSplitInfo, GetType(), NULL);
+
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        if(pSplitInfo)
+            lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, pSplitInfo);
+    #endif
 
         for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
         {

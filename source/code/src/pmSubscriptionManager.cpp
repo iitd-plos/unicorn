@@ -317,10 +317,13 @@ void pmSubscriptionManager::FindSubtaskMemDependencies(pmExecutionStub* pStub, u
         {
             FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lPair.second, Lock(), Unlock());
             
-            pmSubtask& lSubtask = lPair.first.find(lDataPair)->second;
-            
-            InsertScatteredSubscriptionsToSubtaskMapsInternal(lSubtask);
-            lSubtask.mReadyForExecution = true;
+            if(!lSubtask.mReadyForExecution)
+            {
+                pmSubtask& lSubtask = lPair.first.find(lDataPair)->second;
+                
+                InsertScatteredSubscriptionsToSubtaskMapsInternal(lSubtask);
+                lSubtask.mReadyForExecution = true;
+            }
         }
     }
     else
