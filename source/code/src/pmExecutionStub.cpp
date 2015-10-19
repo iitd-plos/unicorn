@@ -2299,13 +2299,8 @@ void pmExecutionStub::CommonPreExecuteOnCPU(pmTask* pTask, ulong pSubtaskId, boo
     }
     else
     {
-        lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, NULL);
-        lSubscriptionManager.FetchSubtaskSubscriptions(this, pSubtaskId, pSplitInfo, GetType(), NULL);
-
-    #ifdef SUPPORT_SPLIT_SUBTASKS
-        if(pSplitInfo)
-            lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, pSplitInfo);
-    #endif
+        lSubscriptionManager.FindSubtaskMemDependencies(this, pSubtaskId, pSplitInfo);
+        lSubscriptionManager.FetchSubtaskSubscriptions(this, pSubtaskId, pSplitInfo, GetType(), pPrefetch);
 
         for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
         {
