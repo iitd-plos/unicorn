@@ -564,16 +564,21 @@ bool pmDestroyOnException::ShouldDelete()
 
 #ifdef TRACK_MEM_COPIES
 pmMemCopyTracker gMemCopyTracker;
-    
+
+STATIC_ACCESSOR_GLOBAL(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("gMemCopyResourceLock"), GetMemCopyResourceLock)
+
 pmMemCopyTracker::pmMemCopyTracker()
     : mBytesCopied(0)
     , mHostId(std::numeric_limits<uint>::max())
+    , mElapsedTime(0)
+    , mStartTime(0)
+    , mOngoingMemCopies(0)
 {
 }
     
 pmMemCopyTracker::~pmMemCopyTracker()
 {
-    std::cout << "Host " << mHostId << " mem-copied " << mBytesCopied << " bytes !!!" << std::endl;
+    std::cout << "Host " << mHostId << " took " << mElapsedTime << " seconds to mem-copy " << mBytesCopied << " bytes !!!" << std::endl;
 }
 
 void pmMemCopyTracker::SetHostId(uint pHostId)
@@ -581,10 +586,28 @@ void pmMemCopyTracker::SetHostId(uint pHostId)
     mHostId = pHostId;
 }
 
-void pmMemCopyTracker::Add(size_t pBytes)
+void pmMemCopyTracker::Begin(size_t pBytes)
 {
+    FINALIZE_RESOURCE(dCompletionLock, GetMemCopyResourceLock().Lock(), GetMemCopyResourceLock().Unlock());
+    
     mBytesCopied += (ulong)pBytes;
+    
+    if(!mOngoingMemCopies)
+        mStartTime = pmBase::GetCurrentTimeInSecs();
+    
+    ++mOngoingMemCopies;
 }
+    
+void pmMemCopyTracker::End()
+{
+    FINALIZE_RESOURCE(dCompletionLock, GetMemCopyResourceLock().Lock(), GetMemCopyResourceLock().Unlock());
+    
+    --mOngoingMemCopies;
+
+    if(!mOngoingMemCopies)
+        mElapsedTime += pmBase::GetCurrentTimeInSecs() - mStartTime;
+}
+
 #endif
 
     

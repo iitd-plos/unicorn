@@ -550,16 +550,20 @@ namespace pm
             ~pmMemCopyTracker();
 
             void SetHostId(uint pHostId);
-            void Add(size_t pBytes);
+            void Begin(size_t pBytes);
+            void End();
 
         private:
             ulong mBytesCopied;
             uint mHostId;
+            double mElapsedTime;
+            double mStartTime;
+            uint mOngoingMemCopies;
     };
     
     extern pmMemCopyTracker gMemCopyTracker;
 
-#define PMLIB_MEMCPY(a, b, c) { gMemCopyTracker.Add(c); memcpy(a, b, c);}
+#define PMLIB_MEMCPY(a, b, c) { gMemCopyTracker.Begin(c); memcpy(a, b, c); gMemCopyTracker.End();}
 #else
 #define PMLIB_MEMCPY(a, b, c) memcpy(a, b, c)
 #endif
@@ -604,6 +608,14 @@ namespace pm
         return t; \
     }
     
+    #define STATIC_ACCESSOR_GLOBAL(type, arg, funcName) \
+    type& funcName(); \
+    type& funcName() \
+    { \
+        static type t arg; \
+        return t; \
+    }
+
     template<typename T>
     struct deleteDeallocator
     {
