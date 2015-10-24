@@ -564,32 +564,20 @@ bool pmDestroyOnException::ShouldDelete()
 
 #ifdef TRACK_MEM_COPIES
 pmMemCopyTracker gMemCopyTracker;
+    
+#define MINIMUM_TIME_TO_REPORT 0.1
 
 STATIC_ACCESSOR_GLOBAL(RESOURCE_LOCK_IMPLEMENTATION_CLASS, __STATIC_LOCK_NAME__("gMemCopyResourceLock"), GetMemCopyResourceLock)
 
-pmMemCopyTracker::pmMemCopyTracker()
+pmMemCopyTracker::pmMemCopyStatistics::pmMemCopyStatistics()
     : mBytesCopied(0)
-    , mHostId(std::numeric_limits<uint>::max())
     , mElapsedTime(0)
     , mStartTime(0)
     , mOngoingMemCopies(0)
-{
-}
-    
-pmMemCopyTracker::~pmMemCopyTracker()
-{
-    std::cout << "Host " << mHostId << " took " << mElapsedTime << " seconds to mem-copy " << mBytesCopied << " bytes !!!" << std::endl;
-}
+{}
 
-void pmMemCopyTracker::SetHostId(uint pHostId)
+void pmMemCopyTracker::pmMemCopyStatistics::BeginRecord(size_t pBytes)
 {
-    mHostId = pHostId;
-}
-
-void pmMemCopyTracker::Begin(size_t pBytes)
-{
-    FINALIZE_RESOURCE(dCompletionLock, GetMemCopyResourceLock().Lock(), GetMemCopyResourceLock().Unlock());
-    
     mBytesCopied += (ulong)pBytes;
     
     if(!mOngoingMemCopies)
@@ -597,15 +585,64 @@ void pmMemCopyTracker::Begin(size_t pBytes)
     
     ++mOngoingMemCopies;
 }
+
+void pmMemCopyTracker::pmMemCopyStatistics::EndRecord()
+{
+    --mOngoingMemCopies;
     
-void pmMemCopyTracker::End()
+    if(!mOngoingMemCopies)
+        mElapsedTime += pmBase::GetCurrentTimeInSecs() - mStartTime;
+}
+
+pmMemCopyTracker::pmMemCopyTracker()
+    : mHostId(std::numeric_limits<uint>::max())
+{
+}
+    
+pmMemCopyTracker::~pmMemCopyTracker()
+{
+    std::cout << "Host " << mHostId << " took " << mNodeTimer.mElapsedTime << " seconds to mem-copy " << mNodeTimer.mBytesCopied << " bytes !!!";
+    
+    bool lFirst = true;
+    for_each(mBifurcationMap, [&lFirst] (const std::pair<std::string, pmMemCopyStatistics>& pPair)
+    {
+        if(pPair.second.mBytesCopied && pPair.second.mElapsedTime > (double)MINIMUM_TIME_TO_REPORT)
+        {
+            if(lFirst)
+            {
+                std::cout << " [ ";
+                lFirst = false;
+            }
+            
+            std::cout << pPair.first << " => (" << pPair.second.mBytesCopied << " bytes, " << pPair.second.mElapsedTime << " secs); ";
+        }
+    });
+    
+    if(!lFirst)
+        std::cout << "]";
+    
+    std::cout << std::endl;
+}
+
+void pmMemCopyTracker::SetHostId(uint pHostId)
+{
+    mHostId = pHostId;
+}
+
+void pmMemCopyTracker::Begin(size_t pBytes, const std::string& pKey)
+{
+    FINALIZE_RESOURCE(dCompletionLock, GetMemCopyResourceLock().Lock(), GetMemCopyResourceLock().Unlock());
+
+    mNodeTimer.BeginRecord(pBytes);
+    mBifurcationMap[pKey].BeginRecord(pBytes);
+}
+    
+void pmMemCopyTracker::End(const std::string& pKey)
 {
     FINALIZE_RESOURCE(dCompletionLock, GetMemCopyResourceLock().Lock(), GetMemCopyResourceLock().Unlock());
     
-    --mOngoingMemCopies;
-
-    if(!mOngoingMemCopies)
-        mElapsedTime += pmBase::GetCurrentTimeInSecs() - mStartTime;
+    mNodeTimer.EndRecord();
+    mBifurcationMap[pKey].EndRecord();
 }
 
 #endif

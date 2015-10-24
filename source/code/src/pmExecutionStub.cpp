@@ -3467,7 +3467,7 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
                         void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
                         void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
 
-                        PMLIB_MEMCPY(lPinnedPtr, lDataPtr, lIter->second.first);
+                        PMLIB_MEMCPY(lPinnedPtr, lDataPtr, lIter->second.first, std::string("pmStubCUDA::CopyDataToPinnedBuffers1"));
                     }
                 }
             }
@@ -3481,7 +3481,7 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
                     
                     if(lShadowMemAddr && pTask->IsReadOnly(pAddressSpace))
                     {
-                        PMLIB_MEMCPY(lVector[pAddressSpaceIndex].pinnedPtr, lShadowMemAddr, lCompactViewData.subscriptionInfo.length);
+                        PMLIB_MEMCPY(lVector[pAddressSpaceIndex].pinnedPtr, lShadowMemAddr, lCompactViewData.subscriptionInfo.length, std::string("pmStubCUDA::CopyDataToPinnedBuffers2"));
                     }
                     else
                     {
@@ -3496,7 +3496,7 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
                             void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
                             void* lDataPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
 
-                            PMLIB_MEMCPY(lPinnedPtr, lDataPtr, lIter->second.first);
+                            PMLIB_MEMCPY(lPinnedPtr, lDataPtr, lIter->second.first, std::string("pmStubCUDA::CopyDataToPinnedBuffers3"));
                         }
                     }
                 }
@@ -3513,7 +3513,7 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
             lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
         
         if(lCpuScratchBuffer && lScratchBufferSize)
-            PMLIB_MEMCPY(lVector.back().pinnedPtr, lCpuScratchBuffer, lScratchBufferSize);
+            PMLIB_MEMCPY(lVector.back().pinnedPtr, lCpuScratchBuffer, lScratchBufferSize, std::string("pmStubCUDA::CopyDataToPinnedBuffers4"));
     }
     
     pmCudaSubtaskSecondaryBuffersStruct& lStruct = mSubtaskSecondaryBuffersMap[pSubtaskId];
@@ -3559,7 +3559,7 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
                         void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
                         void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
 
-                        PMLIB_MEMCPY(lDataPtr, lPinnedPtr, lIter->second.first);
+                        PMLIB_MEMCPY(lDataPtr, lPinnedPtr, lIter->second.first, std::string("pmStubCUDA::CopyDataFromPinnedBuffers1"));
                     }
                 }
             }
@@ -3573,7 +3573,7 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
                     
                     if(lShadowMemAddr && pTask->IsWriteOnly(pAddressSpace))
                     {
-                        PMLIB_MEMCPY(lShadowMemAddr, lVector[pAddressSpaceIndex].pinnedPtr, lCompactViewData.subscriptionInfo.length);
+                        PMLIB_MEMCPY(lShadowMemAddr, lVector[pAddressSpaceIndex].pinnedPtr, lCompactViewData.subscriptionInfo.length, std::string("pmStubCUDA::CopyDataFromPinnedBuffers2"));
                     }
                     else
                     {
@@ -3588,7 +3588,7 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
                             void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
                             void* lDataPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
 
-                            PMLIB_MEMCPY(lDataPtr, lPinnedPtr, lIter->second.first);
+                            PMLIB_MEMCPY(lDataPtr, lPinnedPtr, lIter->second.first, std::string("pmStubCUDA::CopyDataFromPinnedBuffers3"));
                         }
                     }
                 }
@@ -3605,7 +3605,7 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
             lCpuScratchBuffer = lSubscriptionManager.CheckAndGetScratchBuffer(this, pSubtaskId, pSplitInfo, PRE_SUBTASK_TO_POST_SUBTASK, lScratchBufferSize);
         
         if(lCpuScratchBuffer && lScratchBufferSize)
-            PMLIB_MEMCPY(lCpuScratchBuffer, lVector.back().pinnedPtr, lScratchBufferSize);
+            PMLIB_MEMCPY(lCpuScratchBuffer, lVector.back().pinnedPtr, lScratchBufferSize, std::string("pmStubCUDA::CopyDataFromPinnedBuffers4"));
     }
 
     pmCudaSubtaskSecondaryBuffersStruct& lStruct = mSubtaskSecondaryBuffersMap[pSubtaskId];

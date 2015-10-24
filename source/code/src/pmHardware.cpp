@@ -91,9 +91,9 @@ void pmProcessingElement::BuildDeviceInfo(const communicator::devicePool* pDevic
 
     size_t lNameLength = std::min(strlen(lName), (size_t)(MAX_NAME_STR_LEN - 1));
     size_t lDescLength = std::min(strlen(lDesc), (size_t)(MAX_DESC_STR_LEN - 1));
-    
-    PMLIB_MEMCPY(mDeviceInfo.name, lName, lNameLength);
-    PMLIB_MEMCPY(mDeviceInfo.description, lDesc, lDescLength);
+
+    PMLIB_MEMCPY(mDeviceInfo.name, lName, lNameLength, std::string("pmProcessingElement::BuildDeviceInfo1"));
+    PMLIB_MEMCPY(mDeviceInfo.description, lDesc, lDescLength, std::string("pmProcessingElement::BuildDeviceInfo2"));
 
     mDeviceInfo.deviceHandle = ((GetMachine() == PM_LOCAL_MACHINE) ? static_cast<void*>(GetLocalExecutionStub()) : this);
     mDeviceInfo.name[lNameLength] = '\0';

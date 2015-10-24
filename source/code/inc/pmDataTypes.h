@@ -545,27 +545,38 @@ namespace pm
 #ifdef TRACK_MEM_COPIES
     class pmMemCopyTracker
     {
+        struct pmMemCopyStatistics
+        {
+            ulong mBytesCopied;
+            double mElapsedTime;
+            double mStartTime;
+            uint mOngoingMemCopies;
+
+            pmMemCopyStatistics();
+            
+            void BeginRecord(size_t pBytes);
+            void EndRecord();
+        };
+        
         public:
             pmMemCopyTracker();
             ~pmMemCopyTracker();
 
             void SetHostId(uint pHostId);
-            void Begin(size_t pBytes);
-            void End();
+            void Begin(size_t pBytes, const std::string& pKey);
+            void End(const std::string& pKey);
 
         private:
-            ulong mBytesCopied;
             uint mHostId;
-            double mElapsedTime;
-            double mStartTime;
-            uint mOngoingMemCopies;
+            pmMemCopyStatistics mNodeTimer;
+            std::map<std::string, pmMemCopyStatistics> mBifurcationMap;
     };
     
     extern pmMemCopyTracker gMemCopyTracker;
 
-#define PMLIB_MEMCPY(a, b, c) { gMemCopyTracker.Begin(c); memcpy(a, b, c); gMemCopyTracker.End();}
+#define PMLIB_MEMCPY(a, b, c, key) { gMemCopyTracker.Begin(c, key); memcpy(a, b, c); gMemCopyTracker.End(key);}
 #else
-#define PMLIB_MEMCPY(a, b, c) memcpy(a, b, c)
+#define PMLIB_MEMCPY(a, b, c, key) memcpy(a, b, c)
 #endif
 
 #ifdef SUPPORT_SPLIT_SUBTASKS

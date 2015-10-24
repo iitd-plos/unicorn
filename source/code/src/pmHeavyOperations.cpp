@@ -370,7 +370,7 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
                 std::function<void (char*, ulong)> lFunc([&] (char* pMem, ulong pCopyLength)
                 {
                     DEBUG_EXCEPTION_ASSERT(pCopyLength == pLength);
-                    PMLIB_MEMCPY(pMem, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), pCopyLength);
+                    PMLIB_MEMCPY(pMem, (void*)((char*)(lOwnerAddressSpace->GetMem()) + lInternalOffset), pCopyLength, std::string("pmHeavyOperationsThread::ServeGeneralMemoryRequest"));
                 });
 
                 if(!pIsTaskOriginated || pRequestingTask)

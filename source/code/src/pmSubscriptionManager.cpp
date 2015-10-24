@@ -1453,7 +1453,7 @@ void pmSubscriptionManager::InitializeSubtaskShadowMemNaturalView(pmExecutionStu
                 lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount += lCount;
                 
                 size_t lMemSize = std::min(lCount * lPageSize, lUnifiedSubscriptionInfo.length - lStartPage * lPageSize);
-                PMLIB_MEMCPY(lShadowMem + lStartPage * lPageSize, lSrcMem, lMemSize);
+                PMLIB_MEMCPY(lShadowMem + lStartPage * lPageSize, lSrcMem, lMemSize, std::string("pmSubscriptionManager::InitializeSubtaskShadowMemNaturalView1"));
 
                 lSrcMem += lMemSize;
             }
@@ -1467,7 +1467,7 @@ void pmSubscriptionManager::InitializeSubtaskShadowMemNaturalView(pmExecutionStu
 
             for(; lBeginIter != lEndIter; ++lBeginIter)
             {
-                PMLIB_MEMCPY(lShadowMem + (lBeginIter->first - lUnifiedSubscriptionInfo.offset), lCurrPtr, lBeginIter->second.first);
+                PMLIB_MEMCPY(lShadowMem + (lBeginIter->first - lUnifiedSubscriptionInfo.offset), lCurrPtr, lBeginIter->second.first, std::string("pmSubscriptionManager::InitializeSubtaskShadowMemNaturalView2"));
                 lCurrPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lCurrPtr) + lBeginIter->second.first);
             }
         }
@@ -1479,7 +1479,7 @@ void pmSubscriptionManager::InitializeSubtaskShadowMemNaturalView(pmExecutionStu
 
         char* lMem = (char*)(lAddressSpace->GetMem());
         for(; lBeginIter != lEndIter; ++lBeginIter)
-            PMLIB_MEMCPY(lShadowMem + (lBeginIter->first - lUnifiedSubscriptionInfo.offset), lMem + lBeginIter->first, lBeginIter->second.first);
+            PMLIB_MEMCPY(lShadowMem + (lBeginIter->first - lUnifiedSubscriptionInfo.offset), lMem + lBeginIter->first, lBeginIter->second.first, std::string("pmSubscriptionManager::InitializeSubtaskShadowMemNaturalView3"));
     }
     
 #ifdef SUPPORT_LAZY_MEMORY
@@ -1539,7 +1539,7 @@ void pmSubscriptionManager::InitializeSubtaskShadowMemCompactView(pmExecutionStu
                 lSubtask.mAddressSpacesData[pMemIndex].mWriteOnlyLazyUnprotectedPageCount += lCount;
 
                 size_t lMemSize = std::min(lCount * lPageSize, lCompactViewData.subscriptionInfo.length - lStartPage * lPageSize);
-                PMLIB_MEMCPY(lShadowMem + lStartPage * lPageSize, lSrcMem, lMemSize);
+                PMLIB_MEMCPY(lShadowMem + lStartPage * lPageSize, lSrcMem, lMemSize, std::string("pmSubscriptionManager::InitializeSubtaskShadowMemCompactView1"));
 
                 lSrcMem += lMemSize;
             }
@@ -1556,7 +1556,7 @@ void pmSubscriptionManager::InitializeSubtaskShadowMemCompactView(pmExecutionStu
 
             for(lIter = lBeginIter; lIter != lEndIter; ++lIter, ++lOffsetsIter)
             {
-                PMLIB_MEMCPY(lShadowMem + (*lOffsetsIter), lCurrPtr, lIter->second.first);
+                PMLIB_MEMCPY(lShadowMem + (*lOffsetsIter), lCurrPtr, lIter->second.first, std::string("pmSubscriptionManager::InitializeSubtaskShadowMemCompactView2"));
                 lCurrPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lCurrPtr) + lIter->second.first);
             }
         }
@@ -1571,7 +1571,7 @@ void pmSubscriptionManager::InitializeSubtaskShadowMemCompactView(pmExecutionStu
 
         char* lMem = (char*)(lAddressSpace->GetMem());
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter, ++lOffsetsIter)
-            PMLIB_MEMCPY(lShadowMem + (*lOffsetsIter), lMem + lIter->first, lIter->second.first);
+            PMLIB_MEMCPY(lShadowMem + (*lOffsetsIter), lMem + lIter->first, lIter->second.first, std::string("pmSubscriptionManager::InitializeSubtaskShadowMemCompactView3"));
     }
     
 #ifdef SUPPORT_LAZY_MEMORY
@@ -1669,7 +1669,7 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
         const pmSubscriptionInfo& lUnifiedSubscriptionInfo = GetUnifiedReadWriteSubscriptionInternal(pStub, lSubtask, pMemIndex);
         
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter)
-            PMLIB_MEMCPY(lMem + lIter->first, lShadowMem + (lIter->first - lUnifiedSubscriptionInfo.offset), lIter->second.first);
+            PMLIB_MEMCPY(lMem + lIter->first, lShadowMem + (lIter->first - lUnifiedSubscriptionInfo.offset), lIter->second.first, std::string("pmSubscriptionManager::CommitSubtaskShadowMem1"));
     }
     else    // SUBSCRIPTION_COMPACT
     {
@@ -1679,7 +1679,7 @@ void pmSubscriptionManager::CommitSubtaskShadowMem(pmExecutionStub* pStub, ulong
         DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBeginIter, lEndIter));
 
         for(lIter = lBeginIter; lIter != lEndIter; ++lIter, ++lOffsetsIter)
-            PMLIB_MEMCPY(lMem + lIter->first, lShadowMem + (*lOffsetsIter), lIter->second.first);
+            PMLIB_MEMCPY(lMem + lIter->first, lShadowMem + (*lOffsetsIter), lIter->second.first, std::string("pmSubscriptionManager::CommitSubtaskShadowMem2"));
     }
 
     DestroySubtaskShadowMemInternal(lSubtask, pStub, pSubtaskId, pSplitInfo, pMemIndex);

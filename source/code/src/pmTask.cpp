@@ -110,7 +110,7 @@ pmTask::pmTask(void* pTaskConf, uint pTaskConfLength, ulong pTaskId, std::vector
     if(mTaskConfLength)
     {
         mTaskConf = pmBase::AllocateMemory(mTaskConfLength);
-        PMLIB_MEMCPY(mTaskConf, pTaskConf, mTaskConfLength);
+        PMLIB_MEMCPY(mTaskConf, pTaskConf, mTaskConfLength, std::string("pmTask::pmTask"));
     }
 
     mAddressSpaces.reserve(mTaskMemVector.size());
