@@ -2823,6 +2823,8 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                 if(pTask->IsWritable(pAddressSpace))
                 {
                     lSubtaskMemoryVector[pAddressSpaceIndex].requiresLoad = true;
+
+                #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
                     lSubtaskMemoryVector[pAddressSpaceIndex].pinnedPtr = mPinnedChunkCollection.AllocateNoThrow(lSubscriptionInfo.length, pCudaAlignment);
                     
                     if(!lSubtaskMemoryVector[pAddressSpaceIndex].pinnedPtr)
@@ -2830,6 +2832,7 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                         lLoadStatus = false;
                         return;     // return from lambda expression
                     }
+                #endif
                 }
 
                 lSubtaskMemoryVector[pAddressSpaceIndex].cudaPtr = lDeviceMemoryPtr->cudaPtr;
@@ -3225,7 +3228,7 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
 
                         for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
                         {
-                            void* lSrcPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowMemAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
+                            void* lSrcPtr = reinterpret_cast<void*>((lShadowMemAddr ? (reinterpret_cast<size_t>(lShadowMemAddr) + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
                             void* lDestPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + (*lOffsetsIter));
 
                             pHostToDeviceCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
@@ -3343,7 +3346,7 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
 
                         for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
                         {
-                            void* lDestPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowMemAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
+                            void* lDestPtr = reinterpret_cast<void*>((lShadowMemAddr ? (reinterpret_cast<size_t>(lShadowMemAddr) + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
                             void* lSrcPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].cudaPtr) + (*lOffsetsIter));
 
                             pDeviceToHostCommands.push_back(pmCudaMemcpyCommand(lSrcPtr, lDestPtr, lIter->second.first));
