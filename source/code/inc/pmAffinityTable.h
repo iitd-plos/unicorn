@@ -117,9 +117,14 @@ private:
     template<typename T, typename S>
     void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, T pSentinelValue);
 
+#ifdef MACHINES_PICK_BEST_SUBTASKS
 #ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
     template<typename T>
     double GetProfitValue(T& pData);
+#endif
+#else
+    template<typename T>
+    double GetEstimatedCompletionTime(T& pData);
 #endif
     
 #ifdef USE_AFFINITY_IN_STEAL
@@ -140,7 +145,7 @@ private:
         pmTable<uint, std::vector<ulong>> mTable; // machine index versus subtasks in order of preference
     #endif
 #else
-    pmTable<ulong, std::vector<const pmMachine*>> mTable; // subtask id versus machines in order of preference
+    pmTable<ulong, std::vector<std::pair<const pmMachine*, double>>> mTable; // subtask id versus (machine, estimated completion time) pair in order of preference
 #endif
 };
 

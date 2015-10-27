@@ -121,7 +121,7 @@
 		2B2E44011795C6E800309100 /* pmMemChunk.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmMemChunk.h; sourceTree = "<group>"; };
 		2B2E44021795C8B900309100 /* pmMemChunk.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemChunk.cpp; sourceTree = "<group>"; };
 		2B4C2BBE18E9E30E00306F87 /* pmOpenCLManager.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = pmOpenCLManager.h; sourceTree = "<group>"; };
-		2B5590AC1A2197B700E0F3B1 /* pmAffinityTable.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; name = pmAffinityTable.h; path = ../src/pmAffinityTable.h; sourceTree = "<group>"; };
+		2B5590AC1A2197B700E0F3B1 /* pmAffinityTable.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmAffinityTable.h; sourceTree = "<group>"; };
 		2B5590AD1A2197D900E0F3B1 /* pmAffinityTable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmAffinityTable.cpp; sourceTree = "<group>"; };
 		2B5590AF1A21A11D00E0F3B1 /* pmTable.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmTable.h; sourceTree = "<group>"; };
 		2B5590B01A21A13700E0F3B1 /* pmTable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTable.cpp; sourceTree = "<group>"; };
