@@ -234,10 +234,14 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
             mTable.AddRow((uint)(*pMachinesVector[pIndex]), std::move(lTableRow));
         #endif
     #else
-        std::vector<const pmMachine*> lTableRow;
-        lTableRow.reserve(lMachines);
+        std::vector<std::pair<const pmMachine*, double>> lTableRow;
+        lTableRow.resize(lMachines);
         
-        std::transform(pEntry.begin(), pEntry.end(), std::back_inserter(lTableRow), select2nd<T, const pmMachine*>());
+        for_each(pEntry, [&] (const std::pair<T, const pmMachine*>& pMapEntry)
+        {
+            lTableRow.emplace_back(pMapEntry.second, GetEstimatedCompletionTime(pMapEntry.first));
+        });
+
         mTable.AddRow(pIndex, std::move(lTableRow));
     #endif
     });
@@ -396,39 +400,78 @@ void pmAffinityTable::CreateSubtaskMappings()
         }
     #endif
 #else
+    std::vector<double> mEstimatedCompletionTimeOnMachineVector(lMap.size(), 0);
+    double mCurrentMaximumCompletionTime = 0;
+    
     for(ulong i = 0; i < lSubtaskCount; ++i)
     {
-        const std::vector<const pmMachine*>& lSubtaskRow = mTable.GetRow(i);
+        const std::vector<std::pair<const pmMachine*, double>>& lSubtaskRow = mTable.GetRow(i);
         
-        bool lAssigned = false;
+        const pmMachine* lTargetMachinePtr = NULL;
+        double lTargettedCompletionTime = 0;
         
+        double lCompletionTimeOfProbableMachine = std::numeric_limits<double>::max();
+        const pmMachine* lProbableMachinePtr = NULL;
+
         // Most preferred machine for this subtask is at front of the row
+        // Assign that machine to the subtask which is high on preference and does not increase the total completion time beyond the current global maximum.
+        // If there is no such machine, assign subtask to the machine that increases the global completion time by minimum.
         for(auto lSubtaskRowIter = lSubtaskRow.begin(), lSubtaskRowEndIter = lSubtaskRow.end(); lSubtaskRowIter != lSubtaskRowEndIter; ++lSubtaskRowIter)
         {
-            const pmMachine* lMachinePtr = *lSubtaskRowIter;
+            const pmMachine* lMachinePtr = lSubtaskRowIter->first;
             uint lMachine = *lMachinePtr;
+
+            double lCompletionTimeOfSubtask = lSubtaskRowIter->second;
+            double lCompletionTime = mEstimatedCompletionTimeOnMachineVector[lMachine] + lCompletionTimeOfSubtask;
             
             auto lMapIter = lMap.find(lMachine);
             if(lMapIter != lMap.end() && lMapIter->second.second)
             {
-                ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lMapIter->second.first];
+                if(lCompletionTime < mCurrentMaximumCompletionTime)
+                {
+                    lTargetMachinePtr = lMachinePtr;
+                    lTargettedCompletionTime = lCompletionTime;
 
-                lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = i;
-                lPhysicalToLogicalSubtaskMapping[i] = lLogicalSubtaskId;
-
-                ++lMapIter->second.first;
-                --lMapIter->second.second;
-                
-                lAssigned = true;
-                break;
+                    break;
+                }
+                else
+                {
+                    if(lCompletionTimeOfProbableMachine > lCompletionTime)
+                    {
+                        lCompletionTimeOfProbableMachine = lCompletionTime;
+                        lProbableMachinePtr = lMachinePtr;
+                    }
+                }
             }
+            
+        }
+        
+        if(!lTargetMachinePtr)
+        {
+            lTargetMachinePtr = lProbableMachinePtr;
+            lTargettedCompletionTime = lCompletionTimeOfProbableMachine;
         }
 
-        EXCEPTION_ASSERT(lAssigned);
+        EXCEPTION_ASSERT(lTargetMachinePtr && lTargettedCompletionTime);
+
+        uint lMachine = *lTargetMachinePtr;
+
+        auto lMapIter = lMap.find(lMachine);
+        ulong lLogicalSubtaskId = lLogicalSubtaskIdsVector[lMapIter->second.first];
+
+        lLogicalToPhysicalSubtaskMapping[lLogicalSubtaskId] = i;
+        lPhysicalToLogicalSubtaskMapping[i] = lLogicalSubtaskId;
+
+        ++lMapIter->second.first;
+        --lMapIter->second.second;
+
+        mEstimatedCompletionTimeOnMachineVector[lMachine] = lTargettedCompletionTime;
+        mCurrentMaximumCompletionTime = std::max(mCurrentMaximumCompletionTime, lTargettedCompletionTime);
+
     }
 #endif
 
-#ifdef _DEBUG
+#if 0   //def _DEBUG
     for_each_with_index(lLogicalToPhysicalSubtaskMapping, [&] (ulong lPhysicalSubtask, size_t lLogicalSubtask)
     {
         EXCEPTION_ASSERT(lPhysicalToLogicalSubtaskMapping[lPhysicalSubtask] == lLogicalSubtask);
@@ -453,7 +496,9 @@ void pmAffinityTable::CreateSubtaskMappings()
 
     mLocalTask->SetAffinityMappings(std::move(lLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
 }
-    
+
+#ifdef MACHINES_PICK_BEST_SUBTASKS
+
 #ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
 template<typename T>
 double pmAffinityTable::GetProfitValue(T& pData)
@@ -461,7 +506,18 @@ double pmAffinityTable::GetProfitValue(T& pData)
     return 0;
 }
 #endif
+    
+#else
 
+template<typename T>
+double pmAffinityTable::GetEstimatedCompletionTime(T& pData)
+{
+    return 0;
+}
+
+#endif
+
+    
 #ifdef USE_AFFINITY_IN_STEAL
 std::vector<ulong> pmAffinityTable::FindSubtasksWithBestAffinity(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine)
 {
