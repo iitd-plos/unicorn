@@ -230,7 +230,7 @@ void pmExecutionStub::ProcessNegotiatedRange(const pmSubtaskRange& pRange)
     
 void pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation)
 {
-    SwitchThread(std::shared_ptr<stubEvent>(new cancelAllSubtasksEvent(CANCEL_ALL_SUBTASKS, pTask, pTaskListeningOnCancellation)), pTask->GetPriority() - 1);
+    SwitchThread(std::shared_ptr<stubEvent>(new cancelAllSubtasksEvent(CANCEL_ALL_SUBTASKS, pTask)), pTask->GetPriority() - 1);
 
     // Auto lock/unlock scope
     {
@@ -238,6 +238,21 @@ void pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCanc
         
         if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
             CancelCurrentlyExecutingSubtaskRange(pTaskListeningOnCancellation);
+    }
+
+    if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask) && pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()))
+    {
+        FINALIZE_RESOURCE_PTR(dSecondaryAllotteeLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSecondaryAllotteeLock, Lock(), Unlock());
+
+        auto lIter = mSecondaryAllotteeMap.begin(), lEndIter = mSecondaryAllotteeMap.end();
+    
+        for(; lIter != lEndIter; )
+        {
+            if(lIter->first.first == pTask)
+                mSecondaryAllotteeMap.erase(lIter++);
+            else
+                ++lIter;
+        }
     }
 }
 
@@ -259,27 +274,12 @@ void pmExecutionStub::CancelSubtaskRange(const pmSubtaskRange& pRange)
     }
 }
 
-void pmExecutionStub::CancelAllSubtasksInternal(pmTask* pTask, bool pTaskListeningOnCancellation)
+void pmExecutionStub::CancelAllSubtasksInternal(pmTask* pTask)
 {
     ushort lPriority = pTask->GetPriority();
 
     // Delete all subtask exec commands for the task pTask
     DeleteMatchingCommands(lPriority, execEventMatchFunc, pTask);
-    
-    if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask) && pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()))
-    {
-        FINALIZE_RESOURCE_PTR(dSecondaryAllotteeLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mSecondaryAllotteeLock, Lock(), Unlock());
-
-        auto lIter = mSecondaryAllotteeMap.begin(), lEndIter = mSecondaryAllotteeMap.end();
-    
-        for(; lIter != lEndIter; )
-        {
-            if(lIter->first.first == pTask)
-                mSecondaryAllotteeMap.erase(lIter++);
-            else
-                ++lIter;
-        }
-    }
 }
     
 void pmExecutionStub::CancelSubtaskRangeInternal(const pmSubtaskRange& pRange)
@@ -1403,7 +1403,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         {
             cancelAllSubtasksEvent& lEvent = static_cast<cancelAllSubtasksEvent&>(pEvent);
             
-            CancelAllSubtasksInternal(lEvent.task, lEvent.taskListeningOnCancellation);
+            CancelAllSubtasksInternal(lEvent.task);
 
             break;
         }
