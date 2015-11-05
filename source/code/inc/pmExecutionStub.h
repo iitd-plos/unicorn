@@ -76,6 +76,8 @@ enum eventIdentifier
     , SPLIT_SUBTASK_CHECK
 #endif
     , REMOTE_SUBTASK_REDUCE
+    , CANCEL_SUBTASK_RANGE
+    , CANCEL_ALL_SUBTASKS
     , MAX_EXEC_STUB_EVENTS
 };
 
@@ -250,6 +252,28 @@ struct remoteSubtaskReduceEvent : public stubEvent
     {}
 };
 
+struct cancelSubtaskRangeEvent : public stubEvent
+{
+    pmSubtaskRange range;
+    
+    cancelSubtaskRangeEvent(eventIdentifier pEventId, const pmSubtaskRange& pRange)
+    : stubEvent(pEventId)
+    , range(pRange)
+    {}
+};
+
+struct cancelAllSubtasksEvent : public stubEvent
+{
+    pmTask* task;
+    bool taskListeningOnCancellation;
+    
+    cancelAllSubtasksEvent(eventIdentifier pEventId, pmTask* pTask, bool pTaskListeningOnCancellation)
+    : stubEvent(pEventId)
+    , task(pTask)
+    , taskListeningOnCancellation(pTaskListeningOnCancellation)
+    {}
+};
+
 }
 
 class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEvent>
@@ -334,6 +358,9 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 
 	private:
         void PushInternal(const pmSubtaskRange& pRange, bool pIsStealResponse);
+
+        void CancelAllSubtasksInternal(pmTask* pTask, bool pTaskListeningOnCancellation);
+        void CancelSubtaskRangeInternal(const pmSubtaskRange& pRange);
 
         void CheckTermination();
         void AddSubtaskRangeToExecutionQueue(const std::shared_ptr<execStub::stubEvent>& pSharedPtr);

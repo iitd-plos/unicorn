@@ -360,6 +360,8 @@ void pmSafePQ<T, P>::DeleteAndGetAllMatchingItems(P pPriority, matchFuncPtr pMat
                         ++lListIter;
                     }
                 }
+                
+                return;
             }
         }
 

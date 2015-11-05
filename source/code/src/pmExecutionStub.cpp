@@ -227,22 +227,44 @@ void pmExecutionStub::ProcessNegotiatedRange(const pmSubtaskRange& pRange)
 {
 	SwitchThread(std::shared_ptr<stubEvent>(new negotiatedRangeEvent(NEGOTIATED_RANGE, pRange)), pRange.task->GetPriority());
 }
-
-/* This is an asynchronous call. Current subtask is not cancelled immediately. */
+    
 void pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation)
+{
+    SwitchThread(std::shared_ptr<stubEvent>(new cancelAllSubtasksEvent(CANCEL_ALL_SUBTASKS, pTask, pTaskListeningOnCancellation)), pTask->GetPriority() - 1);
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
+        
+        if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
+            CancelCurrentlyExecutingSubtaskRange(pTaskListeningOnCancellation);
+    }
+}
+
+void pmExecutionStub::CancelSubtaskRange(const pmSubtaskRange& pRange)
+{
+    SwitchThread(std::shared_ptr<stubEvent>(new cancelSubtaskRangeEvent(CANCEL_SUBTASK_RANGE, pRange)), pRange.task->GetPriority() - 1);
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
+        
+        if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pRange.task)
+        {
+            THROW_IF_SECOND_RANGE_IS_A_SUBSET(mCurrentSubtaskRangeStats->startSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId, pRange.startSubtask, pRange.endSubtask);
+            
+            if(mCurrentSubtaskRangeStats->startSubtaskId >= pRange.startSubtask && mCurrentSubtaskRangeStats->endSubtaskId <= pRange.endSubtask)
+                CancelCurrentlyExecutingSubtaskRange(false);
+        }
+    }
+}
+
+void pmExecutionStub::CancelAllSubtasksInternal(pmTask* pTask, bool pTaskListeningOnCancellation)
 {
     ushort lPriority = pTask->GetPriority();
 
     // Delete all subtask exec commands for the task pTask
     DeleteMatchingCommands(lPriority, execEventMatchFunc, pTask);
-
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
-
-        if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
-            CancelCurrentlyExecutingSubtaskRange(pTaskListeningOnCancellation);
-    }
     
     if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask) && pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()))
     {
@@ -260,8 +282,7 @@ void pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCanc
     }
 }
     
-/* This is an asynchronous call. Current subtask is not cancelled immediately. */
-void pmExecutionStub::CancelSubtaskRange(const pmSubtaskRange& pRange)
+void pmExecutionStub::CancelSubtaskRangeInternal(const pmSubtaskRange& pRange)
 {
     ushort lPriority = pRange.task->GetPriority();
     
@@ -276,19 +297,6 @@ void pmExecutionStub::CancelSubtaskRange(const pmSubtaskRange& pRange)
         THROW_IF_SECOND_RANGE_IS_A_SUBSET(lExecEvent.range.startSubtask, lExecEvent.range.endSubtask, pRange.startSubtask, pRange.endSubtask);
     });
 #endif
-
-    // Auto lock/unlock scope
-    {
-        FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
-        
-        if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pRange.task)
-        {
-            THROW_IF_SECOND_RANGE_IS_A_SUBSET(mCurrentSubtaskRangeStats->startSubtaskId, mCurrentSubtaskRangeStats->endSubtaskId, pRange.startSubtask, pRange.endSubtask);
-
-            if(mCurrentSubtaskRangeStats->startSubtaskId >= pRange.startSubtask && mCurrentSubtaskRangeStats->endSubtaskId <= pRange.endSubtask)
-                CancelCurrentlyExecutingSubtaskRange(false);
-        }
-    }
 }
 
 #ifdef SUPPORT_CUDA
@@ -1391,6 +1399,24 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             break;
         }
             
+        case CANCEL_ALL_SUBTASKS:
+        {
+            cancelAllSubtasksEvent& lEvent = static_cast<cancelAllSubtasksEvent&>(pEvent);
+            
+            CancelAllSubtasksInternal(lEvent.task, lEvent.taskListeningOnCancellation);
+
+            break;
+        }
+            
+        case CANCEL_SUBTASK_RANGE:
+        {
+            cancelSubtaskRangeEvent& lEvent = static_cast<cancelSubtaskRangeEvent&>(pEvent);
+            
+            CancelSubtaskRangeInternal(lEvent.range);
+
+            break;
+        }
+            
         default:
             PMTHROW(pmFatalErrorException());
 	}
@@ -1450,7 +1476,7 @@ void pmExecutionStub::ExecuteSubtaskRange(execStub::subtaskExecEvent& pEvent)
     else
     {
     #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
-        std::cout << "[Host " << pmGetHostId() << "]: Executed subtask range [" << lCurrentRange.startSubtask << " - " << lCurrentRange.endSubtask << "] - " << lRange.endSubtask << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: Device " << GetProcessingElement()->GetGlobalDeviceIndex() << " executed subtask range [" << lCurrentRange.startSubtask << " - " << lCurrentRange.endSubtask << "] - " << lRange.endSubtask << std::endl;
     #endif
     
         if(lRange.originalAllottee == NULL)
@@ -1730,7 +1756,7 @@ bool pmExecutionStub::CheckSplittedExecution(subtaskExecEvent& pEvent)
     
     return true;
 }
-    
+
 void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSplitSubtaskAutoPtr, bool pSecondaryOperationsBlocked)
 {
     if(!pSplitSubtaskAutoPtr.get())
@@ -1764,7 +1790,7 @@ void pmExecutionStub::ExecutePendingSplit(std::unique_ptr<pmSplitSubtask>&& pSpl
     #endif
 
     #ifdef TRACK_SUBTASK_EXECUTION_VERBOSE
-        std::cout << "[Host " << pmGetHostId() << "]: Executed split subtask " << pSplitSubtaskAutoPtr->subtaskId << " (Split " << pSplitSubtaskAutoPtr->splitId << " of " << pSplitSubtaskAutoPtr->splitCount << ")" << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: Device " << GetProcessingElement()->GetGlobalDeviceIndex() << " executed split subtask " << pSplitSubtaskAutoPtr->subtaskId << " (Split " << pSplitSubtaskAutoPtr->splitId << " of " << pSplitSubtaskAutoPtr->splitCount << ")" << std::endl;
     #endif
     }
 

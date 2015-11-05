@@ -1259,7 +1259,7 @@ void pmMPI::ReceiveNonBlocking(pmCommunicatorCommandPtr& pCommand)
 	if(!lData || lLength == 0)
 		return;
 
-    DEBUG_EXCEPTION_ASSERT(dynamic_cast<const pmMachine*>(pCommand->GetDestination()));
+    DEBUG_EXCEPTION_ASSERT(pCommand->IsPersistent() || dynamic_cast<const pmMachine*>(pCommand->GetDestination()));
 
 	ulong lBlocks = lLength/MPI_TRANSFER_MAX_LIMIT;
 	

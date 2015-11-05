@@ -455,7 +455,7 @@ void pmScheduler::AcknowledgementSendEvent(const pmProcessingElement* pDevice, c
         FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
 
         mAcknowledgementsSent += (pRange.endSubtask - pRange.startSubtask + 1);
-        std::cout << "Device " << pDevice->GetGlobalDeviceIndex() << " sent " << (pRange.endSubtask - pRange.startSubtask + 1) << " acknowledgements for subtasks [" << pRange.startSubtask << " - " << pRange.endSubtask << "]" << std::endl;
+        std::cout << "[Host " << pmGetHostId() << "]: Device " << pDevice->GetGlobalDeviceIndex() << " sent " << (pRange.endSubtask - pRange.startSubtask + 1) << " acknowledgements for subtasks [" << pRange.startSubtask << " - " << pRange.endSubtask << "]" << std::endl;
     }
 #endif
 
