@@ -74,6 +74,44 @@ void HeavyOperationsCommandCompletionCallback(const pmCommandPtr& pCommand)
 	lHeavyOperationsThreadPool->CommandCompletionEvent(pCommand);
 }
     
+// If the macro PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD is defined, then this function is
+// executed directly in network thread's context. This is because memory is received in two MPI messages
+// where the first message contains the metadata while the second contains actual memory. By executing this callback on
+// network thread, we omit the time this message would have taken through the scheduler queue and post an MPI_recv for
+// the actual data quickly. Also, note that since this method is executed on network thread, it has its lock acquired at
+// that time. Calling a network layer's method (from this function) that acquires the lock again will cause a deadlock.
+void MemoryMetaDataReceiveCommandCompletionCallback(const pmCommandPtr& pCommand)
+{
+    pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
+
+    memoryReceiveStruct* lReceiveStruct = (memoryReceiveStruct*)(lCommunicatorCommand->GetData());
+    pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->memOwnerHost), lReceiveStruct->generationNumber);
+
+    if(lAddressSpace)		// If memory still exists
+    {
+        communicator::communicatorCommandTags lTag = (communicator::communicatorCommandTags)lReceiveStruct->mpiTag;
+        const pmMachine* lSendingMachine = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->senderHost);
+        
+        pmTask* lRequestingTask = NULL;
+        if(lReceiveStruct->isTaskOriginated)
+        {
+            const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->originatingHost);
+            lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lReceiveStruct->sequenceNumber);
+        }
+
+        if(!lReceiveStruct->isTaskOriginated || (lRequestingTask && lAddressSpace->GetLockingTask() == lRequestingTask))
+        {
+            char* lBaseAddr = (char*)(lAddressSpace->GetMem()) + lReceiveStruct->offset;
+
+            finalize_ptr<memoryReceiveStruct> lMemoryReceiveData(new memoryReceiveStruct(*lReceiveStruct));
+
+            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceiveStruct>::CreateSharedPtr(lCommunicatorCommand->GetPriority(), RECEIVE, lTag, lSendingMachine, BYTE, lMemoryReceiveData, 1, HeavyOperationsCommandCompletionCallback, static_cast<void*>(lBaseAddr));
+
+            pmCommunicator::GetCommunicator()->ReceiveMemory(lCommand, false);
+        }
+    }
+}
+    
 pmCommandCompletionCallbackType pmHeavyOperationsThreadPool::GetHeavyOperationsCommandCompletionCallback()
 {
     return HeavyOperationsCommandCompletionCallback;
@@ -97,6 +135,7 @@ pmHeavyOperationsThreadPool::pmHeavyOperationsThreadPool(size_t pThreadCount)
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_IDENTIFIER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_TRANSFER_REQUEST_STRUCT);
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(FILE_OPERATIONS_STRUCT);
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_RECEIVE_STRUCT);
 
 	SetupPersistentCommunicationCommands();
 }
@@ -108,6 +147,7 @@ pmHeavyOperationsThreadPool::~pmHeavyOperationsThreadPool()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_IDENTIFIER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_TRANSFER_REQUEST_STRUCT);
     NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(FILE_OPERATIONS_STRUCT);
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_RECEIVE_STRUCT);
 
 	DestroyPersistentCommunicationCommands();
 }
@@ -116,21 +156,34 @@ void pmHeavyOperationsThreadPool::SetupPersistentCommunicationCommands()
 {
     finalize_ptr<communicator::memoryTransferRequest> lMemTransferRequestData(new memoryTransferRequest());
     finalize_ptr<communicator::fileOperationsStruct> lFileOperationsRecvData(new fileOperationsStruct());
+    finalize_ptr<communicator::memoryReceiveStruct> lMemoryReceiveRecvData(new memoryReceiveStruct());
 
 #define PERSISTENT_RECV_COMMAND(tag, structType, structEnumType, recvDataPtr) pmCommunicatorCommand<structEnumType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structType, recvDataPtr, 1, HeavyOperationsCommandCompletionCallback)
 
+#ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
+#define PERSISTENT_MEMORY_RECV_COMMAND(tag, structEnumType, structType, recvDataPtr) pmCommunicatorCommand<structType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structEnumType, recvDataPtr, 1, MemoryMetaDataReceiveCommandCompletionCallback)
+#endif
+
 	mMemTransferRequestCommand = PERSISTENT_RECV_COMMAND(MEMORY_TRANSFER_REQUEST_TAG, MEMORY_TRANSFER_REQUEST_STRUCT, memoryTransferRequest, lMemTransferRequestData);
 	mFileOperationsRecvCommand = PERSISTENT_RECV_COMMAND(FILE_OPERATIONS_TAG, FILE_OPERATIONS_STRUCT, fileOperationsStruct, lFileOperationsRecvData);
+#ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
+    mMemoryReceiveRecvCommand = PERSISTENT_MEMORY_RECV_COMMAND(MEMORY_RECEIVE_TAG, MEMORY_RECEIVE_STRUCT, memoryReceiveStruct, lMemoryReceiveRecvData);
+#else
+    mMemoryReceiveRecvCommand = PERSISTENT_RECV_COMMAND(MEMORY_RECEIVE_TAG, MEMORY_RECEIVE_STRUCT, memoryReceiveStruct, lMemoryReceiveRecvData);
+#endif
     
     mMemTransferRequestCommand->SetPersistent();
     mFileOperationsRecvCommand->SetPersistent();
+    mMemoryReceiveRecvCommand->SetPersistent();
     
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
     lNetwork->InitializePersistentCommand(mMemTransferRequestCommand);
     lNetwork->InitializePersistentCommand(mFileOperationsRecvCommand);
+    lNetwork->InitializePersistentCommand(mMemoryReceiveRecvCommand);
 
 	pmCommunicator::GetCommunicator()->Receive(mMemTransferRequestCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mFileOperationsRecvCommand, false);
+    pmCommunicator::GetCommunicator()->Receive(mMemoryReceiveRecvCommand, false);
 }
     
 void pmHeavyOperationsThreadPool::DestroyPersistentCommunicationCommands()
@@ -139,6 +192,7 @@ void pmHeavyOperationsThreadPool::DestroyPersistentCommunicationCommands()
 
     lNetwork->TerminatePersistentCommand(mMemTransferRequestCommand);
     lNetwork->TerminatePersistentCommand(mFileOperationsRecvCommand);
+    lNetwork->TerminatePersistentCommand(mMemoryReceiveRecvCommand);
 }
 
 void pmHeavyOperationsThreadPool::QueueNetworkRequest(pmCommunicatorCommandPtr& pCommand, heavyOperations::networkRequestType pType)
@@ -587,15 +641,82 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
                     break;
                 }
                 
-                default:
+				case MEMORY_RECEIVE_TAG:
+				{
+                #ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
+                    // Since memory transfers are received in two MPI messages (the first one contains size of the upcoming memory in the second one),
+                    // the first message is not handled in this callback as it is executed on scheduler thread. Rather, in order to reduce the turnaround
+                    // time, the callback is executed in network thread's context and an MPI_Irecv for the upcoming second message is immediately posted
                     PMTHROW(pmFatalErrorException());
+                #else
+                    MemoryMetaDataReceiveCommandCompletionCallback(pCommand);
+                #endif
+
+					break;
+				}
+                    
+                default:
+                {
+                    memoryReceiveStruct* lReceiveStruct = static_cast<memoryReceiveStruct*>(lCommunicatorCommand->GetData());
+                    if(lReceiveStruct)
+                    {
+                        pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->memOwnerHost), lReceiveStruct->generationNumber);
+                    
+                        if(lAddressSpace)		// If memory still exists
+                        {
+                            pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
+
+                            pmTask* lRequestingTask = NULL;
+                            if(lReceiveStruct->isTaskOriginated)
+                            {
+                                const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->originatingHost);
+                                lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lReceiveStruct->sequenceNumber);
+                            }
+
+                            if(lReceiveStruct->transferType == TRANSFER_GENERAL || (lReceiveStruct->step == 0 && lReceiveStruct->count == 1))
+                            {
+                            #ifdef ENABLE_MEM_PROFILING
+                                if(!lRequestingTask || !lRequestingTask->ShouldSuppressTaskLogs())
+                                {
+                                    lAddressSpace->RecordMemReceive(lReceiveStruct->length);
+
+                                    if(lRequestingTask)
+                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lReceiveStruct->length, false);
+                                }
+                            #endif
+
+                                lMemoryManager->UpdateReceivedMemory(lAddressSpace, lReceiveStruct->offset, lReceiveStruct->length, lRequestingTask);
+                            }
+                            else    // TRANSFER_SCATTERED
+                            {
+                                DEBUG_EXCEPTION_ASSERT(lReceiveStruct->transferType == TRANSFER_SCATTERED);
+
+                            #ifdef ENABLE_MEM_PROFILING
+                                if(!lRequestingTask || !lRequestingTask->ShouldSuppressTaskLogs())
+                                {
+                                    lAddressSpace->RecordMemReceive(lReceiveStruct->length * lReceiveStruct->count);
+
+                                    if(lRequestingTask)
+                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lReceiveStruct->length * lReceiveStruct->count, true);
+                                }
+                            #endif
+
+                                lMemoryManager->UpdateReceivedScatteredMemory(lAddressSpace, lReceiveStruct->offset, lReceiveStruct->length, lReceiveStruct->step, lReceiveStruct->count, lRequestingTask);
+                            }
+                        }
+
+                        break;
+                    }
+                    
+                    PMTHROW(pmFatalErrorException());
+                }
             }
 
             break;
         }
         
         default:
-			PMTHROW(pmFatalErrorException());
+            PMTHROW(pmFatalErrorException());
     }
 }
     

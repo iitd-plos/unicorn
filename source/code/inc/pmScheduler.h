@@ -508,7 +508,6 @@ struct affinityTransferEvent : public schedulerEvent
 class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEvent>
 {
 	friend void SchedulerCommandCompletionCallback(const pmCommandPtr& pCommand);
-    friend void MemoryMetaDataReceiveCommandCompletionCallback(const pmCommandPtr& pCommand);
     
 	public:
         virtual ~pmScheduler();
@@ -633,7 +632,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmCommunicatorCommandPtr mTaskEventRecvCommand;
 		pmCommunicatorCommandPtr mStealRequestRecvCommand;
         pmCommunicatorCommandPtr mStealResponseRecvCommand;
-        pmCommunicatorCommandPtr mMemoryReceiveRecvCommand;
         pmCommunicatorCommandPtr mHostFinalizationCommand;
         pmCommunicatorCommandPtr mSubtaskRangeCancelCommand;
         pmCommunicatorCommandPtr mNoReductionReqdCommand;

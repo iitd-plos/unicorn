@@ -127,44 +127,6 @@ void SchedulerCommandCompletionCallback(const pmCommandPtr& pCommand)
 	lScheduler->CommandCompletionEvent(pCommand);
 }
 
-// If the macro PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD is defined, then this function is
-// executed directly in network thread's context. This is because memory is received in two MPI messages
-// where the first message contains the metadata while the second contains actual memory. By executing this callback on
-// network thread, we omit the time this message would have taken through the scheduler queue and post an MPI_recv for
-// the actual data quickly. Also, note that since this method is executed on network thread, it has its lock acquired at
-// that time. Calling a network layer's method (from this function) that acquires the lock again will cause a deadlock.
-void MemoryMetaDataReceiveCommandCompletionCallback(const pmCommandPtr& pCommand)
-{
-    pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
-
-    memoryReceiveStruct* lReceiveStruct = (memoryReceiveStruct*)(lCommunicatorCommand->GetData());
-    pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->memOwnerHost), lReceiveStruct->generationNumber);
-
-    if(lAddressSpace)		// If memory still exists
-    {
-        communicator::communicatorCommandTags lTag = (communicator::communicatorCommandTags)lReceiveStruct->mpiTag;
-        const pmMachine* lSendingMachine = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->senderHost);
-        
-        pmTask* lRequestingTask = NULL;
-        if(lReceiveStruct->isTaskOriginated)
-        {
-            const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->originatingHost);
-            lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lReceiveStruct->sequenceNumber);
-        }
-
-        if(!lReceiveStruct->isTaskOriginated || (lRequestingTask && lAddressSpace->GetLockingTask() == lRequestingTask))
-        {
-            char* lBaseAddr = (char*)(lAddressSpace->GetMem()) + lReceiveStruct->offset;
-
-            finalize_ptr<memoryReceiveStruct> lMemoryReceiveData(new memoryReceiveStruct(*lReceiveStruct));
-
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceiveStruct>::CreateSharedPtr(lCommunicatorCommand->GetPriority(), RECEIVE, lTag, lSendingMachine, BYTE, lMemoryReceiveData, 1, SchedulerCommandCompletionCallback, static_cast<void*>(lBaseAddr));
-
-            pmCommunicator::GetCommunicator()->ReceiveMemory(lCommand, false);
-        }
-    }
-}
-
 bool pmScheduler::SchedulingModelSupportsStealing(scheduler::schedulingModel pModel)
 {
     return (pModel == PULL || pModel == PULL_WITH_AFFINITY);
@@ -188,7 +150,6 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SHADOW_MEM_TRANSFER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SUBTASK_REDUCE_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(REDISTRIBUTION_ORDER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(DATA_REDISTRIBUTION_STRUCT);
@@ -214,7 +175,6 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SHADOW_MEM_TRANSFER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SUBTASK_REDUCE_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(MEMORY_RECEIVE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REDISTRIBUTION_ORDER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(DATA_REDISTRIBUTION_STRUCT);
@@ -248,25 +208,15 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     finalize_ptr<communicator::taskEventStruct> lTaskEventRecvData(new taskEventStruct());
     finalize_ptr<communicator::stealRequestStruct> lStealRequestRecvData(new stealRequestStruct());
     finalize_ptr<communicator::stealResponseStruct> lStealResponseRecvData(new stealResponseStruct());
-    finalize_ptr<communicator::memoryReceiveStruct> lMemoryReceiveRecvData(new memoryReceiveStruct());
     finalize_ptr<communicator::subtaskRangeCancelStruct> lSubtaskRangeCancelData(new subtaskRangeCancelStruct());
     finalize_ptr<communicator::noReductionReqdStruct> lNoReductionReqdData(new noReductionReqdStruct());
 
 #define PERSISTENT_RECV_COMMAND(tag, structEnumType, structType, recvDataPtr) pmCommunicatorCommand<structType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structEnumType, recvDataPtr, 1, SchedulerCommandCompletionCallback)
 
-#ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
-#define PERSISTENT_MEMORY_RECV_COMMAND(tag, structEnumType, structType, recvDataPtr) pmCommunicatorCommand<structType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structEnumType, recvDataPtr, 1, MemoryMetaDataReceiveCommandCompletionCallback)
-#endif
-
 	mRemoteSubtaskRecvCommand = PERSISTENT_RECV_COMMAND(REMOTE_SUBTASK_ASSIGNMENT_TAG, REMOTE_SUBTASK_ASSIGN_STRUCT, remoteSubtaskAssignStruct, lSubtaskAssignRecvData);
 	mTaskEventRecvCommand = PERSISTENT_RECV_COMMAND(TASK_EVENT_TAG, TASK_EVENT_STRUCT, taskEventStruct, lTaskEventRecvData);
 	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	stealRequestStruct, lStealRequestRecvData);
     mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, stealResponseStruct, lStealResponseRecvData);
-#ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
-    mMemoryReceiveRecvCommand = PERSISTENT_MEMORY_RECV_COMMAND(MEMORY_RECEIVE_TAG, MEMORY_RECEIVE_STRUCT, memoryReceiveStruct, lMemoryReceiveRecvData);
-#else
-    mMemoryReceiveRecvCommand = PERSISTENT_RECV_COMMAND(MEMORY_RECEIVE_TAG, MEMORY_RECEIVE_STRUCT, memoryReceiveStruct, lMemoryReceiveRecvData);
-#endif
     mSubtaskRangeCancelCommand = PERSISTENT_RECV_COMMAND(SUBTASK_RANGE_CANCEL_TAG, SUBTASK_RANGE_CANCEL_STRUCT, subtaskRangeCancelStruct, lSubtaskRangeCancelData);
 	mNoReductionReqdCommand = PERSISTENT_RECV_COMMAND(NO_REDUCTION_REQD_TAG, NO_REDUCTION_REQD_STRUCT, noReductionReqdStruct, lNoReductionReqdData);
 
@@ -274,7 +224,6 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     mTaskEventRecvCommand->SetPersistent();
     mStealRequestRecvCommand->SetPersistent();
     mStealResponseRecvCommand->SetPersistent();
-    mMemoryReceiveRecvCommand->SetPersistent();
     mSubtaskRangeCancelCommand->SetPersistent();
     mNoReductionReqdCommand->SetPersistent();
     
@@ -283,7 +232,6 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     lNetwork->InitializePersistentCommand(mTaskEventRecvCommand);
     lNetwork->InitializePersistentCommand(mStealRequestRecvCommand);
     lNetwork->InitializePersistentCommand(mStealResponseRecvCommand);
-    lNetwork->InitializePersistentCommand(mMemoryReceiveRecvCommand);
     lNetwork->InitializePersistentCommand(mSubtaskRangeCancelCommand);
     lNetwork->InitializePersistentCommand(mNoReductionReqdCommand);
 
@@ -291,7 +239,6 @@ void pmScheduler::SetupPersistentCommunicationCommands()
 	pmCommunicator::GetCommunicator()->Receive(mTaskEventRecvCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mStealRequestRecvCommand, false);
     pmCommunicator::GetCommunicator()->Receive(mStealResponseRecvCommand, false);
-    pmCommunicator::GetCommunicator()->Receive(mMemoryReceiveRecvCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mSubtaskRangeCancelCommand, false);
     pmCommunicator::GetCommunicator()->Receive(mNoReductionReqdCommand, false);
 	
@@ -318,7 +265,6 @@ void pmScheduler::DestroyPersistentCommunicationCommands()
     lNetwork->TerminatePersistentCommand(mTaskEventRecvCommand);
     lNetwork->TerminatePersistentCommand(mStealRequestRecvCommand);
     lNetwork->TerminatePersistentCommand(mStealResponseRecvCommand);
-    lNetwork->TerminatePersistentCommand(mMemoryReceiveRecvCommand);
     lNetwork->TerminatePersistentCommand(mSubtaskRangeCancelCommand);
     lNetwork->TerminatePersistentCommand(mNoReductionReqdCommand);
 
@@ -1907,20 +1853,6 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 					break;
 				}
 
-				case MEMORY_RECEIVE_TAG:
-				{
-                #ifdef PROCESS_METADATA_RECEIVE_IN_NETWORK_THREAD
-                    // Since memory transfers are received in two MPI messages (the first one contains size of the upcoming memory in the second one),
-                    // the first message is not handled in this callback as it is executed on scheduler thread. Rather, in order to reduce the turnaround
-                    // time, the callback is executed in network thread's context and an MPI_Irecv for the upcoming second message is immediately posted
-                    PMTHROW(pmFatalErrorException());
-                #else
-                    MemoryMetaDataReceiveCommandCompletionCallback(pCommand);
-                #endif
-
-					break;
-				}
-
 				case STEAL_REQUEST_TAG:
 				{
 					stealRequestStruct* lData = (stealRequestStruct*)(lCommunicatorCommand->GetData());
@@ -2126,60 +2058,7 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
             #endif
 
 				default:
-                {
-                    memoryReceiveStruct* lReceiveStruct = static_cast<memoryReceiveStruct*>(lCommunicatorCommand->GetData());
-                    if(lReceiveStruct)
-                    {
-                        pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->memOwnerHost), lReceiveStruct->generationNumber);
-                    
-                        if(lAddressSpace)		// If memory still exists
-                        {
-                            pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
-
-                            pmTask* lRequestingTask = NULL;
-                            if(lReceiveStruct->isTaskOriginated)
-                            {
-                                const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->originatingHost);
-                                lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lReceiveStruct->sequenceNumber);
-                            }
-
-                            if(lReceiveStruct->transferType == TRANSFER_GENERAL || (lReceiveStruct->step == 0 && lReceiveStruct->count == 1))
-                            {
-                            #ifdef ENABLE_MEM_PROFILING
-                                if(!lRequestingTask || !lRequestingTask->ShouldSuppressTaskLogs())
-                                {
-                                    lAddressSpace->RecordMemReceive(lReceiveStruct->length);
-
-                                    if(lRequestingTask)
-                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lReceiveStruct->length, false);
-                                }
-                            #endif
-
-                                lMemoryManager->UpdateReceivedMemory(lAddressSpace, lReceiveStruct->offset, lReceiveStruct->length, lRequestingTask);
-                            }
-                            else    // TRANSFER_SCATTERED
-                            {
-                                DEBUG_EXCEPTION_ASSERT(lReceiveStruct->transferType == TRANSFER_SCATTERED);
-
-                            #ifdef ENABLE_MEM_PROFILING
-                                if(!lRequestingTask || !lRequestingTask->ShouldSuppressTaskLogs())
-                                {
-                                    lAddressSpace->RecordMemReceive(lReceiveStruct->length * lReceiveStruct->count);
-
-                                    if(lRequestingTask)
-                                        lRequestingTask->GetTaskExecStats().RecordMemReceiveEvent(lReceiveStruct->length * lReceiveStruct->count, true);
-                                }
-                            #endif
-
-                                lMemoryManager->UpdateReceivedScatteredMemory(lAddressSpace, lReceiveStruct->offset, lReceiveStruct->length, lReceiveStruct->step, lReceiveStruct->count, lRequestingTask);
-                            }
-                        }
-
-                        break;
-                    }
-                    
-					PMTHROW(pmFatalErrorException());
-                }
+                    PMTHROW(pmFatalErrorException());
 			}
 
 			break;

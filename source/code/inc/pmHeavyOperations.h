@@ -198,6 +198,7 @@ class pmHeavyOperationsThreadPool
 {
     friend class pmHeavyOperationsThread;
 	friend void HeavyOperationsCommandCompletionCallback(const pmCommandPtr& pCommand);
+    friend void MemoryMetaDataReceiveCommandCompletionCallback(const pmCommandPtr& pCommand);
     
 public:
     virtual ~pmHeavyOperationsThreadPool();
@@ -228,6 +229,7 @@ private:
     
     pmCommunicatorCommandPtr mFileOperationsRecvCommand;
     pmCommunicatorCommandPtr mMemTransferRequestCommand;
+    pmCommunicatorCommandPtr mMemoryReceiveRecvCommand;
     
     RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
