@@ -267,10 +267,12 @@ pmStatus fft_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskInfo p
     }
     else
     {
+#ifdef FFT_2D
         if(pSubtaskInfo.splitInfo.splitCount)
             lPlanner = (pSubtaskInfo.splitInfo.splitId == pSubtaskInfo.splitInfo.splitCount - 1) ? gSplitLastColPlanner[pSubtaskInfo.splitInfo.splitCount - 2].mPlan : gSplitColPlanner[pSubtaskInfo.splitInfo.splitCount - 2].mPlan;
         else
             lPlanner = gColPlanner.mPlan;
+#endif
     }
 #else
     fftwf_plan lPlanner = (lTaskConf->rowPlanner ? gRowPlanner.mPlan : gColPlanner.mPlan);

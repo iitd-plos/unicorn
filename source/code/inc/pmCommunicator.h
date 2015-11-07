@@ -125,7 +125,7 @@ struct memoryIdentifierStruct
     , generationNumber(pMemStruct.generationNumber)
     {}
 
-    bool operator==(const memoryIdentifierStruct& pIdentifier)
+    bool operator==(const memoryIdentifierStruct& pIdentifier) const
     {
         return (memOwnerHost == pIdentifier.memOwnerHost && generationNumber == pIdentifier.generationNumber);
     }

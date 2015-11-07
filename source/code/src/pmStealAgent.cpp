@@ -185,6 +185,7 @@ void pmStealAgent::RecordStealRequestIssue(pmExecutionStub* pStub)
 
     FINALIZE_RESOURCE_PTR(dStubLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lDynamicAggressionStubData.stubLock, Lock(), Unlock());
 
+    // This exception got triggered a few times. A lock is needed over pmExecutionStub::mStealRequestIssuedMap
     EXCEPTION_ASSERT(lDynamicAggressionStubData.stealStartTime == 0);
     lDynamicAggressionStubData.stealStartTime = pmBase::GetCurrentTimeInSecs();
 }

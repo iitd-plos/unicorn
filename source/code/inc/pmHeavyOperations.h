@@ -187,7 +187,7 @@ private:
     
     void ServeScatteredMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded);
     
-    void ForwardMemoryRequest(pmAddressSpace* pSrcAddressSpace, const pmAddressSpace::vmRangeOwner& pRangeOwner, const communicator::memoryIdentifierStruct& pSrcMemIdentifier, const communicator::memoryIdentifierStruct& pDestMemIdentifier, communicator::memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pRequestingMachine, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority);
+    void ForwardMemoryRequest(pmAddressSpace* pSrcAddressSpace, const vmRangeOwner& pRangeOwner, const communicator::memoryIdentifierStruct& pSrcMemIdentifier, const communicator::memoryIdentifierStruct& pDestMemIdentifier, communicator::memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pRequestingMachine, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority);
 
     void HandleCommandCompletion(pmCommandPtr& pCommand);
     

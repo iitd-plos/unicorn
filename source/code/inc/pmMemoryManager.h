@@ -24,7 +24,7 @@
 #include "pmBase.h"
 #include "pmResourceLock.h"
 #include "pmCommand.h"
-#include "pmAddressSpace.h"
+#include "pmMemoryDirectory.h"
 
 #include <map>
 #include <stdlib.h>
@@ -187,9 +187,9 @@ class pmLinuxMemoryManager : public pmMemoryManager
     
         void* AllocatePageAlignedMemoryInternal(pmAddressSpace* pAddressSpace, size_t& pLength, size_t& pPageCount, int& pSharedMemDescriptor);
 
-        void FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, const pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommandPtr& pCommand);
+        void FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, const vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommandPtr& pCommand);
 
-        void FetchNonOverlappingScatteredMemoryRegions(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& pVector, linuxMemManager::pmInFlightRegions& pInFlightMap, std::vector<pmCommandPtr>& pCommandVector);
+        void FetchNonOverlappingScatteredMemoryRegions(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, const std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>& pVector, linuxMemManager::pmInFlightRegions& pInFlightMap, std::vector<pmCommandPtr>& pCommandVector);
 
         template<typename consumer_type>
         void FindRegionsNotInFlight(linuxMemManager::pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, consumer_type& pRegionsToBeFetched, std::vector<pmCommandPtr>& pCommandVector);

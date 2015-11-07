@@ -400,14 +400,14 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
 void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded)
 {
     // Check if the memory is residing locally or forward the request to the owner machine
-    pmAddressSpace::pmMemOwnership lOwnerships;
+    pmMemOwnership lOwnerships;
     pSrcAddressSpace->GetOwners(pOffset, pLength, lOwnerships);
     
-    for_each(lOwnerships, [&] (const pmAddressSpace::pmMemOwnership::value_type& pPair)
+    for_each(lOwnerships, [&] (const pmMemOwnership::value_type& pPair)
     {
         ulong lInternalOffset = pPair.first;
         ulong lInternalLength = pPair.second.first;
-        const pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+        const vmRangeOwner& lRangeOwner = pPair.second.second;
         
         if(lRangeOwner.host == PM_LOCAL_MACHINE)
         {
@@ -476,10 +476,10 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
     pmScatteredSubscriptionFilter lBlocksFilter(pmScatteredSubscriptionInfo(pOffset, pLength, pStep, pCount));
     auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
     {
-        pmAddressSpace::pmMemOwnership lOwnerships;
+        pmMemOwnership lOwnerships;
         pSrcAddressSpace->GetOwners(pOffset + pRow * pStep, pLength, lOwnerships);
         
-        for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+        for_each(lOwnerships, [&] (pmMemOwnership::value_type& pPair)
         {
             lBlocksFilter.AddNextSubRow(pPair.first, pPair.second.first, pPair.second.second);
         });
@@ -487,10 +487,10 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
 
     for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
     {
-        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>& pPair)
+        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>& pPair)
         {
             const pmScatteredSubscriptionInfo& lScatteredInfo = pPair.first;
-            const pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second;
+            const vmRangeOwner& lRangeOwner = pPair.second;
             ulong lReceiverOffset = pReceiverOffset + lRangeOwner.hostOffset - pOffset;
 
             EXCEPTION_ASSERT(lScatteredInfo.size && lScatteredInfo.step && lScatteredInfo.count);
@@ -547,7 +547,7 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
     });
 }
     
-void pmHeavyOperationsThread::ForwardMemoryRequest(pmAddressSpace* pSrcAddressSpace, const pmAddressSpace::vmRangeOwner& pRangeOwner, const memoryIdentifierStruct& pSrcMemIdentifier, const memoryIdentifierStruct& pDestMemIdentifier, memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pRequestingMachine, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority)
+void pmHeavyOperationsThread::ForwardMemoryRequest(pmAddressSpace* pSrcAddressSpace, const vmRangeOwner& pRangeOwner, const memoryIdentifierStruct& pSrcMemIdentifier, const memoryIdentifierStruct& pDestMemIdentifier, memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pRequestingMachine, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority)
 {
     finalize_ptr<memoryTransferRequest> lData(new memoryTransferRequest(pSrcMemIdentifier, pDestMemIdentifier, pTransferType, pReceiverOffset, pOffset, pLength, pStep, pCount, *pRequestingMachine, 1, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority));
     

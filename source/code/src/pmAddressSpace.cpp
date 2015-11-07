@@ -70,7 +70,6 @@ pmAddressSpace::pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pG
     , mMem(NULL)
     , mReadOnlyLazyMapping(NULL)
     , mWaitingTasksLock __LOCK_NAME__("pmAddressSpace::mWaitingTasksLock")
-    , mOwnershipLock __LOCK_NAME__("pmAddressSpace::mOwnershipLock")
     , mWaitingForOwnershipChange(false)
     , mOwnershipTransferLock __LOCK_NAME__("pmAddressSpace::mOwnershipTransferLock")
     , mLockingTask(NULL)
@@ -274,7 +273,10 @@ pmUserMemHandle* pmAddressSpace::GetUserMemHandle()
 
 void pmAddressSpace::Init(const pmMachine* pOwner)
 {
-	mOwnershipMap.emplace(std::piecewise_construct, std::forward_as_tuple(0), std::forward_as_tuple(std::piecewise_construct, std::forward_as_tuple(mRequestedLength), std::forward_as_tuple(pOwner, 0, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner))));
+    mDirectoryPtr.reset(new pmMemoryDirectoryLinear(mRequestedLength, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)));
+    mOriginalDirectoryPtr.reset(new pmMemoryDirectoryLinear(mRequestedLength, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)));
+    
+    mDirectoryPtr->Reset(pOwner);
 }
 
 void* pmAddressSpace::GetMem() const
@@ -436,10 +438,8 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
 
     // Auto lock/unlock scope
     {
-        FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
-
         // FlushOwnerships is called for writable address spaces which causes their mOriginalOwnershipMap to be cleared
-        bool lAddressSpaceReadOnlyLastTime = !mOriginalOwnershipMap.empty();
+        bool lAddressSpaceReadOnlyLastTime = !mOriginalDirectoryPtr->IsEmpty();
 
         // Nothing has to be done if address space was read only last time and is read only even now. In this case, the
         // already kept mOriginalOwnership map, must be kept as it is (for future restorations when address space becomes writable)
@@ -447,9 +447,9 @@ void pmAddressSpace::Lock(pmTask* pTask, pmMemType pMemType)
         {
             // If the address space was read only last time but writable now, then its original ownership map must be restored
             if(lAddressSpaceReadOnlyLastTime && pmUtility::IsWritable(pMemType))
-                mOwnershipMap = mOriginalOwnershipMap;
+                mDirectoryPtr->CloneFrom(mOriginalDirectoryPtr.get());
             else
-                mOriginalOwnershipMap = mOwnershipMap;
+                mOriginalDirectoryPtr->CloneFrom(mDirectoryPtr.get());
         }
     }
     
@@ -520,191 +520,8 @@ pmTask* pmAddressSpace::GetLockingTask()
 
 void pmAddressSpace::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
 {
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = mOwnershipLock;
-    pmMemOwnership& lMap = mOwnershipMap;
-    
-	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
-    SetRangeOwnerInternal(pRangeOwner, pOffset, pLength, lMap);
+    mDirectoryPtr->SetRangeOwner(pRangeOwner, pOffset, pLength);
 }
-
-// This method must be called with mOwnershipLock acquired
-void pmAddressSpace::SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength, pmMemOwnership& pMap)
-{
-    pmMemOwnership& lMap = pMap;
-    
-#ifdef _DEBUG
-#if 0
-    PrintOwnerships();
-    if(pRangeOwner.memIdentifier.memOwnerHost == *(mOwner) && pRangeOwner.memIdentifier.generationNumber == mGenerationNumberOnOwner)
-        std::cout << "Host " << pmGetHostId() << " Set Range Owner: (Offset, Length, Owner, Owner Offset): (" << pOffset << ", " << pLength << ", " << pRangeOwner.host << ", " << pRangeOwner.hostOffset << ")" << std::endl;
-    else
-        std::cout << "Host " << pmGetHostId() << " Set Range Owner: (Offset, Length, Owner address space (Host, Generation Number), Owner, Owner Offset): (" << pOffset << ", " << pLength << ", (" << pRangeOwner.memIdentifier.memOwnerHost << ", " << pRangeOwner.memIdentifier.generationNumber << ")," << pRangeOwner.host << ", " << pRangeOwner.hostOffset << ")" << std::endl;
-#endif
-#endif
-    
-	// Remove present ownership
-	size_t lLastAddr = pOffset + pLength - 1;
-	size_t lOwnerLastAddr = pRangeOwner.hostOffset + pLength - 1;
-
-	pmMemOwnership::iterator lStartIter, lEndIter;
-	pmMemOwnership::iterator* lStartIterAddr = &lStartIter;
-	pmMemOwnership::iterator* lEndIterAddr = &lEndIter;
-
-	FIND_FLOOR_ELEM(pmMemOwnership, lMap, pOffset, lStartIterAddr);
-	FIND_FLOOR_ELEM(pmMemOwnership, lMap, lLastAddr, lEndIterAddr);
-
-	if(!lStartIterAddr || !lEndIterAddr)
-		PMTHROW(pmFatalErrorException());
-    
-	assert(lStartIter->first <= pOffset);
-	assert(lEndIter->first <= lLastAddr);
-	assert(lStartIter->first + lStartIter->second.first > pOffset);
-	assert(lEndIter->first + lEndIter->second.first > lLastAddr);
-
-	size_t lStartOffset = lStartIter->first;
-	//size_t lStartLength = lStartIter->second.first;
-	vmRangeOwner lStartOwner = lStartIter->second.second;
-
-	size_t lEndOffset = lEndIter->first;
-	size_t lEndLength = lEndIter->second.first;
-	vmRangeOwner lEndOwner = lEndIter->second.second;
-
-	lMap.erase(lStartIter, lEndIter);
-    lMap.erase(lEndIter);
-
-	if(lStartOffset < pOffset)
-	{
-		if(lStartOwner.host == pRangeOwner.host && lStartOwner.memIdentifier == pRangeOwner.memIdentifier && lStartOwner.hostOffset == (pRangeOwner.hostOffset - (pOffset - lStartOffset)))
-        {
-            pRangeOwner.hostOffset -= (pOffset - lStartOffset);
-			pOffset = lStartOffset;		// Combine with previous range
-        }
-		else
-        {
-			lMap.insert(std::make_pair(lStartOffset, std::make_pair(pOffset-lStartOffset, lStartOwner)));
-        }
-	}
-    else
-    {
-        if(lStartOffset != pOffset)
-            PMTHROW(pmFatalErrorException());
-        
-        pmMemOwnership::iterator lPrevIter;
-        pmMemOwnership::iterator* lPrevIterAddr = &lPrevIter;
-
-        if(pOffset)
-        {
-            size_t lPrevAddr = pOffset - 1;
-            FIND_FLOOR_ELEM(pmMemOwnership, lMap, lPrevAddr, lPrevIterAddr);
-            if(lPrevIterAddr)
-            {
-                size_t lPrevOffset = lPrevIter->first;
-                size_t lPrevLength = lPrevIter->second.first;
-                vmRangeOwner lPrevOwner = lPrevIter->second.second;
-                
-                if(lPrevOwner.host == pRangeOwner.host && lPrevOwner.memIdentifier == pRangeOwner.memIdentifier && lPrevOwner.hostOffset + lPrevLength == pRangeOwner.hostOffset)
-                {
-                    pRangeOwner.hostOffset -= (lStartOffset - lPrevOffset);
-                    pOffset = lPrevOffset;		// Combine with previous range                
-
-                    lMap.erase(lPrevIter);
-                }
-            }
-        }
-    }
-
-	if(lEndOffset + lEndLength - 1 > lLastAddr)
-	{
-		if(lEndOwner.host == pRangeOwner.host && lEndOwner.memIdentifier == pRangeOwner.memIdentifier && (lEndOwner.hostOffset + (lLastAddr - lEndOffset)) == lOwnerLastAddr)
-        {
-			lLastAddr = lEndOffset + lEndLength - 1;	// Combine with following range
-        }
-		else
-        {
-            vmRangeOwner lEndRangeOwner = lEndOwner;
-            lEndRangeOwner.hostOffset += (lLastAddr - lEndOffset + 1);
-			lMap.insert(std::make_pair(lLastAddr + 1, std::make_pair(lEndOffset + lEndLength - 1 - lLastAddr, lEndRangeOwner)));
-        }
-	}
-    else
-    {
-        if(lEndOffset + lEndLength - 1 != lLastAddr)
-            PMTHROW(pmFatalErrorException());
-
-        pmMemOwnership::iterator lNextIter;
-        pmMemOwnership::iterator* lNextIterAddr = &lNextIter;
-    
-        if(lLastAddr + 1 < GetLength())
-        {
-            size_t lNextAddr = lLastAddr + 1;
-            FIND_FLOOR_ELEM(pmMemOwnership, lMap, lNextAddr, lNextIterAddr);
-            if(lNextIterAddr)
-            {
-                size_t lNextOffset = lNextIter->first;
-                size_t lNextLength = lNextIter->second.first;
-                vmRangeOwner lNextOwner = lNextIter->second.second;
-                
-                if(lNextOwner.host == pRangeOwner.host && lNextOwner.memIdentifier == pRangeOwner.memIdentifier && lNextOwner.hostOffset == lOwnerLastAddr + 1)
-                {
-                    lLastAddr = lNextOffset + lNextLength - 1;	// Combine with following range
-
-                    lMap.erase(lNextIter);
-                }
-            }
-        }
-    }
-
-	lMap.insert(std::make_pair(pOffset, std::make_pair(lLastAddr - pOffset + 1, pRangeOwner)));
-
-#ifdef _DEBUG
-    SanitizeOwnerships();
-#endif
-}
-
-#ifdef _DEBUG
-void pmAddressSpace::CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2)
-{
-    size_t lOffset1 = pRange1->first;
-    size_t lOffset2 = pRange2->first;
-    size_t lLength1 = pRange1->second.first;
-    size_t lLength2 = pRange2->second.first;
-    vmRangeOwner& lRangeOwner1 = pRange1->second.second;
-    vmRangeOwner& lRangeOwner2 = pRange2->second.second;
-    
-    if(lOffset1 + lLength1 != lOffset2)
-        std::cout << "<<< ERROR >>> Host " << pmGetHostId() << " Range end points don't match. Range 1: Offset = " << lOffset1 << " Length = " << lLength1 << " Range 2: Offset = " << lOffset2 << std::endl;
-    
-    if(lRangeOwner1.host == lRangeOwner2.host && lRangeOwner1.memIdentifier == lRangeOwner2.memIdentifier && lRangeOwner1.hostOffset + lLength1 == lRangeOwner2.hostOffset)
-        std::cout << "<<< ERROR >>> Host " << pmGetHostId() << " Mergable Ranges Found (" << lOffset1 << ", " << lLength1 << ") - (" << lOffset2 << ", " << lLength2 << ") map to (" << lRangeOwner1.hostOffset << ", " << lLength1 << ") - (" << lRangeOwner2.hostOffset << ", " << lLength2 << ") on host " << (uint)(*lRangeOwner1.host) << std::endl;
-}
-    
-void pmAddressSpace::SanitizeOwnerships()
-{
-    if(mOwnershipMap.size() == 1)
-        return;
-    
-    pmMemOwnership::iterator lIter, lBegin = mOwnershipMap.begin(), lEnd = mOwnershipMap.end(), lPenultimate = lEnd;
-    --lPenultimate;
-    
-    for(lIter = lBegin; lIter != lPenultimate; ++lIter)
-    {
-        pmMemOwnership::iterator lNext = lIter;
-        ++lNext;
-        
-        CheckMergability(lIter, lNext);
-    }
-}
-
-void pmAddressSpace::PrintOwnerships()
-{
-    std::cout << "Host " << pmGetHostId() << " Ownership Dump " << std::endl;
-    pmMemOwnership::iterator lIter, lBegin = mOwnershipMap.begin(), lEnd = mOwnershipMap.end();
-    for(lIter = lBegin; lIter != lEnd; ++lIter)
-        std::cout << "Range (" << lIter->first << " , " << lIter->second.first << ") is owned by host " << (uint)(*(lIter->second.second.host)) << " (" << lIter->second.second.hostOffset << ", " << lIter->second.first << ")" << std::endl;
-        
-    std::cout << std::endl;
-}
-#endif
 
 void pmAddressSpace::AcquireOwnershipImmediate(ulong pOffset, ulong pLength)
 {
@@ -768,12 +585,14 @@ void pmAddressSpace::FlushOwnerships()
 {
     pmTask* lTask = GetLockingTask();
 
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::FLUSH_MEMORY_OWNERSHIPS);
+#endif
+
     DEBUG_EXCEPTION_ASSERT(lTask && lTask->IsWritable(this));
     
-	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());    
- 
-    mOwnershipMap = mOriginalOwnershipMap;
-    mOriginalOwnershipMap.clear();
+    mDirectoryPtr->CloneFrom(mOriginalDirectoryPtr.get());
+    mOriginalDirectoryPtr->Clear();
     
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
 
@@ -797,24 +616,24 @@ void pmAddressSpace::FlushOwnerships()
         for_each(mOwnershipTransferVector, [&] (const pmMemTransferData& pTransferData)
         {
             pmMemOwnership lOwnerships;
-            GetOwnersInternal(mOwnershipMap, pTransferData.offset, pTransferData.length, lOwnerships);
+            GetOwners(pTransferData.offset, pTransferData.length, lOwnerships);
 
             for_each(lOwnerships, [&] (const decltype(lOwnerships)::value_type& pPair)
             {
-                const pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+                const vmRangeOwner& lRangeOwner = pPair.second.second;
 
                 if(lRangeOwner.host != PM_LOCAL_MACHINE && lRangeOwner.host != pTransferData.rangeOwner.host)
                     lOwnershipTransferMap.find(lRangeOwner.host)->second->emplace_back(pPair.first, pPair.second.first, *(pTransferData.rangeOwner.host));
             });
 
-            SetRangeOwnerInternal(pTransferData.rangeOwner, pTransferData.offset, pTransferData.length, mOwnershipMap);
+            SetRangeOwner(pTransferData.rangeOwner, pTransferData.offset, pTransferData.length);
         });
     }
     else
     {
         for_each(mOwnershipTransferVector, [&] (const pmMemTransferData& pTransferData)
         {
-            SetRangeOwnerInternal(pTransferData.rangeOwner, pTransferData.offset, pTransferData.length, mOwnershipMap);
+            SetRangeOwner(pTransferData.rangeOwner, pTransferData.offset, pTransferData.length);
         });
     }
     
@@ -888,8 +707,8 @@ void pmAddressSpace::FetchRange(ushort pPriority, ulong pOffset, ulong pLength)
  */
 ulong pmAddressSpace::FindLocalDataSizeUnprotected(ulong pOffset, ulong pLength)
 {
-    pmAddressSpace::pmMemOwnership lOwners;
-    GetOwnersInternal(mOwnershipMap, pOffset, pLength, lOwners);
+    pmMemOwnership lOwners;
+    GetOwnersUnprotected(pOffset, pLength, lOwners);
     
     ulong lLocalDataSize = 0;
     for_each(lOwners, [&] (const typename decltype(lOwners)::value_type& pPair)
@@ -931,8 +750,8 @@ void pmAddressSpace::FindLocalDataSizeOnMachinesUnprotected(ulong pOffset, ulong
  */
 std::set<const pmMachine*> pmAddressSpace::FindRemoteDataSourcesUnprotected(ulong pOffset, ulong pLength)
 {
-    pmAddressSpace::pmMemOwnership lOwners;
-    GetOwnersInternal(mOwnershipMap, pOffset, pLength, lOwners);
+    pmMemOwnership lOwners;
+    GetOwnersUnprotected(pOffset, pLength, lOwners);
     
     std::set<const pmMachine*> lSet;
     for_each(lOwners, [&] (const typename decltype(lOwners)::value_type& pPair)
@@ -951,8 +770,8 @@ std::set<const pmMachine*> pmAddressSpace::FindRemoteDataSourcesUnprotected(ulon
  */
 void pmAddressSpace::FindRemoteDataSourcesOnMachinesUnprotected(ulong pOffset, ulong pLength, const std::vector<const pmMachine*>& pMachinesVector, uint* pDataArray, size_t pStepSizeInBytes)
 {
-    pmAddressSpace::pmMemOwnership lOwners;
-    GetOwnersInternal(mOwnershipMap, pOffset, pLength, lOwners);
+    pmMemOwnership lOwners;
+    GetOwnersUnprotected(pOffset, pLength, lOwners);
     
     uint lHosts = pmGetHostCount();
     std::vector<std::set<const pmMachine*>> lRemoteDataSources(lHosts);
@@ -975,84 +794,24 @@ void pmAddressSpace::FindRemoteDataSourcesOnMachinesUnprotected(ulong pOffset, u
     
 bool pmAddressSpace::IsRegionLocallyOwned(ulong pOffset, ulong pLength)
 {
-    pmAddressSpace::pmMemOwnership lOwners;
+    pmMemOwnership lOwners;
     GetOwners(pOffset, pLength, lOwners);
     
     return ((lOwners.size() == 1) && (lOwners.begin()->second.second.host == PM_LOCAL_MACHINE));
 }
 
-void pmAddressSpace::GetOwners(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships)
+void pmAddressSpace::GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships)
 {
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS& lLock = mOwnershipLock;
-    pmMemOwnership& lMap = mOwnershipMap;
-    
-	FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &lLock, Lock(), Unlock());
-    
-    GetOwnersInternal(lMap, pOffset, pLength, pOwnerships);
+    mDirectoryPtr->GetOwners(pOffset, pLength, pOwnerships);
 }
 
 /* This method does not acquire mOwnershipLock (directly calls GetOwnersInternal instead of GetOwners).
  It is only meant to be called by preprocessor task as it does not actually fetch data on user task's
  address spaces, but just determines its current ownership.
  */
-void pmAddressSpace::GetOwnersUnprotected(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships)
+void pmAddressSpace::GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships)
 {
-    GetOwnersInternal(mOwnershipMap, pOffset, pLength, pOwnerships);
-}
-
-/* This method must be called with mOwnershipLock acquired */
-void pmAddressSpace::GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships)
-{
-    pmMemOwnership& lMap = pMap;
-    
-	ulong lLastAddr = pOffset + pLength - 1;
-
-	pmMemOwnership::iterator lStartIter, lEndIter;
-	pmMemOwnership::iterator* lStartIterAddr = &lStartIter;
-	pmMemOwnership::iterator* lEndIterAddr = &lEndIter;
-
-	FIND_FLOOR_ELEM(pmMemOwnership, lMap, pOffset, lStartIterAddr);
-	FIND_FLOOR_ELEM(pmMemOwnership, lMap, lLastAddr, lEndIterAddr);
-
-	if(!lStartIterAddr || !lEndIterAddr)
-		PMTHROW(pmFatalErrorException());
-
-    size_t lSpan = lStartIter->first + lStartIter->second.first - 1;
-    if(lLastAddr < lSpan)
-    {
-        lSpan = lLastAddr;
-        if(lStartIter != lEndIter)
-            PMTHROW(pmFatalErrorException());
-    }
-    
-    vmRangeOwner lRangeOwner = lStartIter->second.second;
-    lRangeOwner.hostOffset += (pOffset - lStartIter->first);
-	pOwnerships.insert(std::make_pair(pOffset, std::make_pair(lSpan - pOffset + 1, lRangeOwner)));
-	
-	pmMemOwnership::iterator lIter = lStartIter;
-	++lIter;
-
-	if(lStartIter != lEndIter)
-	{
-		for(; lIter != lEndIter; ++lIter)
-        {
-            lSpan = lIter->first + lIter->second.first - 1;
-            if(lLastAddr < lSpan)
-            {
-                lSpan = lLastAddr;
-                if(lIter != lEndIter)
-                    PMTHROW(pmFatalErrorException());
-            }
-            
-			pOwnerships.insert(std::make_pair(lIter->first, std::make_pair(lSpan - lIter->first + 1, lIter->second.second)));
-        }
-        
-        lSpan = lEndIter->first + lEndIter->second.first - 1;
-        if(lLastAddr < lSpan)
-            lSpan = lLastAddr;
-        
-        pOwnerships.insert(std::make_pair(lEndIter->first, std::make_pair(lSpan - lEndIter->first + 1, lEndIter->second.second)));
-	}
+    mDirectoryPtr->GetOwnersUnprotected(pOffset, pLength, pOwnerships);
 }
 
 void pmAddressSpace::SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap)
@@ -1062,7 +821,7 @@ void pmAddressSpace::SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& p
     for(; lIter != lEndIter; ++lIter)
         pmScheduler::GetScheduler()->SendPostTaskOwnershipTransfer(this, lIter->first, lIter->second);
 }
-    
+
 void pmAddressSpace::DeleteAllLocalAddressSpaces()
 {
     std::vector<pmAddressSpace*> lAddressSpaces;
@@ -1124,7 +883,7 @@ pmScatteredSubscriptionFilter::pmScatteredSubscriptionFilter(const pmScatteredSu
     : mScatteredSubscriptionInfo(pScatteredSubscriptionInfo)
 {}
     
-const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>>& pmScatteredSubscriptionFilter::FilterBlocks(const std::function<void (size_t)>& pRowFunctor)
+const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& pmScatteredSubscriptionFilter::FilterBlocks(const std::function<void (size_t)>& pRowFunctor)
 {
     for(size_t i = 0; i < mScatteredSubscriptionInfo.count; ++i)
         pRowFunctor(i);
@@ -1133,7 +892,7 @@ const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionIn
 }
 
 // AddNextSubRow must be called in increasing y first and then increasing x values (i.e. first one or more times with increasing x for row one, then similarly for row two and so on)
-void pmScatteredSubscriptionFilter::AddNextSubRow(ulong pOffset, ulong pLength, pmAddressSpace::vmRangeOwner& pRangeOwner)
+void pmScatteredSubscriptionFilter::AddNextSubRow(ulong pOffset, ulong pLength, vmRangeOwner& pRangeOwner)
 {
     ulong lStartCol = (pOffset - (ulong)mScatteredSubscriptionInfo.offset) % (ulong)mScatteredSubscriptionInfo.step;
     
@@ -1181,7 +940,7 @@ void pmScatteredSubscriptionFilter::AddNextSubRow(ulong pOffset, ulong pLength, 
         mCurrentBlocks.emplace_back(lStartCol, pLength, pmScatteredSubscriptionInfo(pOffset, pLength, mScatteredSubscriptionInfo.step, 1), pRangeOwner);
 }
 
-const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>>& pmScatteredSubscriptionFilter::GetLeftoverBlocks()
+const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& pmScatteredSubscriptionFilter::GetLeftoverBlocks()
 {
     PromoteCurrentBlocks();
     

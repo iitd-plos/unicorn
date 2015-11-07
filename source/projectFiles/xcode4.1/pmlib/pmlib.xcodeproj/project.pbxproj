@@ -27,6 +27,7 @@
 		2B5590AE1A2197D900E0F3B1 /* pmAffinityTable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B5590AD1A2197D900E0F3B1 /* pmAffinityTable.cpp */; };
 		2B5590B11A21A13700E0F3B1 /* pmTable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B5590B01A21A13700E0F3B1 /* pmTable.cpp */; };
 		2B5B5615197069CA00D13566 /* pmStealAgent.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B5B5613197069CA00D13566 /* pmStealAgent.cpp */; };
+		2BA4C97F1BED125200FEA529 /* pmMemoryDirectory.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BA4C97E1BED125200FEA529 /* pmMemoryDirectory.cpp */; };
 		2BC0D9D217F9F0DC001CAE05 /* pmCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */; };
 		2BC4072018E9E37B00D1472B /* pmOpenCLManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC4071E18E9E37B00D1472B /* pmOpenCLManager.cpp */; };
 		2BCCED6E151C7B07006AA45D /* pmBase.h in Headers */ = {isa = PBXBuildFile; fileRef = 2BCCED2F151C7B07006AA45D /* pmBase.h */; };
@@ -127,6 +128,8 @@
 		2B5590B01A21A13700E0F3B1 /* pmTable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTable.cpp; sourceTree = "<group>"; };
 		2B5B56111970697B00D13566 /* pmStealAgent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmStealAgent.h; sourceTree = "<group>"; };
 		2B5B5613197069CA00D13566 /* pmStealAgent.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmStealAgent.cpp; sourceTree = "<group>"; };
+		2BA4C97D1BED122800FEA529 /* pmMemoryDirectory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmMemoryDirectory.h; sourceTree = "<group>"; };
+		2BA4C97E1BED125200FEA529 /* pmMemoryDirectory.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemoryDirectory.cpp; sourceTree = "<group>"; };
 		2BC0D9CF17F9F0C3001CAE05 /* pmCache.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmCache.h; sourceTree = "<group>"; };
 		2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmCache.cpp; sourceTree = "<group>"; };
 		2BC4071E18E9E37B00D1472B /* pmOpenCLManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmOpenCLManager.cpp; sourceTree = "<group>"; };
@@ -278,6 +281,7 @@
 				2BCCED3C151C7B07006AA45D /* pmInternalDefinitions.h */,
 				2BCCED3D151C7B07006AA45D /* pmLogger.h */,
 				2B2E44011795C6E800309100 /* pmMemChunk.h */,
+				2BA4C97D1BED122800FEA529 /* pmMemoryDirectory.h */,
 				2BCCED3E151C7B07006AA45D /* pmMemoryManager.h */,
 				2BCCED40151C7B07006AA45D /* pmNetwork.h */,
 				2B4C2BBE18E9E30E00306F87 /* pmOpenCLManager.h */,
@@ -335,6 +339,7 @@
 				0E0668D816BEB8C6001D0B8F /* pmHeavyOperations.cpp */,
 				2BCCED5C151C7B07006AA45D /* pmLogger.cpp */,
 				2B2E44021795C8B900309100 /* pmMemChunk.cpp */,
+				2BA4C97E1BED125200FEA529 /* pmMemoryDirectory.cpp */,
 				2BCCED5D151C7B07006AA45D /* pmMemoryManager.cpp */,
 				2BC4071E18E9E37B00D1472B /* pmOpenCLManager.cpp */,
 				2BCCED5F151C7B07006AA45D /* pmNetwork.cpp */,
@@ -463,6 +468,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2BCCED8E151C7B07006AA45D /* pmBase.cpp in Sources */,
+				2BA4C97F1BED125200FEA529 /* pmMemoryDirectory.cpp in Sources */,
 				2BCCED8F151C7B07006AA45D /* pmCallback.cpp in Sources */,
 				2BCCED90151C7B07006AA45D /* pmCallbackUnit.cpp in Sources */,
 				2BCCED91151C7B07006AA45D /* pmCluster.cpp in Sources */,

@@ -114,7 +114,7 @@ void pmRedistributor::ComputeGlobalOffsets()
     size_t lRunningOffset = 0;
     uint lHostId = (uint)(*PM_LOCAL_MACHINE);
     
-    pmAddressSpace::vmRangeOwner lRangeOwner(NULL, 0, communicator::memoryIdentifierStruct(*mRedistributedAddressSpace->GetMemOwnerHost(), mRedistributedAddressSpace->GetGenerationNumber()));
+    vmRangeOwner lRangeOwner(NULL, 0, communicator::memoryIdentifierStruct(*mRedistributedAddressSpace->GetMemOwnerHost(), mRedistributedAddressSpace->GetGenerationNumber()));
 
     globalRedistributionMapType::iterator lIter = mGlobalRedistributionMap.begin(), lEndIter = mGlobalRedistributionMap.end();
     for(; lIter != lEndIter; ++lIter)
@@ -224,7 +224,7 @@ void pmRedistributor::ProcessRedistributionBucket(size_t pBucketIndex)
     pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(mAddressSpaceIndex);
     char* lMemAddr = reinterpret_cast<char*>(lAddressSpace->GetMem());
 
-    pmAddressSpace::vmRangeOwner lRangeOwner(PM_LOCAL_MACHINE, 0, communicator::memoryIdentifierStruct(*mRedistributedAddressSpace->GetMemOwnerHost(), mRedistributedAddressSpace->GetGenerationNumber()));
+    vmRangeOwner lRangeOwner(PM_LOCAL_MACHINE, 0, communicator::memoryIdentifierStruct(*mRedistributedAddressSpace->GetMemOwnerHost(), mRedistributedAddressSpace->GetGenerationNumber()));
 
     localRedistributionBucket& lBucket = mLocalRedistributionBucketsVector[pBucketIndex];
 

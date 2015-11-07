@@ -23,36 +23,19 @@
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
-#include "pmCommunicator.h"
+#include "pmMemoryDirectory.h"
 
 #include <vector>
 #include <map>
 #include <memory>
 #include <list>
 
-#define FIND_FLOOR_ELEM(mapType, mapVar, searchKey, iterAddr) \
-{ \
-    if(mapVar.empty()) \
-    { \
-        iterAddr = NULL; \
-    } \
-    else \
-    { \
-        mapType::iterator dUpper = mapVar.lower_bound(searchKey); \
-        if(dUpper == mapVar.begin() && (ulong)(dUpper->first) > (ulong)searchKey) \
-            iterAddr = NULL; \
-        else if(dUpper == mapVar.end() || (ulong)(dUpper->first) > (ulong)searchKey) \
-            *iterAddr = (--dUpper); \
-        else \
-            *iterAddr = dUpper; \
-    } \
-}
-
 namespace pm
 {
 
 class pmMachine;
 class pmAddressSpace;
+class pmMemoryDirectory;
 
 typedef class pmUserMemHandle
 {
@@ -82,40 +65,6 @@ class pmAddressSpace : public pmBase
     friend void FetchCallback(const pmCommandPtr& pCommand);
     
 	public:
-		typedef struct vmRangeOwner
-		{
-            const pmMachine* host;                                  // Host where memory page lives
-            ulong hostOffset;                                       // Offset on host (in case of data redistribution offsets at source and destination hosts are different)
-            communicator::memoryIdentifierStruct memIdentifier;     // a different memory might be holding the required data (e.g. redistribution)
-            
-            vmRangeOwner(const pmMachine* pHost, ulong pHostOffset, const communicator::memoryIdentifierStruct& pMemIdentifier)
-            : host(pHost)
-            , hostOffset(pHostOffset)
-            , memIdentifier(pMemIdentifier)
-            {}
-            
-            vmRangeOwner(const vmRangeOwner& pRangeOwner)
-            : host(pRangeOwner.host)
-            , hostOffset(pRangeOwner.hostOffset)
-            , memIdentifier(pRangeOwner.memIdentifier)
-            {}
-		} vmRangeOwner;
-    
-        typedef struct pmMemTransferData
-        {
-            vmRangeOwner rangeOwner;
-            ulong offset;
-            ulong length;
-            
-            pmMemTransferData(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
-            : rangeOwner(pRangeOwner)
-            , offset(pOffset)
-            , length(pLength)
-            {}
-        } pmMemTransferData;
-
-		typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
-
         static pmAddressSpace* CreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
         static pmAddressSpace* CheckAndCreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
 
@@ -132,8 +81,8 @@ class pmAddressSpace : public pmBase
 		void FlushOwnerships();
 
         bool IsRegionLocallyOwned(ulong pOffset, ulong pLength);
-        void GetOwners(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
-        void GetOwnersUnprotected(ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
+        void GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
+        void GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
 
         void Fetch(ushort pPriority);
         void FetchAsync(ushort pPriority, pmCommandPtr pCommand);
@@ -185,11 +134,8 @@ class pmAddressSpace : public pmBase
     
         static ulong GetNextGenerationNumber();
     
-        void GetOwnersInternal(pmMemOwnership& pMap, ulong pOffset, ulong pLength, pmAddressSpace::pmMemOwnership& pOwnerships);
-
         void Init(const pmMachine* pOwner);
         void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
-        void SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength, pmMemOwnership& pMap);
         void SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap);
     
         void SetWaitingForOwnershipChange();
@@ -200,12 +146,6 @@ class pmAddressSpace : public pmBase
         void FetchCompletionCallback(const pmCommandPtr& pCommand);
     
         void ScanLockQueue();
-    
-#ifdef _DEBUG
-        void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
-        void SanitizeOwnerships();
-        void PrintOwnerships();
-#endif
 
         std::vector<uint> GetMachinesForDistribution(bool pRandomize);
 
@@ -232,11 +172,9 @@ class pmAddressSpace : public pmBase
         static addressSpaceMapType& GetAddressSpaceMap();
         static augmentaryAddressSpaceMapType& GetAugmentaryAddressSpaceMap(); // Maps actual allocated memory regions to pmAddressSpace objects
         static RESOURCE_LOCK_IMPLEMENTATION_CLASS& GetResourceLock();
-                
-        pmMemOwnership mOwnershipMap;       // offset versus pair of length of region and vmRangeOwner
-        pmMemOwnership mOriginalOwnershipMap;
-        RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
-        
+    
+        std::unique_ptr<pmMemoryDirectory> mDirectoryPtr, mOriginalDirectoryPtr;
+
         std::vector<pmMemTransferData> mOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
         bool mWaitingForOwnershipChange;  // The address space owner may have sent ownership change message that must be processed before allowing any lock on address space
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipTransferLock;
@@ -263,12 +201,12 @@ public:
     pmScatteredSubscriptionFilter(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
 
     // pRowFunctor should call AddNextSubRow for every range to be kept
-    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>>& FilterBlocks(const std::function<void (size_t)>& pRowFunctor);
+    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& FilterBlocks(const std::function<void (size_t)>& pRowFunctor);
     
-    void AddNextSubRow(ulong pOffset, ulong pLength, pmAddressSpace::vmRangeOwner& pRangeOwner);
+    void AddNextSubRow(ulong pOffset, ulong pLength, vmRangeOwner& pRangeOwner);
     
 private:
-    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>>& GetLeftoverBlocks();
+    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& GetLeftoverBlocks();
     void PromoteCurrentBlocks();
 
     struct blockData
@@ -276,9 +214,9 @@ private:
         ulong startCol;
         ulong colCount;
         pmScatteredSubscriptionInfo subscriptionInfo;
-        pmAddressSpace::vmRangeOwner rangeOwner;
+        vmRangeOwner rangeOwner;
         
-        blockData(ulong pStartCol, ulong pColCount, const pmScatteredSubscriptionInfo& pSubscriptionInfo, pmAddressSpace::vmRangeOwner& pRangeOwner)
+        blockData(ulong pStartCol, ulong pColCount, const pmScatteredSubscriptionInfo& pSubscriptionInfo, vmRangeOwner& pRangeOwner)
         : startCol(pStartCol)
         , colCount(pColCount)
         , subscriptionInfo(pSubscriptionInfo)
@@ -289,7 +227,7 @@ private:
     const pmScatteredSubscriptionInfo& mScatteredSubscriptionInfo;
     
     std::list<blockData> mCurrentBlocks;   // computed till last row processed
-    std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>> mBlocksToBeFetched;
+    std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>> mBlocksToBeFetched;
 };
 
 } // end namespace pm

@@ -438,6 +438,7 @@ namespace pm
             PREPROCESSOR_TASK_EXECUTION,
             AFFINITY_SUBTASK_MAPPINGS,
             AFFINITY_USE_OVERHEAD,
+            FLUSH_MEMORY_OWNERSHIPS,
             UNIVERSAL, /* For internal use only */
             MAX_PROFILE_TYPES
         };

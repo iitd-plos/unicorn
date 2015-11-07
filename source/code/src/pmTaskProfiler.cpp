@@ -52,6 +52,7 @@ static const char* profileName[] =
     (char*)"PREPROCESSOR_TASK_EXECUTION",
     (char*)"AFFINITY_SUBTASK_MAPPINGS",
     (char*)"AFFINITY_USE_OVERHEAD",
+    (char*)"FLUSH_MEMORY_OWNERSHIPS",
     (char*)"UNIVERSAL"
 };
 

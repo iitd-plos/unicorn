@@ -487,16 +487,16 @@ struct localFilter
     {
         ulong lLength = pLastAddr - pStartAddr + 1;
 
-        pmAddressSpace::pmMemOwnership lOwnerships;
+        pmMemOwnership lOwnerships;
         
         if(mUnprotected)
             mAddressSpace->GetOwnersUnprotected(pStartAddr - mMem, lLength, lOwnerships);
         else
             mAddressSpace->GetOwners(pStartAddr - mMem, lLength, lOwnerships);
 
-        for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+        for_each(lOwnerships, [&] (pmMemOwnership::value_type& pPair)
         {
-            pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+            vmRangeOwner& lRangeOwner = pPair.second.second;
 
             if(lRangeOwner.host != mFilteredMachine)
                 mGlobalFilter.AddNextSubRow(pPair.first, pPair.second.first, lRangeOwner);
@@ -558,7 +558,7 @@ ulong pmLinuxMemoryManager::GetScatteredMemoryFetchPages(pmAddressSpace* pAddres
     ulong lPages = 0;
     for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
     {
-        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>& pPair)
+        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>& pPair)
         {
             DEBUG_EXCEPTION_ASSERT(pPair.first.size && pPair.first.step && pPair.first.count);
             
@@ -617,7 +617,7 @@ ulong pmLinuxMemoryManager::GetScatteredMemoryFetchPagesForMachine(pmAddressSpac
     ulong lPages = 0;
     for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
     {
-        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>& pPair)
+        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>& pPair)
         {
             DEBUG_EXCEPTION_ASSERT(pPair.first.size && pPair.first.step && pPair.first.count);
             
@@ -685,7 +685,7 @@ void pmLinuxMemoryManager::FetchScatteredMemoryRegion(pmAddressSpace* pAddressSp
 #else
     for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
     {
-        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>& pPair)
+        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>& pPair)
         {
             EXCEPTION_ASSERT(pPair.first.size && pPair.first.step && pPair.first.count);
 
@@ -706,14 +706,14 @@ uint pmLinuxMemoryManager::GetMemoryFetchEvents(pmAddressSpace* pAddressSpace, s
 {
     EXCEPTION_ASSERT(pLength);
     
-    pmAddressSpace::pmMemOwnership lOwnerships;
+    pmMemOwnership lOwnerships;
     pAddressSpace->GetOwnersUnprotected(pOffset, pLength, lOwnerships);
     
     uint lEvents = 0;
 
-    for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+    for_each(lOwnerships, [&] (pmMemOwnership::value_type& pPair)
     {
-        pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+        vmRangeOwner& lRangeOwner = pPair.second.second;
 
         if(lRangeOwner.host != PM_LOCAL_MACHINE)
             ++lEvents;
@@ -729,14 +729,14 @@ ulong pmLinuxMemoryManager::GetMemoryFetchPages(pmAddressSpace* pAddressSpace, s
     
     size_t lPageSize = GetVirtualMemoryPageSize();
     
-    pmAddressSpace::pmMemOwnership lOwnerships;
+    pmMemOwnership lOwnerships;
     pAddressSpace->GetOwnersUnprotected(pOffset, pLength, lOwnerships);
     
     ulong lPages = 0;
 
-    for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+    for_each(lOwnerships, [&] (pmMemOwnership::value_type& pPair)
     {
-        pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+        vmRangeOwner& lRangeOwner = pPair.second.second;
 
         if(lRangeOwner.host != PM_LOCAL_MACHINE)
             lPages += ((pPair.second.first + lPageSize - 1) / lPageSize);
@@ -770,12 +770,12 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, usho
         
         if(lLength)
         {
-            pmAddressSpace::pmMemOwnership lOwnerships;
+            pmMemOwnership lOwnerships;
             pAddressSpace->GetOwners(lOffset, lLength, lOwnerships);
 
-            for_each(lOwnerships, [&] (pmAddressSpace::pmMemOwnership::value_type& pPair)
+            for_each(lOwnerships, [&] (pmMemOwnership::value_type& pPair)
             {
-                pmAddressSpace::vmRangeOwner& lRangeOwner = pPair.second.second;
+                vmRangeOwner& lRangeOwner = pPair.second.second;
 
                 if(lRangeOwner.host != PM_LOCAL_MACHINE)
                 {
@@ -791,7 +791,7 @@ void pmLinuxMemoryManager::FetchMemoryRegion(pmAddressSpace* pAddressSpace, usho
 }
 
 // This method must be called with mInFlightLock on mInFlightMap of the address space acquired
-void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, const pmAddressSpace::vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommandPtr& pCommand)
+void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, communicator::memoryTransferType pTransferType, size_t pOffset, size_t pLength, size_t pStep, size_t pCount, const vmRangeOwner& pRangeOwner, linuxMemManager::pmInFlightRegions& pInFlightMap, pmCommandPtr& pCommand)
 {
     using namespace linuxMemManager;
 
@@ -844,7 +844,7 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmA
 }
 
 // This method must be called with mInFlightLock on mInFlightMap of the address space acquired
-void pmLinuxMemoryManager::FetchNonOverlappingScatteredMemoryRegions(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, const std::vector<std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>>& pVector, linuxMemManager::pmInFlightRegions& pInFlightMap, std::vector<pmCommandPtr>& pCommandVector)
+void pmLinuxMemoryManager::FetchNonOverlappingScatteredMemoryRegions(ushort pPriority, pmAddressSpace* pAddressSpace, void* pMem, const std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>& pVector, linuxMemManager::pmInFlightRegions& pInFlightMap, std::vector<pmCommandPtr>& pCommandVector)
 {
     using namespace linuxMemManager;
     
@@ -859,7 +859,7 @@ void pmLinuxMemoryManager::FetchNonOverlappingScatteredMemoryRegions(ushort pPri
     lVector->reserve(pVector.size());
     pCommandVector.reserve(pVector.size());
     
-    for_each(pVector, [&] (const std::pair<pmScatteredSubscriptionInfo, pmAddressSpace::vmRangeOwner>& pPair)
+    for_each(pVector, [&] (const std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>& pPair)
     {
         lVector->emplace_back(pPair.first.offset, pPair.second.hostOffset, pPair.first.size, pPair.first.step, pPair.first.count);
     
