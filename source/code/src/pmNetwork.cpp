@@ -478,7 +478,44 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 			break;
 		}
 
-		case OWNERSHIP_TRANSFER_PACKED:
+		case SEND_ACKNOWLEDGEMENT_SCATTERED_PACKED:
+		{
+			sendAcknowledgementScatteredPacked* lData = (sendAcknowledgementScatteredPacked*)(pCommand->GetData());
+            EXCEPTION_ASSERT(lData);
+
+			sendAcknowledgementStruct& lStruct = lData->ackStruct;
+			lLength += sizeof(lStruct) + lData->ackStruct.ownershipDataElements * sizeof(scatteredOwnershipDataStruct) + lData->ackStruct.addressSpaceIndices * sizeof(uint);
+            
+			if(lLength > __MAX_SIGNED(int))
+				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
+            
+            lPackedDataAutoPtr.reset(new char[lLength]);
+			char* lPackedData = lPackedDataAutoPtr.get_ptr();
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(SEND_ACKNOWLEDGEMENT_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+
+            if(lData->ackStruct.ownershipDataElements)
+            {
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(&(lData->scatteredOwnershipVector[0]), (int)lData->ackStruct.ownershipDataElements, GetDataTypeMPI(SCATTERED_OWNERSHIP_DATA_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            }
+            
+            if(lData->ackStruct.addressSpaceIndices)
+            {
+                if( MPI_CALL("MPI_Pack", (MPI_Pack(&(lData->addressSpaceIndexVector[0]), (int)lData->ackStruct.addressSpaceIndices, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            }
+
+            lLength = lPos;
+            
+			break;
+		}
+
+        case OWNERSHIP_TRANSFER_PACKED:
 		{
 			ownershipTransferPacked* lData = (ownershipTransferPacked*)(pCommand->GetData());
             EXCEPTION_ASSERT(lData);
@@ -511,6 +548,39 @@ pmCommunicatorCommandPtr pmMPI::PackData(pmCommunicatorCommandPtr& pCommand)
 			break;
 		}
         
+		case SCATTERED_OWNERSHIP_TRANSFER_PACKED:
+		{
+			scatteredOwnershipTransferPacked* lData = (scatteredOwnershipTransferPacked*)(pCommand->GetData());
+            EXCEPTION_ASSERT(lData);
+            
+            DEBUG_EXCEPTION_ASSERT((uint)(lData->transferData->size()) == lData->transferDataElements);
+
+			memoryIdentifierStruct& lStruct = lData->memIdentifier;
+			lLength += sizeof(lStruct) + sizeof(uint) + lData->transferDataElements * sizeof(scatteredOwnershipChangeStruct);
+            
+			if(lLength > __MAX_SIGNED(int))
+				PMTHROW(pmBeyondComputationalLimitsException(pmBeyondComputationalLimitsException::MPI_MAX_TRANSFER_LENGTH));
+            
+            lPackedDataAutoPtr.reset(new char[lLength]);
+			char* lPackedData = lPackedDataAutoPtr.get_ptr();
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lTag, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lStruct, 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&lData->transferDataElements, 1, MPI_UNSIGNED, lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+        
+			if( MPI_CALL("MPI_Pack", (MPI_Pack(&(*lData->transferData.get())[0], lData->transferDataElements, GetDataTypeMPI(SCATTERED_OWNERSHIP_CHANGE_STRUCT), lPackedData, (int)lLength, &lPos, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_PACK_ERROR));
+            
+            lLength = lPos;
+            
+			break;
+		}
+
         case MULTI_FILE_OPERATIONS_PACKED:
         {
 			multiFileOperationsPacked* lData = (multiFileOperationsPacked*)(pCommand->GetData());
@@ -721,10 +791,18 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
             lDataType = SEND_ACKNOWLEDGEMENT_PACKED;
             break;
         
+        case SEND_ACKNOWLEDGEMENT_SCATTERED_TAG:
+            lDataType = SEND_ACKNOWLEDGEMENT_SCATTERED_PACKED;
+            break;
+
         case OWNERSHIP_TRANSFER_TAG:
             lDataType = OWNERSHIP_TRANSFER_PACKED;
             break;
         
+        case SCATTERED_OWNERSHIP_TRANSFER_TAG:
+            lDataType = SCATTERED_OWNERSHIP_TRANSFER_PACKED;
+            break;
+
         case MULTI_FILE_OPERATIONS_TAG:
             lDataType = MULTI_FILE_OPERATIONS_PACKED;
             break;
@@ -924,7 +1002,35 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
 			break;
 		}
 
-		case OWNERSHIP_TRANSFER_PACKED:
+		case SEND_ACKNOWLEDGEMENT_SCATTERED_PACKED:
+		{
+            finalize_ptr<sendAcknowledgementScatteredPacked> lPackedData(new sendAcknowledgementScatteredPacked());
+
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->ackStruct), 1, GetDataTypeMPI(SEND_ACKNOWLEDGEMENT_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            if(lPackedData->ackStruct.ownershipDataElements)
+            {
+                lPackedData->scatteredOwnershipVector.resize(lPackedData->ackStruct.ownershipDataElements);
+                
+                if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->scatteredOwnershipVector[0]), lPackedData->ackStruct.ownershipDataElements, GetDataTypeMPI(SCATTERED_OWNERSHIP_DATA_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            }
+            
+            if(lPackedData->ackStruct.addressSpaceIndices)
+            {
+                lPackedData->addressSpaceIndexVector.resize(lPackedData->ackStruct.addressSpaceIndices);
+
+                if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->addressSpaceIndexVector[0]), lPackedData->ackStruct.addressSpaceIndices, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+                    PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            }
+
+            lCommand = pmCommunicatorCommand<sendAcknowledgementScatteredPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, lCompletionCallback);
+            
+			break;
+		}
+
+        case OWNERSHIP_TRANSFER_PACKED:
 		{
             finalize_ptr<ownershipTransferPacked> lPackedData(new ownershipTransferPacked());
 
@@ -944,6 +1050,26 @@ pmCommunicatorCommandPtr pmMPI::UnpackData(finalize_ptr<char, deleteArrayDealloc
             break;
         }
             
+		case SCATTERED_OWNERSHIP_TRANSFER_PACKED:
+		{
+            finalize_ptr<scatteredOwnershipTransferPacked> lPackedData(new scatteredOwnershipTransferPacked());
+
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->memIdentifier), 1, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+        
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(lPackedData->transferDataElements), 1, MPI_UNSIGNED, lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+
+            lPackedData->transferData.reset(new std::vector<scatteredOwnershipChangeStruct>(lPackedData->transferDataElements));
+            
+			if( MPI_CALL("MPI_Unpack", (MPI_Unpack(lReceivedData, pDataLength, &lPos, &(*lPackedData->transferData.get())[0], lPackedData->transferDataElements, GetDataTypeMPI(SCATTERED_OWNERSHIP_CHANGE_STRUCT), lCommunicator) != MPI_SUCCESS)) )
+				PMTHROW(pmNetworkException(pmNetworkException::DATA_UNPACK_ERROR));
+            
+            lCommand = pmCommunicatorCommand<scatteredOwnershipTransferPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, lTag, NULL, lDataType, lPackedData, lPos, lCompletionCallback);
+        
+            break;
+        }
+
         case MULTI_FILE_OPERATIONS_PACKED:
         {
             finalize_ptr<multiFileOperationsPacked> lPackedData(new multiFileOperationsPacked());
@@ -1090,7 +1216,9 @@ bool pmMPI::IsUnknownLengthTag(communicatorCommandTags pTag)
             pTag == DATA_REDISTRIBUTION_TAG ||
             pTag == REDISTRIBUTION_OFFSETS_TAG ||
             pTag == SEND_ACKNOWLEDGEMENT_TAG ||
+            pTag == SEND_ACKNOWLEDGEMENT_SCATTERED_TAG ||
             pTag == OWNERSHIP_TRANSFER_TAG ||
+            pTag == SCATTERED_OWNERSHIP_TRANSFER_TAG ||
             pTag == MULTI_FILE_OPERATIONS_TAG ||
         #ifdef USE_AFFINITY_IN_STEAL
             pTag == STEAL_SUCCESS_DISCONTIGUOUS_TAG ||
@@ -1549,7 +1677,9 @@ MPI_Datatype pmMPI::GetDataTypeMPI(communicatorDataTypes pDataType)
         case DATA_REDISTRIBUTION_PACKED:
         case REDISTRIBUTION_OFFSETS_PACKED:
         case SEND_ACKNOWLEDGEMENT_PACKED:
+        case SEND_ACKNOWLEDGEMENT_SCATTERED_PACKED:
         case OWNERSHIP_TRANSFER_PACKED:
+        case SCATTERED_OWNERSHIP_TRANSFER_PACKED:
         case MULTI_FILE_OPERATIONS_PACKED:
         case AFFINITY_DATA_TRANSFER_PACKED:
     #ifdef USE_AFFINITY_IN_STEAL
@@ -1650,7 +1780,19 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			break;
 		}
         
-		case SEND_ACKNOWLEDGEMENT_STRUCT:
+		case SCATTERED_OWNERSHIP_DATA_STRUCT:
+		{
+			lFieldCount = scatteredOwnershipDataStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+        
+		case SCATTERED_OWNERSHIP_CHANGE_STRUCT:
+		{
+			lFieldCount = scatteredOwnershipChangeStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+
+        case SEND_ACKNOWLEDGEMENT_STRUCT:
 		{
 			lFieldCount = sendAcknowledgementStruct::FIELD_COUNT_VALUE;
 			break;
@@ -1858,7 +2000,30 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			break;
 		}
         
-		case SEND_ACKNOWLEDGEMENT_STRUCT:
+		case SCATTERED_OWNERSHIP_DATA_STRUCT:
+		{
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(scatteredOwnershipDataStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 0, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.size, lSizeMPI, MPI_UNSIGNED_LONG, 1, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.step, lStepMPI, MPI_UNSIGNED_LONG, 2, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.count, lCountMPI, MPI_UNSIGNED_LONG, 3, 1);
+
+			break;
+		}
+
+		case SCATTERED_OWNERSHIP_CHANGE_STRUCT:
+		{
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(scatteredOwnershipChangeStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 0, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.size, lSizeMPI, MPI_UNSIGNED_LONG, 1, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.step, lStepMPI, MPI_UNSIGNED_LONG, 2, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.count, lCountMPI, MPI_UNSIGNED_LONG, 3, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.newOwnerHost, lNewOwnerHostMPI, MPI_UNSIGNED, 4, 1);
+
+			break;
+		}
+
+        case SEND_ACKNOWLEDGEMENT_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(sendAcknowledgementStruct, lData, lDataMPI);
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sourceDeviceGlobalIndex, lSourceDeviceGlobalIndexMPI, MPI_UNSIGNED, 0, 1);

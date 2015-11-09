@@ -383,10 +383,26 @@ ownershipTransferPacked::ownershipTransferPacked(pmAddressSpace* pAddressSpace, 
 {}
  
 
+/* struct scatteredOwnershipTransferPacked */
+scatteredOwnershipTransferPacked::scatteredOwnershipTransferPacked(pmAddressSpace* pAddressSpace, std::shared_ptr<std::vector<scatteredOwnershipChangeStruct> >& pChangeData)
+    : memIdentifier(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber())
+    , transferDataElements((uint)(pChangeData->size()))
+    , transferData(pChangeData)
+{}
+
+    
 /* struct sendAcknowledgementPacked */
 sendAcknowledgementPacked::sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
     : ackStruct(pSourceDevice->GetGlobalDeviceIndex(), *pRange.task->GetOriginatingHost(), pRange.task->GetSequenceNumber(), pRange.startSubtask, pRange.endSubtask, pExecStatus, (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pSourceDevice->GetGlobalDeviceIndex()), (uint)pOwnershipVector.size(), (uint)pAddressSpaceIndexVector.size())
     , ownershipVector(std::move(pOwnershipVector))
+    , addressSpaceIndexVector(std::move(pAddressSpaceIndexVector))
+{
+}
+
+/* struct sendAcknowledgementPacked */
+sendAcknowledgementScatteredPacked::sendAcknowledgementScatteredPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
+    : ackStruct(pSourceDevice->GetGlobalDeviceIndex(), *pRange.task->GetOriginatingHost(), pRange.task->GetSequenceNumber(), pRange.startSubtask, pRange.endSubtask, pExecStatus, (pRange.originalAllottee ? pRange.originalAllottee->GetGlobalDeviceIndex() : pSourceDevice->GetGlobalDeviceIndex()), (uint)pScatteredOwnershipVector.size(), (uint)pAddressSpaceIndexVector.size())
+    , scatteredOwnershipVector(std::move(pScatteredOwnershipVector))
     , addressSpaceIndexVector(std::move(pAddressSpaceIndexVector))
 {
 }

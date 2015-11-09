@@ -1539,7 +1539,11 @@ void pmExecutionStub::HandleRangeExecutionCompletion(pmSubtaskRange& pRange, pmS
 
 void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
 {
+    bool lCanDoScatteredOwnershipTransfer = true;
+
     std::vector<communicator::ownershipDataStruct> lOwnershipVector;
+    std::vector<communicator::scatteredOwnershipDataStruct> lScatteredOwnershipVector;
+
     std::vector<uint> lAddressSpaceIndexVector;
 
     if(!pRange.task->GetCallbackUnit()->GetDataReductionCB() && !pRange.task->GetCallbackUnit()->GetDataRedistributionCB())
@@ -1549,22 +1553,51 @@ void pmExecutionStub::CommitRange(pmSubtaskRange& pRange, pmStatus pExecStatus)
         filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
         [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
         {
+            for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
+            {
+                if(lSubscriptionManager.GetSubscriptionFormat(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex) != SUBSCRIPTION_SCATTERED)
+                {
+                    lCanDoScatteredOwnershipTransfer = false;
+                    return;
+                }
+            }
+        });
+
+        filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
+        [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
+        {
             subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
             lAddressSpaceIndexVector.push_back((uint)lOwnershipVector.size());
 
             for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
             {
-                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
-                
-                std::for_each(lBeginIter, lEndIter, [&] (const decltype(lBeginIter)::value_type& pPair)
+                if(lCanDoScatteredOwnershipTransfer)
                 {
-                    lOwnershipVector.push_back(communicator::ownershipDataStruct(pPair.first, pPair.second.first));
-                });
+                    lSubscriptionManager.ProcessScatteredWriteSubscriptionsInfoVector(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex,
+                                                                                      [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+                                                                                      {
+                                                                                          lScatteredOwnershipVector.emplace_back(pScatteredSubscriptionInfo);
+                                                                                      });
+                }
+                else
+                {
+                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
+                    
+                    std::for_each(lBeginIter, lEndIter, [&] (const decltype(lBeginIter)::value_type& pPair)
+                    {
+                        lOwnershipVector.emplace_back(pPair.first, pPair.second.first);
+                    });
+                }
             }
         });
     }
 
-    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), 0);
+    EXCEPTION_ASSERT((lCanDoScatteredOwnershipTransfer && lOwnershipVector.empty()) || (!lCanDoScatteredOwnershipTransfer && lScatteredOwnershipVector.empty()));
+    
+    if(lCanDoScatteredOwnershipTransfer)
+        pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lScatteredOwnershipVector), std::move(lAddressSpaceIndexVector), 0);
+    else
+        pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), 0);
 
 	if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()))
         IssueStealRequestIfRequired(pRange.task);
@@ -1678,14 +1711,31 @@ void pmExecutionStub::CommitSplitSubtask(pmSubtaskRange& pRange, const splitter:
     
 void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, const std::map<ulong, std::vector<pmExecutionStub*>>& pMap, pmStatus pExecStatus, ulong pTotalSplitCount)
 {
+    bool lCanDoScatteredOwnershipTransfer = true;
+    
     std::vector<communicator::ownershipDataStruct> lOwnershipVector;
+    std::vector<communicator::ownershipDataStruct> lScatteredOwnershipVector;
     std::vector<uint> lAddressSpaceIndexVector;
 
     if(!pRange.task->GetCallbackUnit()->GetDataReductionCB() && !pRange.task->GetCallbackUnit()->GetDataRedistributionCB())
     {
-        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
         pmSubscriptionManager& lSubscriptionManager = pRange.task->GetSubscriptionManager();
         std::vector<pmAddressSpace*>& lAddressSpaceVector = pRange.task->GetAddressSpaces();
+
+        filtered_for_each_with_index(lAddressSpaceVector, [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
+        [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
+        {
+             for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
+             {
+                 if(lSubscriptionManager.GetSubscriptionFormat(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex) != SUBSCRIPTION_SCATTERED)
+                 {
+                     lCanDoScatteredOwnershipTransfer = false;
+                     return;
+                 }
+             }
+         });
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
 
         filtered_for_each_with_index(lAddressSpaceVector, [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
         [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
@@ -1700,18 +1750,33 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
                 for_each_with_index(lVector, [&] (const pmExecutionStub* pStub, size_t pSplitIndex)
                 {
                     pmSplitInfo lSplitInfo((uint)pSplitIndex, lSplitCount);
-                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, lSubtaskId, &lSplitInfo, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
 
-                    std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
+                    if(lCanDoScatteredOwnershipTransfer)
                     {
-                        lOwnershipVector.push_back(communicator::ownershipDataStruct(pPair.first, pPair.second.first));
-                    });
+                        lSubscriptionManager.ProcessScatteredWriteSubscriptionsInfoVector(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex,
+                                                                                          [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+                                                                                          {
+                                                                                              lScatteredOwnershipVector.emplace_back(pScatteredSubscriptionInfo);
+                                                                                          });
+                    }
+                    else
+                    {
+                        lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(pStub, lSubtaskId, &lSplitInfo, (uint)pAddressSpaceIndex, lBeginIter, lEndIter);
+
+                        std::for_each(lBeginIter, lEndIter, [&lOwnershipVector] (const decltype(lBeginIter)::value_type& pPair)
+                        {
+                            lOwnershipVector.push_back(communicator::ownershipDataStruct(pPair.first, pPair.second.first));
+                        });
+                    }
                 });
             }
         });
     }
 
-    pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), pTotalSplitCount);
+    if(lCanDoScatteredOwnershipTransfer)
+        pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lScatteredOwnershipVector), std::move(lAddressSpaceIndexVector), pTotalSplitCount);
+    else
+        pmScheduler::GetScheduler()->SendAcknowledgement(GetProcessingElement(), pRange, pExecStatus, std::move(lOwnershipVector), std::move(lAddressSpaceIndexVector), pTotalSplitCount);
 
     // A steal request is generated only if there is no more pending subtask in the stub queue
 	if(pmScheduler::SchedulingModelSupportsStealing(pRange.task->GetSchedulingModel()) && !HasMatchingCommand(pRange.task->GetPriority(), execEventMatchFunc, pRange.task))

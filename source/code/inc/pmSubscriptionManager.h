@@ -75,7 +75,7 @@ namespace subscription
             uint mMemIndex;
             bool mExplicitAllocation;
     };
-    
+
     struct pmSubtaskSubscriptionData
     {
         pmSubscriptionInfo mConsolidatedSubscriptions;
@@ -303,6 +303,8 @@ class pmSubscriptionManager : public pmBase
         const subscription::pmCompactViewData& GetCompactedSubscription(pmExecutionStub* pStub, ulong pSubtaskId, const pmSplitInfo* pSplitInfo, uint pMemIndex);
 
         std::vector<subscription::pmCompactPageInfo> GetReadSubscriptionPagesForCompactViewPage(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, size_t pCompactViewPageOffset, size_t pPageSize);
+    
+        void ProcessScatteredWriteSubscriptionsInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, const std::function<void (const pmScatteredSubscriptionInfo&)>& pFunc);
 
     #ifdef SUPPORT_LAZY_MEMORY
         static pmAddressSpace* FindAddressSpaceContainingShadowAddr(void* pAddr, size_t& pShadowMemOffset, void*& pShadowMemBaseAddr, pmTask*& pTask);

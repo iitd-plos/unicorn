@@ -282,6 +282,7 @@ struct sendAcknowledgementEvent : public schedulerEvent
 	const pmSubtaskRange range;
 	pmStatus execStatus;
     std::vector<communicator::ownershipDataStruct> ownershipVector;
+    std::vector<communicator::scatteredOwnershipDataStruct> scatteredOwnershipVector;
     std::vector<uint> addressSpaceIndexVector;
     ulong totalSplitCount;
     
@@ -294,6 +295,16 @@ struct sendAcknowledgementEvent : public schedulerEvent
     , addressSpaceIndexVector(pAddressSpaceIndexVector)
     , totalSplitCount(pTotalSplitCount)
     {}
+
+    sendAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::scatteredOwnershipDataStruct>&& pScatteredOwnershipData, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount)
+    : schedulerEvent(pEventId)
+    , device(pDevice)
+    , range(pRange)
+    , execStatus(pExecStatus)
+    , scatteredOwnershipVector(pScatteredOwnershipData)
+    , addressSpaceIndexVector(pAddressSpaceIndexVector)
+    , totalSplitCount(pTotalSplitCount)
+    {}
 };
 
 struct receiveAcknowledgementEvent : public schedulerEvent
@@ -302,6 +313,7 @@ struct receiveAcknowledgementEvent : public schedulerEvent
     const pmSubtaskRange range;
     pmStatus execStatus;
     std::vector<communicator::ownershipDataStruct> ownershipVector;
+    std::vector<communicator::scatteredOwnershipDataStruct> scatteredOwnershipVector;
     std::vector<uint> addressSpaceIndexVector;
     
     receiveAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipData, std::vector<uint>&& pAddressSpaceIndexVector)
@@ -310,6 +322,15 @@ struct receiveAcknowledgementEvent : public schedulerEvent
     , range(pRange)
     , execStatus(pExecStatus)
     , ownershipVector(pOwnershipData)
+    , addressSpaceIndexVector(pAddressSpaceIndexVector)
+    {}
+
+    receiveAcknowledgementEvent(eventIdentifier pEventId, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::scatteredOwnershipDataStruct>&& pScatteredOwnershipData, std::vector<uint>&& pAddressSpaceIndexVector)
+    : schedulerEvent(pEventId)
+    , device(pDevice)
+    , range(pRange)
+    , execStatus(pExecStatus)
+    , scatteredOwnershipVector(pScatteredOwnershipData)
     , addressSpaceIndexVector(pAddressSpaceIndexVector)
     {}
 };
@@ -515,7 +536,9 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
     
         static bool SchedulingModelSupportsStealing(scheduler::schedulingModel pModel);
 
-		void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
+        void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
+        void SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
+        void ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 		void ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 
         virtual void ThreadSwitchCallback(std::shared_ptr<scheduler::schedulerEvent>& pEvent);
@@ -541,6 +564,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
     #endif
 
         void AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
+        void AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount);
+		void AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 		void AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<communicator::ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 		void TaskCancelEvent(pmTask* pTask);
         void TaskFinishEvent(pmTask* pTask);
@@ -560,6 +585,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void AffinityTransferEvent(pmLocalTask* pLocalTask, std::set<const pmMachine*>&& pMachines, const std::vector<ulong>* pLogicalToPhysicalSubtaskMapping);
 
         void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> >& pChangeData);
+        void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::scatteredOwnershipChangeStruct> >& pChangeData);
         void SendSubtaskRangeCancellationMessage(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
 
         void HandleCommandCompletion(const pmCommandPtr& pCommand);
@@ -600,6 +626,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		pmStatus StartLocalTaskExecution(pmLocalTask* pLocalTask);
 
 		void PushToStub(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, bool pIsStealResponse);
+    
+        void ProcessAcknowledgementCommon(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus);
 
     #ifdef ENABLE_TWO_LEVEL_STEALING
 		const pmMachine* RandomlySelectStealTarget(const pmProcessingElement* pStealingDevice, pmTask* pTask, bool& pShouldMultiAssign);
@@ -620,6 +648,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
     #endif
 
         void RegisterPostTaskCompletionOwnershipTransfers(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, const std::vector<communicator::ownershipDataStruct>& pOwnershipVector, const std::vector<uint>& pAddressSpaceIndexVector);
+        void RegisterPostTaskCompletionOwnershipTransfers(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, const std::vector<communicator::scatteredOwnershipDataStruct>& pScatteredOwnershipVector, const std::vector<uint>& pAddressSpaceIndexVector);
     
         void ClearPendingTaskCommands(pmTask* pTask);
         void SendTaskFinishToMachines(pmLocalTask* pLocalTask);

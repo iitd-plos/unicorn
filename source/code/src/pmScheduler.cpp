@@ -144,6 +144,8 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(REMOTE_SUBTASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(OWNERSHIP_DATA_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(OWNERSHIP_CHANGE_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SCATTERED_OWNERSHIP_DATA_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SCATTERED_OWNERSHIP_CHANGE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SEND_ACKNOWLEDGEMENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(TASK_EVENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(STEAL_REQUEST_STRUCT);
@@ -169,6 +171,8 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REMOTE_SUBTASK_ASSIGN_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(OWNERSHIP_DATA_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(OWNERSHIP_CHANGE_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SCATTERED_OWNERSHIP_DATA_STRUCT);
+	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SCATTERED_OWNERSHIP_CHANGE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SEND_ACKNOWLEDGEMENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(TASK_EVENT_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(STEAL_REQUEST_STRUCT);
@@ -393,6 +397,21 @@ void pmScheduler::StealFailedReturnEvent(const pmProcessingElement* pStealingDev
 	SwitchThread(std::shared_ptr<schedulerEvent>(new stealFailStealerEvent(STEAL_FAIL_STEALER, pStealingDevice, pTargetDevice, pTask)), pTask->GetPriority());
 }
 
+void pmScheduler::AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, size_t pTotalSplitCount)
+{
+#ifdef TRACK_SUBTASK_EXECUTION
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTrackLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTrackLock, Lock(), Unlock());
+
+        mAcknowledgementsSent += (pRange.endSubtask - pRange.startSubtask + 1);
+        std::cout << "[Host " << pmGetHostId() << "]: Device " << pDevice->GetGlobalDeviceIndex() << " sent " << (pRange.endSubtask - pRange.startSubtask + 1) << " acknowledgements for subtasks [" << pRange.startSubtask << " - " << pRange.endSubtask << "]" << std::endl;
+    }
+#endif
+
+	SwitchThread(std::shared_ptr<schedulerEvent>(new sendAcknowledgementEvent(SEND_ACKNOWLEDGEMENT, pDevice, pRange, pExecStatus, std::move(pScatteredOwnershipVector), std::move(pAddressSpaceIndexVector), pTotalSplitCount)), pRange.task->GetPriority());
+}
+
 void pmScheduler::AcknowledgementSendEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, size_t pTotalSplitCount)
 {
 #ifdef TRACK_SUBTASK_EXECUTION
@@ -406,6 +425,11 @@ void pmScheduler::AcknowledgementSendEvent(const pmProcessingElement* pDevice, c
 #endif
 
 	SwitchThread(std::shared_ptr<schedulerEvent>(new sendAcknowledgementEvent(SEND_ACKNOWLEDGEMENT, pDevice, pRange, pExecStatus, std::move(pOwnershipVector), std::move(pAddressSpaceIndexVector), pTotalSplitCount)), pRange.task->GetPriority());
+}
+
+void pmScheduler::AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
+{
+	SwitchThread(std::shared_ptr<schedulerEvent>(new receiveAcknowledgementEvent(RECEIVE_ACKNOWLEDGEMENT, pDevice, pRange, pExecStatus, std::move(pScatteredOwnershipVector), std::move(pAddressSpaceIndexVector))), pRange.task->GetPriority());
 }
 
 void pmScheduler::AcknowledgementReceiveEvent(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
@@ -666,21 +690,37 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                 break;
         
             lTask->IncrementSubtasksExecuted(lEventDetails.range.endSubtask - lEventDetails.range.startSubtask + 1, lEventDetails.totalSplitCount);
+            
+            EXCEPTION_ASSERT(lEventDetails.ownershipVector.empty() || lEventDetails.scatteredOwnershipVector.empty());
 
             const pmMachine* lOriginatingHost = lTask->GetOriginatingHost();
             if(lOriginatingHost == PM_LOCAL_MACHINE)
             {
-                AcknowledgementReceiveEvent(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.ownershipVector), std::move(lEventDetails.addressSpaceIndexVector));
+                if(lEventDetails.scatteredOwnershipVector.empty())
+                    AcknowledgementReceiveEvent(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.ownershipVector), std::move(lEventDetails.addressSpaceIndexVector));
+                else
+                    AcknowledgementReceiveEvent(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.scatteredOwnershipVector), std::move(lEventDetails.addressSpaceIndexVector));
 
                 return;
             }
             else
             {
-                finalize_ptr<sendAcknowledgementPacked> lPackedData(new sendAcknowledgementPacked(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.ownershipVector), std::move(lEventDetails.addressSpaceIndexVector)));
-            
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<sendAcknowledgementPacked>::CreateSharedPtr(lTask->GetPriority(), SEND, SEND_ACKNOWLEDGEMENT_TAG, lOriginatingHost, SEND_ACKNOWLEDGEMENT_PACKED, lPackedData, 1);
+                if(lEventDetails.scatteredOwnershipVector.empty())
+                {
+                    finalize_ptr<sendAcknowledgementPacked> lPackedData(new sendAcknowledgementPacked(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.ownershipVector), std::move(lEventDetails.addressSpaceIndexVector)));
+                
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<sendAcknowledgementPacked>::CreateSharedPtr(lTask->GetPriority(), SEND, SEND_ACKNOWLEDGEMENT_TAG, lOriginatingHost, SEND_ACKNOWLEDGEMENT_PACKED, lPackedData, 1);
 
-                pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
+                    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
+                }
+                else
+                {
+                    finalize_ptr<sendAcknowledgementScatteredPacked> lPackedData(new sendAcknowledgementScatteredPacked(lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.scatteredOwnershipVector), std::move(lEventDetails.addressSpaceIndexVector)));
+                
+                    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<sendAcknowledgementScatteredPacked>::CreateSharedPtr(lTask->GetPriority(), SEND, SEND_ACKNOWLEDGEMENT_SCATTERED_TAG, lOriginatingHost, SEND_ACKNOWLEDGEMENT_SCATTERED_PACKED, lPackedData, 1);
+
+                    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
+                }
             }
 
             break;
@@ -690,8 +730,15 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
         {
             receiveAcknowledgementEvent& lEventDetails = static_cast<receiveAcknowledgementEvent&>(pEvent);
 
+            EXCEPTION_ASSERT(lEventDetails.ownershipVector.empty() || lEventDetails.scatteredOwnershipVector.empty());
+
             if(pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(lEventDetails.range.task))
-                ProcessAcknowledgement((pmLocalTask*)(lEventDetails.range.task), lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.ownershipVector), std::move(lEventDetails.addressSpaceIndexVector));
+            {
+                if(lEventDetails.scatteredOwnershipVector.empty())
+                    ProcessAcknowledgement((pmLocalTask*)(lEventDetails.range.task), lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.ownershipVector), std::move(lEventDetails.addressSpaceIndexVector));
+                else
+                    ProcessAcknowledgement((pmLocalTask*)(lEventDetails.range.task), lEventDetails.device, lEventDetails.range, lEventDetails.execStatus, std::move(lEventDetails.scatteredOwnershipVector), std::move(lEventDetails.addressSpaceIndexVector));
+            }
             
             break;
         }
@@ -1001,7 +1048,18 @@ void pmScheduler::SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, c
 
     pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
 }
+
+void pmScheduler::SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<scatteredOwnershipChangeStruct> >& pChangeData)
+{
+    EXCEPTION_ASSERT(pReceiverHost != PM_LOCAL_MACHINE);
     
+    finalize_ptr<scatteredOwnershipTransferPacked> lPackedData(new scatteredOwnershipTransferPacked(pAddressSpace, pChangeData));
+
+    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<scatteredOwnershipTransferPacked>::CreateSharedPtr(MAX_CONTROL_PRIORITY, SEND, SCATTERED_OWNERSHIP_TRANSFER_TAG, pReceiverHost, SCATTERED_OWNERSHIP_TRANSFER_PACKED, lPackedData, 1);
+
+    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
+}
+
 void pmScheduler::SendSubtaskRangeCancellationMessage(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange)
 {
  	const pmMachine* lMachine = pTargetDevice->GetMachine();
@@ -1521,23 +1579,79 @@ void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessin
     });
 }
 
+void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, const std::vector<scatteredOwnershipDataStruct>& pScatteredOwnershipVector, const std::vector<uint>& pAddressSpaceIndexVector)
+{
+    if(pScatteredOwnershipVector.empty())
+        return;
+
+    filtered_for_each_with_index(pRange.task->GetAddressSpaces(), [&pRange] (const pmAddressSpace* pAddressSpace) {return pRange.task->IsWritable(pAddressSpace);},
+    [&] (pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
+    {
+        memoryIdentifierStruct lMemoryStruct(*pAddressSpace->GetMemOwnerHost(), pAddressSpace->GetGenerationNumber());
+        
+        std::vector<scatteredOwnershipDataStruct>::const_iterator lDataIter = pScatteredOwnershipVector.begin() + pAddressSpaceIndexVector[pOutputAddressSpaceIndex];
+        std::vector<scatteredOwnershipDataStruct>::const_iterator lDataEndIter = pScatteredOwnershipVector.end();
+        
+        if(pOutputAddressSpaceIndex != pAddressSpaceIndexVector.size() - 1)
+        {
+            lDataEndIter = pScatteredOwnershipVector.begin() + pAddressSpaceIndexVector[pOutputAddressSpaceIndex + 1];
+            --lDataEndIter;
+        }
+
+        const pmMachine* lMachine = pDevice->GetMachine();
+
+        std::for_each(lDataIter, lDataEndIter, [&] (const scatteredOwnershipDataStruct& pStruct)
+        {
+             pAddressSpace->TransferOwnershipPostTaskCompletion(vmRangeOwner(lMachine, pStruct.offset, lMemoryStruct), pStruct.offset, pStruct.size, pStruct.step, pStruct.count);
+        });
+    });
+}
+
 // This method is executed at master host for the task
 void pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
 {
     RegisterPostTaskCompletionOwnershipTransfers(pDevice, pRange, pOwnershipVector, pAddressSpaceIndexVector);
 
-	pmSubtaskManager* lSubtaskManager = pLocalTask->GetSubtaskManager();
-	lSubtaskManager->RegisterSubtaskCompletion(pDevice, pRange.endSubtask - pRange.startSubtask + 1, pRange.startSubtask, pExecStatus);
+    ProcessAcknowledgementCommon(pLocalTask, pDevice, pRange, pExecStatus);
+}
 
-	if(lSubtaskManager->HasTaskFinished())
-	{
-		SendTaskFinishToMachines(pLocalTask);
-	}
-	else
-	{
-		if(pLocalTask->GetSchedulingModel() == PUSH)
-			AssignSubtasksToDevice(pDevice, pLocalTask);
-	}
+void pmScheduler::ProcessAcknowledgement(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector)
+{
+    RegisterPostTaskCompletionOwnershipTransfers(pDevice, pRange, pScatteredOwnershipVector, pAddressSpaceIndexVector);
+    
+    ProcessAcknowledgementCommon(pLocalTask, pDevice, pRange, pExecStatus);
+}
+    
+void pmScheduler::ProcessAcknowledgementCommon(pmLocalTask* pLocalTask, const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus)
+{
+    pmSubtaskManager* lSubtaskManager = pLocalTask->GetSubtaskManager();
+    lSubtaskManager->RegisterSubtaskCompletion(pDevice, pRange.endSubtask - pRange.startSubtask + 1, pRange.startSubtask, pExecStatus);
+    
+    if(lSubtaskManager->HasTaskFinished())
+    {
+        SendTaskFinishToMachines(pLocalTask);
+    }
+    else
+    {
+        if(pLocalTask->GetSchedulingModel() == PUSH)
+            AssignSubtasksToDevice(pDevice, pLocalTask);
+    }
+}
+
+    
+void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount)
+{
+    // If task owner is not same as address space owner, then there is a problem.
+    // We need to send ownership updates to address space owner and not task owner.
+    // This works currently because an address space handle is only available on the
+    // host where it has been created (i.e. address space owner) and task can only be
+    // created with address space handle. This forces task owner to be same as address
+    // space owner.
+
+    if(pRange.task->GetOriginatingHost() != PM_LOCAL_MACHINE)
+        RegisterPostTaskCompletionOwnershipTransfers(pDevice, pRange, pScatteredOwnershipVector, pAddressSpaceIndexVector);
+
+	AcknowledgementSendEvent(pDevice, pRange, pExecStatus, std::move(pScatteredOwnershipVector), std::move(pAddressSpaceIndexVector), pTotalSplitCount);
 }
 
 void pmScheduler::SendAcknowledgement(const pmProcessingElement* pDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector, ulong pTotalSplitCount)
@@ -1724,7 +1838,26 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 					break;
 				}
 
-				case TASK_EVENT_TAG:
+				case SEND_ACKNOWLEDGEMENT_SCATTERED_TAG:
+				{
+					sendAcknowledgementScatteredPacked* lData = (sendAcknowledgementScatteredPacked*)(lCommunicatorCommand->GetData());
+                    
+					const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->ackStruct.originatingHost);
+					pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->ackStruct.sequenceNumber);
+                    
+                    DEBUG_EXCEPTION_ASSERT(lOriginatingHost == PM_LOCAL_MACHINE);
+                
+                    const pmProcessingElement* lSourceDevice = pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->ackStruct.sourceDeviceGlobalIndex);
+                    const pmProcessingElement* lOriginalAllottee = ((lData->ackStruct.originalAllotteeGlobalIndex == lData->ackStruct.sourceDeviceGlobalIndex) ? NULL : pmDevicePool::GetDevicePool()->GetDeviceAtGlobalIndex(lData->ackStruct.originalAllotteeGlobalIndex));
+
+                    pmSubtaskRange lRange(lTask, lOriginalAllottee, lData->ackStruct.startSubtask, lData->ackStruct.endSubtask);
+
+                    AcknowledgementReceiveEvent(lSourceDevice, lRange, (pmStatus)(lData->ackStruct.execStatus), std::move(lData->scatteredOwnershipVector), std::move(lData->addressSpaceIndexVector));
+                
+					break;
+				}
+
+                case TASK_EVENT_TAG:
 				{
 					taskEventStruct* lData = (taskEventStruct*)(lCommunicatorCommand->GetData());
 
@@ -1931,7 +2064,19 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
 					break;
 				}
 
-				case HOST_FINALIZATION_TAG:
+				case SCATTERED_OWNERSHIP_TRANSFER_TAG:
+				{
+					scatteredOwnershipTransferPacked* lData = (scatteredOwnershipTransferPacked*)(lCommunicatorCommand->GetData());
+					pmAddressSpace* lAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lData->memIdentifier.memOwnerHost), lData->memIdentifier.generationNumber);
+    
+                    EXCEPTION_ASSERT(lAddressSpace);
+                
+                    lAddressSpace->ChangeOwnership(lData->transferData);
+
+					break;
+				}
+
+                case HOST_FINALIZATION_TAG:
 				{
                     DEBUG_EXCEPTION_ASSERT(((hostFinalizationStruct*)(lCommunicatorCommand->GetData()))->terminate == false);
                     DEBUG_EXCEPTION_ASSERT(pmMachinePool::GetMachinePool()->GetMachine(0) == PM_LOCAL_MACHINE);

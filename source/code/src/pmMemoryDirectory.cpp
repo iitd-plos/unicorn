@@ -47,6 +47,19 @@ void pmMemoryDirectoryLinear::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulo
     
     SetRangeOwnerInternal(pRangeOwner, pOffset, pLength);
 }
+    
+void pmMemoryDirectoryLinear::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+{
+    vmRangeOwner lRangeOwner(pRangeOwner);
+
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+
+    for(ulong i = 0; i < pCount; ++i)
+    {
+        lRangeOwner.hostOffset = pRangeOwner.hostOffset + i * pStep;
+        SetRangeOwnerInternal(lRangeOwner, pOffset + i * pStep, pLength);
+    }
+}
 
 // Must be called with mOwnershipLock acquired
 void pmMemoryDirectoryLinear::SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength)
@@ -60,7 +73,7 @@ void pmMemoryDirectoryLinear::SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ul
         std::cout << "Host " << pmGetHostId() << " Set Range Owner: (Offset, Length, Owner address space (Host, Generation Number), Owner, Owner Offset): (" << pOffset << ", " << pLength << ", (" << pRangeOwner.memIdentifier.memOwnerHost << ", " << pRangeOwner.memIdentifier.generationNumber << ")," << pRangeOwner.host << ", " << pRangeOwner.hostOffset << ")" << std::endl;
 #endif
 #endif
-    
+   
 	// Remove present ownership
 	size_t lLastAddr = pOffset + pLength - 1;
 	size_t lOwnerLastAddr = pRangeOwner.hostOffset + pLength - 1;
@@ -180,14 +193,6 @@ void pmMemoryDirectoryLinear::SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ul
 #endif
 }
 
-void pmMemoryDirectoryLinear::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
-{
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
-
-    for(ulong i = 0; i < pCount; ++i)
-        SetRangeOwnerInternal(pRangeOwner, pOffset + i * pStep, pLength);
-}
-
 // Must be called with mOwnershipLock acquired
 void pmMemoryDirectoryLinear::GetOwnersInternal(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships)
 {
@@ -247,13 +252,20 @@ void pmMemoryDirectoryLinear::GetOwners(ulong pOffset, ulong pLength, pmMemOwner
 
     GetOwnersInternal(pOffset, pLength, pOwnerships);
 }
-    
-void pmMemoryDirectoryLinear::GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships)
+
+void pmMemoryDirectoryLinear::GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships)
 {
     FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
-    
+
+    pmMemOwnership lOwnerships;
     for(ulong i = 0; i < pCount; ++i)
-        GetOwnersInternal(pOffset + i * pStep, pLength, pOwnerships);
+        GetOwnersInternal(pOffset + i * pStep, pLength, lOwnerships);
+    
+    pScatteredOwnerships.reserve(lOwnerships.size());
+    for_each(lOwnerships, [&] (const pmMemOwnership::value_type& pPair)
+    {
+        pScatteredOwnerships.emplace_back(std::piecewise_construct, std::forward_as_tuple(pPair.first, pPair.second.first, 0, 1), std::forward_as_tuple(pPair.second.second));
+    });
 }
 
 // This method is temporarily created for preprocessor task
@@ -263,10 +275,17 @@ void pmMemoryDirectoryLinear::GetOwnersUnprotected(ulong pOffset, ulong pLength,
 }
 
 // This method is temporarily created for preprocessor task
-void pmMemoryDirectoryLinear::GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships)
+void pmMemoryDirectoryLinear::GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships)
 {
+    pmMemOwnership lOwnerships;
     for(ulong i = 0; i < pCount; ++i)
-        GetOwnersInternal(pOffset + i * pStep, pLength, pOwnerships);
+        GetOwnersInternal(pOffset + i * pStep, pLength, lOwnerships);
+
+    pScatteredOwnerships.reserve(lOwnerships.size());
+    for_each(lOwnerships, [&] (const pmMemOwnership::value_type& pPair)
+    {
+        pScatteredOwnerships.emplace_back(std::piecewise_construct, std::forward_as_tuple(pPair.first, pPair.second.first, 0, 1), std::forward_as_tuple(pPair.second.second));
+    });
 }
     
 void pmMemoryDirectoryLinear::Clear()
@@ -408,10 +427,16 @@ void pmMemoryDirectory2D::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong p
 
 void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships)
 {
-    GetOwners(pOffset, pLength, 0, 1, pOwnerships);
+    pmScatteredMemOwnership lScatteredOwnerships;
+    GetOwners(pOffset, pLength, 0, 1, lScatteredOwnerships);
+
+    for_each(lScatteredOwnerships, [&] (pmScatteredMemOwnership::value_type& pPair)
+    {
+        pOwnerships.emplace(std::piecewise_construct, std::forward_as_tuple(pPair.first.offset), std::forward_as_tuple(pPair.first.size, pPair.second));
+    });
 }
     
-void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships)
+void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pOwnerships)
 {
     EXCEPTION_ASSERT(((pStep == 0 && pCount == 1) || (mAddressSpaceCols == pStep)) && pOffset + pStep * (pCount - 1) + pLength <= mAddressSpaceRows * mAddressSpaceCols);
 
@@ -421,7 +446,7 @@ void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, ulong pStep, u
 }
 
 // Must be called with mOwnershipLock acquired
-void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships)
+void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships)
 {
     boost_box_type lBox = GetBox(pOffset, pLength, pStep, pCount);
     
@@ -433,23 +458,28 @@ void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong 
         boost_box_type lOutBox;
         boost::geometry::intersection(lBox, pPair.first, lOutBox);
 
-        pmScatteredSubscriptionInfo lScatteredSubscriptinInfo = GetReverseBoxMapping(lOutBox);
+        pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(lOutBox);
         
-        for(ulong i = 0; i < lScatteredSubscriptinInfo.count; ++i)
-            pOwnerships.insert(std::make_pair(lScatteredSubscriptinInfo.offset + i * lScatteredSubscriptinInfo.step, std::make_pair(lScatteredSubscriptinInfo.size, pPair.second)));
+        pScatteredOwnerships.emplace_back(lScatteredSubscriptionInfo, pPair.second);
     });
 }
 
 // This method is temporarily created for preprocessor task
 void pmMemoryDirectory2D::GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships)
 {
-    GetOwnersInternal(pOffset, pLength, 0, 1, pOwnerships);
+    pmScatteredMemOwnership lScatteredOwnerships;
+    GetOwnersInternal(pOffset, pLength, 0, 1, lScatteredOwnerships);
+
+    for_each(lScatteredOwnerships, [&] (pmScatteredMemOwnership::value_type& pPair)
+    {
+        pOwnerships.emplace(std::piecewise_construct, std::forward_as_tuple(pPair.first.offset), std::forward_as_tuple(pPair.first.size, pPair.second));
+    });
 }
 
 // This method is temporarily created for preprocessor task
-void pmMemoryDirectory2D::GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships)
+void pmMemoryDirectory2D::GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships)
 {
-    GetOwnersInternal(pOffset, pLength, pStep, pCount, pOwnerships);
+    GetOwnersInternal(pOffset, pLength, pStep, pCount, pScatteredOwnerships);
 }
 
 void pmMemoryDirectory2D::Clear()

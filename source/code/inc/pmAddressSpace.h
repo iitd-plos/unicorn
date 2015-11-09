@@ -51,7 +51,8 @@ private:
     pmAddressSpace* mAddressSpace;
 } pmUserMemHandle;
     
-typedef std::map<const pmMachine*, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> > > pmOwnershipTransferMap;
+typedef std::map<const pmMachine*, std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>> pmOwnershipTransferMap;
+typedef std::map<const pmMachine*, std::shared_ptr<std::vector<communicator::scatteredOwnershipChangeStruct>>> pmScatteredOwnershipTransferMap;
 
 /**
  * \brief Encapsulation of task memory
@@ -78,10 +79,12 @@ class pmAddressSpace : public pmBase
     
         void AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
         void TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
-		void FlushOwnerships();
+        void TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pSize, ulong pStep, ulong pCount);
+        void FlushOwnerships();
 
         bool IsRegionLocallyOwned(ulong pOffset, ulong pLength);
         void GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
+        void GetOwners(ulong pOffset, ulong pSize, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
         void GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
 
         void Fetch(ushort pPriority);
@@ -101,6 +104,7 @@ class pmAddressSpace : public pmBase
     #endif
     
         void ChangeOwnership(std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>& pOwnershipData);
+        void ChangeOwnership(std::shared_ptr<std::vector<communicator::scatteredOwnershipChangeStruct>>& pScatteredOwnershipData);
     
         void UserDelete();
         void SetUserMemHandle(pmUserMemHandle* pUserMemHandle);
@@ -136,11 +140,14 @@ class pmAddressSpace : public pmBase
     
         void Init(const pmMachine* pOwner);
         void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
+        void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pSize, ulong pStep, ulong pCount);
         void SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap);
+        void SendRemoteOwnershipChangeMessages(pmScatteredOwnershipTransferMap& pScatteredOwnershipTransferMap);
     
         void SetWaitingForOwnershipChange();
         bool IsWaitingForOwnershipChange();
         void TransferOwnershipImmediate(ulong pOffset, ulong pLength, const pmMachine* pNewOwnerHost);
+        void TransferOwnershipImmediate(ulong pOffset, ulong pSize, ulong pStep, ulong pCount, const pmMachine* pNewOwnerHost);
     
         void Lock(pmTask* pTask, pmMemType pMemType);
         void FetchCompletionCallback(const pmCommandPtr& pCommand);
@@ -176,6 +183,7 @@ class pmAddressSpace : public pmBase
         std::unique_ptr<pmMemoryDirectory> mDirectoryPtr, mOriginalDirectoryPtr;
 
         std::vector<pmMemTransferData> mOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
+        std::vector<pmScatteredMemTransferData> mScatteredOwnershipTransferVector;	// memory subscriptions; updated to mOwnershipMap after task finishes
         bool mWaitingForOwnershipChange;  // The address space owner may have sent ownership change message that must be processed before allowing any lock on address space
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipTransferLock;
 
@@ -202,7 +210,7 @@ public:
 
     // pRowFunctor should call AddNextSubRow for every range to be kept
     const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& FilterBlocks(const std::function<void (size_t)>& pRowFunctor);
-    
+
     void AddNextSubRow(ulong pOffset, ulong pLength, vmRangeOwner& pRangeOwner);
     
 private:

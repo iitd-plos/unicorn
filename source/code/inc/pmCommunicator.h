@@ -279,6 +279,40 @@ struct ownershipDataStruct
     {}
 };
 
+struct scatteredOwnershipDataStruct
+{
+    ulong offset;
+    ulong size;
+    ulong step;
+    ulong count;
+
+    typedef enum fieldCount
+    {
+        FIELD_COUNT_VALUE = 4
+    } fieldCount;
+    
+    scatteredOwnershipDataStruct()
+    : offset(std::numeric_limits<ulong>::max())
+    , size(0)
+    , step(0)
+    , count(0)
+    {}
+
+    scatteredOwnershipDataStruct(ulong pOffset, ulong pSize, ulong pStep, ulong pCount)
+    : offset(pOffset)
+    , size(pSize)
+    , step(pStep)
+    , count(pCount)
+    {}
+
+    scatteredOwnershipDataStruct(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+    : offset(pScatteredSubscriptionInfo.offset)
+    , size(pScatteredSubscriptionInfo.size)
+    , step(pScatteredSubscriptionInfo.step)
+    , count(pScatteredSubscriptionInfo.count)
+    {}
+};
+    
 struct sendAcknowledgementStruct
 {
     uint sourceDeviceGlobalIndex;
@@ -334,6 +368,19 @@ struct sendAcknowledgementPacked
     sendAcknowledgementPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<ownershipDataStruct>&& pOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
 };
 
+struct sendAcknowledgementScatteredPacked
+{
+    sendAcknowledgementStruct ackStruct;
+    std::vector<scatteredOwnershipDataStruct> scatteredOwnershipVector;
+    std::vector<uint> addressSpaceIndexVector;
+
+    sendAcknowledgementScatteredPacked()
+    : ackStruct()
+    {}
+
+    sendAcknowledgementScatteredPacked(const pmProcessingElement* pSourceDevice, const pmSubtaskRange& pRange, pmStatus pExecStatus, std::vector<scatteredOwnershipDataStruct>&& pScatteredOwnershipVector, std::vector<uint>&& pAddressSpaceIndexVector);
+};
+    
 enum taskEvents
 {
     TASK_FINISH_EVENT,
@@ -500,6 +547,36 @@ struct ownershipChangeStruct
     {}
 };
 
+struct scatteredOwnershipChangeStruct
+{
+    ulong offset;
+    ulong size;
+    ulong step;
+    ulong count;
+    uint newOwnerHost;
+
+    typedef enum fieldCount
+    {
+        FIELD_COUNT_VALUE = 5
+    } fieldCount;
+    
+    scatteredOwnershipChangeStruct()
+    : offset(std::numeric_limits<ulong>::max())
+    , size(std::numeric_limits<ulong>::max())
+    , step(std::numeric_limits<ulong>::max())
+    , count(std::numeric_limits<ulong>::max())
+    , newOwnerHost(std::numeric_limits<uint>::max())
+    {}
+
+    scatteredOwnershipChangeStruct(ulong pOffset, ulong pSize, ulong pStep, ulong pCount, uint pNewOwnerHost)
+    : offset(pOffset)
+    , size(pSize)
+    , step(pStep)
+    , count(pCount)
+    , newOwnerHost(pNewOwnerHost)
+    {}
+};
+
 struct ownershipTransferPacked
 {
     memoryIdentifierStruct memIdentifier;
@@ -512,6 +589,20 @@ struct ownershipTransferPacked
     {}
     
     ownershipTransferPacked(pmAddressSpace* pAddressSpace, std::shared_ptr<std::vector<ownershipChangeStruct> >& pChangeData);
+};
+
+struct scatteredOwnershipTransferPacked
+{
+    memoryIdentifierStruct memIdentifier;
+    uint transferDataElements;
+    std::shared_ptr<std::vector<scatteredOwnershipChangeStruct> > transferData;
+
+    scatteredOwnershipTransferPacked()
+    : memIdentifier()
+    , transferDataElements(0)
+    {}
+    
+    scatteredOwnershipTransferPacked(pmAddressSpace* pAddressSpace, std::shared_ptr<std::vector<scatteredOwnershipChangeStruct> >& pChangeData);
 };
     
 enum memoryTransferType

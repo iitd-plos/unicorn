@@ -368,6 +368,27 @@ void pmAddressSpace::ChangeOwnership(std::shared_ptr<std::vector<communicator::o
 
     ScanLockQueue();
 }
+
+void pmAddressSpace::ChangeOwnership(std::shared_ptr<std::vector<communicator::scatteredOwnershipChangeStruct>>& pScatteredOwnershipData)
+{
+    EXCEPTION_ASSERT(!GetLockingTask());
+
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
+
+        EXCEPTION_ASSERT(mWaitingForOwnershipChange);
+
+        for_each(*pScatteredOwnershipData.get(), [this] (communicator::scatteredOwnershipChangeStruct& pStruct)
+        {
+            TransferOwnershipImmediate(pStruct.offset, pStruct.size, pStruct.step, pStruct.count, pmMachinePool::GetMachinePool()->GetMachine(pStruct.newOwnerHost));
+        });
+
+        mWaitingForOwnershipChange = false;
+    }
+
+    ScanLockQueue();
+}
     
 void pmAddressSpace::ScanLockQueue()
 {
@@ -475,6 +496,7 @@ void pmAddressSpace::Unlock(pmTask* pTask)
         FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
         
         EXCEPTION_ASSERT(mOwnershipTransferVector.empty());
+        EXCEPTION_ASSERT(mScatteredOwnershipTransferVector.empty());
     }
 #endif
     
@@ -483,7 +505,7 @@ void pmAddressSpace::Unlock(pmTask* pTask)
         FINALIZE_RESOURCE_PTR(dTaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTaskLock, Lock(), Unlock());
 
         EXCEPTION_ASSERT(mLockingTask == pTask);
-        
+
         mLockingTask = NULL;
     }
 
@@ -523,6 +545,11 @@ void pmAddressSpace::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffse
     mDirectoryPtr->SetRangeOwner(pRangeOwner, pOffset, pLength);
 }
 
+void pmAddressSpace::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pSize, ulong pStep, ulong pCount)
+{
+    mDirectoryPtr->SetRangeOwner(pRangeOwner, pOffset, pSize, pStep, pCount);
+}
+
 void pmAddressSpace::AcquireOwnershipImmediate(ulong pOffset, ulong pLength)
 {
     SetRangeOwner(vmRangeOwner(PM_LOCAL_MACHINE, pOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)), pOffset, pLength);
@@ -533,6 +560,13 @@ void pmAddressSpace::TransferOwnershipImmediate(ulong pOffset, ulong pLength, co
     DEBUG_EXCEPTION_ASSERT(pNewOwnerHost != PM_LOCAL_MACHINE);
 
     SetRangeOwner(vmRangeOwner(pNewOwnerHost, pOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)), pOffset, pLength);
+}
+
+void pmAddressSpace::TransferOwnershipImmediate(ulong pOffset, ulong pSize, ulong pStep, ulong pCount, const pmMachine* pNewOwnerHost)
+{
+    DEBUG_EXCEPTION_ASSERT(pNewOwnerHost != PM_LOCAL_MACHINE);
+
+    SetRangeOwner(vmRangeOwner(pNewOwnerHost, pOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)), pOffset, pSize, pStep, pCount);
 }
 
 
@@ -571,16 +605,25 @@ void pmAddressSpace::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
     pLength = lEndAddress - pOffset + 1;
     pOffset -= reinterpret_cast<size_t>(GetMem());
 }
-    
+
 void pmAddressSpace::TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
 {
     DEBUG_EXCEPTION_ASSERT(!GetLockingTask()->IsReadOnly(this));
 
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
 
-    mOwnershipTransferVector.push_back(pmMemTransferData(pRangeOwner, pOffset, pLength));
+    mOwnershipTransferVector.emplace_back(pRangeOwner, pOffset, pLength);
 }
 
+void pmAddressSpace::TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pSize, ulong pStep, ulong pCount)
+{
+    DEBUG_EXCEPTION_ASSERT(!GetLockingTask()->IsReadOnly(this));
+
+	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
+
+    mScatteredOwnershipTransferVector.emplace_back(pRangeOwner, pOffset, pSize, pStep, pCount);
+}
+    
 void pmAddressSpace::FlushOwnerships()
 {
     pmTask* lTask = GetLockingTask();
@@ -588,6 +631,8 @@ void pmAddressSpace::FlushOwnerships()
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::FLUSH_MEMORY_OWNERSHIPS);
 #endif
+    
+    EXCEPTION_ASSERT(mOwnershipTransferVector.empty() || mScatteredOwnershipTransferVector.empty());
 
     DEBUG_EXCEPTION_ASSERT(lTask && lTask->IsWritable(this));
     
@@ -598,6 +643,7 @@ void pmAddressSpace::FlushOwnerships()
 
     bool lOwnershipTransferRequired = ((mOwner == PM_LOCAL_MACHINE) && (!lTask->GetCallbackUnit()->GetDataReductionCB()) && (!lTask->GetCallbackUnit()->GetDataRedistributionCB()));
     pmOwnershipTransferMap lOwnershipTransferMap;
+    pmScatteredOwnershipTransferMap lScatteredOwnershipTransferMap;
     
     if(lOwnershipTransferRequired)
     {
@@ -607,7 +653,10 @@ void pmAddressSpace::FlushOwnerships()
         for_each(lMachines, [&] (const pmMachine* pMachine)
         {
             if(pMachine != PM_LOCAL_MACHINE)
+            {
                 lOwnershipTransferMap.emplace(std::piecewise_construct, std::forward_as_tuple(pMachine), std::forward_as_tuple(new std::vector<communicator::ownershipChangeStruct>()));
+                lScatteredOwnershipTransferMap.emplace(std::piecewise_construct, std::forward_as_tuple(pMachine), std::forward_as_tuple(new std::vector<communicator::scatteredOwnershipChangeStruct>()));
+            }
         });
     }
     
@@ -628,6 +677,22 @@ void pmAddressSpace::FlushOwnerships()
 
             SetRangeOwner(pTransferData.rangeOwner, pTransferData.offset, pTransferData.length);
         });
+
+        for_each(mScatteredOwnershipTransferVector, [&] (const pmScatteredMemTransferData& pScatteredTransferData)
+        {
+            pmScatteredMemOwnership lScatteredOwnerships;
+            GetOwners(pScatteredTransferData.offset, pScatteredTransferData.size, pScatteredTransferData.step, pScatteredTransferData.count, lScatteredOwnerships);
+
+            for_each(lScatteredOwnerships, [&] (const pmScatteredMemOwnership::value_type& pPair)
+            {
+                const vmRangeOwner& lRangeOwner = pPair.second;
+
+                if(lRangeOwner.host != PM_LOCAL_MACHINE && lRangeOwner.host != pScatteredTransferData.rangeOwner.host)
+                    lScatteredOwnershipTransferMap.find(lRangeOwner.host)->second->emplace_back(pPair.first.offset, pPair.first.size, pPair.first.step, pPair.first.count, *(pScatteredTransferData.rangeOwner.host));
+            });
+
+            SetRangeOwner(pScatteredTransferData.rangeOwner, pScatteredTransferData.offset, pScatteredTransferData.size, pScatteredTransferData.step, pScatteredTransferData.count);
+        });
     }
     else
     {
@@ -635,12 +700,24 @@ void pmAddressSpace::FlushOwnerships()
         {
             SetRangeOwner(pTransferData.rangeOwner, pTransferData.offset, pTransferData.length);
         });
+
+        for_each(mScatteredOwnershipTransferVector, [&] (const pmScatteredMemTransferData& pScatteredTransferData)
+        {
+            SetRangeOwner(pScatteredTransferData.rangeOwner, pScatteredTransferData.offset, pScatteredTransferData.size, pScatteredTransferData.step, pScatteredTransferData.count);
+        });
     }
     
-    mOwnershipTransferVector.clear();
-
     if(lOwnershipTransferRequired)
-        SendRemoteOwnershipChangeMessages(lOwnershipTransferMap);
+    {
+        if(!mOwnershipTransferVector.empty())
+            SendRemoteOwnershipChangeMessages(lOwnershipTransferMap);
+
+        if(!mScatteredOwnershipTransferVector.empty())
+            SendRemoteOwnershipChangeMessages(lScatteredOwnershipTransferMap);
+    }
+
+    mOwnershipTransferVector.clear();
+    mScatteredOwnershipTransferVector.clear();
 }
     
 void pmAddressSpace::Fetch(ushort pPriority)
@@ -805,6 +882,11 @@ void pmAddressSpace::GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOw
     mDirectoryPtr->GetOwners(pOffset, pLength, pOwnerships);
 }
 
+void pmAddressSpace::GetOwners(ulong pOffset, ulong pSize, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships)
+{
+    mDirectoryPtr->GetOwners(pOffset, pSize, pStep, pCount, pScatteredOwnerships);
+}
+
 /* This method does not acquire mOwnershipLock (directly calls GetOwnersInternal instead of GetOwners).
  It is only meant to be called by preprocessor task as it does not actually fetch data on user task's
  address spaces, but just determines its current ownership.
@@ -817,6 +899,14 @@ void pmAddressSpace::GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwn
 void pmAddressSpace::SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap)
 {
     pmOwnershipTransferMap::iterator lIter = pOwnershipTransferMap.begin(), lEndIter = pOwnershipTransferMap.end();
+
+    for(; lIter != lEndIter; ++lIter)
+        pmScheduler::GetScheduler()->SendPostTaskOwnershipTransfer(this, lIter->first, lIter->second);
+}
+
+void pmAddressSpace::SendRemoteOwnershipChangeMessages(pmScatteredOwnershipTransferMap& pScatteredOwnershipTransferMap)
+{
+    pmScatteredOwnershipTransferMap::iterator lIter = pScatteredOwnershipTransferMap.begin(), lEndIter = pScatteredOwnershipTransferMap.end();
 
     for(; lIter != lEndIter; ++lIter)
         pmScheduler::GetScheduler()->SendPostTaskOwnershipTransfer(this, lIter->first, lIter->second);
@@ -887,7 +977,7 @@ const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionIn
 {
     for(size_t i = 0; i < mScatteredSubscriptionInfo.count; ++i)
         pRowFunctor(i);
-    
+
     return GetLeftoverBlocks();
 }
 

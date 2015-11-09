@@ -49,7 +49,7 @@
 namespace pm
 {
 
-typedef struct vmRangeOwner
+struct vmRangeOwner
 {
     const pmMachine* host;                                  // Host where memory page lives
     ulong hostOffset;                                       // Offset on host (in case of data redistribution offsets at source and destination hosts are different)
@@ -71,9 +71,9 @@ typedef struct vmRangeOwner
     {
         return (host == pRangeOwner.host && hostOffset == pRangeOwner.hostOffset && memIdentifier == pRangeOwner.memIdentifier);
     }
-} vmRangeOwner;
+};
 
-typedef struct pmMemTransferData
+struct pmMemTransferData
 {
     vmRangeOwner rangeOwner;
     ulong offset;
@@ -84,9 +84,27 @@ typedef struct pmMemTransferData
     , offset(pOffset)
     , length(pLength)
     {}
-} pmMemTransferData;
+};
 
-typedef std::map<size_t, std::pair<size_t, vmRangeOwner> > pmMemOwnership;
+struct pmScatteredMemTransferData
+{
+    vmRangeOwner rangeOwner;
+    ulong offset;
+    ulong size;
+    ulong step;
+    ulong count;
+    
+    pmScatteredMemTransferData(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pSize, ulong pStep, ulong pCount)
+    : rangeOwner(pRangeOwner)
+    , offset(pOffset)
+    , size(pSize)
+    , step(pStep)
+    , count(pCount)
+    {}
+};
+
+typedef std::map<size_t, std::pair<size_t, vmRangeOwner>> pmMemOwnership;
+typedef std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>> pmScatteredMemOwnership;
 
 class pmMemoryDirectory : public pmBase
 {
@@ -99,10 +117,10 @@ public:
     virtual void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength, ulong pStep, ulong pCount) = 0;
 
     virtual void GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships) = 0;
-    virtual void GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships) = 0;
+    virtual void GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships) = 0;
     
     virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships) = 0;
-    virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships) = 0;
+    virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships) = 0;
 
     virtual void Clear() = 0;
     virtual bool IsEmpty() = 0;
@@ -126,10 +144,10 @@ public:
     virtual void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
 
     virtual void GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
-    virtual void GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships);
+    virtual void GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
 
     virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
-    virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships);
+    virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
 
     virtual void Clear();
     virtual bool IsEmpty();
@@ -166,10 +184,10 @@ public:
     virtual void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
 
     virtual void GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
-    virtual void GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships);
+    virtual void GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
 
     virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
-    virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships);
+    virtual void GetOwnersUnprotected(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
 
     virtual void Clear();
     virtual bool IsEmpty();
@@ -177,7 +195,7 @@ public:
     virtual void CloneFrom(pmMemoryDirectory* pDirectory);
     
 private:
-    void GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmMemOwnership& pOwnerships);
+    void GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
     void GetDifferenceOfBoxes(const boost_box_type& pBox1, const boost_box_type& pBox2, std::vector<boost_box_type>& pRemainingBoxes);
     
     boost_box_type GetBox(ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
