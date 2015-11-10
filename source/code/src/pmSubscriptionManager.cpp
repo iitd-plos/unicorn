@@ -591,7 +591,7 @@ void pmSubscriptionManager::InsertScatteredSubscriptionsToSubtaskMapsInternal(su
     });
 }
     
-pmSubscriptionFormat pmSubscriptionManager::GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
+pmSubscriptionFormat pmSubscriptionManager::GetSubscriptionFormat(const pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
     

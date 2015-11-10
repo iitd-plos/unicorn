@@ -259,7 +259,7 @@ class pmSubscriptionManager : public pmBase
         void FindRemoteTransferEstimateForSubtaskOnMachines(pmExecutionStub* pStub, ulong pSubtaskId, const std::vector<const pmMachine*>& pMachinesVector, float* pDataArray, size_t pStepSizeInBytes = 0);
     #endif
     
-        pmSubscriptionFormat GetSubscriptionFormat(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
+        pmSubscriptionFormat GetSubscriptionFormat(const pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
         std::vector<pmScatteredSubscriptionInfo> GetUnifiedScatteredSubscriptionInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex);
 
     #ifdef SUPPORT_LAZY_MEMORY
