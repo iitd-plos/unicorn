@@ -626,7 +626,7 @@ std::vector<pmScatteredSubscriptionInfo> pmSubscriptionManager::GetUnifiedScatte
     return lVector;
 }
 
-void pmSubscriptionManager::ProcessScatteredWriteSubscriptionsInfoVector(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, const std::function<void (const pmScatteredSubscriptionInfo&)>& pFunc)
+void pmSubscriptionManager::ProcessScatteredWriteSubscriptionsInfoVector(const pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, uint pMemIndex, const std::function<void (const pmScatteredSubscriptionInfo&)>& pFunc)
 {
     DEBUG_EXCEPTION_ASSERT(GetSubscriptionFormat(pStub, pSubtaskId, pSplitInfo, pMemIndex) == SUBSCRIPTION_SCATTERED);
 

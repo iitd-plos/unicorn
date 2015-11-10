@@ -23,7 +23,7 @@
 
 #include "pmBase.h"
 #include "pmCommunicator.h"
-#include "pmResourceLock.H"
+#include "pmResourceLock.h"
 
 #include <boost/geometry/geometries/box.hpp>
 #include <boost/geometry/index/rtree.hpp>

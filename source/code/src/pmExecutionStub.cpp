@@ -1714,7 +1714,7 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
     bool lCanDoScatteredOwnershipTransfer = true;
     
     std::vector<communicator::ownershipDataStruct> lOwnershipVector;
-    std::vector<communicator::ownershipDataStruct> lScatteredOwnershipVector;
+    std::vector<communicator::scatteredOwnershipDataStruct> lScatteredOwnershipVector;
     std::vector<uint> lAddressSpaceIndexVector;
 
     if(!pRange.task->GetCallbackUnit()->GetDataReductionCB() && !pRange.task->GetCallbackUnit()->GetDataRedistributionCB())
@@ -1727,11 +1727,22 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
         {
              for(ulong lSubtaskId = pRange.startSubtask; lSubtaskId <= pRange.endSubtask; ++lSubtaskId)
              {
-                 if(lSubscriptionManager.GetSubscriptionFormat(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex) != SUBSCRIPTION_SCATTERED)
-                 {
-                     lCanDoScatteredOwnershipTransfer = false;
-                     return;
-                 }
+                const std::vector<pmExecutionStub*>& lVector = pMap.find(lSubtaskId)->second;
+                uint lSplitCount = (uint)lVector.size();
+
+                for_each_with_index(lVector, [&] (const pmExecutionStub* pStub, size_t pSplitIndex)
+                {
+                    pmSplitInfo lSplitInfo((uint)pSplitIndex, lSplitCount);
+
+                    if(lSubscriptionManager.GetSubscriptionFormat(pStub, lSubtaskId, &lSplitInfo, (uint)pAddressSpaceIndex) != SUBSCRIPTION_SCATTERED)
+                    {
+                        lCanDoScatteredOwnershipTransfer = false;
+                        return; // return from lambda
+                    }
+                });
+                 
+                 if(!lCanDoScatteredOwnershipTransfer)
+                     return;    // return from lambda
              }
          });
 
@@ -1753,7 +1764,7 @@ void pmExecutionStub::SendSplitAcknowledgement(const pmSubtaskRange& pRange, con
 
                     if(lCanDoScatteredOwnershipTransfer)
                     {
-                        lSubscriptionManager.ProcessScatteredWriteSubscriptionsInfoVector(this, lSubtaskId, NULL, (uint)pAddressSpaceIndex,
+                        lSubscriptionManager.ProcessScatteredWriteSubscriptionsInfoVector(pStub, lSubtaskId, &lSplitInfo, (uint)pAddressSpaceIndex,
                                                                                           [&] (const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
                                                                                           {
                                                                                               lScatteredOwnershipVector.emplace_back(pScatteredSubscriptionInfo);

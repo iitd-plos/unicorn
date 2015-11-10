@@ -671,7 +671,7 @@ void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong 
     {
         ulong lStoredBoxOffset = GetReverseBoxOffset(pPair.first);
         
-        boost_box_type lOutBox;
+        boost_box_type lOutBox(boost_point_type(0, 0), boost_point_type(0, 0));
         boost::geometry::intersection(lBox, pPair.first, lOutBox);
 
         pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(lOutBox);
