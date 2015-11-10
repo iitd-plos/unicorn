@@ -183,7 +183,18 @@ remoteTaskAssignPacked::remoteTaskAssignPacked(pmLocalTask* pLocalTask)
         for_each(pLocalTask->GetTaskMemVector(), [&] (const pmTaskMemory& pTaskMemory)
         {
             const pmAddressSpace* lAddressSpace = pTaskMemory.addressSpace;
-            taskMem.emplace_back(memoryIdentifierStruct(*(lAddressSpace->GetMemOwnerHost()), lAddressSpace->GetGenerationNumber()), lAddressSpace->GetLength(), pLocalTask->GetMemType(lAddressSpace), pTaskMemory.subscriptionVisibilityType, (ushort)pTaskMemory.disjointReadWritesAcrossSubtasks);
+            
+            pmAddressSpaceType lAddressSpaceType = lAddressSpace->GetAddressSpaceType();
+            DEBUG_EXCEPTION_ASSERT(lAddressSpaceType == ADDRESS_SPACE_LINEAR || lAddressSpaceType == ADDRESS_SPACE_2D);
+
+            if(lAddressSpaceType == ADDRESS_SPACE_LINEAR)
+            {
+                taskMem.emplace_back(memoryIdentifierStruct(*(lAddressSpace->GetMemOwnerHost()), lAddressSpace->GetGenerationNumber()), lAddressSpace->GetLength(), pLocalTask->GetMemType(lAddressSpace), pTaskMemory.subscriptionVisibilityType, (ushort)pTaskMemory.disjointReadWritesAcrossSubtasks);
+            }
+            else
+            {
+                taskMem.emplace_back(memoryIdentifierStruct(*(lAddressSpace->GetMemOwnerHost()), lAddressSpace->GetGenerationNumber()), lAddressSpace->GetRows(), lAddressSpace->GetCols(), pLocalTask->GetMemType(lAddressSpace), pTaskMemory.subscriptionVisibilityType, (ushort)pTaskMemory.disjointReadWritesAcrossSubtasks);
+            }
         });
     }
 

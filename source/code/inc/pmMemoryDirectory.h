@@ -159,9 +159,9 @@ private:
     void GetOwnersInternal(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
 
 #ifdef _DEBUG
-    void CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2);
-    void SanitizeOwnerships();
-    void PrintOwnerships();
+    void CheckMergability(const pmMemOwnership::iterator& pRange1, const pmMemOwnership::iterator& pRange2) const;
+    void SanitizeOwnerships() const;
+    void PrintOwnerships() const;
 #endif
 
     ulong mAddressSpaceLength;
@@ -198,8 +198,18 @@ private:
     void GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
     void GetDifferenceOfBoxes(const boost_box_type& pBox1, const boost_box_type& pBox2, std::vector<boost_box_type>& pRemainingBoxes);
     
-    boost_box_type GetBox(ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
-    pmScatteredSubscriptionInfo GetReverseBoxMapping(const boost_box_type& pBox);
+#ifdef _DEBUG
+    void PrintOwnerships() const;
+    void SanitizeOwnerships() const;
+    void PrintBox(const boost_box_type& pBox) const;
+    bool AreBoxesEqual(const boost_box_type& pBox1, const boost_box_type& pBox2) const;
+#endif
+
+    boost_box_type GetBox(ulong pOffset, ulong pLength, ulong pStep, ulong pCount) const;
+    pmScatteredSubscriptionInfo GetReverseBoxMapping(const boost_box_type& pBox) const;
+    ulong GetReverseBoxOffset(const boost_box_type& pBox) const;
+    
+    void CombineAndInsertBox(boost_box_type pBox, vmRangeOwner pRangeOwner);
 
     ulong mAddressSpaceRows, mAddressSpaceCols;
     

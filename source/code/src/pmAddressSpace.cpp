@@ -65,7 +65,10 @@ pmAddressSpace::pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pG
     , mUserMemHandle(NULL)
     , mRequestedLength(pLength)
     , mAllocatedLength(pLength)
+    , mRequestedRows(std::numeric_limits<size_t>::max())
+    , mRequestedCols(std::numeric_limits<size_t>::max())
     , mVMPageCount(0)
+    , mAddressSpaceType(ADDRESS_SPACE_LINEAR)
     , mLazy(false)
     , mMem(NULL)
     , mReadOnlyLazyMapping(NULL)
@@ -84,10 +87,45 @@ pmAddressSpace::pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pG
     , mMemProfileLock __LOCK_NAME__("pmAddressSpace::mMemProfileLock")
 #endif
 {
+    Init();
+}
+    
+pmAddressSpace::pmAddressSpace(size_t pRows, size_t pCols, const pmMachine* pOwner, ulong pGenerationNumberOnOwner)
+    : mOwner(pOwner?pOwner:PM_LOCAL_MACHINE)
+    , mGenerationNumberOnOwner(pGenerationNumberOnOwner)
+    , mUserMemHandle(NULL)
+    , mRequestedLength(pRows * pCols)
+    , mAllocatedLength(mRequestedLength)
+    , mRequestedRows(pRows)
+    , mRequestedCols(pCols)
+    , mVMPageCount(0)
+    , mAddressSpaceType(ADDRESS_SPACE_2D)
+    , mLazy(false)
+    , mMem(NULL)
+    , mReadOnlyLazyMapping(NULL)
+    , mWaitingTasksLock __LOCK_NAME__("pmAddressSpace::mWaitingTasksLock")
+    , mWaitingForOwnershipChange(false)
+    , mOwnershipTransferLock __LOCK_NAME__("pmAddressSpace::mOwnershipTransferLock")
+    , mLockingTask(NULL)
+    , mTaskLock __LOCK_NAME__("pmAddressSpace::mTaskLock")
+    , mUserDelete(false)
+    , mDeleteLock __LOCK_NAME__("pmAddressSpace::mDeleteLock")
+#ifdef ENABLE_MEM_PROFILING
+    , mMemReceived(0)
+    , mMemTransferred(0)
+    , mMemReceiveEvents(0)
+    , mMemTransferEvents(0)
+    , mMemProfileLock __LOCK_NAME__("pmAddressSpace::mMemProfileLock")
+#endif
+{
+    Init();
+}
+
+void pmAddressSpace::Init()
+{
     EXCEPTION_ASSERT(mGenerationNumberOnOwner != 0);
 
 	mMem = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->AllocateMemory(this, mAllocatedLength, mVMPageCount);
-    Init(mOwner);
 
     // Auto lock/unlock scope
 	{
@@ -100,8 +138,23 @@ pmAddressSpace::pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pG
 
 		lAddressSpaceMap[lPair] = this;
 	}
-}
 
+    DEBUG_EXCEPTION_ASSERT(mAddressSpaceType == ADDRESS_SPACE_LINEAR || mAddressSpaceType == ADDRESS_SPACE_2D);
+    
+    if(mAddressSpaceType == ADDRESS_SPACE_LINEAR)
+    {
+        mDirectoryPtr.reset(new pmMemoryDirectoryLinear(mRequestedLength, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)));
+        mOriginalDirectoryPtr.reset(new pmMemoryDirectoryLinear(mRequestedLength, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)));
+    }
+    else
+    {
+        mDirectoryPtr.reset(new pmMemoryDirectory2D(mRequestedRows, mRequestedCols, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)));
+        mOriginalDirectoryPtr.reset(new pmMemoryDirectory2D(mRequestedRows, mRequestedCols, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)));
+    }
+    
+    mDirectoryPtr->Reset(mOwner);
+}
+    
 pmAddressSpace::~pmAddressSpace()
 {
 #ifdef ENABLE_MEM_PROFILING
@@ -179,11 +232,25 @@ pmAddressSpace* pmAddressSpace::CreateAddressSpace(size_t pLength, const pmMachi
     return new pmAddressSpace(pLength, pOwner, pGenerationNumberOnOwner);
 }
 
+pmAddressSpace* pmAddressSpace::CreateAddressSpace(size_t pRows, size_t pCols, const pmMachine* pOwner, ulong pGenerationNumberOnOwner /* = GetNextGenerationNumber() */)
+{
+    return new pmAddressSpace(pRows, pCols, pOwner, pGenerationNumberOnOwner);
+}
+
 pmAddressSpace* pmAddressSpace::CheckAndCreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner)
 {
     pmAddressSpace* lAddressSpace = FindAddressSpace(pOwner, pGenerationNumberOnOwner);
     if(!lAddressSpace)
         lAddressSpace = CreateAddressSpace(pLength, pOwner, pGenerationNumberOnOwner);
+
+    return lAddressSpace;
+}
+
+pmAddressSpace* pmAddressSpace::CheckAndCreateAddressSpace(size_t pRows, size_t pCols, const pmMachine* pOwner, ulong pGenerationNumberOnOwner)
+{
+    pmAddressSpace* lAddressSpace = FindAddressSpace(pOwner, pGenerationNumberOnOwner);
+    if(!lAddressSpace)
+        lAddressSpace = CreateAddressSpace(pRows, pCols, pOwner, pGenerationNumberOnOwner);
 
     return lAddressSpace;
 }
@@ -271,14 +338,6 @@ pmUserMemHandle* pmAddressSpace::GetUserMemHandle()
     return mUserMemHandle;
 }
 
-void pmAddressSpace::Init(const pmMachine* pOwner)
-{
-    mDirectoryPtr.reset(new pmMemoryDirectoryLinear(mRequestedLength, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)));
-    mOriginalDirectoryPtr.reset(new pmMemoryDirectoryLinear(mRequestedLength, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)));
-    
-    mDirectoryPtr->Reset(pOwner);
-}
-
 void* pmAddressSpace::GetMem() const
 {
 	return mMem;
@@ -292,6 +351,21 @@ size_t pmAddressSpace::GetAllocatedLength() const
 size_t pmAddressSpace::GetLength() const
 {
 	return mRequestedLength;
+}
+
+pmAddressSpaceType pmAddressSpace::GetAddressSpaceType() const
+{
+    return mAddressSpaceType;
+}
+
+size_t pmAddressSpace::GetRows() const
+{
+    return mRequestedRows;
+}
+
+size_t pmAddressSpace::GetCols() const
+{
+    return mRequestedCols;
 }
 
 pmAddressSpace* pmAddressSpace::FindAddressSpace(const pmMachine* pOwner, ulong pGenerationNumber)
@@ -609,7 +683,7 @@ void pmAddressSpace::GetPageAlignedAddresses(size_t& pOffset, size_t& pLength)
 void pmAddressSpace::TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
 {
     DEBUG_EXCEPTION_ASSERT(!GetLockingTask()->IsReadOnly(this));
-
+    
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
 
     mOwnershipTransferVector.emplace_back(pRangeOwner, pOffset, pLength);
@@ -619,11 +693,11 @@ void pmAddressSpace::TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRa
 {
     DEBUG_EXCEPTION_ASSERT(!GetLockingTask()->IsReadOnly(this));
 
-	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
 
     mScatteredOwnershipTransferVector.emplace_back(pRangeOwner, pOffset, pSize, pStep, pCount);
 }
-    
+
 void pmAddressSpace::FlushOwnerships()
 {
     pmTask* lTask = GetLockingTask();

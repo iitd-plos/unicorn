@@ -421,7 +421,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	size_t lMemSize = lMatrixElems * sizeof(MATRIX_DATA_TYPE);
 
     pmMemHandle lMemHandle;
-	CREATE_MEM(lMemSize, lMemHandle);
+	CREATE_MEM_2D(lMatrixDim, lMatrixDim * sizeof(MATRIX_DATA_TYPE), lMemHandle);
     
     pmRawMemPtr lRawMemPtr;
     pmGetRawMemPtr(lMemHandle, &lRawMemPtr);

@@ -37,7 +37,7 @@ class pmMachine;
 class pmAddressSpace;
 class pmMemoryDirectory;
 
-typedef class pmUserMemHandle
+class pmUserMemHandle
 {
 public:
     pmUserMemHandle(pmAddressSpace* pAddressSpace);
@@ -49,8 +49,8 @@ public:
     
 private:
     pmAddressSpace* mAddressSpace;
-} pmUserMemHandle;
-    
+};
+
 typedef std::map<const pmMachine*, std::shared_ptr<std::vector<communicator::ownershipChangeStruct>>> pmOwnershipTransferMap;
 typedef std::map<const pmMachine*, std::shared_ptr<std::vector<communicator::scatteredOwnershipChangeStruct>>> pmScatteredOwnershipTransferMap;
 
@@ -67,7 +67,10 @@ class pmAddressSpace : public pmBase
     
 	public:
         static pmAddressSpace* CreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
+        static pmAddressSpace* CreateAddressSpace(size_t pRows, size_t pCols, const pmMachine* pOwner, ulong pGenerationNumberOnOwner = GetNextGenerationNumber());
+
         static pmAddressSpace* CheckAndCreateAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
+        static pmAddressSpace* CheckAndCreateAddressSpace(size_t pRows, size_t pCols, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
 
         ~pmAddressSpace();
     
@@ -132,13 +135,18 @@ class pmAddressSpace : public pmBase
         const pmMachine* GetMemOwnerHost() const;
     
         const char* GetName();
+    
+        pmAddressSpaceType GetAddressSpaceType() const;
+        size_t GetRows() const;
+        size_t GetCols() const;
 
     private:    
-		pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
+        pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
+        pmAddressSpace(size_t pRows, size_t pCols, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
     
         static ulong GetNextGenerationNumber();
     
-        void Init(const pmMachine* pOwner);
+        void Init();
         void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
         void SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pSize, ulong pStep, ulong pCount);
         void SendRemoteOwnershipChangeMessages(pmOwnershipTransferMap& pOwnershipTransferMap);
@@ -161,7 +169,10 @@ class pmAddressSpace : public pmBase
         pmUserMemHandle* mUserMemHandle;
 		size_t mRequestedLength;
 		size_t mAllocatedLength;
+        size_t mRequestedRows;
+        size_t mRequestedCols;
 		size_t mVMPageCount;
+        pmAddressSpaceType mAddressSpaceType;
         bool mLazy;
         void* mMem;
         void* mReadOnlyLazyMapping;

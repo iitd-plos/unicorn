@@ -13,7 +13,7 @@ namespace fft
 
 #define DEFAULT_INPLACE_VALUE 0
 
-#define ROWS_PER_FFT_SUBTASK 2048  // must be a power of 2
+#define ROWS_PER_FFT_SUBTASK 512  // must be a power of 2
     
 #ifndef FFT_DATA_TYPE
 #error "FFT_DATA_TYPE not defined"

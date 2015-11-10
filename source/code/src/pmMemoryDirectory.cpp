@@ -40,7 +40,7 @@ void pmMemoryDirectoryLinear::Reset(const pmMachine* pOwner)
 {
 	mOwnershipMap.emplace(std::piecewise_construct, std::forward_as_tuple(0), std::forward_as_tuple(std::piecewise_construct, std::forward_as_tuple(mAddressSpaceLength), std::forward_as_tuple(pOwner, 0, mMemoryIdentifierStruct)));
 }
-
+    
 void pmMemoryDirectoryLinear::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
 {
     FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
@@ -313,7 +313,7 @@ void pmMemoryDirectoryLinear::CloneFrom(pmMemoryDirectory* pDirectory)
 
 
 #ifdef _DEBUG
-void pmMemoryDirectoryLinear::CheckMergability(pmMemOwnership::iterator& pRange1, pmMemOwnership::iterator& pRange2)
+void pmMemoryDirectoryLinear::CheckMergability(const pmMemOwnership::iterator& pRange1, const pmMemOwnership::iterator& pRange2) const
 {
     size_t lOffset1 = pRange1->first;
     size_t lOffset2 = pRange2->first;
@@ -329,12 +329,12 @@ void pmMemoryDirectoryLinear::CheckMergability(pmMemOwnership::iterator& pRange1
         std::cout << "<<< ERROR >>> Host " << pmGetHostId() << " Mergable Ranges Found (" << lOffset1 << ", " << lLength1 << ") - (" << lOffset2 << ", " << lLength2 << ") map to (" << lRangeOwner1.hostOffset << ", " << lLength1 << ") - (" << lRangeOwner2.hostOffset << ", " << lLength2 << ") on host " << (uint)(*lRangeOwner1.host) << std::endl;
 }
     
-void pmMemoryDirectoryLinear::SanitizeOwnerships()
+void pmMemoryDirectoryLinear::SanitizeOwnerships() const
 {
     if(mOwnershipMap.size() == 1)
         return;
     
-    pmMemOwnership::iterator lIter, lBegin = mOwnershipMap.begin(), lEnd = mOwnershipMap.end(), lPenultimate = lEnd;
+    pmMemOwnership::const_iterator lIter, lBegin = mOwnershipMap.begin(), lEnd = mOwnershipMap.end(), lPenultimate = lEnd;
     --lPenultimate;
     
     for(lIter = lBegin; lIter != lPenultimate; ++lIter)
@@ -346,10 +346,10 @@ void pmMemoryDirectoryLinear::SanitizeOwnerships()
     }
 }
 
-void pmMemoryDirectoryLinear::PrintOwnerships()
+void pmMemoryDirectoryLinear::PrintOwnerships() const
 {
     std::cout << "Host " << pmGetHostId() << " Ownership Dump " << std::endl;
-    pmMemOwnership::iterator lIter, lBegin = mOwnershipMap.begin(), lEnd = mOwnershipMap.end();
+    pmMemOwnership::const_iterator lIter, lBegin = mOwnershipMap.begin(), lEnd = mOwnershipMap.end();
     for(lIter = lBegin; lIter != lEnd; ++lIter)
         std::cout << "Range (" << lIter->first << " , " << lIter->second.first << ") is owned by host " << (uint)(*(lIter->second.second.host)) << " (" << lIter->second.second.hostOffset << ", " << lIter->second.first << ")" << std::endl;
         
@@ -365,7 +365,7 @@ pmMemoryDirectory2D::pmMemoryDirectory2D(ulong pAddressSpaceRows, ulong pAddress
     , mAddressSpaceCols(pAddressSpaceCols)
 {}
 
-pmMemoryDirectory2D::boost_box_type pmMemoryDirectory2D::GetBox(ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+pmMemoryDirectory2D::boost_box_type pmMemoryDirectory2D::GetBox(ulong pOffset, ulong pLength, ulong pStep, ulong pCount) const
 {
     boost_point_type lPoint1(pOffset % pStep, pOffset / pStep);
     boost_point_type lPoint2(lPoint1.get<0>() + pLength - 1, lPoint1.get<1>() + pCount - 1);
@@ -373,7 +373,7 @@ pmMemoryDirectory2D::boost_box_type pmMemoryDirectory2D::GetBox(ulong pOffset, u
     return boost_box_type(lPoint1, lPoint2);
 }
 
-pmScatteredSubscriptionInfo pmMemoryDirectory2D::GetReverseBoxMapping(const boost_box_type& pBox)
+pmScatteredSubscriptionInfo pmMemoryDirectory2D::GetReverseBoxMapping(const boost_box_type& pBox) const
 {
     const boost_point_type& lMinCorner = pBox.min_corner();
     const boost_point_type& lMaxCorner = pBox.max_corner();
@@ -381,20 +381,56 @@ pmScatteredSubscriptionInfo pmMemoryDirectory2D::GetReverseBoxMapping(const boos
     return pmScatteredSubscriptionInfo(lMinCorner.get<0>() + lMinCorner.get<1>() * mAddressSpaceCols, lMaxCorner.get<0>() - lMinCorner.get<0>() + 1, mAddressSpaceCols, lMaxCorner.get<1>() - lMinCorner.get<1>() + 1);
 }
     
+ulong pmMemoryDirectory2D::GetReverseBoxOffset(const boost_box_type& pBox) const
+{
+    const boost_point_type& lMinCorner = pBox.min_corner();
+    return lMinCorner.get<0>() + lMinCorner.get<1>() * mAddressSpaceCols;
+}
+    
 void pmMemoryDirectory2D::Reset(const pmMachine* pOwner)
 {
     mOwnershipRTree.insert(std::make_pair(GetBox(0, mAddressSpaceCols, mAddressSpaceCols, mAddressSpaceRows), vmRangeOwner(pOwner, 0, mMemoryIdentifierStruct)));
 }
-
+    
 void pmMemoryDirectory2D::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
 {
-    SetRangeOwner(pRangeOwner, pOffset, pLength, 0, 1);
+    pmScatteredMemOwnership lScatteredOwnerships;
+    
+    ulong lRemainder = (pOffset % mAddressSpaceCols);
+    ulong lFirstRowLength = lRemainder ? std::min(mAddressSpaceCols - lRemainder, pLength) : 0;
+    
+    ulong lRemainingLength = pLength - lFirstRowLength;
+    ulong lIntermediateRowsOffset = pOffset + lFirstRowLength;
+    
+    ulong lScatteredCount = lRemainingLength / mAddressSpaceCols;
+    ulong lLeftover = lRemainingLength % mAddressSpaceCols;
+
+    if(lFirstRowLength)
+        SetRangeOwner(pRangeOwner, pOffset, lFirstRowLength, mAddressSpaceCols, 1);
+    
+    if(lScatteredCount)
+    {
+        vmRangeOwner lRangeOwner(pRangeOwner);
+        lRangeOwner.hostOffset += lFirstRowLength;
+
+        SetRangeOwner(lRangeOwner, lIntermediateRowsOffset, mAddressSpaceCols, mAddressSpaceCols, lScatteredCount);
+    }
+    
+    if(lLeftover)
+    {
+        vmRangeOwner lRangeOwner(pRangeOwner);
+        lRangeOwner.hostOffset += (lFirstRowLength + lScatteredCount * mAddressSpaceCols);
+
+        SetRangeOwner(lRangeOwner, lIntermediateRowsOffset + lScatteredCount * mAddressSpaceCols, lLeftover, mAddressSpaceCols, 1);
+    }
 }
 
 void pmMemoryDirectory2D::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
 {
+    EXCEPTION_ASSERT(pLength <= mAddressSpaceCols && pStep == mAddressSpaceCols);
+
     FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
-    
+
     boost_box_type lBox = GetBox(pOffset, pLength, pStep, pCount);
     
     std::vector<std::pair<boost_box_type, vmRangeOwner>> lOverlappingBoxes;
@@ -405,40 +441,216 @@ void pmMemoryDirectory2D::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong p
     
     for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, vmRangeOwner>& pPair)
     {
+        ulong lStoredBoxOffset = GetReverseBoxOffset(pPair.first);
+
         lRemainingBoxes.clear();
         GetDifferenceOfBoxes(pPair.first, lBox, lRemainingBoxes);
-        
+
         mOwnershipRTree.remove(pPair);
         
         for_each(lRemainingBoxes, [&] (const boost_box_type& pBox)
         {
-            mOwnershipRTree.insert(std::make_pair(pBox, pPair.second));
+            vmRangeOwner lRangeOwner(pPair.second);
+            lRangeOwner.hostOffset += GetReverseBoxOffset(pBox) - lStoredBoxOffset;
+
+            CombineAndInsertBox(pBox, lRangeOwner);
         });
     });
 
-//#ifdef _DEBUG
+#ifdef _DEBUG
     lOverlappingBoxes.clear();
     mOwnershipRTree.query(boost::geometry::index::intersects(lBox), std::back_inserter(lOverlappingBoxes));
     EXCEPTION_ASSERT(lOverlappingBoxes.empty());
-//#endif
 
-    mOwnershipRTree.insert(std::make_pair(lBox, pRangeOwner));
+#endif
+
+    CombineAndInsertBox(lBox, pRangeOwner);
+    
+#ifdef _DEBUG
+#if 0
+    PrintOwnerships();
+    SanitizeOwnerships();
+#endif
+#endif
+}
+    
+void pmMemoryDirectory2D::CombineAndInsertBox(boost_box_type pBox, vmRangeOwner pRangeOwner)
+{
+    const boost_point_type& lMinCorner = pBox.min_corner();
+    const boost_point_type& lMaxCorner = pBox.max_corner();
+
+    ulong lXMin = lMinCorner.get<0>();
+    ulong lYMin = lMinCorner.get<1>();
+    ulong lXMax = lMaxCorner.get<0>();
+    ulong lYMax = lMaxCorner.get<1>();
+
+    std::vector<std::pair<boost_box_type, vmRangeOwner>> lOverlappingBoxes;
+    bool lCombined = false;
+
+    // Combine pBox with the one at top if matching
+    boost_box_type lTopEdgeBox(boost_point_type(lXMin, lYMin - 1), boost_point_type(lXMax, lYMin - 1));
+    mOwnershipRTree.query(boost::geometry::index::intersects(lTopEdgeBox), std::back_inserter(lOverlappingBoxes));
+
+    if(lOverlappingBoxes.size() == 1)
+    {
+        auto lPair = lOverlappingBoxes.begin();
+        boost_point_type lOverlappingMinCorner = lPair->first.min_corner();
+        boost_point_type lOverlappingMaxCorner = lPair->first.max_corner();
+        
+        if(lPair->second.host == pRangeOwner.host && lXMin == lOverlappingMinCorner.get<0>() && lXMax == lOverlappingMaxCorner.get<0>())
+        {
+            EXCEPTION_ASSERT(lYMin - 1 == lOverlappingMaxCorner.get<1>());
+
+            pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(lPair->first);
+
+            if(lPair->second.hostOffset + lScatteredSubscriptionInfo.count * lScatteredSubscriptionInfo.step == pRangeOwner.hostOffset)
+            {
+                pBox.min_corner() = lOverlappingMinCorner;
+                pRangeOwner.hostOffset = lPair->second.hostOffset;
+                
+                lXMin = pBox.min_corner().get<0>();
+                lYMin = pBox.min_corner().get<1>();
+                
+                mOwnershipRTree.remove(*lPair);
+                lCombined = true;
+            }
+        }
+    }
+
+    // Combine pBox with the one at bottom if matching
+    lOverlappingBoxes.clear();
+    boost_box_type lBottomEdgeBox(boost_point_type(lXMin, lYMax + 1), boost_point_type(lXMax, lYMax + 1));
+    mOwnershipRTree.query(boost::geometry::index::intersects(lBottomEdgeBox), std::back_inserter(lOverlappingBoxes));
+
+    if(lOverlappingBoxes.size() == 1)
+    {
+        auto lPair = lOverlappingBoxes.begin();
+        boost_point_type lOverlappingMinCorner = lPair->first.min_corner();
+        boost_point_type lOverlappingMaxCorner = lPair->first.max_corner();
+        
+        if(lPair->second.host == pRangeOwner.host && lXMin == lOverlappingMinCorner.get<0>() && lXMax == lOverlappingMaxCorner.get<0>())
+        {
+            EXCEPTION_ASSERT(lYMax + 1 == lOverlappingMinCorner.get<1>());
+
+            pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(pBox);
+
+            if(lPair->second.hostOffset == pRangeOwner.hostOffset + lScatteredSubscriptionInfo.count * lScatteredSubscriptionInfo.step)
+            {
+                pBox.max_corner() = lOverlappingMaxCorner;
+
+                lXMax = pBox.max_corner().get<0>();
+                lYMax = pBox.max_corner().get<1>();
+
+                mOwnershipRTree.remove(*lPair);
+                lCombined = true;
+            }
+        }
+    }
+
+    // Combine pBox with the one at left if matching
+    lOverlappingBoxes.clear();
+    boost_box_type lLeftEdgeBox(boost_point_type(lXMin - 1, lYMin), boost_point_type(lXMin - 1, lYMax));
+    mOwnershipRTree.query(boost::geometry::index::intersects(lLeftEdgeBox), std::back_inserter(lOverlappingBoxes));
+
+    if(lOverlappingBoxes.size() == 1)
+    {
+        auto lPair = lOverlappingBoxes.begin();
+        boost_point_type lOverlappingMinCorner = lPair->first.min_corner();
+        boost_point_type lOverlappingMaxCorner = lPair->first.max_corner();
+        
+        if(lPair->second.host == pRangeOwner.host && lYMin == lOverlappingMinCorner.get<1>() && lYMax == lOverlappingMaxCorner.get<1>())
+        {
+            EXCEPTION_ASSERT(lXMin - 1 == lOverlappingMaxCorner.get<0>());
+
+            pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(lPair->first);
+
+            if(lPair->second.hostOffset + lScatteredSubscriptionInfo.size == pRangeOwner.hostOffset)
+            {
+                pBox.min_corner() = lOverlappingMinCorner;
+                pRangeOwner.hostOffset = lPair->second.hostOffset;
+                
+                lXMin = pBox.min_corner().get<0>();
+                lYMin = pBox.min_corner().get<1>();
+
+                mOwnershipRTree.remove(*lPair);
+                lCombined = true;
+            }
+        }
+    }
+
+    // Combine pBox with the one at right if matching
+    lOverlappingBoxes.clear();
+    boost_box_type lRightEdgeBox(boost_point_type(lXMax + 1, lYMin), boost_point_type(lXMax + 1, lYMax));
+    mOwnershipRTree.query(boost::geometry::index::intersects(lRightEdgeBox), std::back_inserter(lOverlappingBoxes));
+
+    if(lOverlappingBoxes.size() == 1)
+    {
+        auto lPair = lOverlappingBoxes.begin();
+        boost_point_type lOverlappingMinCorner = lPair->first.min_corner();
+        boost_point_type lOverlappingMaxCorner = lPair->first.max_corner();
+        
+        if(lPair->second.host == pRangeOwner.host && lYMin == lOverlappingMinCorner.get<1>() && lYMax == lOverlappingMaxCorner.get<1>())
+        {
+            EXCEPTION_ASSERT(lXMax + 1 == lOverlappingMinCorner.get<0>());
+
+            pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(pBox);
+
+            if(lPair->second.hostOffset == pRangeOwner.hostOffset + lScatteredSubscriptionInfo.size)
+            {
+                pBox.max_corner() = lOverlappingMaxCorner;
+
+                lXMax = pBox.max_corner().get<0>();
+                lYMax = pBox.max_corner().get<1>();
+                
+                mOwnershipRTree.remove(*lPair);
+                lCombined = true;
+            }
+        }
+    }
+
+    if(lCombined)
+        CombineAndInsertBox(pBox, pRangeOwner);
+    else
+        mOwnershipRTree.insert(std::make_pair(pBox, pRangeOwner));
 }
 
 void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships)
 {
     pmScatteredMemOwnership lScatteredOwnerships;
-    GetOwners(pOffset, pLength, 0, 1, lScatteredOwnerships);
+    
+    ulong lRemainder = (pOffset % mAddressSpaceCols);
+    ulong lFirstRowLength = lRemainder ? std::min(mAddressSpaceCols - lRemainder, pLength) : 0;
+    
+    ulong lRemainingLength = pLength - lFirstRowLength;
+    ulong lIntermediateRowsOffset = pOffset + lFirstRowLength;
+    
+    ulong lScatteredCount = lRemainingLength / mAddressSpaceCols;
+    ulong lLeftover = lRemainingLength % mAddressSpaceCols;
+
+    if(lFirstRowLength)
+        GetOwners(pOffset, lFirstRowLength, mAddressSpaceCols, 1, lScatteredOwnerships);
+    
+    if(lScatteredCount)
+        GetOwners(lIntermediateRowsOffset, mAddressSpaceCols, mAddressSpaceCols, lScatteredCount, lScatteredOwnerships);
+    
+    if(lLeftover)
+        GetOwners(lIntermediateRowsOffset + lScatteredCount * mAddressSpaceCols, lLeftover, mAddressSpaceCols, 1, lScatteredOwnerships);
 
     for_each(lScatteredOwnerships, [&] (pmScatteredMemOwnership::value_type& pPair)
     {
-        pOwnerships.emplace(std::piecewise_construct, std::forward_as_tuple(pPair.first.offset), std::forward_as_tuple(pPair.first.size, pPair.second));
+        vmRangeOwner lRangeOwner(pPair.second);
+        for(ulong i = 0; i < pPair.first.count; ++i)
+        {
+            lRangeOwner.hostOffset = pPair.second.hostOffset + i * pPair.first.step;
+            pOwnerships.emplace(std::piecewise_construct, std::forward_as_tuple(pPair.first.offset + i * pPair.first.step), std::forward_as_tuple(pPair.first.size, lRangeOwner));
+        }
     });
 }
     
 void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pOwnerships)
 {
-    EXCEPTION_ASSERT(((pStep == 0 && pCount == 1) || (mAddressSpaceCols == pStep)) && pOffset + pStep * (pCount - 1) + pLength <= mAddressSpaceRows * mAddressSpaceCols);
+    EXCEPTION_ASSERT(mAddressSpaceCols == pStep);
+    EXCEPTION_ASSERT((pOffset + pStep * (pCount - 1) + pLength) <= (mAddressSpaceRows * mAddressSpaceCols));
 
     FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
     
@@ -448,6 +660,8 @@ void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, ulong pStep, u
 // Must be called with mOwnershipLock acquired
 void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships)
 {
+    EXCEPTION_ASSERT(pLength <= mAddressSpaceCols && pStep == mAddressSpaceCols);
+
     boost_box_type lBox = GetBox(pOffset, pLength, pStep, pCount);
     
     std::vector<std::pair<boost_box_type, vmRangeOwner>> lOverlappingBoxes;
@@ -455,12 +669,17 @@ void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong 
     
     for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, vmRangeOwner>& pPair)
     {
+        ulong lStoredBoxOffset = GetReverseBoxOffset(pPair.first);
+        
         boost_box_type lOutBox;
         boost::geometry::intersection(lBox, pPair.first, lOutBox);
 
         pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(lOutBox);
         
-        pScatteredOwnerships.emplace_back(lScatteredSubscriptionInfo, pPair.second);
+        vmRangeOwner lRangeOwner(pPair.second);
+        lRangeOwner.hostOffset += lScatteredSubscriptionInfo.offset - lStoredBoxOffset;
+
+        pScatteredOwnerships.emplace_back(lScatteredSubscriptionInfo, lRangeOwner);
     });
 }
 
@@ -468,11 +687,33 @@ void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong 
 void pmMemoryDirectory2D::GetOwnersUnprotected(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships)
 {
     pmScatteredMemOwnership lScatteredOwnerships;
-    GetOwnersInternal(pOffset, pLength, 0, 1, lScatteredOwnerships);
+    
+    ulong lRemainder = (pOffset % mAddressSpaceCols);
+    ulong lFirstRowLength = lRemainder ? std::min(mAddressSpaceCols - lRemainder, pLength) : 0;
+    
+    ulong lRemainingLength = pLength - lFirstRowLength;
+    ulong lIntermediateRowsOffset = pOffset + lFirstRowLength;
+    
+    ulong lScatteredCount = lRemainingLength / mAddressSpaceCols;
+    ulong lLeftover = lRemainingLength % mAddressSpaceCols;
+
+    if(lFirstRowLength)
+        GetOwnersInternal(pOffset, lFirstRowLength, mAddressSpaceCols, 1, lScatteredOwnerships);
+    
+    if(lScatteredCount)
+        GetOwnersInternal(lIntermediateRowsOffset, mAddressSpaceCols, mAddressSpaceCols, lScatteredCount, lScatteredOwnerships);
+    
+    if(lLeftover)
+        GetOwnersInternal(lIntermediateRowsOffset + lScatteredCount * mAddressSpaceCols, lLeftover, mAddressSpaceCols, 1, lScatteredOwnerships);
 
     for_each(lScatteredOwnerships, [&] (pmScatteredMemOwnership::value_type& pPair)
     {
-        pOwnerships.emplace(std::piecewise_construct, std::forward_as_tuple(pPair.first.offset), std::forward_as_tuple(pPair.first.size, pPair.second));
+        vmRangeOwner lRangeOwner(pPair.second);
+        for(ulong i = 0; i < pPair.first.count; ++i)
+        {
+            lRangeOwner.hostOffset = pPair.second.hostOffset + i * pPair.first.step;
+            pOwnerships.emplace(std::piecewise_construct, std::forward_as_tuple(pPair.first.offset + i * pPair.first.step), std::forward_as_tuple(pPair.first.size, lRangeOwner));
+        }
     });
 }
 
@@ -528,7 +769,7 @@ void pmMemoryDirectory2D::GetDifferenceOfBoxes(const boost_box_type& pBox1, cons
     
     // Create a rectangle at bottom if required
     if(lYMax1 > lYMax2)
-        pRemainingBoxes.emplace_back(boost_point_type(lXMin1, lYMax2 + 1), boost_point_type(lXMax1, lYMax2));
+        pRemainingBoxes.emplace_back(boost_point_type(lXMin1, lYMax2 + 1), boost_point_type(lXMax1, lYMax1));
 
     // Create a rectangle at left if required
     if(lXMin1 < lXMin2)
@@ -538,5 +779,89 @@ void pmMemoryDirectory2D::GetDifferenceOfBoxes(const boost_box_type& pBox1, cons
     if(lXMax1 > lXMax2)
         pRemainingBoxes.emplace_back(boost_point_type(lXMax2 + 1, std::max(lYMin1, lYMin2)), boost_point_type(lXMax1, std::min(lYMax1, lYMax2)));
 }
+    
+#ifdef _DEBUG
+void pmMemoryDirectory2D::PrintOwnerships() const
+{
+    std::cout << "Host " << pmGetHostId() << " Ownership Dump (" << this << ")" << std::endl;
+    
+    boost_box_type lBox = GetBox(0, mAddressSpaceCols, mAddressSpaceCols, mAddressSpaceRows);
+    
+    std::vector<std::pair<boost_box_type, vmRangeOwner>> lOverlappingBoxes;
+    mOwnershipRTree.query(boost::geometry::index::intersects(lBox), std::back_inserter(lOverlappingBoxes));
+    
+    for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, vmRangeOwner>& pPair)
+    {
+        pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(pPair.first);
+
+        std::cout << "Scattered Range (" << lScatteredSubscriptionInfo.offset << ", " << lScatteredSubscriptionInfo.size << ", " << lScatteredSubscriptionInfo.step << ", " << lScatteredSubscriptionInfo.count << ") is owned by host " << (uint)(*(pPair.second.host)) << " (offset " << pPair.second.hostOffset << ")" << std::endl;
+    });
+
+    std::cout << std::endl;
+}
+    
+void pmMemoryDirectory2D::SanitizeOwnerships() const
+{
+    boost_box_type lBox = GetBox(0, mAddressSpaceCols, mAddressSpaceCols, mAddressSpaceRows);
+    
+    std::vector<std::pair<boost_box_type, vmRangeOwner>> lOverlappingBoxes;
+    mOwnershipRTree.query(boost::geometry::index::intersects(lBox), std::back_inserter(lOverlappingBoxes));
+    
+    for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, vmRangeOwner>& pPair)
+    {
+        std::vector<std::pair<boost_box_type, vmRangeOwner>> lWronglyOverlappingBoxes;
+        mOwnershipRTree.query(boost::geometry::index::intersects(pPair.first), std::back_inserter(lWronglyOverlappingBoxes));
+        
+        if(lWronglyOverlappingBoxes.size() != 1)
+        {
+            for_each(lWronglyOverlappingBoxes, [&] (const std::pair<boost_box_type, vmRangeOwner>& pInnerPair)
+            {
+                if(!AreBoxesEqual(pInnerPair.first, pPair.first))
+                {
+                    std::cout << "<<< ERROR >>> Host " << pmGetHostId() << " Boxes wrongly overlap. Box 1: ";
+                    PrintBox(pPair.first);
+                    std::cout << " Box 2: ";
+                    PrintBox(pInnerPair.first);
+                    std::cout << std::endl;
+                }
+            });
+        }
+    });
+}
+    
+void pmMemoryDirectory2D::PrintBox(const boost_box_type& pBox) const
+{
+    const boost_point_type& lMinCorner = pBox.min_corner();
+    const boost_point_type& lMaxCorner = pBox.max_corner();
+    
+    ulong lXMin = lMinCorner.get<0>();
+    ulong lYMin = lMinCorner.get<1>();
+    ulong lXMax = lMaxCorner.get<0>();
+    ulong lYMax = lMaxCorner.get<1>();
+
+    std::cout << "(" << lXMin << ", " << lYMin << ", " << lXMax << ", " << lYMax << ")";
+}
+
+bool pmMemoryDirectory2D::AreBoxesEqual(const boost_box_type& pBox1, const boost_box_type& pBox2) const
+{
+    const boost_point_type& lMinCorner1 = pBox1.min_corner();
+    const boost_point_type& lMaxCorner1 = pBox1.max_corner();
+    const boost_point_type& lMinCorner2 = pBox2.min_corner();
+    const boost_point_type& lMaxCorner2 = pBox2.max_corner();
+    
+    ulong lXMin1 = lMinCorner1.get<0>();
+    ulong lYMin1 = lMinCorner1.get<1>();
+    ulong lXMin2 = lMinCorner2.get<0>();
+    ulong lYMin2 = lMinCorner2.get<1>();
+
+    ulong lXMax1 = lMaxCorner1.get<0>();
+    ulong lYMax1 = lMaxCorner1.get<1>();
+    ulong lXMax2 = lMaxCorner2.get<0>();
+    ulong lYMax2 = lMaxCorner2.get<1>();
+    
+    return (lXMin1 == lXMin2 && lYMin1 == lYMin2 && lXMax1 == lXMax2 && lYMax1 == lYMax2);
+}
+#endif
+
 
 }

@@ -40,32 +40,32 @@ using namespace heavyOperations;
 using namespace communicator;
 
 #ifdef TRACK_MEMORY_REQUESTS
-void __dump_mem_forward(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, const memoryIdentifierStruct& newIdentifier, ulong newOffset);
-void __dump_mem_transfer(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host);
+void __dump_mem_forward(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, size_t step, size_t count, uint host, uint newHost, const memoryIdentifierStruct& newIdentifier, ulong newOffset);
+void __dump_mem_transfer(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, size_t step, size_t count, uint host);
     
-void __dump_mem_forward(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host, uint newHost, const memoryIdentifierStruct&  newIdentifier, ulong newOffset)
+void __dump_mem_forward(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, size_t step, size_t count, uint host, uint newHost, const memoryIdentifierStruct&  newIdentifier, ulong newOffset)
 {
     char lStr[512];
     
-    sprintf(lStr, "Forwarding address space %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld to host %d (Dest host %d)", addressSpace, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, newHost, host);
+    sprintf(lStr, "Forwarding address space %p (Dest mem (%d, %ld); Remote mem (%d, %ld)) from offset %ld (Dest offset %ld; Remote Offset %ld) for length %ld (step %ld, count %ld) to host %d (Dest host %d)", addressSpace, identifier.memOwnerHost, identifier.generationNumber, newIdentifier.memOwnerHost, newIdentifier.generationNumber, offset, receiverOffset, newOffset, length, step, count, newHost, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-void __dump_mem_transfer(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, uint host)
+void __dump_mem_transfer(const pmAddressSpace* addressSpace, const memoryIdentifierStruct& identifier, size_t receiverOffset, size_t offset, size_t length, size_t step, size_t count, uint host)
 {
     char lStr[512];
     
-    sprintf(lStr, "Transferring address space %p (Remote mem (%d, %ld)) from offset %ld (Remote offset %ld) for length %ld to host %d", addressSpace,identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, host);
+    sprintf(lStr, "Transferring address space %p (Remote mem (%d, %ld)) from offset %ld (Remote offset %ld) for length %ld (step %ld, count %ld) to host %d", addressSpace,identifier.memOwnerHost, identifier.generationNumber, offset, receiverOffset, length, step, count, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-#define MEM_TRANSFER_DUMP(addressSpace, identifier, receiverOffset, offset, length, host) __dump_mem_transfer(addressSpace, identifier, receiverOffset, offset, length, host);
-#define MEM_FORWARD_DUMP(addressSpace, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset) __dump_mem_forward(addressSpace, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset);
+#define MEM_TRANSFER_DUMP(addressSpace, identifier, receiverOffset, offset, length, step, count, host) __dump_mem_transfer(addressSpace, identifier, receiverOffset, offset, length, step, count, host);
+#define MEM_FORWARD_DUMP(addressSpace, identifier, receiverOffset, offset, length, step, count, host, newHost, newIdentifier, newOffset) __dump_mem_forward(addressSpace, identifier, receiverOffset, offset, length, step, count, host, newHost, newIdentifier, newOffset);
 #else
-#define MEM_TRANSFER_DUMP(addressSpace, identifier, receiverOffset, offset, length, host)
-#define MEM_FORWARD_DUMP(addressSpace, identifier, receiverOffset, offset, length, host, newHost, newIdentifier, newOffset)
+#define MEM_TRANSFER_DUMP(addressSpace, identifier, receiverOffset, offset, length, step, count, host)
+#define MEM_FORWARD_DUMP(addressSpace, identifier, receiverOffset, offset, length, step, count, host, newHost, newIdentifier, newOffset)
 #endif
 
 void HeavyOperationsCommandCompletionCallback(const pmCommandPtr& pCommand)
@@ -452,7 +452,7 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
 
                     finalize_ptr<memoryReceiveStruct> lHelperData(new memoryReceiveStruct(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, pReceiverOffset + lInternalOffset - pOffset, lStepLength, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, std::numeric_limits<int>::max(), pmGetHostId()));
 
-                    MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lStepLength, (uint)(*pRequestingMachine))
+                    MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset + lInternalOffset - pOffset, lInternalOffset, lStepLength, 0, 0, (uint)(*pRequestingMachine))
 
                     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceiveStruct>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_STRUCT, lHelperData, 1, NULL, static_cast<void*>(static_cast<char*>(lOwnerAddressSpace->GetMem()) + lInternalOffset));
 
@@ -528,7 +528,7 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
 
                     finalize_ptr<memoryReceiveStruct> lHelperData(new memoryReceiveStruct(pDestMemIdentifier.memOwnerHost, pDestMemIdentifier.generationNumber, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.size, lStepScatteredInfo.step, lStepCounts, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, std::numeric_limits<int>::max(), pmGetHostId()));
                 
-                    MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.offset, lStepScatteredInfo.size * lStepScatteredInfo.count, (uint)(*pRequestingMachine))
+                    MEM_TRANSFER_DUMP(pSrcAddressSpace, pDestMemIdentifier, lReceiverOffset + lInternalStepOffset, lStepScatteredInfo.offset, lStepScatteredInfo.size, lStepScatteredInfo.step, lStepScatteredInfo.count, (uint)(*pRequestingMachine))
 
                     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryReceiveStruct>::CreateSharedPtr(pPriority, SEND, MEMORY_RECEIVE_TAG, pRequestingMachine, MEMORY_RECEIVE_STRUCT, lHelperData, 1, NULL, static_cast<void*>(lBeginAddr + lRangeOwner.hostOffset + lInternalStepOffset));
 
@@ -551,7 +551,7 @@ void pmHeavyOperationsThread::ForwardMemoryRequest(pmAddressSpace* pSrcAddressSp
 {
     finalize_ptr<memoryTransferRequest> lData(new memoryTransferRequest(pSrcMemIdentifier, pDestMemIdentifier, pTransferType, pReceiverOffset, pOffset, pLength, pStep, pCount, *pRequestingMachine, 1, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority));
     
-    MEM_FORWARD_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength, (uint)(*pRequestingMachine), *pRangeOwner.host, pRangeOwner.memIdentifier, pRangeOwner.hostOffset)
+    MEM_FORWARD_DUMP(pSrcAddressSpace, pDestMemIdentifier, pReceiverOffset, pOffset, pLength, pStep, pCount, (uint)(*pRequestingMachine), *pRangeOwner.host, pRangeOwner.memIdentifier, pRangeOwner.hostOffset)
 
     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<memoryTransferRequest>::CreateSharedPtr(MAX_CONTROL_PRIORITY, SEND, MEMORY_TRANSFER_REQUEST_TAG, pRangeOwner.host, MEMORY_TRANSFER_REQUEST_STRUCT, lData, 1);
     

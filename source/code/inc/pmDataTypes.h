@@ -156,6 +156,13 @@ namespace pm
         SUBSCRIPTION_FORMAT_MAX
     };
 
+    enum pmAddressSpaceType
+    {
+        ADDRESS_SPACE_LINEAR,
+        ADDRESS_SPACE_2D,
+        MAX_ADDRESS_SPACE_TYPES
+    };
+
     struct pmTaskMemory
     {
         pmAddressSpace* addressSpace;

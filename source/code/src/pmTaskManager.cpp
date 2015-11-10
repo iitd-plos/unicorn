@@ -76,7 +76,15 @@ pmRemoteTask* pmTaskManager::CreateRemoteTask(communicator::remoteTaskAssignPack
         communicator::taskMemoryStruct& lTaskMemStruct = pRemoteTaskData->taskMem[memIndex];
         const pmMachine* lOwnerHost = pmMachinePool::GetMachinePool()->GetMachine(lTaskMemStruct.memIdentifier.memOwnerHost);
 
-        pmAddressSpace* lAddressSpace = pmAddressSpace::CheckAndCreateAddressSpace(lTaskMemStruct.memLength, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
+        pmAddressSpace* lAddressSpace = NULL;
+        
+        EXCEPTION_ASSERT(lTaskMemStruct.addressSpaceType == ADDRESS_SPACE_LINEAR || lTaskMemStruct.addressSpaceType == ADDRESS_SPACE_2D);
+
+        if(lTaskMemStruct.addressSpaceType == ADDRESS_SPACE_LINEAR)
+            lAddressSpace = pmAddressSpace::CheckAndCreateAddressSpace(lTaskMemStruct.memLength, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
+        else
+            lAddressSpace = pmAddressSpace::CheckAndCreateAddressSpace(lTaskMemStruct.memLength, lTaskMemStruct.cols, lOwnerHost, lTaskMemStruct.memIdentifier.generationNumber);
+        
         lTaskMemVector.emplace_back(lAddressSpace, (pmMemType)(lTaskMemStruct.memType), (pmSubscriptionVisibilityType)(lTaskMemStruct.subscriptionVisibility), (bool)lTaskMemStruct.flags);
     }
 

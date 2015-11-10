@@ -134,30 +134,46 @@ struct memoryIdentifierStruct
 struct taskMemoryStruct
 {
     memoryIdentifierStruct memIdentifier;
-    ulong memLength;
+    ulong memLength;    // For 2D address spaces, this contains the number of rows
+    ulong cols;
     ushort memType;     // enum pmMemType
     ushort subscriptionVisibility;  // enum pmSubscriptionVisibilityType
     ushort flags;       // LSB 1 - disjointReadWriteSubscriptionsAcrossSubtasks
+    ushort addressSpaceType;    // enum pmAddressSpaceType
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 5
+        FIELD_COUNT_VALUE = 7
     } fieldCount;
     
     taskMemoryStruct()
     : memIdentifier()
     , memLength(0)
+    , cols(std::numeric_limits<ulong>::max())
     , memType(std::numeric_limits<ushort>::max())
     , subscriptionVisibility(SUBSCRIPTION_NATURAL)
     , flags(0)
+    , addressSpaceType(MAX_ADDRESS_SPACE_TYPES)
     {}
 
     taskMemoryStruct(const memoryIdentifierStruct& pMemStruct, ulong pMemLength, pmMemType pMemType, pmSubscriptionVisibilityType pSubscriptionVisibility, ushort pFlags)
     : memIdentifier(pMemStruct)
     , memLength(pMemLength)
+    , cols(std::numeric_limits<ulong>::max())
     , memType((ushort)pMemType)
     , subscriptionVisibility(pSubscriptionVisibility)
     , flags(pFlags)
+    , addressSpaceType(ADDRESS_SPACE_LINEAR)
+    {}
+
+    taskMemoryStruct(const memoryIdentifierStruct& pMemStruct, ulong pRows, ulong pCols, pmMemType pMemType, pmSubscriptionVisibilityType pSubscriptionVisibility, ushort pFlags)
+    : memIdentifier(pMemStruct)
+    , memLength(pRows)
+    , cols(pCols)
+    , memType((ushort)pMemType)
+    , subscriptionVisibility(pSubscriptionVisibility)
+    , flags(pFlags)
+    , addressSpaceType(ADDRESS_SPACE_2D)
     {}
 };
 

@@ -155,9 +155,9 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 	CREATE_TASK(lSubtaskCount, pCallbackHandle[0], pSchedulingPolicy)
 
     pmMemHandle lInputMem1, lInputMem2, lOutputMem;
-    CREATE_MEM(lMatrixSize, lInputMem1)
-    CREATE_MEM(lMatrixSize, lInputMem2)
-    CREATE_MEM(lMatrixSize, lOutputMem)
+    CREATE_MEM_2D(lMatrixDim, lMatrixDim * sizeof(MATRIX_DATA_TYPE), lInputMem1)
+    CREATE_MEM_2D(lMatrixDim, lMatrixDim * sizeof(MATRIX_DATA_TYPE), lInputMem2)
+    CREATE_MEM_2D(lMatrixDim, lMatrixDim * sizeof(MATRIX_DATA_TYPE), lOutputMem)
 
     pmRawMemPtr lRawInputPtr1, lRawInputPtr2, lRawOutputPtr;
     pmGetRawMemPtr(lInputMem1, &lRawInputPtr1);

@@ -42,20 +42,20 @@ namespace pm
 {
         
 #ifdef TRACK_MEMORY_REQUESTS
-void __dump_mem_req(const pmAddressSpace* addressSpace, const void* addr, size_t receiverOffset, size_t offset, size_t length, uint host);
+void __dump_mem_req(const pmAddressSpace* addressSpace, const void* addr, size_t receiverOffset, size_t offset, size_t length, size_t step, size_t count, uint host);
     
-void __dump_mem_req(const pmAddressSpace* addressSpace, const void* addr, size_t receiverOffset, size_t offset, size_t length, uint host)
+void __dump_mem_req(const pmAddressSpace* addressSpace, const void* addr, size_t receiverOffset, size_t offset, size_t length, size_t step, size_t count, uint host)
 {
     char lStr[512];
    
-    sprintf(lStr, "Requesting memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld from host %d", addr, addressSpace, receiverOffset, offset, length, host);
+    sprintf(lStr, "Requesting memory %p (address space %p) at offset %ld (Remote Offset %ld) for length %ld (step %ld, count %ld) from host %d", addr, addressSpace, receiverOffset, offset, length, step, count, host);
     
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
-#define MEM_REQ_DUMP(addressSpace, addr, receiverOffset, offset, length, host) __dump_mem_req(addressSpace, addr, receiverOffset, offset, length, host);
+#define MEM_REQ_DUMP(addressSpace, addr, receiverOffset, offset, length, step, count, host) __dump_mem_req(addressSpace, addr, receiverOffset, offset, length, step, count, host);
 #else
-#define MEM_REQ_DUMP(addressSpace, addr, receiverOffset, offset, length, host)    
+#define MEM_REQ_DUMP(addressSpace, addr, receiverOffset, offset, length, step, count, host)
 #endif
     
 
@@ -838,7 +838,7 @@ void pmLinuxMemoryManager::FetchNonOverlappingMemoryRegion(ushort pPriority, pmA
     
 	pCommand->MarkExecutionStart();
 
-    MEM_REQ_DUMP(pAddressSpace, pMem, pOffset, pRangeOwner.hostOffset, pLength, (uint)(*pRangeOwner.host));
+    MEM_REQ_DUMP(pAddressSpace, pMem, pOffset, pRangeOwner.hostOffset, pLength, pStep, pCount, (uint)(*pRangeOwner.host));
 
 	pmCommunicator::GetCommunicator()->Send(lSendCommand);
 }
@@ -886,7 +886,7 @@ void pmLinuxMemoryManager::FetchNonOverlappingScatteredMemoryRegions(ushort pPri
     
     pmCommunicatorCommandPtr lSendCommand = pmCommunicatorCommand<communicator::scatteredMemoryTransferRequestCombinedPacked>::CreateSharedPtr(pPriority, communicator::SEND, communicator::SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_TAG, pVector[0].second.host, communicator::SCATTERED_MEMORY_TRANSFER_REQUEST_COMBINED_PACKED, lPackedData, 1);
 
-    //MEM_REQ_DUMP(pAddressSpace, pMem, pOffset, pRangeOwner.hostOffset, pLength, (uint)(*pRangeOwner.host));
+//    MEM_REQ_DUMP(pAddressSpace, pMem, pOffset, pRangeOwner.hostOffset, pLength, pStep, pCount, (uint)(*pRangeOwner.host));
 
     pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lSendCommand);
 }

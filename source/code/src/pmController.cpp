@@ -187,6 +187,14 @@ void pmController::CreateMemory_Public(size_t pLength, pmMemHandle* pMem)
     *pMem = new pmUserMemHandle(lAddressSpace);
 }
 
+void pmController::CreateMemory2D_Public(size_t pRows, size_t pCols, pmMemHandle* pMem)
+{
+	*pMem = NULL;
+
+    pmAddressSpace* lAddressSpace = pmAddressSpace::CreateAddressSpace(pRows, pCols, PM_LOCAL_MACHINE);
+    *pMem = new pmUserMemHandle(lAddressSpace);
+}
+
 void pmController::ReleaseMemory_Public(pmMemHandle pMem)
 {
     if(!pMem)

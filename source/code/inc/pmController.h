@@ -66,7 +66,8 @@ class pmController : public pmBase
 		/* User API Functions */
 		void RegisterCallbacks_Public(const char* pKey, pmCallbacks pCallbacks, pmCallbackHandle* pCallbackHandle);
 		void ReleaseCallbacks_Public(pmCallbackHandle pCallbackHandle);
-		void CreateMemory_Public(size_t pLength, pmMemHandle* pMem);
+        void CreateMemory_Public(size_t pLength, pmMemHandle* pMem);
+        void CreateMemory2D_Public(size_t pRows, size_t pCols, pmMemHandle* pMem);
         void ReleaseMemory_Public(pmMemHandle pMem);
         void FetchMemory_Public(pmMemHandle pMem);
         void FetchMemoryRange_Public(pmMemHandle pMem, size_t pOffset, size_t pLength);

@@ -542,7 +542,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 #ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
     pmRawMemPtr lRawInputPtr;
 
-    CREATE_MEM(IMAGE_SIZE, lInputMemHandle);
+    CREATE_MEM_2D(gImageHeight, (size_t)gImageWidth * PIXEL_COUNT, lInputMemHandle);
 
     pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);
 

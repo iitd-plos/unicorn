@@ -385,7 +385,7 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
 {
     if(!pSubscriptionInfo.length)
         return;
-    
+
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
 
     if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
@@ -463,6 +463,9 @@ void pmSubscriptionManager::RegisterSubscriptionInternal(pmSubtask& pSubtask, ui
 {
     pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(pMemIndex);
     CheckAppropriateSubscription(lAddressSpace, pSubscriptionType);
+    
+    if(lAddressSpace->GetAddressSpaceType() == ADDRESS_SPACE_2D && pScatteredSubscriptionInfo.size > lAddressSpace->GetCols())
+        PMTHROW(pmFatalErrorException());
 
     pmSubtaskAddressSpaceData& lAddressSpaceData = pSubtask.mAddressSpacesData[pMemIndex];
     pmSubtaskSubscriptionData& lSubscriptionData = (IsReadSubscription(pSubscriptionType) ? lAddressSpaceData.mReadSubscriptionData : lAddressSpaceData.mWriteSubscriptionData);

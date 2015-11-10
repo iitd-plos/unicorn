@@ -91,6 +91,7 @@ bool isCudaCacheEnabled();   /* by default, its enabled */
 #endif
 
 #define CREATE_MEM(memSize, memHandle) SAFE_PM_EXEC( pmCreateMemory(memSize, &memHandle) )
+#define CREATE_MEM_2D(memRows, memCols, memHandle) SAFE_PM_EXEC( pmCreateMemory2D(memRows, memCols, &memHandle) )
 
 #ifdef BUILD_CUDA
 

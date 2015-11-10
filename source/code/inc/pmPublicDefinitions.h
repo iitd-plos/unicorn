@@ -38,7 +38,7 @@ namespace pm
     const size_t MAX_NAME_STR_LEN = 256;
     const size_t MAX_DESC_STR_LEN = 1024;
     const size_t MAX_CB_KEY_LEN = 128;
-    const size_t MAX_MEM_SECTIONS_PER_TASK = 8;
+    const size_t MAX_MEM_SECTIONS_PER_TASK = 4;
 
 	/**
 	 * This enumeration defines success and all error conditions for the PMLIB Application Programming Interface (API).
@@ -331,7 +331,12 @@ namespace pm
 	/** The memory creation API. The allocated memory is returned in the variable pMemHandle */
 	pmStatus pmCreateMemory(size_t pLength, pmMemHandle* pMemHandle);
 
-	/* The memory destruction API. The same interface is used for both input and output memory */
+	/** The 2D memory creation API. The allocated memory is returned in the variable pMemHandle.
+     *  The allocated memory has a two dimensional layout with pRows rows and pCols columns.
+     */
+	pmStatus pmCreateMemory2D(size_t pRows, size_t pCols, pmMemHandle* pMemHandle);
+
+    /* The memory destruction API. The same interface is used for both input and output memory */
 	pmStatus pmReleaseMemory(pmMemHandle pMemHandle);
     
     /** This routine reads the entire distributed memory pointed to by pMem from the entire cluster into the local buffer.

@@ -440,12 +440,12 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     size_t lElems = lElemsX * lElemsY;
     size_t lMemSize = lElems * sizeof(FFT_DATA_TYPE);
     
-	CREATE_MEM(lMemSize, lOutputMemHandle);
+	CREATE_MEM_2D(lElemsX, lElemsY * sizeof(FFT_DATA_TYPE), lOutputMemHandle);
     
     if(lInplace)
         lInputMemHandle = lOutputMemHandle;
     else
-        CREATE_MEM(lMemSize, lInputMemHandle);
+        CREATE_MEM_2D(lElemsX, lElemsY * sizeof(FFT_DATA_TYPE), lInputMemHandle);
     
 	pmRawMemPtr lRawInputPtr;
 	pmGetRawMemPtr(lInputMemHandle, &lRawInputPtr);

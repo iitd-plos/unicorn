@@ -518,9 +518,14 @@ pmStatus pmReleaseCallbacks(pmCallbackHandle pCallbackHandle)
 	SAFE_EXECUTE_ON_CONTROLLER(ReleaseCallbacks_Public, pCallbackHandle);
 }
 
-pmStatus pmCreateMemory(size_t pLength, pmMemHandle* pMem)
+pmStatus pmCreateMemory(size_t pLength, pmMemHandle* pMemHandle)
 {
-	SAFE_EXECUTE_ON_CONTROLLER(CreateMemory_Public, pLength, pMem);
+	SAFE_EXECUTE_ON_CONTROLLER(CreateMemory_Public, pLength, pMemHandle);
+}
+
+pmStatus pmCreateMemory2D(size_t pRows, size_t pCols, pmMemHandle* pMemHandle)
+{
+	SAFE_EXECUTE_ON_CONTROLLER(CreateMemory2D_Public, pRows, pCols, pMemHandle);
 }
 
 pmStatus pmReleaseMemory(pmMemHandle pMem)

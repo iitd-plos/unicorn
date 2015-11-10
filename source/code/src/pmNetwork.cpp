@@ -38,7 +38,7 @@ using namespace communicator;
 
 pmCluster* PM_GLOBAL_CLUSTER = NULL;
 
-const uint MIN_SEND_REQUESTS_TO_TRIGGER_CLEANUP = 64;
+const uint MIN_SEND_REQUESTS_TO_TRIGGER_CLEANUP = 256;
 
 //#define ENABLE_MPI_DEBUG_HOOK
 
@@ -1941,9 +1941,11 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(taskMemoryStruct, lData, lDataMPI);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memIdentifier, lMemIdentifierMPI, GetDataTypeMPI(MEMORY_IDENTIFIER_STRUCT), 0, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memLength, lMemLengthMPI, MPI_UNSIGNED_LONG, 1, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memType, lMemTypeMPI, MPI_UNSIGNED_SHORT, 2, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subscriptionVisibility, lSubscriptionVisibilityMPI, MPI_UNSIGNED_SHORT, 3, 1);
-            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.flags, lFlagsMPI, MPI_UNSIGNED_SHORT, 4, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.cols, lColsMPI, MPI_UNSIGNED_LONG, 2, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memType, lMemTypeMPI, MPI_UNSIGNED_SHORT, 3, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subscriptionVisibility, lSubscriptionVisibilityMPI, MPI_UNSIGNED_SHORT, 4, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.flags, lFlagsMPI, MPI_UNSIGNED_SHORT, 5, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.addressSpaceType, lAddressSpaceTypeMPI, MPI_UNSIGNED_SHORT, 6, 1);
 
             break;
         }

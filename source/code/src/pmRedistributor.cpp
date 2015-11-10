@@ -202,10 +202,22 @@ void pmRedistributor::CreateRedistributedAddressSpace(ulong pGenerationNumber /*
 {
     pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(mAddressSpaceIndex);
 
-    if(mTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
-        mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetLength(), PM_LOCAL_MACHINE);
+    if(lAddressSpace->GetAddressSpaceType() == ADDRESS_SPACE_LINEAR)
+    {
+        if(mTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
+            mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetLength(), PM_LOCAL_MACHINE);
+        else
+            mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetLength(), lAddressSpace->GetMemOwnerHost(), pGenerationNumber);
+    }
     else
-        mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetLength(), lAddressSpace->GetMemOwnerHost(), pGenerationNumber);
+    {
+        DEBUG_EXCEPTION_ASSERT(lAddressSpace->GetAddressSpaceType() == ADDRESS_SPACE_2D);
+
+        if(mTask->GetOriginatingHost() == PM_LOCAL_MACHINE)
+            mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetRows(), lAddressSpace->GetCols(), PM_LOCAL_MACHINE);
+        else
+            mRedistributedAddressSpace = pmAddressSpace::CreateAddressSpace(lAddressSpace->GetRows(), lAddressSpace->GetCols(), lAddressSpace->GetMemOwnerHost(), pGenerationNumber);
+    }
 
     pmCommandPtr lCountDownCommand = pmCountDownCommand::CreateSharedPtr(1, mTask->GetPriority(), 0, NULL);
     lCountDownCommand->MarkExecutionStart();
