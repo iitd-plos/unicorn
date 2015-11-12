@@ -473,21 +473,9 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
 
 void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAddressSpace, pmTask* pRequestingTask, const pmMachine* pRequestingMachine, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pReceiverOffset, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority, bool pIsForwarded)
 {
-    pmScatteredSubscriptionFilter lBlocksFilter(pmScatteredSubscriptionInfo(pOffset, pLength, pStep, pCount));
-    auto lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
+    auto lLambda = [&] (const pmScatteredMemOwnership& pScatteredMemOwnership)
     {
-        pmMemOwnership lOwnerships;
-        pSrcAddressSpace->GetOwners(pOffset + pRow * pStep, pLength, lOwnerships);
-        
-        for_each(lOwnerships, [&] (pmMemOwnership::value_type& pPair)
-        {
-            lBlocksFilter.AddNextSubRow(pPair.first, pPair.second.first, pPair.second.second);
-        });
-    });
-
-    for_each(lBlocks, [&] (const typename decltype(lBlocks)::value_type& pMapKeyValue)
-    {
-        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>& pPair)
+        for_each(pScatteredMemOwnership, [&] (const std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>& pPair)
         {
             const pmScatteredSubscriptionInfo& lScatteredInfo = pPair.first;
             const vmRangeOwner& lRangeOwner = pPair.second;
@@ -544,7 +532,34 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
                 ForwardMemoryRequest(pSrcAddressSpace, lRangeOwner, lRangeOwner.memIdentifier, pDestMemIdentifier, TRANSFER_SCATTERED, lReceiverOffset, lScatteredInfo.offset, lScatteredInfo.size, lScatteredInfo.step, lScatteredInfo.count, pRequestingMachine, pIsTaskOriginated, pTaskOriginatingHost, pTaskSequenceNumber, pPriority);
             }
         });
-    });
+    };
+
+    if(pSrcAddressSpace->GetAddressSpaceType() == ADDRESS_SPACE_LINEAR)
+    {
+        pmScatteredSubscriptionFilter lBlocksFilter(pmScatteredSubscriptionInfo(pOffset, pLength, pStep, pCount));
+        const auto& lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
+        {
+            pmMemOwnership lOwnerships;
+            pSrcAddressSpace->GetOwners(pOffset + pRow * pStep, pLength, lOwnerships);
+            
+            for_each(lOwnerships, [&] (pmMemOwnership::value_type& pPair)
+            {
+                lBlocksFilter.AddNextSubRow(pPair.first, pPair.second.first, pPair.second.second);
+            });
+        });
+
+        for_each(lBlocks, [&] (const std::pair<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& pMapKeyValue)
+        {
+            lLambda(pMapKeyValue.second);
+        });
+    }
+    else
+    {
+        pmScatteredMemOwnership lScatteredMemOwnership;
+        pSrcAddressSpace->GetOwners(pOffset, pLength, pStep, pCount, lScatteredMemOwnership);
+
+        lLambda(lScatteredMemOwnership);
+    }
 }
     
 void pmHeavyOperationsThread::ForwardMemoryRequest(pmAddressSpace* pSrcAddressSpace, const vmRangeOwner& pRangeOwner, const memoryIdentifierStruct& pSrcMemIdentifier, const memoryIdentifierStruct& pDestMemIdentifier, memoryTransferType pTransferType, ulong pReceiverOffset, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pRequestingMachine, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber, ushort pPriority)

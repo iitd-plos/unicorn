@@ -785,9 +785,10 @@ void pmAddressSpace::FlushOwnerships()
     {
         if(!mOwnershipTransferVector.empty())
             SendRemoteOwnershipChangeMessages(lOwnershipTransferMap);
-
-        if(!mScatteredOwnershipTransferVector.empty())
+        else if(!mScatteredOwnershipTransferVector.empty())
             SendRemoteOwnershipChangeMessages(lScatteredOwnershipTransferMap);
+        else
+            SendRemoteOwnershipChangeMessages(lOwnershipTransferMap);   // Dummy message (since the other side is waiting)
     }
 
     mOwnershipTransferVector.clear();

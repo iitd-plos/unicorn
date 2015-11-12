@@ -386,8 +386,28 @@ void pmSubscriptionManager::RegisterSubscription(pmExecutionStub* pStub, ulong p
     if(!pSubscriptionInfo.length)
         return;
 
-    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+    // For 2D address spaces, convert linear subscription to a scattered one (as it is more efficiently handled)
+    pmAddressSpace* lAddressSpace = mTask->GetAddressSpace(pMemIndex);
+    if(lAddressSpace->GetAddressSpaceType() == ADDRESS_SPACE_2D)
+    {
+        ulong lAddressSpaceCols = lAddressSpace->GetCols();
+        
+        if(pSubscriptionInfo.length > lAddressSpaceCols)
+        {
+            // Currently doing this only if offset and length are multiple of address space cols
+            if(!(pSubscriptionInfo.offset % lAddressSpaceCols) && !(pSubscriptionInfo.length % lAddressSpaceCols))
+            {
+                pmScatteredSubscriptionInfo lScatteredSubscriptionInfo(pSubscriptionInfo.offset, lAddressSpaceCols, lAddressSpaceCols, pSubscriptionInfo.length / lAddressSpaceCols);
+                
+                RegisterSubscription(pStub, pSubtaskId, pSplitInfo, pMemIndex, pSubscriptionType, lScatteredSubscriptionInfo);
 
+                return;
+            }
+        }
+    }
+
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+    
     if(pSubscriptionType == READ_WRITE_SUBSCRIPTION)
     {
         RegisterSubscriptionInternal(lSubtask, pMemIndex, READ_SUBSCRIPTION, pSubscriptionInfo);

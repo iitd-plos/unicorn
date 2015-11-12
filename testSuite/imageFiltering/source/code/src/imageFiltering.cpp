@@ -559,7 +559,7 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
         exit(1);
 #endif
 
-    CREATE_MEM(IMAGE_SIZE, lOutputMemHandle);
+    CREATE_MEM_2D(gImageHeight, (size_t)gImageWidth * PIXEL_COUNT, lOutputMemHandle);
 
     double lStartTime = getCurrentTimeInSecs();
 
