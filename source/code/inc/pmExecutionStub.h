@@ -469,6 +469,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
     
     #ifdef PROACTIVE_STEAL_REQUESTS
         std::map<pmTask*, bool> mStealRequestIssuedMap;
+        RESOURCE_LOCK_IMPLEMENTATION_CLASS mStealRequestIssuedMapLock;
     #endif
     
     protected:

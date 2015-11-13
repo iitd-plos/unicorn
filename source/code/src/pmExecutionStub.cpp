@@ -96,6 +96,9 @@ pmExecutionStub::pmExecutionStub(uint pDeviceIndexOnMachine)
 #ifdef SUPPORT_OPENCL
     , mOpenCLDevice(NULL)
 #endif
+#ifdef PROACTIVE_STEAL_REQUESTS
+    , mStealRequestIssuedMapLock __LOCK_NAME__("pmExecutionStub::mStealRequestIssuedMapLock")
+#endif
 {
 }
 
@@ -169,10 +172,15 @@ void pmExecutionStub::Push(const pmSubtaskRange& pRange, bool pIsStealResponse)
         pRange.task->GetStealAgent()->RecordSuccessfulSteal(this);
     #endif
 
-        auto lIter = mStealRequestIssuedMap.find(pRange.task);
-        EXCEPTION_ASSERT(lIter != mStealRequestIssuedMap.end() && lIter->second);
-        
-        lIter->second = false;
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dStealRequestIssuedMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealRequestIssuedMapLock, Lock(), Unlock());
+
+            auto lIter = mStealRequestIssuedMap.find(pRange.task);
+            EXCEPTION_ASSERT(lIter != mStealRequestIssuedMap.end() && lIter->second);
+            
+            lIter->second = false;
+        }
     }
 #endif
 }
@@ -199,10 +207,15 @@ void pmExecutionStub::Push(pmTask* pTask, std::vector<ulong>&& pDiscontiguousSte
         pTask->GetStealAgent()->RecordSuccessfulSteal(this);
     #endif
 
-    auto lRequestIter = mStealRequestIssuedMap.find(pTask);
-    EXCEPTION_ASSERT(lRequestIter != mStealRequestIssuedMap.end() && lRequestIter->second);
-    
-    lRequestIter->second = false;
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dStealRequestIssuedMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealRequestIssuedMapLock, Lock(), Unlock());
+
+        auto lRequestIter = mStealRequestIssuedMap.find(pTask);
+        EXCEPTION_ASSERT(lRequestIter != mStealRequestIssuedMap.end() && lRequestIter->second);
+        
+        lRequestIter->second = false;
+    }
 #endif
 }
 #endif
@@ -309,8 +322,13 @@ void pmExecutionStub::FreeGpuResources()
 void pmExecutionStub::FreeTaskResources(pmTask* pTask)
 {
 #ifdef PROACTIVE_STEAL_REQUESTS
-    if(pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()))
-        mStealRequestIssuedMap.erase(pTask);
+    // Auto lock/unlock scope
+    {
+        FINALIZE_RESOURCE_PTR(dStealRequestIssuedMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealRequestIssuedMapLock, Lock(), Unlock());
+
+        if(pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()))
+            mStealRequestIssuedMap.erase(pTask);
+    }
 #endif
 
 #ifdef SUPPORT_SPLIT_SUBTASKS
@@ -2494,11 +2512,22 @@ void pmExecutionStub::IssueStealRequestIfRequired(pmTask* pTask)
     DEBUG_EXCEPTION_ASSERT(pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()));
     
 #ifdef PROACTIVE_STEAL_REQUESTS
-    auto lIter = mStealRequestIssuedMap.find(pTask);
-    if(lIter == mStealRequestIssuedMap.end() || !lIter->second)
+    bool lIssueRequest = false;
+
+    // Auto lock/unlock scope
     {
-        mStealRequestIssuedMap[pTask] = true;
-        
+        FINALIZE_RESOURCE_PTR(dStealRequestIssuedMapLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mStealRequestIssuedMapLock, Lock(), Unlock());
+
+        auto lIter = mStealRequestIssuedMap.find(pTask);
+        if(lIter == mStealRequestIssuedMap.end() || !lIter->second)
+        {
+            mStealRequestIssuedMap[pTask] = true;
+            lIssueRequest = true;
+        }
+    }
+
+    if(lIssueRequest)
+    {
     #ifdef ENABLE_DYNAMIC_AGGRESSION
         pTask->GetStealAgent()->RecordStealRequestIssue(this);
     #endif
