@@ -80,7 +80,6 @@ class pmAddressSpace : public pmBase
     
         void DisposeMemory();
     
-        void AcquireOwnershipImmediate(ulong pOffset, ulong pLength);
         void TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength);
         void TransferOwnershipPostTaskCompletion(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pSize, ulong pStep, ulong pCount);
         void FlushOwnerships();
@@ -126,7 +125,11 @@ class pmAddressSpace : public pmBase
         void RecordMemReceive(size_t pReceiveSize);
         void RecordMemTransfer(size_t pTransferSize);
 #endif
-            
+    
+        pmScatteredTransferMapType SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet);            
+        pmLinearTransferVectorType SetupRemoteRegionsForFetching(const pmSubscriptionInfo& pSubscriptionInfo, ulong pPriority, std::vector<pmCommandPtr>& pCommandVector);
+        virtual pmRemoteRegionsInfoMapType GetRemoteRegionsInfo(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
+
         static pmAddressSpace* FindAddressSpace(const pmMachine* pOwner, ulong pGenerationNumber);
         static pmAddressSpace* FindAddressSpaceContainingLazyAddress(void* pPtr);
         static void DeleteAllLocalAddressSpaces();
@@ -139,8 +142,11 @@ class pmAddressSpace : public pmBase
         pmAddressSpaceType GetAddressSpaceType() const;
         size_t GetRows() const;
         size_t GetCols() const;
+    
+        void CopyOrUpdateReceivedMemory(pmTask* pRequestingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource);
+        void UpdateReceivedMemory(pmTask* pRequestingTask, ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
 
-    private:    
+    private:
         pmAddressSpace(size_t pLength, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
         pmAddressSpace(size_t pRows, size_t pCols, const pmMachine* pOwner, ulong pGenerationNumberOnOwner);
     
@@ -212,41 +218,6 @@ class pmAddressSpace : public pmBase
         ulong mMemTransferEvents;
         RESOURCE_LOCK_IMPLEMENTATION_CLASS mMemProfileLock;
 #endif
-};
-    
-class pmScatteredSubscriptionFilter
-{
-public:
-    pmScatteredSubscriptionFilter(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
-
-    // pRowFunctor should call AddNextSubRow for every range to be kept
-    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& FilterBlocks(const std::function<void (size_t)>& pRowFunctor);
-
-    void AddNextSubRow(ulong pOffset, ulong pLength, vmRangeOwner& pRangeOwner);
-    
-private:
-    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& GetLeftoverBlocks();
-    void PromoteCurrentBlocks();
-
-    struct blockData
-    {
-        ulong startCol;
-        ulong colCount;
-        pmScatteredSubscriptionInfo subscriptionInfo;
-        vmRangeOwner rangeOwner;
-        
-        blockData(ulong pStartCol, ulong pColCount, const pmScatteredSubscriptionInfo& pSubscriptionInfo, vmRangeOwner& pRangeOwner)
-        : startCol(pStartCol)
-        , colCount(pColCount)
-        , subscriptionInfo(pSubscriptionInfo)
-        , rangeOwner(pRangeOwner)
-        {}
-    };
-
-    const pmScatteredSubscriptionInfo& mScatteredSubscriptionInfo;
-    
-    std::list<blockData> mCurrentBlocks;   // computed till last row processed
-    std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>> mBlocksToBeFetched;
 };
 
 } // end namespace pm

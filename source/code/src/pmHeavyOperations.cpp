@@ -327,7 +327,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
         {
             memTransferEvent& lEventDetails = static_cast<memTransferEvent&>(pEvent);
 
-            EXCEPTION_ASSERT(lEventDetails.machine != PM_LOCAL_MACHINE || lEventDetails.isForwarded);   // Cyclic reference
+            EXCEPTION_ASSERT(lEventDetails.machine != PM_LOCAL_MACHINE);   // Cyclic reference
 
             pmAddressSpace* lSrcAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.srcMemIdentifier.memOwnerHost), lEventDetails.srcMemIdentifier.generationNumber);
             if(!lSrcAddressSpace)
@@ -339,7 +339,6 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lEventDetails.taskOriginatingHost);
                 lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lEventDetails.taskSequenceNumber);
                 
-                // Turn down all requests for tasks that have already finished
                 if(lOriginatingHost == PM_LOCAL_MACHINE)
                 {
                     if(!lRequestingTask)
@@ -347,6 +346,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 }
                 else
                 {
+                    // Turn down all requests for tasks that have already finished
                     if(pmTaskManager::GetTaskManager()->IsRemoteTaskFinished(*lOriginatingHost, lEventDetails.taskSequenceNumber))
                         return;
                 }
@@ -417,6 +417,9 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
             
             if(pRequestingMachine == PM_LOCAL_MACHINE)
             {
+                EXCEPTION_ASSERT(0);    // This should not happen
+
+            #if 0
                 pmAddressSpace* lDestAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(pDestMemIdentifier.memOwnerHost), pDestMemIdentifier.generationNumber);
             
                 EXCEPTION_ASSERT(lDestAddressSpace);
@@ -428,7 +431,8 @@ void pmHeavyOperationsThread::ServeGeneralMemoryRequest(pmAddressSpace* pSrcAddr
                 });
 
                 if(!pIsTaskOriginated || pRequestingTask)
-                    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CopyReceivedMemory(lDestAddressSpace, pReceiverOffset + lInternalOffset - pOffset, pLength, lFunc, pRequestingTask);
+                    lDestAddressSpace->CopyOrUpdateReceivedMemory(pRequestingTask, pReceiverOffset + lInternalOffset - pOffset, pLength, &lFunc);
+            #endif
             }
             else
             {
@@ -679,8 +683,6 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
                     
                         if(lAddressSpace)		// If memory still exists
                         {
-                            pmMemoryManager* lMemoryManager = MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager();
-
                             pmTask* lRequestingTask = NULL;
                             if(lReceiveStruct->isTaskOriginated)
                             {
@@ -700,7 +702,7 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
                                 }
                             #endif
 
-                                lMemoryManager->UpdateReceivedMemory(lAddressSpace, lReceiveStruct->offset, lReceiveStruct->length, lRequestingTask);
+                                lAddressSpace->CopyOrUpdateReceivedMemory(lRequestingTask, lReceiveStruct->offset, lReceiveStruct->length, NULL);
                             }
                             else    // TRANSFER_SCATTERED
                             {
@@ -716,7 +718,7 @@ void pmHeavyOperationsThread::HandleCommandCompletion(pmCommandPtr& pCommand)
                                 }
                             #endif
 
-                                lMemoryManager->UpdateReceivedScatteredMemory(lAddressSpace, lReceiveStruct->offset, lReceiveStruct->length, lReceiveStruct->step, lReceiveStruct->count, lRequestingTask);
+                                lAddressSpace->UpdateReceivedMemory(lRequestingTask, lReceiveStruct->offset, lReceiveStruct->length, lReceiveStruct->step, lReceiveStruct->count);
                             }
                         }
 

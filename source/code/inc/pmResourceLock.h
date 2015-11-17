@@ -39,12 +39,9 @@ namespace pm
  * guard all accesses to shared resources inside Lock/Unlock calls.
 */
 
-class pmResourceLock : public pmBase
+class pmResourceLockBase : public pmBase
 {
 	public:
-        virtual void Lock() = 0;
-		virtual void Unlock() = 0;
-
     #ifdef RECORD_LOCK_ACQUISITIONS
         virtual void RecordAcquisition(const char* pFile, int pLine) = 0;
         virtual void ResetAcquisition() = 0;
@@ -54,7 +51,16 @@ class pmResourceLock : public pmBase
 	private:
 };
 
-class pmPThreadResourceLock : public pmResourceLock
+class pmResourceLock : public pmResourceLockBase
+{
+	public:
+        virtual void Lock() = 0;
+		virtual void Unlock() = 0;
+
+	private:
+};
+
+class pmPThreadResourceLock : public pmResourceLockBase
 {
 	public:
 		pmPThreadResourceLock(
@@ -92,6 +98,53 @@ class pmPThreadResourceLock : public pmResourceLock
     #endif
 };
 
+class pmRWResourceLock : public pmResourceLockBase
+{
+	public:
+        virtual void ReadLock() = 0;
+        virtual void WriteLock() = 0;
+		virtual void Unlock() = 0;
+
+	private:
+};
+
+class pmPThreadRWResourceLock : public pmRWResourceLock
+{
+	public:
+		pmPThreadRWResourceLock(
+                        #ifdef TRACK_MUTEX_TIMINGS
+                              const char* pName = ""
+                        #endif
+                              );
+    
+		virtual ~pmPThreadRWResourceLock();
+    
+        virtual void ReadLock();
+        virtual void WriteLock();
+		virtual void Unlock();
+    
+    #ifdef RECORD_LOCK_ACQUISITIONS
+        virtual void RecordAcquisition(const char* pFile, int pLine);
+        virtual void ResetAcquisition();
+        virtual bool IsLockSelfAcquired();
+    #endif
+    
+	private:
+		pthread_rwlock_t mRWLock;
+    
+    #ifdef RECORD_LOCK_ACQUISITIONS
+        std::string mFile;
+        int mLine;
+        bool mIsCurrentlyAcquired;
+        pthread_t mThread;
+    #endif
+
+    #ifdef TRACK_MUTEX_TIMINGS
+        pmAccumulationTimer mLockTimer;
+        pmAccumulationTimer mUnlockTimer;
+    #endif
+};
+    
 } // end namespace pm
 
 #endif

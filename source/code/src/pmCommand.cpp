@@ -165,10 +165,18 @@ void pmCountDownCommand::MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& 
     
     DEBUG_EXCEPTION_ASSERT(mCount);
     --mCount;
-    
+
     if(!mCount)
         pmCommand::MarkExecutionEnd(pStatus, pSharedPtr);
 }
+    
+size_t pmCountDownCommand::GetOutstandingCount()
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCountLock, Lock(), Unlock());
+    
+    return mCount;
+}
+
 
 
 /* class pmAccumulatorCommand */

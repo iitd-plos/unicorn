@@ -1574,7 +1574,7 @@ void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessin
 
         std::for_each(lDataIter, lDataEndIter, [&] (const ownershipDataStruct& pStruct)
         {
-             pAddressSpace->TransferOwnershipPostTaskCompletion(vmRangeOwner(lMachine, pStruct.offset, lMemoryStruct), pStruct.offset, pStruct.length);
+            pAddressSpace->TransferOwnershipPostTaskCompletion(vmRangeOwner(lMachine, pStruct.offset, lMemoryStruct), pStruct.offset, pStruct.length);
         });
     });
 }
@@ -1602,7 +1602,7 @@ void pmScheduler::RegisterPostTaskCompletionOwnershipTransfers(const pmProcessin
 
         std::for_each(lDataIter, lDataEndIter, [&] (const scatteredOwnershipDataStruct& pStruct)
         {
-             pAddressSpace->TransferOwnershipPostTaskCompletion(vmRangeOwner(lMachine, pStruct.offset, lMemoryStruct), pStruct.offset, pStruct.size, pStruct.step, pStruct.count);
+            pAddressSpace->TransferOwnershipPostTaskCompletion(vmRangeOwner(lMachine, pStruct.offset, lMemoryStruct), pStruct.offset, pStruct.size, pStruct.step, pStruct.count);
         });
     });
 }

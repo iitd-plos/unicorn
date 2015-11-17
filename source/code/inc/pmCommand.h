@@ -130,6 +130,8 @@ class pmCountDownCommand : public pmCommand
         static pmCommandPtr CreateSharedPtr(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier = NULL);
 
         virtual void MarkExecutionEnd(pmStatus pStatus, const pmCommandPtr& pSharedPtr);
+    
+        size_t GetOutstandingCount();
 
     protected:
         pmCountDownCommand(size_t pCount, ushort pPriority, ushort pType, pmCommandCompletionCallbackType pCallback, const void* pUserIdentifier = NULL)

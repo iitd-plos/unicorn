@@ -110,7 +110,12 @@ typedef unsigned long ulong;
 				THREAD_JOIN_ERROR,
 				THREAD_AFFINITY_ERROR,
                 SIGNAL_RAISE_ERROR,
-                TLS_KEY_ERROR
+                TLS_KEY_ERROR,
+				RWLOCK_INIT_FAILURE,
+                RWLOCK_READ_LOCK_FAILURE,
+                RWLOCK_WRITE_LOCK_FAILURE,
+				RWLOCK_UNLOCK_FAILURE,
+				RWLOCK_DESTROY_FAILURE
 			} failureTypes;
 
 			pmThreadFailureException(failureTypes pFailureId, int pErrorCode) {mFailureId = pFailureId;}

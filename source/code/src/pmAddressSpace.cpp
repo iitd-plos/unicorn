@@ -583,7 +583,7 @@ void pmAddressSpace::Unlock(pmTask* pTask)
         mLockingTask = NULL;
     }
 
-    MEMORY_MANAGER_IMPLEMENTATION_CLASS::GetMemoryManager()->CancelUnreferencedRequests(this);
+    mDirectoryPtr->CancelUnreferencedRequests();
     
     bool lUserDelete = false;
     // Auto lock/unlock scope
@@ -623,11 +623,6 @@ void pmAddressSpace::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffse
 {
     mDirectoryPtr->SetRangeOwner(pRangeOwner, pOffset, pSize, pStep, pCount);
 }
-
-void pmAddressSpace::AcquireOwnershipImmediate(ulong pOffset, ulong pLength)
-{
-    SetRangeOwner(vmRangeOwner(PM_LOCAL_MACHINE, pOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)), pOffset, pLength);
-}
     
 void pmAddressSpace::TransferOwnershipImmediate(ulong pOffset, ulong pLength, const pmMachine* pNewOwnerHost)
 {
@@ -643,6 +638,27 @@ void pmAddressSpace::TransferOwnershipImmediate(ulong pOffset, ulong pSize, ulon
     SetRangeOwner(vmRangeOwner(pNewOwnerHost, pOffset, communicator::memoryIdentifierStruct(*(mOwner), mGenerationNumberOnOwner)), pOffset, pSize, pStep, pCount);
 }
 
+void pmAddressSpace::CopyOrUpdateReceivedMemory(pmTask* pRequestingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource)
+{
+    EXCEPTION_ASSERT(pLength);
+
+    pmTask* lLockingTask = GetLockingTask();
+    if(lLockingTask != pRequestingTask)
+        return;
+
+    mDirectoryPtr->CopyOrUpdateReceivedMemory(this, GetMem(), pRequestingTask, pOffset, pLength, pDataSource);
+}
+
+void pmAddressSpace::UpdateReceivedMemory(pmTask* pRequestingTask, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+{
+    EXCEPTION_ASSERT(pLength && pStep && pCount);
+
+    pmTask* lLockingTask = GetLockingTask();
+    if(lLockingTask != pRequestingTask)
+        return;
+    
+    mDirectoryPtr->UpdateReceivedMemory(this, GetMem(), pRequestingTask, pOffset, pLength, pStep, pCount);
+}
 
 #ifdef SUPPORT_LAZY_MEMORY
 void* pmAddressSpace::GetReadOnlyLazyMemoryMapping()
@@ -705,7 +721,7 @@ void pmAddressSpace::FlushOwnerships()
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::FLUSH_MEMORY_OWNERSHIPS);
 #endif
-    
+
     EXCEPTION_ASSERT(mOwnershipTransferVector.empty() || mScatteredOwnershipTransferVector.empty());
 
     DEBUG_EXCEPTION_ASSERT(lTask && lTask->IsWritable(this));
@@ -795,6 +811,21 @@ void pmAddressSpace::FlushOwnerships()
     mScatteredOwnershipTransferVector.clear();
 }
     
+pmScatteredTransferMapType pmAddressSpace::SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet)
+{
+    return mDirectoryPtr->SetupRemoteRegionsForFetching(pScatteredSubscriptionInfo, GetMem(), pPriority, pCommandsAlreadyIssuedSet);
+}
+
+pmLinearTransferVectorType pmAddressSpace::SetupRemoteRegionsForFetching(const pmSubscriptionInfo& pSubscriptionInfo, ulong pPriority, std::vector<pmCommandPtr>& pCommandVector)
+{
+    return mDirectoryPtr->SetupRemoteRegionsForFetching(pSubscriptionInfo, GetMem(), pPriority, pCommandVector);
+}
+    
+pmRemoteRegionsInfoMapType pmAddressSpace::GetRemoteRegionsInfo(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+{
+    return mDirectoryPtr->GetRemoteRegionsInfo(pScatteredSubscriptionInfo, GetMem());
+}
+    
 void pmAddressSpace::Fetch(ushort pPriority)
 {
     FetchRange(pPriority, 0, GetLength());
@@ -879,8 +910,8 @@ ulong pmAddressSpace::FindLocalDataSizeUnprotected(ulong pOffset, ulong pLength)
  */
 void pmAddressSpace::FindLocalDataSizeOnMachinesUnprotected(ulong pOffset, ulong pLength, const std::vector<const pmMachine*>& pMachinesVector, ulong* pDataArray, size_t pStepSizeInBytes)
 {
-    pmAddressSpace::pmMemOwnership lOwners;
-    GetOwnersInternal(mOwnershipMap, pOffset, pLength, lOwners);
+    pmMemOwnership lOwners;
+    GetOwnersUnprotected(pOffset, pLength, lOwners);
 
     std::vector<ulong> lLocalDataSize(pmGetHostCount(), 0);
     
@@ -1041,87 +1072,7 @@ pmAddressSpace* pmUserMemHandle::GetAddressSpace()
 {
     return mAddressSpace;
 }
-    
-    
-/* class pmScatteredSubscriptionFilter */
-pmScatteredSubscriptionFilter::pmScatteredSubscriptionFilter(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
-    : mScatteredSubscriptionInfo(pScatteredSubscriptionInfo)
-{}
-    
-const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& pmScatteredSubscriptionFilter::FilterBlocks(const std::function<void (size_t)>& pRowFunctor)
-{
-    for(size_t i = 0; i < mScatteredSubscriptionInfo.count; ++i)
-        pRowFunctor(i);
 
-    return GetLeftoverBlocks();
-}
-
-// AddNextSubRow must be called in increasing y first and then increasing x values (i.e. first one or more times with increasing x for row one, then similarly for row two and so on)
-void pmScatteredSubscriptionFilter::AddNextSubRow(ulong pOffset, ulong pLength, vmRangeOwner& pRangeOwner)
-{
-    ulong lStartCol = (pOffset - (ulong)mScatteredSubscriptionInfo.offset) % (ulong)mScatteredSubscriptionInfo.step;
-    
-    bool lRangeCombined = false;
-
-    auto lIter = mCurrentBlocks.begin(), lEndIter = mCurrentBlocks.end();
-    while(lIter != lEndIter)
-    {
-        blockData& lData = (*lIter);
-
-        ulong lEndCol1 = lData.startCol + lData.colCount - 1;
-        ulong lEndCol2 = lStartCol + pLength - 1;
-        
-        bool lRemoveCurrentRange = false;
-        
-        if(!(lEndCol2 < lData.startCol || lStartCol > lEndCol1))    // If the ranges overlap
-        {
-            // Total overlap and to be fetched from same host and there is no gap between rows
-            if(lData.startCol == lStartCol && lData.colCount == pLength && lData.rangeOwner.host == pRangeOwner.host
-               && lData.rangeOwner.memIdentifier == pRangeOwner.memIdentifier
-               && (lData.rangeOwner.hostOffset + lData.subscriptionInfo.count * lData.subscriptionInfo.step == pRangeOwner.hostOffset)
-               && (lData.subscriptionInfo.offset + lData.subscriptionInfo.count * lData.subscriptionInfo.step == pOffset))
-            {
-                ++lData.subscriptionInfo.count; // Combine with previous range
-                lRangeCombined = true;
-            }
-            else
-            {
-                lRemoveCurrentRange = true;
-            }
-        }
-        
-        if(lRemoveCurrentRange)
-        {
-            mBlocksToBeFetched[lData.rangeOwner.host].emplace_back(lData.subscriptionInfo, lData.rangeOwner);
-            mCurrentBlocks.erase(lIter++);
-        }
-        else
-        {
-            ++lIter;
-        }
-    }
-    
-    if(!lRangeCombined)
-        mCurrentBlocks.emplace_back(lStartCol, pLength, pmScatteredSubscriptionInfo(pOffset, pLength, mScatteredSubscriptionInfo.step, 1), pRangeOwner);
-}
-
-const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& pmScatteredSubscriptionFilter::GetLeftoverBlocks()
-{
-    PromoteCurrentBlocks();
-    
-    return mBlocksToBeFetched;
-}
-
-void pmScatteredSubscriptionFilter::PromoteCurrentBlocks()
-{
-    for_each(mCurrentBlocks, [&] (const blockData& pData)
-    {
-        mBlocksToBeFetched[pData.rangeOwner.host].emplace_back(pData.subscriptionInfo, pData.rangeOwner);
-    });
-    
-    mCurrentBlocks.clear();
-}
-    
 };
 
 

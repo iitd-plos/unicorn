@@ -20,6 +20,7 @@
 
 #include "pmMemoryDirectory.h"
 #include "pmHardware.h"
+#include "pmTask.h"
 
 namespace pm
 {
@@ -29,7 +30,8 @@ pmMemoryDirectory::pmMemoryDirectory(const communicator::memoryIdentifierStruct&
     : mMemoryIdentifierStruct(pMemoryIdentifierStruct)
     , mOwnershipLock __LOCK_NAME__("pmMemoryDirectory::mOwnershipLock")
 {}
-    
+
+
 /* class pmMemoryDirectoryLinear */
 pmMemoryDirectoryLinear::pmMemoryDirectoryLinear(ulong pAddressSpaceLength, const communicator::memoryIdentifierStruct& pMemoryIdentifierStruct)
     : pmMemoryDirectory(pMemoryIdentifierStruct)
@@ -43,7 +45,7 @@ void pmMemoryDirectoryLinear::Reset(const pmMachine* pOwner)
     
 void pmMemoryDirectoryLinear::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength)
 {
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
     
     SetRangeOwnerInternal(pRangeOwner, pOffset, pLength);
 }
@@ -52,7 +54,7 @@ void pmMemoryDirectoryLinear::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulo
 {
     vmRangeOwner lRangeOwner(pRangeOwner);
 
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
 
     for(ulong i = 0; i < pCount; ++i)
     {
@@ -248,14 +250,14 @@ void pmMemoryDirectoryLinear::GetOwnersInternal(ulong pOffset, ulong pLength, pm
 
 void pmMemoryDirectoryLinear::GetOwners(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships)
 {
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, ReadLock(), Unlock());
 
     GetOwnersInternal(pOffset, pLength, pOwnerships);
 }
 
 void pmMemoryDirectoryLinear::GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships)
 {
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, ReadLock(), Unlock());
 
     pmMemOwnership lOwnerships;
     for(ulong i = 0; i < pCount; ++i)
@@ -290,14 +292,14 @@ void pmMemoryDirectoryLinear::GetOwnersUnprotected(ulong pOffset, ulong pLength,
     
 void pmMemoryDirectoryLinear::Clear()
 {
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
     
     mOwnershipMap.clear();
 }
 
 bool pmMemoryDirectoryLinear::IsEmpty()
 {
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, ReadLock(), Unlock());
 
     return mOwnershipMap.empty();
 }
@@ -306,7 +308,8 @@ void pmMemoryDirectoryLinear::CloneFrom(pmMemoryDirectory* pDirectory)
 {
     EXCEPTION_ASSERT(dynamic_cast<pmMemoryDirectoryLinear*>(pDirectory) != NULL);
 
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dSrcDirectoryOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &pDirectory->mOwnershipLock, ReadLock(), Unlock());
     
     mOwnershipMap = static_cast<pmMemoryDirectoryLinear*>(pDirectory)->mOwnershipMap;
 }
@@ -356,6 +359,369 @@ void pmMemoryDirectoryLinear::PrintOwnerships() const
     std::cout << std::endl;
 }
 #endif
+    
+template<typename consumer_type>
+void pmMemoryDirectoryLinear::FindRegionsNotInFlight(pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, consumer_type& pRegionsToBeFetched, std::vector<pmCommandPtr>& pCommandVector)
+{
+    DEBUG_EXCEPTION_ASSERT(pLength);
+
+	pmInFlightRegions::iterator lStartIter, lEndIter;
+	pmInFlightRegions::iterator* lStartIterAddr = &lStartIter;
+	pmInFlightRegions::iterator* lEndIterAddr = &lEndIter;
+
+	char* lFetchAddress = (char*)pMem + pOffset;
+	char* lLastFetchAddress = lFetchAddress + pLength - 1;
+
+    FIND_FLOOR_ELEM(pmInFlightRegions, pInFlightMap, lFetchAddress, lStartIterAddr);	// Find range in flight just previous to the start of new range
+    FIND_FLOOR_ELEM(pmInFlightRegions, pInFlightMap, lLastFetchAddress, lEndIterAddr);	// Find range in flight just previous to the end of new range
+    
+    // Both start and end of new range fall prior to all ranges in flight or there is no range in flight
+    if(!lStartIterAddr && !lEndIterAddr)
+    {
+        pRegionsToBeFetched.emplace_back((ulong)lFetchAddress, (ulong)lLastFetchAddress);
+    }
+    else
+    {
+        // If start of new range falls prior to all ranges in flight but end of new range does not
+        if(!lStartIterAddr)
+        {
+            char* lFirstAddr = (char*)(pInFlightMap.begin()->first);
+            pRegionsToBeFetched.emplace_back((ulong)lFetchAddress, ((ulong)lFirstAddr)-1);
+            lFetchAddress = lFirstAddr;
+            lStartIter = pInFlightMap.begin();
+        }
+        
+        // Both start and end of new range have atleast one in flight range prior to them
+        
+        // Check if start and end of new range fall within their just prior ranges or outside
+        bool lStartInside = ((lFetchAddress >= (char*)(lStartIter->first)) && (lFetchAddress < ((char*)(lStartIter->first) + lStartIter->second.first)));
+        bool lEndInside = ((lLastFetchAddress >= (char*)(lEndIter->first)) && (lLastFetchAddress < ((char*)(lEndIter->first) + lEndIter->second.first)));
+        
+        // If both start and end of new range have the same in flight range just prior to them
+        if(lStartIter == lEndIter)
+        {
+            // If both start and end lie within the same in flight range, then the new range is already being fetched
+            if(lStartInside && lEndInside)
+            {
+                pCommandVector.emplace_back(lStartIter->second.second.receiveCommand);
+                return;
+            }
+            else if(lStartInside && !lEndInside)
+            {
+                // If start of new range is within an in flight range and that range is just prior to the end of new range
+                pCommandVector.emplace_back(lStartIter->second.second.receiveCommand);
+                
+                pRegionsToBeFetched.emplace_back((ulong)((char*)(lStartIter->first) + lStartIter->second.first), (ulong)lLastFetchAddress);
+            }
+            else
+            {
+                // If both start and end of new range have the same in flight range just prior to them and they don't fall within that range
+                pRegionsToBeFetched.emplace_back((ulong)lFetchAddress, (ulong)lLastFetchAddress);
+            }
+        }
+        else
+        {
+            // If start and end of new range have different in flight ranges prior to them
+            
+            // If start of new range does not fall within the in flight range
+            if(!lStartInside)
+            {
+                ++lStartIter;
+                pRegionsToBeFetched.emplace_back((ulong)lFetchAddress, ((ulong)(lStartIter->first))-1);
+            }
+            
+            // If end of new range does not fall within the in flight range
+            if(!lEndInside)
+            {
+                pRegionsToBeFetched.emplace_back((ulong)((char*)(lEndIter->first) + lEndIter->second.first), (ulong)lLastFetchAddress);
+            }
+            
+            pCommandVector.emplace_back(lEndIter->second.second.receiveCommand);
+            
+            // Fetch all non in flight data between in flight ranges
+            if(lStartIter != lEndIter)
+            {
+                for(pmInFlightRegions::iterator lTempIter = lStartIter; lTempIter != lEndIter; ++lTempIter)
+                {
+                    pCommandVector.emplace_back(lTempIter->second.second.receiveCommand);
+                    
+                    pmInFlightRegions::iterator lNextIter = lTempIter;
+                    ++lNextIter;
+
+                    // If there is any gap between the two ranges in flight
+                    if((ulong)((char*)(lTempIter->first) + lTempIter->second.first) != ((ulong)(lNextIter->first)))
+                        pRegionsToBeFetched.emplace_back((ulong)((char*)(lTempIter->first) + lTempIter->second.first), ((ulong)(lNextIter->first))-1);
+                }
+            }
+        }
+    }
+}
+
+pmScatteredTransferMapType pmMemoryDirectoryLinear::SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet)
+{
+	pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
+    pmScatteredSubscriptionFilterHelper lLocalFilter(lBlocksFilter, pAddressSpaceBaseAddr, *this, true);
+    
+    pmScatteredTransferMapType lMachineVersusTupleVectorMap;
+
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+    
+    const auto& lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
+    {
+        std::vector<pmCommandPtr> lInnerCommandVector;
+
+        FindRegionsNotInFlight(mInFlightLinearMap, pAddressSpaceBaseAddr, pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.size, lLocalFilter, lInnerCommandVector);
+
+        // If the range is already in one or more scattered flights, then multiple general entries are put into inFlightMap
+        // Having a set ensures that a command is inserted and subsequently waited upon only once
+        std::move(lInnerCommandVector.begin(), lInnerCommandVector.end(), std::inserter(pCommandsAlreadyIssuedSet, pCommandsAlreadyIssuedSet.begin()));
+    });
+
+    for_each(lBlocks, [&] (const std::pair<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& pMapKeyValue)
+    {
+        for_each(pMapKeyValue.second, [&] (const std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>& pPair)
+        {
+            EXCEPTION_ASSERT(pPair.first.size && pPair.first.step && pPair.first.count);
+
+            pmCommandPtr lCommand = pmCountDownCommand::CreateSharedPtr(pPair.first.count, pPriority, communicator::RECEIVE, 0);	// Dummy command just to allow threads to wait on it
+            lCommand->MarkExecutionStart();
+
+            for(size_t i = 0; i < pPair.first.count; ++i)
+            {
+                char* lAddr = (char*)pAddressSpaceBaseAddr + pPair.first.offset + i * pPair.first.step;
+                mInFlightLinearMap.emplace(std::piecewise_construct, std::forward_as_tuple(lAddr), std::forward_as_tuple(pPair.first.size, regionFetchData(lCommand)));
+            }
+            
+            lMachineVersusTupleVectorMap[pMapKeyValue.first].emplace_back(pPair.first, pPair.second, lCommand);
+        });
+    });
+    
+    return lMachineVersusTupleVectorMap;
+}
+
+pmRemoteRegionsInfoMapType pmMemoryDirectoryLinear::GetRemoteRegionsInfo(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr)
+{
+	pmScatteredSubscriptionFilter lBlocksFilter(pScatteredSubscriptionInfo);
+    pmScatteredSubscriptionFilterHelper lLocalFilter(lBlocksFilter, pAddressSpaceBaseAddr, *this, true);
+    
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, ReadLock(), Unlock());
+    
+    const auto& lBlocks = lBlocksFilter.FilterBlocks([&] (size_t pRow)
+    {
+        ulong lStartAddr = (ulong)((char*)pAddressSpaceBaseAddr + pScatteredSubscriptionInfo.offset + pRow * pScatteredSubscriptionInfo.step);
+
+        lLocalFilter.emplace_back(lStartAddr, lStartAddr + pScatteredSubscriptionInfo.size - 1);
+    });
+    
+    return lBlocks;
+}
+    
+pmLinearTransferVectorType pmMemoryDirectoryLinear::SetupRemoteRegionsForFetching(const pmSubscriptionInfo& pSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::vector<pmCommandPtr>& pCommandVector)
+{
+    std::vector<std::pair<ulong, ulong>> lRegionsToBeFetched;	// Start address and last address of sub ranges to be fetched
+    pmLinearTransferVectorType lTupleVector;
+
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+    
+    FindRegionsNotInFlight(mInFlightLinearMap, pAddressSpaceBaseAddr, pSubscriptionInfo.offset, pSubscriptionInfo.length, lRegionsToBeFetched, pCommandVector);
+
+    for_each(lRegionsToBeFetched, [&] (const std::pair<ulong, ulong>& pPair)
+    {
+		ulong lOffset = pPair.first - (ulong)pAddressSpaceBaseAddr;
+		ulong lLength = pPair.second - pPair.first + 1;
+        
+        if(lLength)
+        {
+            pmMemOwnership lOwnerships;
+            GetOwnersUnprotected(lOffset, lLength, lOwnerships);
+
+            for_each(lOwnerships, [&] (pmMemOwnership::value_type& pInnerPair)
+            {
+                vmRangeOwner& lRangeOwner = pInnerPair.second.second;
+
+                if(lRangeOwner.host != PM_LOCAL_MACHINE)
+                {
+                    char* lAddr = (char*)pAddressSpaceBaseAddr + pInnerPair.first;
+
+                    pmCommandPtr lCommand = pmCommand::CreateSharedPtr(pPriority, communicator::RECEIVE, 0);	// Dummy command just to allow threads to wait on it
+                    lCommand->MarkExecutionStart();
+
+                    mInFlightLinearMap.emplace(std::piecewise_construct, std::forward_as_tuple(lAddr), std::forward_as_tuple(pInnerPair.second.first, regionFetchData(lCommand)));
+                    lTupleVector.emplace_back(pmSubscriptionInfo(pInnerPair.first, pInnerPair.second.first), lRangeOwner, lCommand);
+                }
+            });
+        }
+    });
+
+    return lTupleVector;
+}
+    
+void pmMemoryDirectoryLinear::CancelUnreferencedRequests()
+{
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+
+    // During scattered transfers, a single command is replicated as general fetch commands and multiple entries are
+    // made into the inFlightMap. This increases the use_count of the shared ptr. Here, it is important to find out
+    // the use_count that is external to inFlightMap. To compute the external use_count, the following map is used.
+    std::map<pmCommandPtr, std::vector<pmInFlightRegions::iterator>> lInFlightUseCountMap;
+    
+    auto lIter = mInFlightLinearMap.begin(), lEnd = mInFlightLinearMap.end();
+    while(lIter != lEnd)
+    {
+        if(lIter->second.second.receiveCommand.unique())
+        {
+            mInFlightLinearMap.erase(lIter++);
+        }
+        else
+        {
+            decltype(lInFlightUseCountMap)::iterator lUseCountIter = lInFlightUseCountMap.find(lIter->second.second.receiveCommand);
+            if(lUseCountIter == lInFlightUseCountMap.end())
+                lUseCountIter = lInFlightUseCountMap.emplace(std::piecewise_construct, std::forward_as_tuple(lIter->second.second.receiveCommand), std::forward_as_tuple()).first;
+            
+            lUseCountIter->second.push_back(lIter);
+            
+            ++lIter;
+        }
+    }
+    
+    for_each(lInFlightUseCountMap, [&] (const decltype(lInFlightUseCountMap)::value_type& pPair)
+    {
+        if((ulong)pPair.first.use_count() == (ulong)pPair.second.size() + 1) // Plus 1 for lInFlightUseCountMap
+        {
+            for_each(pPair.second, [&] (const pmInFlightRegions::iterator& pIter)
+            {
+                mInFlightLinearMap.erase(pIter);
+            });
+        }
+    });
+}
+
+void pmMemoryDirectoryLinear::CopyOrUpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource)
+{
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+
+    if(CopyOrUpdateReceivedMemoryInternal(pAddressSpace, pAddressSpaceBaseAddr, mInFlightLinearMap, pLockingTask, pOffset, pLength, pDataSource))
+    {
+    #ifdef ENABLE_TASK_PROFILING
+        if(pLockingTask)
+            pLockingTask->GetTaskProfiler()->RecordProfileEvent(pLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+    #endif
+    }
+}
+
+void pmMemoryDirectoryLinear::UpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+{
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+
+    bool lComplete = true;
+    for(ulong i = 0; i < pCount; ++i)
+        lComplete &= CopyOrUpdateReceivedMemoryInternal(pAddressSpace, pAddressSpaceBaseAddr, mInFlightLinearMap, pLockingTask, pOffset + i * pStep, pLength);
+
+#ifdef ENABLE_TASK_PROFILING
+    if(lComplete && pLockingTask)
+        pLockingTask->GetTaskProfiler()->RecordProfileEvent(pLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+#endif
+}
+    
+// Must be called with WriteLock on address space directory acquired
+void pmMemoryDirectoryLinear::AcquireOwnershipImmediateInternal(ulong pOffset, ulong pLength)
+{
+    SetRangeOwnerInternal(vmRangeOwner(PM_LOCAL_MACHINE, pOffset, mMemoryIdentifierStruct), pOffset, pLength);
+}
+
+// Must be called with WriteLock on address space directory acquired
+bool pmMemoryDirectoryLinear::CopyOrUpdateReceivedMemoryInternal(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmInFlightRegions& pInFlightMap, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource /* = NULL */)
+{
+    void* lDestMem = pAddressSpaceBaseAddr;
+    char* lAddr = (char*)lDestMem + pOffset;
+    
+    bool lTransferCommandComplete = false;
+    
+    pmInFlightRegions::iterator lIter = pInFlightMap.find(lAddr);
+    if((lIter != pInFlightMap.end()) && (lIter->second.first == pLength))
+    {
+        std::pair<size_t, regionFetchData>& lPair = lIter->second;
+        
+        if(pDataSource)
+            (*pDataSource)(lAddr, pLength);
+
+        regionFetchData& lData = lPair.second;
+        AcquireOwnershipImmediateInternal(pOffset, lPair.first);
+
+        pmCountDownCommand* lCountDownCommand = dynamic_cast<pmCountDownCommand*>(lData.receiveCommand.get());
+        if(!lCountDownCommand || lCountDownCommand->GetOutstandingCount() == 1)
+            lTransferCommandComplete = true;
+
+        pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
+        lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
+
+        pInFlightMap.erase(lIter);
+    }
+    else
+    {
+        pmInFlightRegions::iterator lBaseIter;
+        pmInFlightRegions::iterator* lBaseIterAddr = &lBaseIter;
+        FIND_FLOOR_ELEM(pmInFlightRegions, pInFlightMap, lAddr, lBaseIterAddr);
+        
+        if(!lBaseIterAddr)
+            PMTHROW(pmFatalErrorException());
+        
+        size_t lStartAddr = reinterpret_cast<size_t>(lBaseIter->first);
+        std::pair<size_t, regionFetchData>& lPair = lBaseIter->second;
+        
+        size_t lRecvAddr = reinterpret_cast<size_t>(lAddr);
+        if((lRecvAddr < lStartAddr) || (lRecvAddr + pLength > lStartAddr + lPair.first))
+            PMTHROW(pmFatalErrorException());
+        
+        typedef std::map<size_t, size_t> partialReceiveRecordType;
+        regionFetchData& lData = lPair.second;
+        partialReceiveRecordType& lPartialReceiveRecordMap = lData.partialReceiveRecordMap;
+                
+        partialReceiveRecordType::iterator lPartialIter;
+        partialReceiveRecordType::iterator* lPartialIterAddr = &lPartialIter;
+        FIND_FLOOR_ELEM(partialReceiveRecordType, lPartialReceiveRecordMap, lRecvAddr, lPartialIterAddr);
+
+        if(lPartialIterAddr && lPartialIter->first + lPartialIter->second - 1 >= lRecvAddr)
+            PMTHROW(pmFatalErrorException());   // Multiple overlapping partial receives
+
+        lData.accumulatedPartialReceivesLength += pLength;
+        if(lData.accumulatedPartialReceivesLength > lPair.first)
+            PMTHROW(pmFatalErrorException());
+
+        bool lTransferComplete = (lData.accumulatedPartialReceivesLength == lPair.first);
+
+        if(lTransferComplete)
+        {
+            pmCountDownCommand* lCountDownCommand = dynamic_cast<pmCountDownCommand*>(lData.receiveCommand.get());
+            if(!lCountDownCommand || lCountDownCommand->GetOutstandingCount() == 1)
+                lTransferCommandComplete = true;
+
+            if(pDataSource)
+                (*pDataSource)(lAddr, pLength);
+
+            size_t lOffset = lStartAddr - reinterpret_cast<size_t>(lDestMem);
+            AcquireOwnershipImmediateInternal(lOffset, lPair.first);
+
+            pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
+            lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
+
+            pInFlightMap.erase(lBaseIter);
+        }
+        else
+        {            
+            // Make partial receive entry
+            lPartialReceiveRecordMap[lRecvAddr] = pLength;
+            
+            if(pDataSource)
+                (*pDataSource)(lAddr, pLength);
+
+            size_t lOffset = lRecvAddr - reinterpret_cast<size_t>(lDestMem);
+            AcquireOwnershipImmediateInternal(lOffset, pLength);
+        }
+    }
+    
+    return lTransferCommandComplete;
+}
 
 
 /* class pmMemoryDirectory2D */
@@ -429,8 +795,13 @@ void pmMemoryDirectory2D::SetRangeOwner(const vmRangeOwner& pRangeOwner, ulong p
 {
     EXCEPTION_ASSERT(pLength <= mAddressSpaceCols && pStep == mAddressSpaceCols);
 
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+    
+    SetRangeOwnerInternal(pRangeOwner, pOffset, pLength, pStep, pCount);
+}
 
+void pmMemoryDirectory2D::SetRangeOwnerInternal(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+{
     boost_box_type lBox = GetBox(pOffset, pLength, pStep, pCount);
     
     std::vector<std::pair<boost_box_type, vmRangeOwner>> lOverlappingBoxes;
@@ -650,9 +1021,13 @@ void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, pmMemOwnership
 void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pOwnerships)
 {
     EXCEPTION_ASSERT(mAddressSpaceCols == pStep);
-    EXCEPTION_ASSERT((pOffset + pStep * (pCount - 1) + pLength) <= (mAddressSpaceRows * mAddressSpaceCols));
+    if(!((pOffset + pStep * (pCount - 1) + pLength) <= (mAddressSpaceRows * mAddressSpaceCols)))
+    {
+        std::cout << pOffset << " " << pLength << " " << pStep << " " << pCount << " " << mAddressSpaceRows << " " << mAddressSpaceCols << " " << (pOffset + pStep * (pCount - 1) + pLength) << std::endl;
+        PMTHROW(pmFatalErrorException());
+    }
 
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, ReadLock(), Unlock());
     
     GetOwnersInternal(pOffset, pLength, pStep, pCount, pOwnerships);
 }
@@ -663,7 +1038,7 @@ void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong 
     EXCEPTION_ASSERT(pLength <= mAddressSpaceCols && pStep == mAddressSpaceCols);
 
     boost_box_type lBox = GetBox(pOffset, pLength, pStep, pCount);
-    
+
     std::vector<std::pair<boost_box_type, vmRangeOwner>> lOverlappingBoxes;
     mOwnershipRTree.query(boost::geometry::index::intersects(lBox), std::back_inserter(lOverlappingBoxes));
     
@@ -725,14 +1100,14 @@ void pmMemoryDirectory2D::GetOwnersUnprotected(ulong pOffset, ulong pLength, ulo
 
 void pmMemoryDirectory2D::Clear()
 {
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
     
     mOwnershipRTree.clear();
 }
 
 bool pmMemoryDirectory2D::IsEmpty()
 {
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, ReadLock(), Unlock());
 
     return mOwnershipRTree.empty();
 }
@@ -741,11 +1116,13 @@ void pmMemoryDirectory2D::CloneFrom(pmMemoryDirectory* pDirectory)
 {
     EXCEPTION_ASSERT(dynamic_cast<pmMemoryDirectory2D*>(pDirectory) != NULL);
 
-    FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
-    
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+    FINALIZE_RESOURCE_PTR(dSrcDirectoryOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &pDirectory->mOwnershipLock, ReadLock(), Unlock());
+
     mOwnershipRTree = static_cast<pmMemoryDirectory2D*>(pDirectory)->mOwnershipRTree;
 }
 
+// Subtracts pBox2 from pBox1
 void pmMemoryDirectory2D::GetDifferenceOfBoxes(const boost_box_type& pBox1, const boost_box_type& pBox2, std::vector<boost_box_type>& pRemainingBoxes)
 {
     const boost_point_type& lMinCorner1 = pBox1.min_corner();
@@ -779,6 +1156,258 @@ void pmMemoryDirectory2D::GetDifferenceOfBoxes(const boost_box_type& pBox1, cons
     if(lXMax1 > lXMax2)
         pRemainingBoxes.emplace_back(boost_point_type(lXMax2 + 1, std::max(lYMin1, lYMin2)), boost_point_type(lXMax1, std::min(lYMax1, lYMax2)));
 }
+    
+void pmMemoryDirectory2D::CancelUnreferencedRequests()
+{
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+
+    boost_box_type lBounds = mInFlightRTree.bounds();
+    
+    std::vector<std::pair<boost_box_type, regionFetchData2D>> lOverlappingBoxes;
+    mInFlightRTree.query(boost::geometry::index::intersects(lBounds), std::back_inserter(lOverlappingBoxes));
+    
+    std::vector<std::pair<boost_box_type, regionFetchData2D>> lRemovableRequests;
+    
+    for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, regionFetchData2D>& pPair)
+    {
+        if(pPair.second.receiveCommand.unique())
+            lRemovableRequests.emplace_back(pPair);
+    });
+
+    for_each(lRemovableRequests, [&] (const std::pair<boost_box_type, regionFetchData2D>& pPair)
+    {
+        mInFlightRTree.remove(pPair);
+    });
+}
+
+pmScatteredTransferMapType pmMemoryDirectory2D::SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet)
+{
+    pmScatteredMemOwnership lScatteredMemOwnerships;
+    pmScatteredTransferMapType lMachineVersusTupleVectorMap;
+
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+
+    GetOwnersInternal(pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.size, pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.count, lScatteredMemOwnerships);
+    
+    for_each(lScatteredMemOwnerships, [&] (const pmScatteredMemOwnership::value_type& pPair)
+    {
+        if(pPair.second.host != PM_LOCAL_MACHINE)
+        {
+            std::vector<boost_box_type> lRemainingBoxes1, lRemainingBoxes2;
+            boost_box_type lBox = GetBox(pPair.first.offset, pPair.first.size, pPair.first.step, pPair.first.count);
+            
+            lRemainingBoxes1.emplace_back(lBox);
+            ushort lCurrentRemainingBoxVectorIndex = 0;
+            
+            std::vector<std::pair<boost_box_type, regionFetchData2D>> lOverlappingBoxes;
+            mInFlightRTree.query(boost::geometry::index::intersects(lBox), std::back_inserter(lOverlappingBoxes));
+            
+            for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, regionFetchData2D>& pInnerPair)
+            {
+                pCommandsAlreadyIssuedSet.emplace(pInnerPair.second.receiveCommand);
+
+                const std::vector<boost_box_type>& lSrcBoxes = lCurrentRemainingBoxVectorIndex ? lRemainingBoxes2 : lRemainingBoxes1;
+                std::vector<boost_box_type>& lDestBoxes = lCurrentRemainingBoxVectorIndex ? lRemainingBoxes1 : lRemainingBoxes2;
+
+                lDestBoxes.clear();
+
+                lCurrentRemainingBoxVectorIndex = 1 - lCurrentRemainingBoxVectorIndex;
+
+                for_each(lSrcBoxes, [&] (const boost_box_type& pSrcBox)
+                {
+                    GetDifferenceOfBoxes(pSrcBox, pInnerPair.first, lDestBoxes);
+                });
+            });
+
+            const std::vector<boost_box_type>& lRemainingBoxes = lCurrentRemainingBoxVectorIndex ? lRemainingBoxes2 : lRemainingBoxes1;
+
+            for_each(lRemainingBoxes, [&] (const boost_box_type& pBox)
+            {
+                pmCommandPtr lCommand = pmCommand::CreateSharedPtr(pPriority, communicator::RECEIVE, 0);	// Dummy command just to allow threads to wait on it
+                lCommand->MarkExecutionStart();
+                
+                pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(pBox);
+
+                vmRangeOwner lRangeOwner = pPair.second;
+                lRangeOwner.hostOffset += lScatteredSubscriptionInfo.offset - pPair.first.offset;
+                
+                mInFlightRTree.insert(std::make_pair(pBox, regionFetchData2D(lCommand)));
+                lMachineVersusTupleVectorMap[pPair.second.host].emplace_back(lScatteredSubscriptionInfo, lRangeOwner, lCommand);
+
+            });
+        }
+    });
+    
+    return lMachineVersusTupleVectorMap;
+}
+
+pmLinearTransferVectorType pmMemoryDirectory2D::SetupRemoteRegionsForFetching(const pmSubscriptionInfo& pSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::vector<pmCommandPtr>& pCommandVector)
+{
+    pmLinearTransferVectorType lLinearTransferVector;
+    pmScatteredTransferMapType lScatteredTransferMap1, lScatteredTransferMap2, lScatteredTransferMap3;
+    std::set<pmCommandPtr> lCommandsAlreadyIssuedSet;
+
+    ulong lRemainder = (pSubscriptionInfo.offset % mAddressSpaceCols);
+    ulong lFirstRowLength = lRemainder ? std::min(mAddressSpaceCols - lRemainder, pSubscriptionInfo.length) : 0;
+    
+    ulong lRemainingLength = pSubscriptionInfo.length - lFirstRowLength;
+    ulong lIntermediateRowsOffset = pSubscriptionInfo.offset + lFirstRowLength;
+    
+    ulong lScatteredCount = lRemainingLength / mAddressSpaceCols;
+    ulong lLeftover = lRemainingLength % mAddressSpaceCols;
+
+    if(lFirstRowLength)
+        lScatteredTransferMap1 = SetupRemoteRegionsForFetching(pmScatteredSubscriptionInfo(pSubscriptionInfo.offset, lFirstRowLength, mAddressSpaceCols, 1), pAddressSpaceBaseAddr,  pPriority, lCommandsAlreadyIssuedSet);
+    
+    if(lScatteredCount)
+        lScatteredTransferMap2 = SetupRemoteRegionsForFetching(pmScatteredSubscriptionInfo(lIntermediateRowsOffset, mAddressSpaceCols, mAddressSpaceCols, lScatteredCount), pAddressSpaceBaseAddr,  pPriority, lCommandsAlreadyIssuedSet);
+    
+    if(lLeftover)
+        lScatteredTransferMap3 = SetupRemoteRegionsForFetching(pmScatteredSubscriptionInfo(lIntermediateRowsOffset + lScatteredCount * mAddressSpaceCols, lLeftover, mAddressSpaceCols, 1), pAddressSpaceBaseAddr,  pPriority, lCommandsAlreadyIssuedSet);
+    
+    pCommandVector.reserve(lCommandsAlreadyIssuedSet.size());
+    std::copy(lCommandsAlreadyIssuedSet.begin(), lCommandsAlreadyIssuedSet.end(), std::back_inserter(pCommandVector));
+    
+    lLinearTransferVector.reserve(lScatteredTransferMap1.size() + lScatteredTransferMap2.size() + lScatteredTransferMap3.size());
+
+    auto lLambda = [&lLinearTransferVector] (pmScatteredTransferMapType& pScatteredTransferMap)
+    {
+        for_each(pScatteredTransferMap, [&] (pmScatteredTransferMapType::value_type& pMapKeyValue)
+        {
+            for_each(pMapKeyValue.second, [&] (std::tuple<pmScatteredSubscriptionInfo, vmRangeOwner, pmCommandPtr>& pTuple)
+            {
+                const pmScatteredSubscriptionInfo& lInfo = std::get<0>(pTuple);
+                vmRangeOwner lRangeOwner = std::get<1>(pTuple);
+                pmCommandPtr& lCommandPtr = std::get<2>(pTuple);
+                
+                if(lInfo.size == lInfo.step)
+                {
+                    lLinearTransferVector.emplace_back(pmSubscriptionInfo(lInfo.offset, lInfo.size * lInfo.count), lRangeOwner, lCommandPtr);
+                }
+                else
+                {
+                    for(ulong i = 0; i < lInfo.count; ++i)
+                    {
+                        lRangeOwner.hostOffset += lInfo.step;
+                        lLinearTransferVector.emplace_back(pmSubscriptionInfo(lInfo.offset + i * lInfo.step, lInfo.size), lRangeOwner, lCommandPtr);
+                    }
+                }
+            });
+        });
+    };
+    
+    lLambda(lScatteredTransferMap1);
+    lLambda(lScatteredTransferMap2);
+    lLambda(lScatteredTransferMap3);
+
+    return lLinearTransferVector;
+}
+
+pmRemoteRegionsInfoMapType pmMemoryDirectory2D::GetRemoteRegionsInfo(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr)
+{
+    pmRemoteRegionsInfoMapType lRemoteRegionsInfoMap;
+    pmScatteredMemOwnership lScatteredMemOwnerships;
+
+    GetOwners(pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.size, pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.count, lScatteredMemOwnerships);
+    
+    for_each(lScatteredMemOwnerships, [&] (const pmScatteredMemOwnership::value_type& pPair)
+    {
+        if(pPair.second.host != PM_LOCAL_MACHINE)
+            lRemoteRegionsInfoMap[pPair.second.host].emplace_back(pPair);
+    });
+  
+    return lRemoteRegionsInfoMap;
+}
+
+void pmMemoryDirectory2D::CopyOrUpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource)
+{
+    EXCEPTION_ASSERT(!pDataSource); // This should not happen (see pmHeavyOperationsThread::ServeGeneralMemoryRequest)
+    
+    if(UpdateReceivedMemoryInternal(pAddressSpace, pAddressSpaceBaseAddr, pOffset, pLength, mAddressSpaceCols, 1))
+    {
+    #ifdef ENABLE_TASK_PROFILING
+        if(pLockingTask)
+            pLockingTask->GetTaskProfiler()->RecordProfileEvent(pLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+    #endif
+    }
+}
+
+void pmMemoryDirectory2D::UpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+{
+    if(UpdateReceivedMemoryInternal(pAddressSpace, pAddressSpaceBaseAddr, pOffset, pLength, pStep, pCount))
+    {
+    #ifdef ENABLE_TASK_PROFILING
+        if(pLockingTask)
+            pLockingTask->GetTaskProfiler()->RecordProfileEvent(pLockingTask->IsReadOnly(pAddressSpace) ? taskProfiler::INPUT_MEMORY_TRANSFER : taskProfiler::OUTPUT_MEMORY_TRANSFER, false);
+    #endif
+    }
+}
+    
+// Must be called with WriteLock on address space directory acquired
+bool pmMemoryDirectory2D::UpdateReceivedMemoryInternal(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+{
+    boost_box_type lIncomingBox = GetBox(pOffset, pLength, pStep, pCount);
+    
+    bool lTransferCommandComplete = false;
+    
+    FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
+
+    std::vector<std::pair<boost_box_type, regionFetchData2D>> lOverlappingBoxes;
+    mInFlightRTree.query(boost::geometry::index::intersects(lIncomingBox), std::back_inserter(lOverlappingBoxes));
+    
+    EXCEPTION_ASSERT(lOverlappingBoxes.size() == 1);
+    const boost_box_type& lOverlappingBox = lOverlappingBoxes.begin()->first;
+    const regionFetchData2D& lData = lOverlappingBoxes.begin()->second;
+
+    if(AreBoxesEqual(lIncomingBox, lOverlappingBox))
+    {
+        SetRangeOwnerInternal(vmRangeOwner(PM_LOCAL_MACHINE, pOffset, mMemoryIdentifierStruct), pOffset, pLength, pStep, pCount);
+
+        pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
+        lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
+
+        lTransferCommandComplete = true;
+        mInFlightRTree.remove(*lOverlappingBoxes.begin());
+    }
+    else
+    {
+    #ifdef _DEBUG
+        std::vector<boost_box_type> lTestRemainingBoxes;
+
+        GetDifferenceOfBoxes(lIncomingBox, lOverlappingBox, lTestRemainingBoxes);
+        EXCEPTION_ASSERT(lTestRemainingBoxes.empty());
+    #endif
+
+        regionFetchData2D lNewData = lData;
+        lNewData.accumulatedPartialReceivesLength += pLength * pCount;
+        lNewData.partialReceiveRecordVector.emplace_back(lIncomingBox);
+        
+        pmScatteredSubscriptionInfo lScatteredSubscriptionInfo = GetReverseBoxMapping(lOverlappingBox);
+
+        size_t lExpectedLength = lScatteredSubscriptionInfo.size * lScatteredSubscriptionInfo.count;
+        
+        EXCEPTION_ASSERT(lNewData.accumulatedPartialReceivesLength <= lExpectedLength);
+        
+        if(lNewData.accumulatedPartialReceivesLength == lExpectedLength)
+        {
+            SetRangeOwnerInternal(vmRangeOwner(PM_LOCAL_MACHINE, lScatteredSubscriptionInfo.offset, mMemoryIdentifierStruct), lScatteredSubscriptionInfo.offset, lScatteredSubscriptionInfo.size, lScatteredSubscriptionInfo.step, lScatteredSubscriptionInfo.count);
+
+            pmCommandPtr lCommandPtr = std::static_pointer_cast<pmCommand>(lData.receiveCommand);
+            lData.receiveCommand->MarkExecutionEnd(pmSuccess, lCommandPtr);
+
+            lTransferCommandComplete = true;
+            mInFlightRTree.remove(*lOverlappingBoxes.begin());
+        }
+        else
+        {
+            mInFlightRTree.remove(*lOverlappingBoxes.begin());
+            mInFlightRTree.insert(std::make_pair(lOverlappingBox, lNewData));
+        }
+    }
+
+    return lTransferCommandComplete;
+}
+
     
 #ifdef _DEBUG
 void pmMemoryDirectory2D::PrintOwnerships() const
@@ -841,6 +1470,7 @@ void pmMemoryDirectory2D::PrintBox(const boost_box_type& pBox) const
 
     std::cout << "(" << lXMin << ", " << lYMin << ", " << lXMax << ", " << lYMax << ")";
 }
+#endif
 
 bool pmMemoryDirectory2D::AreBoxesEqual(const boost_box_type& pBox1, const boost_box_type& pBox2) const
 {
@@ -861,7 +1491,115 @@ bool pmMemoryDirectory2D::AreBoxesEqual(const boost_box_type& pBox1, const boost
     
     return (lXMin1 == lXMin2 && lYMin1 == lYMin2 && lXMax1 == lXMax2 && lYMax1 == lYMax2);
 }
-#endif
 
+
+/* class pmScatteredSubscriptionFilter */
+pmScatteredSubscriptionFilter::pmScatteredSubscriptionFilter(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo)
+    : mScatteredSubscriptionInfo(pScatteredSubscriptionInfo)
+{}
+    
+const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& pmScatteredSubscriptionFilter::FilterBlocks(const std::function<void (size_t)>& pRowFunctor)
+{
+    for(size_t i = 0; i < mScatteredSubscriptionInfo.count; ++i)
+        pRowFunctor(i);
+
+    return GetLeftoverBlocks();
+}
+
+// AddNextSubRow must be called in increasing y first and then increasing x values (i.e. first one or more times with increasing x for row one, then similarly for row two and so on)
+void pmScatteredSubscriptionFilter::AddNextSubRow(ulong pOffset, ulong pLength, vmRangeOwner& pRangeOwner)
+{
+    ulong lStartCol = (pOffset - (ulong)mScatteredSubscriptionInfo.offset) % (ulong)mScatteredSubscriptionInfo.step;
+    
+    bool lRangeCombined = false;
+
+    auto lIter = mCurrentBlocks.begin(), lEndIter = mCurrentBlocks.end();
+    while(lIter != lEndIter)
+    {
+        blockData& lData = (*lIter);
+
+        ulong lEndCol1 = lData.startCol + lData.colCount - 1;
+        ulong lEndCol2 = lStartCol + pLength - 1;
+        
+        bool lRemoveCurrentRange = false;
+        
+        if(!(lEndCol2 < lData.startCol || lStartCol > lEndCol1))    // If the ranges overlap
+        {
+            // Total overlap and to be fetched from same host and there is no gap between rows
+            if(lData.startCol == lStartCol && lData.colCount == pLength && lData.rangeOwner.host == pRangeOwner.host
+               && lData.rangeOwner.memIdentifier == pRangeOwner.memIdentifier
+               && (lData.rangeOwner.hostOffset + lData.subscriptionInfo.count * lData.subscriptionInfo.step == pRangeOwner.hostOffset)
+               && (lData.subscriptionInfo.offset + lData.subscriptionInfo.count * lData.subscriptionInfo.step == pOffset))
+            {
+                ++lData.subscriptionInfo.count; // Combine with previous range
+                lRangeCombined = true;
+            }
+            else
+            {
+                lRemoveCurrentRange = true;
+            }
+        }
+        
+        if(lRemoveCurrentRange)
+        {
+            mBlocksToBeFetched[lData.rangeOwner.host].emplace_back(lData.subscriptionInfo, lData.rangeOwner);
+            mCurrentBlocks.erase(lIter++);
+        }
+        else
+        {
+            ++lIter;
+        }
+    }
+    
+    if(!lRangeCombined)
+        mCurrentBlocks.emplace_back(lStartCol, pLength, pmScatteredSubscriptionInfo(pOffset, pLength, mScatteredSubscriptionInfo.step, 1), pRangeOwner);
+}
+
+const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& pmScatteredSubscriptionFilter::GetLeftoverBlocks()
+{
+    PromoteCurrentBlocks();
+    
+    return mBlocksToBeFetched;
+}
+
+void pmScatteredSubscriptionFilter::PromoteCurrentBlocks()
+{
+    for_each(mCurrentBlocks, [&] (const blockData& pData)
+    {
+        mBlocksToBeFetched[pData.rangeOwner.host].emplace_back(pData.subscriptionInfo, pData.rangeOwner);
+    });
+    
+    mCurrentBlocks.clear();
+}
+
+
+/* class pmScatteredSubscriptionFilterHelper */
+pmScatteredSubscriptionFilterHelper::pmScatteredSubscriptionFilterHelper(pmScatteredSubscriptionFilter& pGlobalFilter, void* pBaseAddr, pmMemoryDirectoryLinear& pMemoryDirectoryLinear, bool pUnprotected, const pmMachine* pFilteredMachine /* = PM_LOCAL_MACHINE */)
+: mGlobalFilter(pGlobalFilter)
+, mMemoryDirectoryLinear(pMemoryDirectoryLinear)
+, mMem(reinterpret_cast<ulong>(pBaseAddr))
+, mUnprotected(pUnprotected)
+, mFilteredMachine(pFilteredMachine)
+{}
+
+void pmScatteredSubscriptionFilterHelper::emplace_back(ulong pStartAddr, ulong pLastAddr)
+{
+    ulong lLength = pLastAddr - pStartAddr + 1;
+
+    pmMemOwnership lOwnerships;
+    
+    if(mUnprotected)
+        mMemoryDirectoryLinear.GetOwnersUnprotected(pStartAddr - mMem, lLength, lOwnerships);
+    else
+        mMemoryDirectoryLinear.GetOwners(pStartAddr - mMem, lLength, lOwnerships);
+
+    for_each(lOwnerships, [&] (pmMemOwnership::value_type& pPair)
+    {
+        vmRangeOwner& lRangeOwner = pPair.second.second;
+
+        if(lRangeOwner.host != mFilteredMachine)
+            mGlobalFilter.AddNextSubRow(pPair.first, pPair.second.first, lRangeOwner);
+    });
+}
 
 }

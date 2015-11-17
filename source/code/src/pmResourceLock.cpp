@@ -40,10 +40,19 @@ void __dump_mutex(pthread_mutex_t* mutex, const char* state)
     pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
 }
 
+void __dump_rwlock(pthread_rwlock_t* rwlock, const char* state)
+{
+    char lStr[512];
+    sprintf(lStr, "RWLock State Change: %p (%s)", rwlock, state);
+    pmLogger::GetLogger()->Log(pmLogger::MINIMAL, pmLogger::INFORMATION, lStr);
+}
+
 #define DUMP_MUTEX(a, b) __dump_mutex(a, b)
+#define DUMP_RWLOCK(a, b) __dump_rwlock(a, b)
 
 #else
 #define DUMP_MUTEX(a, b)
+#define DUMP_RWLOCK(a, b)
 #endif
 
     
@@ -116,6 +125,91 @@ void pmPThreadResourceLock::ResetAcquisition()
 }
 
 bool pmPThreadResourceLock::IsLockSelfAcquired()
+{
+    return (mIsCurrentlyAcquired && mThread == pthread_self());
+}
+#endif
+
+
+/* class pmPThreadRWResourceLock */
+pmPThreadRWResourceLock::pmPThreadRWResourceLock(
+                                        #ifdef TRACK_MUTEX_TIMINGS
+                                              const char* pName /* = "" */
+                                        #endif
+                                             )
+#ifdef RECORD_LOCK_ACQUISITIONS
+    : mLine(-1)
+    , mIsCurrentlyAcquired(false)
+#endif
+#ifdef TRACK_MUTEX_TIMINGS
+#ifdef RECORD_LOCK_ACQUISITIONS
+    ,
+#else
+    :
+#endif
+     mLockTimer(strlen(pName) ? (std::string(pName).append(" [Lock]")) : pName)
+    , mUnlockTimer(strlen(pName) ? std::string(pName).append(" [Unlock]") : pName)
+#endif
+{
+	THROW_ON_NON_ZERO_RET_VAL( pthread_rwlock_init(&mRWLock, NULL), pmThreadFailureException, pmThreadFailureException::RWLOCK_INIT_FAILURE );
+	DUMP_RWLOCK(&mRWLock, "Created");
+}
+
+pmPThreadRWResourceLock::~pmPThreadRWResourceLock()
+{
+	DUMP_RWLOCK(&mRWLock, "Destroying");
+
+	ReadLock();
+	Unlock();
+	
+    THROW_ON_NON_ZERO_RET_VAL( pthread_rwlock_destroy(&mRWLock), pmThreadFailureException, pmThreadFailureException::RWLOCK_DESTROY_FAILURE );
+}
+
+void pmPThreadRWResourceLock::ReadLock()
+{
+#ifdef TRACK_MUTEX_TIMINGS
+    pmAccumulationTimerHelper lHelperTimer(&mLockTimer);
+#endif
+
+	DUMP_RWLOCK(&mRWLock, "Read_Locking");
+	THROW_ON_NON_ZERO_RET_VAL( pthread_rwlock_rdlock(&mRWLock), pmThreadFailureException, pmThreadFailureException::RWLOCK_READ_LOCK_FAILURE );
+}
+
+void pmPThreadRWResourceLock::WriteLock()
+{
+#ifdef TRACK_MUTEX_TIMINGS
+    pmAccumulationTimerHelper lHelperTimer(&mLockTimer);
+#endif
+
+	DUMP_RWLOCK(&mRWLock, "Write_Locking");
+	THROW_ON_NON_ZERO_RET_VAL( pthread_rwlock_wrlock(&mRWLock), pmThreadFailureException, pmThreadFailureException::RWLOCK_WRITE_LOCK_FAILURE );
+}
+
+void pmPThreadRWResourceLock::Unlock()
+{
+#ifdef TRACK_MUTEX_TIMINGS
+    pmAccumulationTimerHelper lHelperTimer(&mUnlockTimer);
+#endif
+
+	DUMP_RWLOCK(&mRWLock, "Unlocking");
+	THROW_ON_NON_ZERO_RET_VAL( pthread_rwlock_unlock(&mRWLock), pmThreadFailureException, pmThreadFailureException::RWLOCK_UNLOCK_FAILURE );
+}
+
+#ifdef RECORD_LOCK_ACQUISITIONS
+void pmPThreadRWResourceLock::RecordAcquisition(const char* pFile, int pLine)
+{
+    mFile = pFile;
+    mLine = pLine;
+    mIsCurrentlyAcquired = true;
+    mThread = pthread_self();
+}
+
+void pmPThreadRWResourceLock::ResetAcquisition()
+{
+    mIsCurrentlyAcquired = false;
+}
+
+bool pmPThreadRWResourceLock::IsLockSelfAcquired()
 {
     return (mIsCurrentlyAcquired && mThread == pthread_self());
 }

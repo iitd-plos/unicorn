@@ -24,6 +24,7 @@
 #include "pmBase.h"
 #include "pmCommunicator.h"
 #include "pmResourceLock.h"
+#include "pmHardware.h"
 
 #include <boost/geometry/geometries/box.hpp>
 #include <boost/geometry/index/rtree.hpp>
@@ -104,10 +105,18 @@ struct pmScatteredMemTransferData
 };
 
 typedef std::map<size_t, std::pair<size_t, vmRangeOwner>> pmMemOwnership;
+    
+typedef std::vector<std::tuple<pmSubscriptionInfo, vmRangeOwner, pmCommandPtr>> pmLinearTransferVectorType;
+typedef std::map<const pmMachine*, std::vector<std::tuple<pmScatteredSubscriptionInfo, vmRangeOwner, pmCommandPtr>>> pmScatteredTransferMapType;
+typedef std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>> pmRemoteRegionsInfoMapType;
+
 typedef std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>> pmScatteredMemOwnership;
 
 class pmMemoryDirectory : public pmBase
 {
+    friend class pmMemoryDirectoryLinear;
+    friend class pmMemoryDirectory2D;
+    
 public:
     pmMemoryDirectory(const communicator::memoryIdentifierStruct& pMemoryIdentifierStruct);
 
@@ -126,15 +135,43 @@ public:
     virtual bool IsEmpty() = 0;
     
     virtual void CloneFrom(pmMemoryDirectory* pDirectory) = 0;
+
+    virtual void CancelUnreferencedRequests() = 0;
+
+    virtual pmScatteredTransferMapType SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet) = 0;
+    virtual pmLinearTransferVectorType SetupRemoteRegionsForFetching(const pmSubscriptionInfo& pSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::vector<pmCommandPtr>& pCommandVector) = 0;
+    virtual pmRemoteRegionsInfoMapType GetRemoteRegionsInfo(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr) = 0;
+    
+    virtual void CopyOrUpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource) = 0;
+    virtual void UpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, ulong pStep, ulong pCount) = 0;
     
 protected:
     communicator::memoryIdentifierStruct mMemoryIdentifierStruct;
 
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
+    RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS mOwnershipLock;
 };
     
 class pmMemoryDirectoryLinear : public pmMemoryDirectory
 {
+    struct regionFetchData
+    {
+        pmCommandPtr receiveCommand;
+        
+        std::map<size_t, size_t> partialReceiveRecordMap;
+        size_t accumulatedPartialReceivesLength;
+        
+        regionFetchData()
+        : accumulatedPartialReceivesLength(0)
+        {}
+        
+        regionFetchData(pmCommandPtr& pCommand)
+        : receiveCommand(pCommand)
+        , accumulatedPartialReceivesLength(0)
+        {}
+    };
+
+    typedef std::map<void*, std::pair<size_t, regionFetchData>> pmInFlightRegions;
+
 public:
     pmMemoryDirectoryLinear(ulong pAddressSpaceLength, const communicator::memoryIdentifierStruct& pMemoryIdentifierStruct);
 
@@ -154,9 +191,24 @@ public:
 
     virtual void CloneFrom(pmMemoryDirectory* pDirectory);
 
+    virtual void CancelUnreferencedRequests();
+    
+    virtual pmScatteredTransferMapType SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet);
+    virtual pmLinearTransferVectorType SetupRemoteRegionsForFetching(const pmSubscriptionInfo& pSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::vector<pmCommandPtr>& pCommandVector);
+    virtual pmRemoteRegionsInfoMapType GetRemoteRegionsInfo(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr);
+
+    virtual void CopyOrUpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource);
+    virtual void UpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
+
 private:
     void SetRangeOwnerInternal(vmRangeOwner pRangeOwner, ulong pOffset, ulong pLength);
     void GetOwnersInternal(ulong pOffset, ulong pLength, pmMemOwnership& pOwnerships);
+
+    template<typename consumer_type>
+    void FindRegionsNotInFlight(pmInFlightRegions& pInFlightMap, void* pMem, size_t pOffset, size_t pLength, consumer_type& pRegionsToBeFetched, std::vector<pmCommandPtr>& pCommandVector);
+
+    void AcquireOwnershipImmediateInternal(ulong pOffset, ulong pLength);
+    bool CopyOrUpdateReceivedMemoryInternal(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmInFlightRegions& pInFlightMap, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource = NULL);
 
 #ifdef _DEBUG
     void CheckMergability(const pmMemOwnership::iterator& pRange1, const pmMemOwnership::iterator& pRange2) const;
@@ -167,13 +219,38 @@ private:
     ulong mAddressSpaceLength;
     
     pmMemOwnership mOwnershipMap;       // offset versus pair of length of region and vmRangeOwner
+    pmInFlightRegions mInFlightLinearMap;	// Map for regions being fetched; pair is length of region and regionFetchData
 };
     
 class pmMemoryDirectory2D : public pmMemoryDirectory
 {
     typedef typename boost::geometry::model::point<ulong, 2, boost::geometry::cs::cartesian> boost_point_type;
     typedef typename boost::geometry::model::box<boost_point_type> boost_box_type;
-    typedef typename boost::geometry::index::rtree<std::pair<boost_box_type, vmRangeOwner>, boost::geometry::index::quadratic<16>> boost_rtree_type;
+
+    struct regionFetchData2D
+    {
+        pmCommandPtr receiveCommand;
+        
+        std::vector<boost_box_type> partialReceiveRecordVector;
+        size_t accumulatedPartialReceivesLength;
+        
+        regionFetchData2D()
+        : accumulatedPartialReceivesLength(0)
+        {}
+        
+        regionFetchData2D(pmCommandPtr& pCommand)
+        : receiveCommand(pCommand)
+        , accumulatedPartialReceivesLength(0)
+        {}
+        
+        bool operator==(const regionFetchData2D& pData) const
+        {
+            return (receiveCommand == pData.receiveCommand);
+        }
+    };
+
+    typedef typename boost::geometry::index::rtree<std::pair<boost_box_type, vmRangeOwner>, boost::geometry::index::quadratic<16>> pmScatteredMemOwnershipRTree;
+    typedef typename boost::geometry::index::rtree<std::pair<boost_box_type, regionFetchData2D>, boost::geometry::index::quadratic<16>> pmInFlightScatteredRegions;
 
 public:
     pmMemoryDirectory2D(ulong pAddressSpaceRows, ulong pAddressSpaceCols, const communicator::memoryIdentifierStruct& pMemoryIdentifierStruct);
@@ -194,16 +271,30 @@ public:
 
     virtual void CloneFrom(pmMemoryDirectory* pDirectory);
     
+    virtual void CancelUnreferencedRequests();
+
+    virtual pmScatteredTransferMapType SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet);
+    virtual pmLinearTransferVectorType SetupRemoteRegionsForFetching(const pmSubscriptionInfo& pSubscriptionInfo, void* pAddressSpaceBaseAddr, ulong pPriority, std::vector<pmCommandPtr>& pCommandVector);
+    virtual pmRemoteRegionsInfoMapType GetRemoteRegionsInfo(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, void* pAddressSpaceBaseAddr);
+
+    virtual void CopyOrUpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource);
+    virtual void UpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
+
 private:
     void GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
+
     void GetDifferenceOfBoxes(const boost_box_type& pBox1, const boost_box_type& pBox2, std::vector<boost_box_type>& pRemainingBoxes);
-    
+    bool UpdateReceivedMemoryInternal(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
+
+    void SetRangeOwnerInternal(const vmRangeOwner& pRangeOwner, ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
+
 #ifdef _DEBUG
     void PrintOwnerships() const;
     void SanitizeOwnerships() const;
     void PrintBox(const boost_box_type& pBox) const;
-    bool AreBoxesEqual(const boost_box_type& pBox1, const boost_box_type& pBox2) const;
 #endif
+
+    bool AreBoxesEqual(const boost_box_type& pBox1, const boost_box_type& pBox2) const;
 
     boost_box_type GetBox(ulong pOffset, ulong pLength, ulong pStep, ulong pCount) const;
     pmScatteredSubscriptionInfo GetReverseBoxMapping(const boost_box_type& pBox) const;
@@ -212,8 +303,59 @@ private:
     void CombineAndInsertBox(boost_box_type pBox, vmRangeOwner pRangeOwner);
 
     ulong mAddressSpaceRows, mAddressSpaceCols;
+
+    pmScatteredMemOwnershipRTree mOwnershipRTree;
+    pmInFlightScatteredRegions mInFlightRTree;
+};
+
+class pmScatteredSubscriptionFilter
+{
+public:
+    pmScatteredSubscriptionFilter(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
+
+    // pRowFunctor should call AddNextSubRow for every range to be kept
+    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& FilterBlocks(const std::function<void (size_t)>& pRowFunctor);
+
+    void AddNextSubRow(ulong pOffset, ulong pLength, vmRangeOwner& pRangeOwner);
     
-    boost_rtree_type mOwnershipRTree;       // offset versus pair of length of region and vmRangeOwner
+private:
+    const std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>>& GetLeftoverBlocks();
+    void PromoteCurrentBlocks();
+
+    struct blockData
+    {
+        ulong startCol;
+        ulong colCount;
+        pmScatteredSubscriptionInfo subscriptionInfo;
+        vmRangeOwner rangeOwner;
+        
+        blockData(ulong pStartCol, ulong pColCount, const pmScatteredSubscriptionInfo& pSubscriptionInfo, vmRangeOwner& pRangeOwner)
+        : startCol(pStartCol)
+        , colCount(pColCount)
+        , subscriptionInfo(pSubscriptionInfo)
+        , rangeOwner(pRangeOwner)
+        {}
+    };
+
+    const pmScatteredSubscriptionInfo& mScatteredSubscriptionInfo;
+    
+    std::list<blockData> mCurrentBlocks;   // computed till last row processed
+    std::map<const pmMachine*, std::vector<std::pair<pmScatteredSubscriptionInfo, vmRangeOwner>>> mBlocksToBeFetched;
+};
+    
+struct pmScatteredSubscriptionFilterHelper
+{
+public:
+    pmScatteredSubscriptionFilterHelper(pmScatteredSubscriptionFilter& pGlobalFilter, void* pBaseAddr, pmMemoryDirectoryLinear& pMemoryDirectoryLinear, bool pUnprotected, const pmMachine* pFilteredMachine = PM_LOCAL_MACHINE);
+
+    void emplace_back(ulong pStartAddr, ulong pLastAddr);
+    
+private:
+    pmScatteredSubscriptionFilter& mGlobalFilter;
+    pmMemoryDirectoryLinear& mMemoryDirectoryLinear;
+    ulong mMem;
+    bool mUnprotected;
+    const pmMachine* mFilteredMachine;
 };
     
 } // end namespace pm
