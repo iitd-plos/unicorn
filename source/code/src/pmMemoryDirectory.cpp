@@ -1139,6 +1139,12 @@ void pmMemoryDirectory2D::GetDifferenceOfBoxes(const boost_box_type& pBox1, cons
     ulong lYMax1 = lMaxCorner1.get<1>();
     ulong lXMax2 = lMaxCorner2.get<0>();
     ulong lYMax2 = lMaxCorner2.get<1>();
+    
+    if(lXMax1 < lXMin2 || lXMin1 > lXMax2 || lYMax1 < lYMin2 || lYMin1 > lYMax2)
+    {
+        pRemainingBoxes.emplace_back(pBox1);
+        return;
+    }
 
     // Create a rectangle at top if required
     if(lYMin1 < lYMin2)
@@ -1188,7 +1194,7 @@ pmScatteredTransferMapType pmMemoryDirectory2D::SetupRemoteRegionsForFetching(co
     FINALIZE_RESOURCE_PTR(dOwnershipLock, RW_RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, WriteLock(), Unlock());
 
     GetOwnersInternal(pScatteredSubscriptionInfo.offset, pScatteredSubscriptionInfo.size, pScatteredSubscriptionInfo.step, pScatteredSubscriptionInfo.count, lScatteredMemOwnerships);
-    
+
     for_each(lScatteredMemOwnerships, [&] (const pmScatteredMemOwnership::value_type& pPair)
     {
         if(pPair.second.host != PM_LOCAL_MACHINE)
@@ -1198,7 +1204,7 @@ pmScatteredTransferMapType pmMemoryDirectory2D::SetupRemoteRegionsForFetching(co
             
             lRemainingBoxes1.emplace_back(lBox);
             ushort lCurrentRemainingBoxVectorIndex = 0;
-            
+
             std::vector<std::pair<boost_box_type, regionFetchData2D>> lOverlappingBoxes;
             mInFlightRTree.query(boost::geometry::index::intersects(lBox), std::back_inserter(lOverlappingBoxes));
             
@@ -1220,9 +1226,118 @@ pmScatteredTransferMapType pmMemoryDirectory2D::SetupRemoteRegionsForFetching(co
             });
 
             const std::vector<boost_box_type>& lRemainingBoxes = lCurrentRemainingBoxVectorIndex ? lRemainingBoxes2 : lRemainingBoxes1;
+            
+        #if 1
+            if(!lRemainingBoxes.empty())
+            {
+                bool lOverlap = false;
+
+                auto lIter = lRemainingBoxes.begin(), lEndIter = lRemainingBoxes.end();
+                for(; lIter != lEndIter; ++lIter)
+                {
+                    for(auto lInnerIter = lIter + 1; lInnerIter != lEndIter; ++lInnerIter)
+                    {
+                        const boost_point_type& lMinCorner1 = lIter->min_corner();
+                        const boost_point_type& lMaxCorner1 = lIter->max_corner();
+                        const boost_point_type& lMinCorner2 = lInnerIter->min_corner();
+                        const boost_point_type& lMaxCorner2 = lInnerIter->max_corner();
+                        
+                        ulong lXMin1 = lMinCorner1.get<0>();
+                        ulong lYMin1 = lMinCorner1.get<1>();
+                        ulong lXMin2 = lMinCorner2.get<0>();
+                        ulong lYMin2 = lMinCorner2.get<1>();
+
+                        ulong lXMax1 = lMaxCorner1.get<0>();
+                        ulong lYMax1 = lMaxCorner1.get<1>();
+                        ulong lXMax2 = lMaxCorner2.get<0>();
+                        ulong lYMax2 = lMaxCorner2.get<1>();
+                        
+                        if(!(lXMax1 < lXMin2 || lXMin1 > lXMax2 || lYMax1 < lYMin2 || lYMin1 > lYMax2))
+                        {
+                            lOverlap = true;
+                            
+                            pmScatteredSubscriptionInfo lBoxInfo = GetReverseBoxMapping(*lIter);
+                            pmScatteredSubscriptionInfo lOverBoxInfo = GetReverseBoxMapping(*lInnerIter);
+
+                            std::cout << "Box (" << lBoxInfo.offset << ", " << lBoxInfo.size << ", " << lBoxInfo.step << ", "<< lBoxInfo.count << ") overlaps box (" << lOverBoxInfo.offset << ", " << lOverBoxInfo.size << ", " << lOverBoxInfo.step << ", "<< lOverBoxInfo.count << ")" << std::endl;
+                            
+                            for_each(lRemainingBoxes, [&] (const boost_box_type& pBox)
+                            {
+                                pmScatteredSubscriptionInfo lInfo = GetReverseBoxMapping(pBox);
+                                std::cout << "[" << lInfo.offset << ", " << lInfo.size << ", " << lInfo.step << ", " << lInfo.count << "]" << std::endl;
+                            });
+                            
+                            std::cout << "[[" << pScatteredSubscriptionInfo.offset << ", " << pScatteredSubscriptionInfo.size << ", " << pScatteredSubscriptionInfo.step << ", " << pScatteredSubscriptionInfo.count << "]]" << std::endl;
+                            
+                            std::cout << "Non-local blocks ..." << std::endl;
+                            for_each(lScatteredMemOwnerships, [&] (const pmScatteredMemOwnership::value_type& pPair)
+                            {
+                                if(pPair.second.host != PM_LOCAL_MACHINE)
+                                {
+                                    std::cout << "{" << pPair.first.offset << ", " << pPair.first.size << ", " << pPair.first.step << ", " << pPair.first.count << "}" << std::endl;
+
+                                    std::vector<std::pair<boost_box_type, regionFetchData2D>> lInFlightBoxes;
+                                    mInFlightRTree.query(boost::geometry::index::intersects(GetBox(pPair.first.offset, pPair.first.size, pPair.first.step, pPair.first.count)), std::back_inserter(lInFlightBoxes));
+                                    
+                                    for_each(lInFlightBoxes, [&] (const std::pair<boost_box_type, regionFetchData2D>& pInnerPair)
+                                    {
+                                        pmScatteredSubscriptionInfo lInfo = GetReverseBoxMapping(pInnerPair.first);
+                                        std::cout << "[" << lInfo.offset << ", " << lInfo.size << ", " << lInfo.step << ", " << lInfo.count << "]" << std::endl;
+                                    });
+                                }
+                            });
+
+                            break;
+                        }
+                    }
+                }
+                
+                EXCEPTION_ASSERT(!lOverlap);
+            }
+        #endif
 
             for_each(lRemainingBoxes, [&] (const boost_box_type& pBox)
             {
+            #if 1
+                std::vector<std::pair<boost_box_type, regionFetchData2D>> lOverlappingBoxes;
+                mInFlightRTree.query(boost::geometry::index::intersects(pBox), std::back_inserter(lOverlappingBoxes));
+                
+                if(!lOverlappingBoxes.empty())
+                {
+                    pmScatteredSubscriptionInfo lBoxInfo = GetReverseBoxMapping(pBox);
+                    std::cout << "Box (" << lBoxInfo.offset << ", " << lBoxInfo.size << ", " << lBoxInfo.step << ", "<< lBoxInfo.count << ") overlaps " << lOverlappingBoxes.size() << " in flight boxes ..." << std::endl;
+
+                    for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, regionFetchData2D>& pPair)
+                    {
+                        pmScatteredSubscriptionInfo lInfo = GetReverseBoxMapping(pPair.first);
+                        std::cout << "[" << lInfo.offset << ", " << lInfo.size << ", " << lInfo.step << ", " << lInfo.count << "]" << std::endl;
+                    });
+
+                    std::cout << "[[" << pScatteredSubscriptionInfo.offset << ", " << pScatteredSubscriptionInfo.size << ", " << pScatteredSubscriptionInfo.step << ", " << pScatteredSubscriptionInfo.count << "]]" << std::endl;
+                            
+                    std::cout << "Non-local blocks ..." << std::endl;
+    
+                    for_each(lScatteredMemOwnerships, [&] (const pmScatteredMemOwnership::value_type& pPair)
+                    {
+                        if(pPair.second.host != PM_LOCAL_MACHINE)
+                        {
+                            std::cout << "{" << pPair.first.offset << ", " << pPair.first.size << ", " << pPair.first.step << ", " << pPair.first.count << "}" << std::endl;
+
+                            std::vector<std::pair<boost_box_type, regionFetchData2D>> lInFlightBoxes;
+                            mInFlightRTree.query(boost::geometry::index::intersects(GetBox(pPair.first.offset, pPair.first.size, pPair.first.step, pPair.first.count)), std::back_inserter(lInFlightBoxes));
+                            
+                            for_each(lInFlightBoxes, [&] (const std::pair<boost_box_type, regionFetchData2D>& pInnerPair)
+                            {
+                                pmScatteredSubscriptionInfo lInfo = GetReverseBoxMapping(pInnerPair.first);
+                                std::cout << "[" << lInfo.offset << ", " << lInfo.size << ", " << lInfo.step << ", " << lInfo.count << "]" << std::endl;
+                            });
+                        }
+                    });
+                }
+
+                EXCEPTION_ASSERT(lOverlappingBoxes.empty());
+            #endif
+                
                 pmCommandPtr lCommand = pmCommand::CreateSharedPtr(pPriority, communicator::RECEIVE, 0);	// Dummy command just to allow threads to wait on it
                 lCommand->MarkExecutionStart();
                 
@@ -1233,7 +1348,6 @@ pmScatteredTransferMapType pmMemoryDirectory2D::SetupRemoteRegionsForFetching(co
                 
                 mInFlightRTree.insert(std::make_pair(pBox, regionFetchData2D(lCommand)));
                 lMachineVersusTupleVectorMap[pPair.second.host].emplace_back(lScatteredSubscriptionInfo, lRangeOwner, lCommand);
-
             });
         }
     });
@@ -1354,6 +1468,19 @@ bool pmMemoryDirectory2D::UpdateReceivedMemoryInternal(pmAddressSpace* pAddressS
 
     std::vector<std::pair<boost_box_type, regionFetchData2D>> lOverlappingBoxes;
     mInFlightRTree.query(boost::geometry::index::intersects(lIncomingBox), std::back_inserter(lOverlappingBoxes));
+
+#if 1
+    if(lOverlappingBoxes.size() > 1)
+    {
+        std::cout << "Received Subscription (" << pOffset << ", " << pLength << ", " << pStep << ", "<< pCount << ") Matches " << lOverlappingBoxes.size() << " Potentials ..." << std::endl;
+
+        for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, regionFetchData2D>& pPair)
+        {
+            pmScatteredSubscriptionInfo lInfo = GetReverseBoxMapping(pPair.first);
+            std::cout << "[" << lInfo.offset << ", " << lInfo.size << ", " << lInfo.step << ", " << lInfo.count << "]" << std::endl;
+        });
+    }
+#endif
     
     EXCEPTION_ASSERT(lOverlappingBoxes.size() == 1);
     const boost_box_type& lOverlappingBox = lOverlappingBoxes.begin()->first;
