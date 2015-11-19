@@ -1227,7 +1227,7 @@ pmScatteredTransferMapType pmMemoryDirectory2D::SetupRemoteRegionsForFetching(co
 
             const std::vector<boost_box_type>& lRemainingBoxes = lCurrentRemainingBoxVectorIndex ? lRemainingBoxes2 : lRemainingBoxes1;
             
-        #if 1
+        #if 0
             if(!lRemainingBoxes.empty())
             {
                 bool lOverlap = false;
@@ -1298,7 +1298,7 @@ pmScatteredTransferMapType pmMemoryDirectory2D::SetupRemoteRegionsForFetching(co
 
             for_each(lRemainingBoxes, [&] (const boost_box_type& pBox)
             {
-            #if 1
+            #if 0
                 std::vector<std::pair<boost_box_type, regionFetchData2D>> lOverlappingBoxes;
                 mInFlightRTree.query(boost::geometry::index::intersects(pBox), std::back_inserter(lOverlappingBoxes));
                 
@@ -1469,7 +1469,7 @@ bool pmMemoryDirectory2D::UpdateReceivedMemoryInternal(pmAddressSpace* pAddressS
     std::vector<std::pair<boost_box_type, regionFetchData2D>> lOverlappingBoxes;
     mInFlightRTree.query(boost::geometry::index::intersects(lIncomingBox), std::back_inserter(lOverlappingBoxes));
 
-#if 1
+#if 0
     if(lOverlappingBoxes.size() > 1)
     {
         std::cout << "Received Subscription (" << pOffset << ", " << pLength << ", " << pStep << ", "<< pCount << ") Matches " << lOverlappingBoxes.size() << " Potentials ..." << std::endl;
