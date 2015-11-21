@@ -100,6 +100,7 @@ enum eventIdentifier
     STEAL_SUCCESS_DISCONTIGUOUS_TARGET,
     STEAL_SUCCESS_DISCONTIGUOUS_STEALER,
 #endif
+    ALL_REDUCTIONS_DONE_EVENT,
     MAX_SCHEDULER_EVENTS
 };
 
@@ -518,6 +519,22 @@ struct affinityTransferEvent : public schedulerEvent
     , logicalToPhysicalSubtaskMapping(pLogicalToPhysicalSubtaskMapping)
     {}
 };
+    
+struct allReductionsDoneEvent : public schedulerEvent
+{
+    pmLocalTask* localTask;
+    pmExecutionStub* lastStub;
+    ulong lastSubtaskId;
+    pmSplitData lastSplitData;
+    
+    allReductionsDoneEvent(eventIdentifier pEventId, pmLocalTask* pLocalTask, pmExecutionStub* pLastStub, ulong pLastSubtaskId, const pmSplitData& pLastSplitData)
+    : schedulerEvent(pEventId)
+    , localTask(pLocalTask)
+    , lastStub(pLastStub)
+    , lastSubtaskId(pLastSubtaskId)
+    , lastSplitData(pLastSplitData)
+    {}
+};
 
 }
 
@@ -583,6 +600,8 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void TerminateTaskEvent(pmTask* pTask);
         void ReductionTerminationEvent(pmLocalTask* pLocalTask);
         void AffinityTransferEvent(pmLocalTask* pLocalTask, std::set<const pmMachine*>&& pMachines, const std::vector<ulong>* pLogicalToPhysicalSubtaskMapping);
+    
+        void AllReductionsDoneEvent(pmLocalTask* pLocalTask, pmExecutionStub* pLastStub, ulong pLastSubtaskId, const pmSplitData& pLastSplitData);
 
         void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> >& pChangeData);
         void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::scatteredOwnershipChangeStruct> >& pChangeData);

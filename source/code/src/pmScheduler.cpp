@@ -509,6 +509,11 @@ void pmScheduler::AffinityTransferEvent(pmLocalTask* pLocalTask, std::set<const 
     SwitchThread(std::shared_ptr<schedulerEvent>(new affinityTransferEvent(AFFINITY_TRANSFER_EVENT, pLocalTask, std::move(pMachines), pLogicalToPhysicalSubtaskMapping)), pLocalTask->GetPriority());
 }
     
+void pmScheduler::AllReductionsDoneEvent(pmLocalTask* pLocalTask, pmExecutionStub* pLastStub, ulong pLastSubtaskId, const pmSplitData& pLastSplitData)
+{
+    SwitchThread(std::shared_ptr<schedulerEvent>(new allReductionsDoneEvent(ALL_REDUCTIONS_DONE_EVENT, pLocalTask, pLastStub, pLastSubtaskId, pLastSplitData)), pLocalTask->GetPriority());
+}
+    
 void pmScheduler::SendFinalizationSignal()
 {
 	SwitchThread(std::shared_ptr<schedulerEvent>(new hostFinalizationEvent(HOST_FINALIZATION, false)), MAX_CONTROL_PRIORITY);
@@ -747,7 +752,7 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
         {
             taskCancelEvent& lEventDetails = static_cast<taskCancelEvent&>(pEvent);
             pmTask* lTask = lEventDetails.task;
-
+            
             CancelAllSubtaskSplitDummyEventsOnLocalStubs(lTask);
             CancelAllSubtasksExecutingOnLocalStubs(lTask, false);
     
@@ -956,6 +961,16 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
         {
             affinityTransferEvent& lEventDetails = static_cast<affinityTransferEvent&>(pEvent);
             SendAffinityDataToMachines(lEventDetails.localTask, lEventDetails.machines, *lEventDetails.logicalToPhysicalSubtaskMapping);
+            
+            break;
+        }
+            
+        case ALL_REDUCTIONS_DONE_EVENT:
+        {
+            allReductionsDoneEvent& lEventDetails = static_cast<allReductionsDoneEvent&>(pEvent);
+
+            std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr(lEventDetails.lastSplitData.operator std::unique_ptr<pmSplitInfo>());
+            lEventDetails.localTask->AllReductionsDone(lEventDetails.lastStub, lEventDetails.lastSubtaskId, lSplitInfoAutoPtr.get());
             
             break;
         }
@@ -1475,10 +1490,10 @@ void pmScheduler::SendStealResponse(const pmProcessingElement* pStealingDevice, 
 void pmScheduler::SendStealResponse(pmTask* pTask, const pmProcessingElement* pStealingDevice, const pmProcessingElement* pTargetDevice, std::vector<ulong>&& pDiscontiguousStealData)
 {
 #ifdef TRACK_SUBTASK_STEALS
-    for_each(pRangeVector, [&] (const pmSubtaskRange& range)
-    {
-        STEAL_RESPONSE_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*(pTargetDevice->GetMachine())), pStealingDevice->GetGlobalDeviceIndex(), pTargetDevice->GetGlobalDeviceIndex(), pRange.task->GetTaskExecStats().GetStubExecutionRate(pmStubManager::GetStubManager()->GetStub(pTargetDevice)), pRange.endSubtask - pRange.startSubtask + 1);
-    });
+//    for_each(pRangeVector, [&] (const pmSubtaskRange& range)
+//    {
+//        STEAL_RESPONSE_DUMP((uint)(*(pStealingDevice->GetMachine())), (uint)(*(pTargetDevice->GetMachine())), pStealingDevice->GetGlobalDeviceIndex(), pTargetDevice->GetGlobalDeviceIndex(), pRange.task->GetTaskExecStats().GetStubExecutionRate(pmStubManager::GetStubManager()->GetStub(pTargetDevice)), pRange.endSubtask - pRange.startSubtask + 1);
+//    });
 #endif
 
 	const pmMachine* lMachine = pStealingDevice->GetMachine();

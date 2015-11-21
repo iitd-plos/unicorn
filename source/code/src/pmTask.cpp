@@ -1427,9 +1427,9 @@ pmRemoteTask::pmRemoteTask(finalize_ptr<char, deleteArrayDeallocator<char>>& pTa
 {
     SetSequenceNumber(pSequenceNumber);
 
-    CreateReducerAndRedistributors();
-    
     pmProcessingElement::GetMachines(mDevices, mMachines);
+
+    CreateReducerAndRedistributors();
 }
 
 pmRemoteTask::~pmRemoteTask()
