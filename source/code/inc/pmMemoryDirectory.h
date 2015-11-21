@@ -211,7 +211,7 @@ private:
     bool CopyOrUpdateReceivedMemoryInternal(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmInFlightRegions& pInFlightMap, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource = NULL);
 
 #ifdef _DEBUG
-    void CheckMergability(const pmMemOwnership::iterator& pRange1, const pmMemOwnership::iterator& pRange2) const;
+    void CheckMergability(const pmMemOwnership::const_iterator& pRange1, const pmMemOwnership::const_iterator& pRange2) const;
     void SanitizeOwnerships() const;
     void PrintOwnerships() const;
 #endif

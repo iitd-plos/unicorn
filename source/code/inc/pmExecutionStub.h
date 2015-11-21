@@ -265,10 +265,12 @@ struct cancelSubtaskRangeEvent : public stubEvent
 struct cancelAllSubtasksEvent : public stubEvent
 {
     pmTask* task;
+    bool taskListeningOnCancellation;
     
-    cancelAllSubtasksEvent(eventIdentifier pEventId, pmTask* pTask)
+    cancelAllSubtasksEvent(eventIdentifier pEventId, pmTask* pTask, bool pTaskListeningOnCancellation)
     : stubEvent(pEventId)
     , task(pTask)
+    , taskListeningOnCancellation(pTaskListeningOnCancellation)
     {}
 };
 
@@ -357,7 +359,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 	private:
         void PushInternal(const pmSubtaskRange& pRange, bool pIsStealResponse);
 
-        void CancelAllSubtasksInternal(pmTask* pTask);
+        void CancelAllSubtasksInternal(pmTask* pTask, bool pTaskListeningOnCancellation);
         void CancelSubtaskRangeInternal(const pmSubtaskRange& pRange);
 
         void CheckTermination();

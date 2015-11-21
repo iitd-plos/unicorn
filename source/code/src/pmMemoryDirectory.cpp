@@ -316,14 +316,14 @@ void pmMemoryDirectoryLinear::CloneFrom(pmMemoryDirectory* pDirectory)
 
 
 #ifdef _DEBUG
-void pmMemoryDirectoryLinear::CheckMergability(const pmMemOwnership::iterator& pRange1, const pmMemOwnership::iterator& pRange2) const
+void pmMemoryDirectoryLinear::CheckMergability(const pmMemOwnership::const_iterator& pRange1, const pmMemOwnership::const_iterator& pRange2) const
 {
     size_t lOffset1 = pRange1->first;
     size_t lOffset2 = pRange2->first;
     size_t lLength1 = pRange1->second.first;
     size_t lLength2 = pRange2->second.first;
-    vmRangeOwner& lRangeOwner1 = pRange1->second.second;
-    vmRangeOwner& lRangeOwner2 = pRange2->second.second;
+    const vmRangeOwner& lRangeOwner1 = pRange1->second.second;
+    const vmRangeOwner& lRangeOwner2 = pRange2->second.second;
     
     if(lOffset1 + lLength1 != lOffset2)
         std::cout << "<<< ERROR >>> Host " << pmGetHostId() << " Range end points don't match. Range 1: Offset = " << lOffset1 << " Length = " << lLength1 << " Range 2: Offset = " << lOffset2 << std::endl;
@@ -342,7 +342,7 @@ void pmMemoryDirectoryLinear::SanitizeOwnerships() const
     
     for(lIter = lBegin; lIter != lPenultimate; ++lIter)
     {
-        pmMemOwnership::iterator lNext = lIter;
+        pmMemOwnership::const_iterator lNext = lIter;
         ++lNext;
         
         CheckMergability(lIter, lNext);

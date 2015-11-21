@@ -112,6 +112,26 @@ void pmSafePQ<T, P>::BlockSecondaryOperations()
     
     mSecondaryOperationsBlocked = true;
 }
+    
+template<typename T, typename P>
+void pmSafePQ<T, P>::CallWhenSecondaryOperationsUnblocked(const std::function<void ()>& pFunc)
+{
+    while(1)
+    {
+        // Auto lock/unlock scope
+        {
+            FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+            if(!mSecondaryOperationsBlocked)
+            {
+                pFunc();
+                return;
+            }
+        }
+    
+        mSecondaryOperationsWait.Wait();
+    }
+}
 
 template<typename T, typename P>
 bool pmSafePQ<T, P>::IsHighPriorityElementPresent(P pPriority)

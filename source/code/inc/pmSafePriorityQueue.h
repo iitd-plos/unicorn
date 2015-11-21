@@ -54,6 +54,8 @@ class pmSafePQ : public pmBase
     
         void UnblockSecondaryOperations();
         void BlockSecondaryOperations();
+    
+        void CallWhenSecondaryOperationsUnblocked(const std::function<void ()>& pFunc);
 
         void WaitForCurrentItem();
         void WaitIfMatchingItemBeingProcessed(matchFuncPtr pMatchFunc, void* pMatchCriterion);

@@ -243,15 +243,20 @@ void pmExecutionStub::ProcessNegotiatedRange(const pmSubtaskRange& pRange)
     
 void pmExecutionStub::CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation)
 {
-    SwitchThread(std::shared_ptr<stubEvent>(new cancelAllSubtasksEvent(CANCEL_ALL_SUBTASKS, pTask)), pTask->GetPriority() - 1);
+    pTask->RecordStubWillSendCancellationMessage();
 
+    SwitchThread(std::shared_ptr<stubEvent>(new cancelAllSubtasksEvent(CANCEL_ALL_SUBTASKS, pTask, pTaskListeningOnCancellation)), pTask->GetPriority() - 1);
+
+    std::function<void ()> lFunc = [&] ()
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
         
         if(mCurrentSubtaskRangeStats && mCurrentSubtaskRangeStats->task == pTask)
-            CancelCurrentlyExecutingSubtaskRange(pTaskListeningOnCancellation);
-    }
+            CancelCurrentlyExecutingSubtaskRange(false);
+    };
+
+    CallWhenSecondaryCommandsUnblocked(lFunc);
 
     if(pTask->IsMultiAssignEnabled() && !pmTaskManager::GetTaskManager()->DoesTaskHavePendingSubtasks(pTask) && pmScheduler::SchedulingModelSupportsStealing(pTask->GetSchedulingModel()))
     {
@@ -273,6 +278,7 @@ void pmExecutionStub::CancelSubtaskRange(const pmSubtaskRange& pRange)
 {
     SwitchThread(std::shared_ptr<stubEvent>(new cancelSubtaskRangeEvent(CANCEL_SUBTASK_RANGE, pRange)), pRange.task->GetPriority() - 1);
 
+    std::function<void ()> lFunc = [&] ()
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());
@@ -284,15 +290,20 @@ void pmExecutionStub::CancelSubtaskRange(const pmSubtaskRange& pRange)
             if(mCurrentSubtaskRangeStats->startSubtaskId >= pRange.startSubtask && mCurrentSubtaskRangeStats->endSubtaskId <= pRange.endSubtask)
                 CancelCurrentlyExecutingSubtaskRange(false);
         }
-    }
+    };
+    
+    CallWhenSecondaryCommandsUnblocked(lFunc);
 }
 
-void pmExecutionStub::CancelAllSubtasksInternal(pmTask* pTask)
+void pmExecutionStub::CancelAllSubtasksInternal(pmTask* pTask, bool pTaskListeningOnCancellation)
 {
     ushort lPriority = pTask->GetPriority();
 
     // Delete all subtask exec commands for the task pTask
     DeleteMatchingCommands(lPriority, execEventMatchFunc, pTask);
+    
+    if(pTaskListeningOnCancellation)
+        pTask->RegisterStubCancellationMessage();
 }
     
 void pmExecutionStub::CancelSubtaskRangeInternal(const pmSubtaskRange& pRange)
@@ -1421,7 +1432,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         {
             cancelAllSubtasksEvent& lEvent = static_cast<cancelAllSubtasksEvent&>(pEvent);
             
-            CancelAllSubtasksInternal(lEvent.task);
+            CancelAllSubtasksInternal(lEvent.task, lEvent.taskListeningOnCancellation);
 
             break;
         }

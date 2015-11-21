@@ -125,7 +125,7 @@ void pmPThread<T, P>::WaitIfCurrentCommandMatches(typename pmSafePQ<T, P>::match
 {
     this->mSafePQ.WaitIfMatchingItemBeingProcessed(pMatchFunc, pMatchCriterion);
 }
-    
+
 template<typename T, typename P>
 void pmPThread<T, P>::WaitForQueuedCommands()
 {
@@ -178,6 +178,12 @@ void pmThread<T, P>::BlockSecondaryCommands()
     this->mSafePQ.BlockSecondaryOperations();
 }
 
+template<typename T, typename P>
+void pmThread<T, P>::CallWhenSecondaryCommandsUnblocked(const std::function<void ()>& pFunc)
+{
+    this->mSafePQ.CallWhenSecondaryOperationsUnblocked(pFunc);
+}
+    
 template<typename T, typename P>
 void pmPThread<T, P>::SetProcessorAffinity(int pProcessorId)
 {

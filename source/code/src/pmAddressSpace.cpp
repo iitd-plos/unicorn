@@ -567,7 +567,7 @@ void pmAddressSpace::Unlock(pmTask* pTask)
 #ifdef _DEBUG
     // Auto lock/unlock scope
     {
-        FINALIZE_RESOURCE_PTR(dOwnershipLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipLock, Lock(), Unlock());
+        FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
         
         EXCEPTION_ASSERT(mOwnershipTransferVector.empty());
         EXCEPTION_ASSERT(mScatteredOwnershipTransferVector.empty());
@@ -722,14 +722,14 @@ void pmAddressSpace::FlushOwnerships()
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::FLUSH_MEMORY_OWNERSHIPS);
 #endif
 
-    EXCEPTION_ASSERT(mOwnershipTransferVector.empty() || mScatteredOwnershipTransferVector.empty());
-
     DEBUG_EXCEPTION_ASSERT(lTask && lTask->IsWritable(this));
     
     mDirectoryPtr->CloneFrom(mOriginalDirectoryPtr.get());
     mOriginalDirectoryPtr->Clear();
     
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
+
+    EXCEPTION_ASSERT(mOwnershipTransferVector.empty() || mScatteredOwnershipTransferVector.empty());
 
     bool lOwnershipTransferRequired = ((mOwner == PM_LOCAL_MACHINE) && (!lTask->GetCallbackUnit()->GetDataReductionCB()) && (!lTask->GetCallbackUnit()->GetDataRedistributionCB()));
     pmOwnershipTransferMap lOwnershipTransferMap;
