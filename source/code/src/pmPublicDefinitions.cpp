@@ -734,6 +734,36 @@ pmScatteredSubscriptionInfo::pmScatteredSubscriptionInfo(size_t pOffset, size_t 
     , step(pStep)
     , count(pCount)
 {}
+    
+pmStatus pmReduceIntAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
+{
+    return pmReduceInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
+}
+
+pmStatus pmReduceUIntAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
+{
+    return pmReduceUInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
+}
+
+pmStatus pmReduceLongAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
+{
+    return pmReduceLongs(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
+}
+
+pmStatus pmReduceULongAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
+{
+    return pmReduceULongs(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
+}
+
+pmStatus pmReduceFloatAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
+{
+    return pmReduceFloats(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
+}
+
+pmStatus pmReduceDoubleAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
+{
+    return pmReduceDoubles(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
+}
 
 pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo)
 {

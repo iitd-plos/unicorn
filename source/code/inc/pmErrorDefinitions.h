@@ -217,7 +217,12 @@ typedef unsigned long ulong;
 				PROBE_ERROR,
 				GET_COUNT_ERROR,
 				DUMMY_REQUEST_CANCEL_ERROR,
-                SUBARRAY_TYPE_CREATION
+                SUBARRAY_TYPE_CREATION,
+                COMM_GROUP_ERROR,
+                GROUP_INCL_ERROR,
+                COMM_CREATE_ERROR,
+                GROUP_FREE_ERROR,
+                COMM_FREE_ERROR
 			} failureTypes;
 
 			pmNetworkException(failureTypes pFailureId) {mFailureId = pFailureId;}

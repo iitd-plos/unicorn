@@ -159,6 +159,11 @@ public:
     virtual ulong GetDataLength() const = 0;
     virtual pmCommunicatorCommandPtr Clone() = 0;   /* Creates a copy of the command. The data is not copied, however */
     
+    void HoldExternalDataForLifetimeOfCommand(const std::shared_ptr<void>& pExternalDataPtr)
+    {
+        mExternalDataPtr = pExternalDataPtr;
+    }
+    
     void SetPersistent()
     {
         mPersistent = true;
@@ -188,6 +193,7 @@ private:
     communicator::communicatorDataTypes mDataType;
     const pmHardware* mDestination;
     bool mPersistent;
+    std::shared_ptr<void> mExternalDataPtr;
 };
     
 template<typename T, typename D, bool>

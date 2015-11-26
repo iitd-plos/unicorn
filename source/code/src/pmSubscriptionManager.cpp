@@ -971,6 +971,13 @@ size_t pmSubscriptionManager::GetReservedCudaGlobalMemSize(pmExecutionStub* pStu
 	return lSubtask.mReservedCudaGlobalMemSize;
 }
 
+bool pmSubscriptionManager::HasScratchBuffers(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+{
+    GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);
+
+    return !lSubtask.mScratchBuffers.empty();
+}
+    
 void pmSubscriptionManager::DeleteScratchBuffer(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, pmScratchBufferType pScratchBufferType)
 {
     GET_SUBTASK(lSubtask, pStub, pSubtaskId, pSplitInfo);

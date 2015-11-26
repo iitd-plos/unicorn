@@ -12,8 +12,6 @@
 		0E20293F162DF290006DC536 /* pmTls.h in Headers */ = {isa = PBXBuildFile; fileRef = 0E20293E162DF290006DC536 /* pmTls.h */; };
 		0E202941162DF35B006DC536 /* pmTls.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E202940162DF35B006DC536 /* pmTls.cpp */; };
 		0E29502015CAFE3A00F31801 /* pmTimedEventManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0E29501F15CAFE3A00F31801 /* pmTimedEventManager.cpp */; };
-		0E78AD0416A9B11800EF45BF /* libmpi_cxx.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E78AD0216A9B11800EF45BF /* libmpi_cxx.0.dylib */; };
-		0E78AD0516A9B11800EF45BF /* libmpi.0.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E78AD0316A9B11800EF45BF /* libmpi.0.dylib */; };
 		0EB3339F16F28D120078AC9C /* pmDataTypes.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EB3339D16F28D110078AC9C /* pmDataTypes.cpp */; };
 		0EDC2EAA15B313C700937B7E /* pmTaskProfiler.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EDC2EA915B313C700937B7E /* pmTaskProfiler.cpp */; };
 		0EFEA57216EF141000DDB741 /* pmUtility.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 0EFEA57016EF141000DDB741 /* pmUtility.cpp */; };
@@ -27,6 +25,8 @@
 		2B5590AE1A2197D900E0F3B1 /* pmAffinityTable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B5590AD1A2197D900E0F3B1 /* pmAffinityTable.cpp */; };
 		2B5590B11A21A13700E0F3B1 /* pmTable.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B5590B01A21A13700E0F3B1 /* pmTable.cpp */; };
 		2B5B5615197069CA00D13566 /* pmStealAgent.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2B5B5613197069CA00D13566 /* pmStealAgent.cpp */; };
+		2B77138B1C05F56E00206B51 /* libmpi.12.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B7713891C05F54800206B51 /* libmpi.12.dylib */; };
+		2B77138D1C05F56E00206B51 /* libmpi_cxx.1.dylib in Frameworks */ = {isa = PBXBuildFile; fileRef = 2B77138C1C05F56E00206B51 /* libmpi_cxx.1.dylib */; };
 		2BA4C97F1BED125200FEA529 /* pmMemoryDirectory.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BA4C97E1BED125200FEA529 /* pmMemoryDirectory.cpp */; };
 		2BC0D9D217F9F0DC001CAE05 /* pmCache.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC0D9D017F9F0DC001CAE05 /* pmCache.cpp */; };
 		2BC4072018E9E37B00D1472B /* pmOpenCLManager.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 2BC4071E18E9E37B00D1472B /* pmOpenCLManager.cpp */; };
@@ -128,6 +128,8 @@
 		2B5590B01A21A13700E0F3B1 /* pmTable.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTable.cpp; sourceTree = "<group>"; };
 		2B5B56111970697B00D13566 /* pmStealAgent.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmStealAgent.h; sourceTree = "<group>"; };
 		2B5B5613197069CA00D13566 /* pmStealAgent.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmStealAgent.cpp; sourceTree = "<group>"; };
+		2B7713891C05F54800206B51 /* libmpi.12.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi.12.dylib; path = "../../../../../../../Installations/openmpi-1.10.0-multithreaded/release/lib/libmpi.12.dylib"; sourceTree = "<group>"; };
+		2B77138C1C05F56E00206B51 /* libmpi_cxx.1.dylib */ = {isa = PBXFileReference; lastKnownFileType = "compiled.mach-o.dylib"; name = libmpi_cxx.1.dylib; path = "../../../../../../../Installations/openmpi-1.10.0-multithreaded/release/lib/libmpi_cxx.1.dylib"; sourceTree = "<group>"; };
 		2BA4C97D1BED122800FEA529 /* pmMemoryDirectory.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmMemoryDirectory.h; sourceTree = "<group>"; };
 		2BA4C97E1BED125200FEA529 /* pmMemoryDirectory.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmMemoryDirectory.cpp; sourceTree = "<group>"; };
 		2BC0D9CF17F9F0C3001CAE05 /* pmCache.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmCache.h; sourceTree = "<group>"; };
@@ -209,8 +211,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				0E78AD0416A9B11800EF45BF /* libmpi_cxx.0.dylib in Frameworks */,
-				0E78AD0516A9B11800EF45BF /* libmpi.0.dylib in Frameworks */,
+				2B77138D1C05F56E00206B51 /* libmpi_cxx.1.dylib in Frameworks */,
+				2B77138B1C05F56E00206B51 /* libmpi.12.dylib in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -220,6 +222,8 @@
 		2BCCED12151C7AA1006AA45D = {
 			isa = PBXGroup;
 			children = (
+				2B77138C1C05F56E00206B51 /* libmpi_cxx.1.dylib */,
+				2B7713891C05F54800206B51 /* libmpi.12.dylib */,
 				0E78AD0216A9B11800EF45BF /* libmpi_cxx.0.dylib */,
 				0E78AD0316A9B11800EF45BF /* libmpi.0.dylib */,
 				2BCCED2E151C7B07006AA45D /* inc */,
@@ -612,12 +616,13 @@
 				GCC_WARN_HIDDEN_VIRTUAL_FUNCTIONS = YES;
 				GCC_WARN_NON_VIRTUAL_DESTRUCTOR = YES;
 				HEADER_SEARCH_PATHS = (
-					"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/include/",
+					"$(SRCROOT)/../../../../../../../Installations/openmpi-1.10.0-multithreaded/release/include/",
 					"$(SRCROOT)/../../../../thirdparty/boost/**",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib\"",
+					"/Users/tberi/Installations/openmpi-1.10.0-multithreaded/release/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -648,12 +653,13 @@
 				GCC_WARN_HIDDEN_VIRTUAL_FUNCTIONS = YES;
 				GCC_WARN_NON_VIRTUAL_DESTRUCTOR = YES;
 				HEADER_SEARCH_PATHS = (
-					"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/include/",
+					"$(SRCROOT)/../../../../../../../Installations/openmpi-1.10.0-multithreaded/release/include/",
 					"$(SRCROOT)/../../../../thirdparty/boost/**",
 				);
 				LIBRARY_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"$(SRCROOT)/../../../../../../../Installations/openmpi-1.4.5-multithreaded/release/lib\"",
+					"/Users/tberi/Installations/openmpi-1.10.0-multithreaded/release/lib",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 10.7;
 				PRODUCT_NAME = "$(TARGET_NAME)";

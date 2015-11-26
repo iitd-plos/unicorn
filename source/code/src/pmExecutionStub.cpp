@@ -430,6 +430,11 @@ void pmExecutionStub::CancelPostNegotiationSplittedExecutionInternal(std::vector
     }
 }
 #endif
+    
+void pmExecutionStub::AddPlaceHolderEventForDirectExternalReduction(pmTask* pTask)
+{
+    SwitchThread(std::shared_ptr<stubEvent>(new directExternalReductionPlaceHolderEvent(DIRECT_EXTERNAL_REDUCTION, pTask)), pTask->GetPriority());
+}
 
 void pmExecutionStub::NegotiateRange(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange)
 {
@@ -1445,7 +1450,16 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
 
             break;
         }
+
+        case DIRECT_EXTERNAL_REDUCTION:
+        {
+            directExternalReductionPlaceHolderEvent& lEvent = static_cast<directExternalReductionPlaceHolderEvent&>(pEvent);
             
+            lEvent.task->GetReducer()->PerformDirectExternalReductions();
+            
+            break;
+        }
+
         default:
             PMTHROW(pmFatalErrorException());
 	}

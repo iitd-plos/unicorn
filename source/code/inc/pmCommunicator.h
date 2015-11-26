@@ -812,7 +812,7 @@ struct subtaskReduceStruct
 {
     uint originatingHost;
     ulong sequenceNumber;	// sequence number of local task object (on originating host)
-    ulong subtaskId;
+    ulong subtaskId;        // Currently, split info does not travel with reduction struct
     uint shadowMemsCount;
     uint scratchBuffer1Length;  // PRE_SUBTASK_TO_POST_SUBTASK scratch buffer
     uint scratchBuffer2Length;  // SUBTASK_TO_POST_SUBTASK scratch buffer
@@ -860,6 +860,42 @@ struct subtaskReducePacked
     {}
 
     subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+};
+
+struct subtaskMemoryReduceStruct
+{
+    uint originatingHost;
+    ulong sequenceNumber;	// sequence number of local task object (on originating host)
+    ulong subtaskId;        // Currently, split info does not travel with reduction struct
+    ulong offset;
+    ulong length;
+    int mpiTag;             // MPI tag of the upcoming message that contains actual memory
+    uint senderHost;        // Id of the host sending this message
+
+    typedef enum fieldCount
+    {
+        FIELD_COUNT_VALUE = 7
+    } fieldCount;
+    
+    subtaskMemoryReduceStruct()
+    : originatingHost(std::numeric_limits<uint>::max())
+    , sequenceNumber(0)
+    , subtaskId(std::numeric_limits<ulong>::max())
+    , offset(0)
+    , length(0)
+    , mpiTag(0)
+    , senderHost(std::numeric_limits<uint>::max())
+    {}
+
+    subtaskMemoryReduceStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pSubtaskId, ulong pOffset, ulong pLength, int pMpiTag, uint pSenderHost)
+    : originatingHost(pOriginatingHost)
+    , sequenceNumber(pSequenceNumber)
+    , subtaskId(pSubtaskId)
+    , offset(pOffset)
+    , length(pLength)
+    , mpiTag(pMpiTag)
+    , senderHost(pSenderHost)
+    {}
 };
 
 struct memoryReceiveStruct
@@ -1271,6 +1307,9 @@ class pmCommunicator : public pmBase
 		
         void SendMemory(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
         void ReceiveMemory(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
+    
+        void SendReduce(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
+        void ReceiveReduce(pmCommunicatorCommandPtr& pCommand, bool pBlocking = false);
 
     private:
 		pmCommunicator();

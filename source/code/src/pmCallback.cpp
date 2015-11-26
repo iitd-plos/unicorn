@@ -248,6 +248,11 @@ pmStatus pmDataReductionCB::Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong
 	return mCallback(pTask->GetTaskInfo(), pStub1->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo1, pStub2->GetProcessingElement()->GetDeviceInfo(), lSubtaskInfo2);
 }
 
+const pmDataReductionCallback pmDataReductionCB::GetCallback() const
+{
+    return mCallback;
+}
+
 
 /* class pmDataRedistributionCB */
 pmDataRedistributionCB::pmDataRedistributionCB(pmDataRedistributionCallback pCallback)

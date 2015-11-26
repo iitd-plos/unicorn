@@ -23,6 +23,7 @@
 
 #include "pmBase.h"
 #include "pmResourceLock.h"
+#include "pmCommunicator.h"
 
 #include <vector>
 #include <limits>
@@ -53,7 +54,9 @@ struct lastSubtaskData
     
 class pmReducer : public pmBase
 {
-	public:
+    friend void PostMpiReduceCommandCompletionCallback(const pmCommandPtr& pCommand);
+
+    public:
 		pmReducer(pmTask* pTask);
 
 		void CheckReductionFinish();
@@ -62,6 +65,8 @@ class pmReducer : public pmBase
     
         void SignalSendToMachineAboutNoLocalReduction();
         void RegisterNoReductionReqdResponse();
+    
+        void PrepareForExternalReceive(communicator::subtaskMemoryReduceStruct& pStruct);
 
         void ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
         void ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
@@ -70,6 +75,9 @@ class pmReducer : public pmBase
         void ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
         void ReduceDoubles(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType);
 
+        void PerformDirectExternalReductions();
+        void RegisterExternalReductionFinish();
+    
 	private:
 		void PopulateExternalMachineList();
 		ulong GetMaxPossibleExternalReductionReceives(uint pFollowingMachineCount);
@@ -90,8 +98,10 @@ class pmReducer : public pmBase
 		const pmMachine* mSendToMachine;			// Machine to which this machine will send
 		pmTask* mTask;
     
-        bool mAddedReductionFinishEvent;
+        std::vector<communicator::subtaskMemoryReduceStruct> mSubtaskMemoryReduceStructVector;
 
+        bool mReductionTerminated;
+    
 		RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
 

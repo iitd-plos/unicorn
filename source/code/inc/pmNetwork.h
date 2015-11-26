@@ -71,6 +71,9 @@ class pmNetwork : public pmBase
     
         virtual void BroadcastNonBlocking(pmCommunicatorCommandPtr& pCommand) = 0;
 		virtual void All2AllNonBlocking(pmCommunicatorCommandPtr& pCommand) = 0;
+    
+        virtual void SendReduce(pmCommunicatorCommandPtr& pCommand) = 0;
+        virtual void ReceiveReduce(pmCommunicatorCommandPtr& pCommand) = 0;
 
         virtual void FreezeReceptionAndFinishCommands() = 0;
 
@@ -88,6 +91,8 @@ class pmNetwork : public pmBase
 
 		virtual void GlobalBarrier() = 0;
         virtual void StartReceiving() = 0;
+    
+        virtual bool IsImplicitlyReducible(pmTask* pTask) const = 0;
 
 		pmNetwork();
 		virtual ~pmNetwork();
@@ -145,6 +150,19 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
             private:
                 MPI_Datatype mSubArrayType;
         };
+    
+        class pmMpiCommWrapper
+        {
+            public:
+                pmMpiCommWrapper(uint pFirstMachineGlobalRank, uint pSecondMachineGlobalRank);
+                ~pmMpiCommWrapper();
+            
+                MPI_Comm GetCommunicator() const;
+            
+            private:
+                MPI_Group mGroup;
+                MPI_Comm mCommunicator;
+        };
 
 		static pmNetwork* GetNetwork();
 
@@ -158,6 +176,9 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
         virtual void BroadcastNonBlocking(pmCommunicatorCommandPtr& pCommand);
 		virtual void All2AllNonBlocking(pmCommunicatorCommandPtr& pCommand);
     
+        virtual void SendReduce(pmCommunicatorCommandPtr& pCommand);
+        virtual void ReceiveReduce(pmCommunicatorCommandPtr& pCommand);
+
         virtual void FreezeReceptionAndFinishCommands();
 
 		virtual pmCommunicatorCommandPtr PackData(pmCommunicatorCommandPtr& pCommand);
@@ -174,6 +195,8 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
 
 		virtual void InitializePersistentCommand(pmCommunicatorCommandPtr& pCommand);
 		virtual void TerminatePersistentCommand(pmCommunicatorCommandPtr& pCommand);
+    
+        virtual bool IsImplicitlyReducible(pmTask* pTask) const;
 
 		virtual void GlobalBarrier();
         virtual void StartReceiving();
@@ -196,7 +219,10 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
         MPI_Request GetPersistentSendRequestInternal(pmCommunicatorCommandPtr& pCommand);
         MPI_Request GetPersistentRecvRequestInternal(pmCommunicatorCommandPtr& pCommand);
     
-		void SetupDummyRequest();
+        MPI_Datatype GetReducibleDataTypeAndSize(pmTask* pTask, size_t& pSize) const;
+        MPI_Op GetReductionMpiOperation(pmTask* pTask) const;
+
+        void SetupDummyRequest();
 		void CancelDummyRequest();
 
         void CommandComplete(pmCommunicatorCommandPtr& pCommand, pmStatus pStatus);
@@ -227,6 +253,10 @@ class pmMPI : public pmNetwork, public THREADING_IMPLEMENTATION_CLASS<network::n
     
 		pmUnknownLengthReceiveThread* mReceiveThread;
         pmDynamicMpiTagProducer mDynamicMpiTagProducer;
+
+    #ifdef PRE_CREATE_SUB_COMMUNICATORS
+        std::map<std::pair<uint, uint>, std::shared_ptr<pmMpiCommWrapper>> mSubCommunicators;
+    #endif
 };
 
 } // end namespace pm

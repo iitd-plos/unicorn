@@ -92,6 +92,8 @@ class pmDataReductionCB : public pmCallback
 
 		pmStatus Invoke(pmTask* pTask, pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, bool pMultiAssign1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, bool pMultiAssign2) const;
 
+        const pmDataReductionCallback GetCallback() const;
+    
 	private:
 		const pmDataReductionCallback mCallback;
 };

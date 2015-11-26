@@ -345,17 +345,6 @@ pmStatus pageRank_cpu(pmTaskInfo pTaskInfo, pmDeviceInfo pDeviceInfo, pmSubtaskI
 	return pmSuccess;
 }
     
-pmStatus pageRankDataReduction(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
-{
-#if PAGE_RANK_DATA_TYPE == float
-    return pmReduceFloats(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-#elif PAGE_RANK_DATA_TYPE == int
-    return pmReduceInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-#else
-#error "Unsupported data type"
-#endif
-}
-
 #define READ_NON_COMMON_ARGS \
 	char* lBasePath = DEFAULT_BASE_PATH; \
 	FETCH_STR_ARG(lBasePath, pCommonArgs, argc, argv);
@@ -534,7 +523,13 @@ pmCallbacks DoSetDefaultCallbacks()
 	lCallbacks.subtask_gpu_custom = pageRank_cudaLaunchFunc;
 #endif
 
-    lCallbacks.dataReduction = pageRankDataReduction;
+#if PAGE_RANK_DATA_TYPE == float
+    lCallbacks.dataReduction = pmReduceFloatAdd;
+#elif PAGE_RANK_DATA_TYPE == int
+    lCallbacks.dataReduction = pmReduceIntAdd;
+#else
+#error "Unsupported data type"
+#endif
 
 	return lCallbacks;
 }

@@ -101,6 +101,7 @@ enum eventIdentifier
     STEAL_SUCCESS_DISCONTIGUOUS_STEALER,
 #endif
     ALL_REDUCTIONS_DONE_EVENT,
+    EXTERNAL_REDUCTION_FINISH_EVENT,
     MAX_SCHEDULER_EVENTS
 };
 
@@ -535,6 +536,16 @@ struct allReductionsDoneEvent : public schedulerEvent
     , lastSplitData(pLastSplitData)
     {}
 };
+    
+struct externalReductionFinishEvent : public schedulerEvent
+{
+    pmTask* task;
+    
+    externalReductionFinishEvent(eventIdentifier pEventId, pmTask* pTask)
+    : schedulerEvent(pEventId)
+    , task(pTask)
+    {}
+};
 
 }
 
@@ -589,7 +600,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void TaskCompleteEvent(pmLocalTask* pLocalTask);
 		void ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, const pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
         void NoReductionRequiredEvent(pmTask* pTask, const pmMachine* pDestMachine);
-        void MemTransferEvent(pmAddressSpace* pSrcAddressSpace, communicator::memoryIdentifierStruct& pDestMemIdentifier, ulong pOffset, ulong pLength, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority);
     
         void CommandCompletionEvent(const pmCommandPtr& pCommand);
         void RangeCancellationEvent(const pmProcessingElement* pTargetDevice, const pmSubtaskRange& pRange);
@@ -602,6 +612,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         void AffinityTransferEvent(pmLocalTask* pLocalTask, std::set<const pmMachine*>&& pMachines, const std::vector<ulong>* pLogicalToPhysicalSubtaskMapping);
     
         void AllReductionsDoneEvent(pmLocalTask* pLocalTask, pmExecutionStub* pLastStub, ulong pLastSubtaskId, const pmSplitData& pLastSplitData);
+        void AddRegisterExternalReductionFinishEvent(pmTask* pTask);
 
         void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::ownershipChangeStruct> >& pChangeData);
         void SendPostTaskOwnershipTransfer(pmAddressSpace* pAddressSpace, const pmMachine* pReceiverHost, std::shared_ptr<std::vector<communicator::scatteredOwnershipChangeStruct> >& pChangeData);
@@ -683,6 +694,7 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
         pmCommunicatorCommandPtr mHostFinalizationCommand;
         pmCommunicatorCommandPtr mSubtaskRangeCancelCommand;
         pmCommunicatorCommandPtr mNoReductionReqdCommand;
+        pmCommunicatorCommandPtr mSubtaskMemoryReduceCommand;
 
     #ifdef TRACK_SUBTASK_EXECUTION
         ulong mSubtasksAssigned;

@@ -78,6 +78,7 @@ enum eventIdentifier
     , REMOTE_SUBTASK_REDUCE
     , CANCEL_SUBTASK_RANGE
     , CANCEL_ALL_SUBTASKS
+    , DIRECT_EXTERNAL_REDUCTION
     , MAX_EXEC_STUB_EVENTS
 };
 
@@ -273,6 +274,16 @@ struct cancelAllSubtasksEvent : public stubEvent
     , taskListeningOnCancellation(pTaskListeningOnCancellation)
     {}
 };
+    
+struct directExternalReductionPlaceHolderEvent : public stubEvent
+{
+    pmTask* task;
+
+    directExternalReductionPlaceHolderEvent(eventIdentifier pEventId, pmTask* pTask)
+    : stubEvent(pEventId)
+    , task(pTask)
+    {}
+};
 
 }
 
@@ -322,6 +333,8 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void SplitSubtaskCheckEvent(pmTask* pTask);
         void RemoveSplitSubtaskCheckEvent(pmTask* pTask);
     #endif
+    
+        void AddPlaceHolderEventForDirectExternalReduction(pmTask* pTask);
 
         void NegotiateRange(const pmProcessingElement* pRequestingDevice, const pmSubtaskRange& pRange);
 

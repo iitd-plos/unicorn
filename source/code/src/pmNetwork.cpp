@@ -29,6 +29,8 @@
 #include "pmStubManager.h"
 #include "pmHeavyOperations.h"
 #include "pmLogger.h"
+#include "pmTask.h"
+#include "pmTaskManager.h"
 
 namespace pm
 {
@@ -192,6 +194,25 @@ pmMPI::pmMPI()
 #ifdef TRACK_MEM_COPIES
     gMemCopyTracker.SetHostId(mHostId);
 #endif
+
+#ifdef PRE_CREATE_SUB_COMMUNICATORS
+    if(lHosts > 1)
+    {
+        for(int i = 0; i < lHosts - 1; ++i)
+        {
+            for(int j = 1; j < lHosts; ++j)
+            {
+                if(i != j)
+                {
+                    pmMpiCommWrapper* lInternalCommunicator = new pmMpiCommWrapper(i, j);
+
+                    if(lInternalCommunicator->GetCommunicator() != MPI_COMM_NULL)
+                        mSubCommunicators.emplace(std::piecewise_construct, std::forward_as_tuple(i, j), std::forward_as_tuple(lInternalCommunicator));
+                }
+            }
+        }
+    }
+#endif
 }
 
 pmMPI::~pmMPI()
@@ -256,7 +277,11 @@ pmMPI::~pmMPI()
 
 	delete static_cast<pmClusterMPI*>(PM_GLOBAL_CLUSTER);
 
-	if( MPI_CALL("MPI_Finalize", (MPI_Finalize() != MPI_SUCCESS)) )
+#ifdef PRE_CREATE_SUB_COMMUNICATORS
+    mSubCommunicators.clear();
+#endif
+
+    if( MPI_CALL("MPI_Finalize", (MPI_Finalize() != MPI_SUCCESS)) )
         PMTHROW(pmNetworkException(pmNetworkException::FINALIZE_ERROR));
 
     #ifdef DUMP_THREADS
@@ -1315,6 +1340,178 @@ void pmMPI::ReceiveMemory(pmCommunicatorCommandPtr& pCommand)
     ReceiveNonBlockingInternal(pCommand, lTargetMem, 1, lSubArrayManager.GetMpiType());
 #endif
 }
+
+bool pmMPI::IsImplicitlyReducible(pmTask* pTask) const
+{
+    size_t lSize = 0;
+    return (GetReducibleDataTypeAndSize(pTask, lSize) != MPI_DATATYPE_NULL && GetReductionMpiOperation(pTask) != MPI_OP_NULL);
+}
+    
+MPI_Datatype pmMPI::GetReducibleDataTypeAndSize(pmTask* pTask, size_t& pSize) const
+{
+    const pmDataReductionCallback lDataReductionCallback = pTask->GetCallbackUnit()->GetDataReductionCB()->GetCallback();
+    
+    if(lDataReductionCallback == pmReduceIntAdd)
+    {
+        pSize = sizeof(int);
+        return MPI_INT;
+    }
+    else if(lDataReductionCallback == pmReduceUIntAdd)
+    {
+        pSize = sizeof(uint);
+        return MPI_UNSIGNED;
+    }
+    else if(lDataReductionCallback == pmReduceLongAdd)
+    {
+        pSize = sizeof(long);
+        return MPI_LONG;
+    }
+    else if(lDataReductionCallback == pmReduceULongAdd)
+    {
+        pSize = sizeof(ulong);
+        return MPI_UNSIGNED_LONG;
+    }
+    else if(lDataReductionCallback == pmReduceFloatAdd)
+    {
+        pSize = sizeof(float);
+        return MPI_FLOAT;
+    }
+    else if(lDataReductionCallback == pmReduceDoubleAdd)
+    {
+        pSize = sizeof(double);
+        return MPI_DOUBLE;
+    }
+    
+    return MPI_DATATYPE_NULL;
+}
+    
+MPI_Op pmMPI::GetReductionMpiOperation(pmTask* pTask) const
+{
+    const pmDataReductionCallback lDataReductionCallback = pTask->GetCallbackUnit()->GetDataReductionCB()->GetCallback();
+    
+    if(lDataReductionCallback == pmReduceIntAdd || lDataReductionCallback == pmReduceUIntAdd || lDataReductionCallback == pmReduceLongAdd
+       || lDataReductionCallback == pmReduceULongAdd || lDataReductionCallback == pmReduceFloatAdd || lDataReductionCallback == pmReduceDoubleAdd)
+    {
+        return MPI_SUM;
+    }
+    
+    return MPI_OP_NULL;
+}
+    
+void pmMPI::SendReduce(pmCommunicatorCommandPtr& pCommand)
+{
+    subtaskMemoryReduceStruct* lData = (subtaskMemoryReduceStruct*)(pCommand->GetData());
+    ulong lLength = lData->length;
+
+	if(!lData || lLength == 0)
+		return;
+    
+    DEBUG_EXCEPTION_ASSERT(pCommand->GetTag() == SUBTASK_MEMORY_REDUCE_TAG);
+    DEBUG_EXCEPTION_ASSERT(dynamic_cast<const pmMachine*>(pCommand->GetDestination()));
+
+    EXCEPTION_ASSERT(lLength <= MPI_TRANSFER_MAX_LIMIT);
+    EXCEPTION_ASSERT(!pCommand->IsPersistent());
+
+    pCommand->MarkExecutionStart();
+
+    // MPI_IReduce does not take any tag
+//    lData->mpiTag = mDynamicMpiTagProducer.GetNextTag(static_cast<const pmMachine*>(pCommand->GetDestination()));
+    
+    pmCommunicatorCommandPtr lClonePtr = pCommand->Clone();
+    
+    SendNonBlockingInternal(pCommand, lData, 1);
+    
+    lClonePtr->SetTag((communicator::communicatorCommandTags)lData->mpiTag);
+
+    char* lTargetMem = static_cast<char*>(const_cast<void*>(lClonePtr->GetUserIdentifier()));
+
+    const pmMachine* lDestMachine = dynamic_cast<const pmMachine*>(pCommand->GetDestination());
+    
+#ifdef PRE_CREATE_SUB_COMMUNICATORS
+    std::shared_ptr<pmMpiCommWrapper>& lWrapperPtr = mSubCommunicators.find(std::make_pair<>((uint)(*lDestMachine), (uint)(*PM_LOCAL_MACHINE)))->second;
+#else
+    std::shared_ptr<pmMpiCommWrapper> lWrapperPtr(new pmMpiCommWrapper((uint)(*lDestMachine), (uint)(*PM_LOCAL_MACHINE)));
+    lClonePtr->HoldExternalDataForLifetimeOfCommand(lWrapperPtr);
+#endif
+
+    const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+    pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+
+    size_t lSize = 0;
+    MPI_Datatype lDataType = GetReducibleDataTypeAndSize(lTask, lSize);
+
+    EXCEPTION_ASSERT(lLength % lSize == 0);
+    lLength /= lSize;
+
+    MPI_Request lRequest = MPI_REQUEST_NULL;
+    if( MPI_CALL("MPI_Ireduce", (MPI_Ireduce(lTargetMem, lTargetMem, (int)lLength, lDataType, GetReductionMpiOperation(lTask), 0, lWrapperPtr->GetCommunicator(), &lRequest) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
+
+    EXCEPTION_ASSERT(lRequest != MPI_REQUEST_NULL);
+
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    EXCEPTION_ASSERT(mNonBlockingRequestMap.find(lRequest) == mNonBlockingRequestMap.end());
+
+    mNonBlockingRequestMap.emplace(lRequest, pCommand);
+    
+    mRequestCountMap.emplace(std::piecewise_construct, std::forward_as_tuple(pCommand), std::forward_as_tuple(1));
+
+    CancelDummyRequest();
+}
+
+void pmMPI::ReceiveReduce(pmCommunicatorCommandPtr &pCommand)
+{
+    subtaskMemoryReduceStruct* lData = (subtaskMemoryReduceStruct*)(pCommand->GetData());
+    ulong lLength = lData->length;
+
+	if(!lData || lLength == 0)
+		return;
+
+    DEBUG_EXCEPTION_ASSERT(pCommand->GetTag() > MAX_COMMUNICATOR_COMMAND_TAGS);
+    DEBUG_EXCEPTION_ASSERT(dynamic_cast<const pmMachine*>(pCommand->GetDestination()));
+
+    EXCEPTION_ASSERT(lLength <= MPI_TRANSFER_MAX_LIMIT);
+    EXCEPTION_ASSERT(!pCommand->IsPersistent());
+
+    pCommand->MarkExecutionStart();
+    
+    char* lTargetMem = static_cast<char*>(const_cast<void*>(pCommand->GetUserIdentifier()));
+
+    const pmMachine* lSrcMachine = dynamic_cast<const pmMachine*>(pCommand->GetDestination());
+
+#ifdef PRE_CREATE_SUB_COMMUNICATORS
+    std::shared_ptr<pmMpiCommWrapper>& lWrapperPtr = mSubCommunicators.find(std::make_pair<>((uint)(*PM_LOCAL_MACHINE), (uint)(*lSrcMachine)))->second;
+#else
+    std::shared_ptr<pmMpiCommWrapper> lWrapperPtr(new pmMpiCommWrapper((uint)(*PM_LOCAL_MACHINE), (uint)(*lSrcMachine)));
+    pCommand->HoldExternalDataForLifetimeOfCommand(lWrapperPtr);
+#endif
+
+    const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
+    pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
+
+    size_t lSize = 0;
+    MPI_Datatype lDataType = GetReducibleDataTypeAndSize(lTask, lSize);
+
+    EXCEPTION_ASSERT(lLength % lSize == 0);
+    lLength /= lSize;
+
+    MPI_Request lRequest = MPI_REQUEST_NULL;
+    if( MPI_CALL("MPI_Ireduce", (MPI_Ireduce(MPI_IN_PLACE, lTargetMem, (int)lLength, lDataType, GetReductionMpiOperation(lTask), 0, lWrapperPtr->GetCommunicator(), &lRequest) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
+
+    EXCEPTION_ASSERT(lRequest != MPI_REQUEST_NULL);
+
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    EXCEPTION_ASSERT(mNonBlockingRequestMap.find(lRequest) == mNonBlockingRequestMap.end());
+
+    mNonBlockingRequestMap.emplace(lRequest, pCommand);
+    
+    mRequestCountMap.emplace(std::piecewise_construct, std::forward_as_tuple(pCommand), std::forward_as_tuple(1));
+
+    CancelDummyRequest();
+}
     
 /* MPI 2 currently does not support non-blocking collective messages */
 void pmMPI::BroadcastNonBlocking(pmCommunicatorCommandPtr& pCommand)
@@ -1529,7 +1726,7 @@ void pmMPI::ReceiveNonBlockingInternalForMemoryReceive(pmCommunicatorCommandPtr&
 	mNonBlockingRequestMap.emplace(lRequest, pCommand);
     mRequestCountMap.emplace(std::piecewise_construct, std::forward_as_tuple(pCommand), std::forward_as_tuple(1));
 }
-
+    
 void pmMPI::GlobalBarrier()
 {
 	if( MPI_CALL("MPI_Barrier", (MPI_Barrier(MPI_COMM_WORLD) != MPI_SUCCESS)) )
@@ -1840,7 +2037,13 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			break;
 		}
             
-		case MEMORY_RECEIVE_STRUCT:
+		case SUBTASK_MEMORY_REDUCE_STRUCT:
+		{
+			lFieldCount = subtaskMemoryReduceStruct::FIELD_COUNT_VALUE;
+			break;
+		}
+
+        case MEMORY_RECEIVE_STRUCT:
 		{
 			lFieldCount = memoryReceiveStruct::FIELD_COUNT_VALUE;
 			break;
@@ -2141,7 +2344,21 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			break;
 		}
 
-		case MEMORY_RECEIVE_STRUCT:
+		case SUBTASK_MEMORY_REDUCE_STRUCT:
+		{
+			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(subtaskMemoryReduceStruct, lData, lDataMPI);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.originatingHost, lOriginatingHostMPI, MPI_UNSIGNED, 0, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.sequenceNumber, lSequenceNumberMPI, MPI_UNSIGNED_LONG, 1, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.subtaskId, lSubtaskIdMPI, MPI_UNSIGNED_LONG, 2, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.offset, lOffsetMPI, MPI_UNSIGNED_LONG, 3, 1);
+			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 4, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.mpiTag, lMpiTagMPI, MPI_INT, 5, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.senderHost, lSenderHostMPI, MPI_UNSIGNED, 6, 1);
+
+			break;
+		}
+
+        case MEMORY_RECEIVE_STRUCT:
 		{
 			REGISTER_MPI_DATA_TYPE_HELPER_HEADER(memoryReceiveStruct, lData, lDataMPI);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.memOwnerHost, lMemOwnerHostMPI, MPI_UNSIGNED, 0, 1);
@@ -2549,6 +2766,41 @@ int pmMPI::pmDynamicMpiTagProducer::GetNextTag(const pmMachine* pMachine)
         lIter->second = MAX_COMMUNICATOR_DATA_TYPES;
 
     return ++lIter->second;
+}
+
+
+/* class pmMPI::pmMpiCommWrapper */
+pmMPI::pmMpiCommWrapper::pmMpiCommWrapper(uint pFirstMachineGlobalRank, uint pSecondMachineGlobalRank)
+    : mGroup(MPI_GROUP_EMPTY)
+    , mCommunicator(MPI_COMM_NULL)
+{
+    MPI_Group lWorldGroup;
+    if( MPI_CALL("MPI_Comm_group", (MPI_Comm_group(MPI_COMM_WORLD, &lWorldGroup) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException::COMM_GROUP_ERROR);
+
+    int lRanks[] = {(int)pFirstMachineGlobalRank, (int)pSecondMachineGlobalRank};
+    if( MPI_CALL("MPI_Group_incl", (MPI_Group_incl(lWorldGroup, 2, lRanks, &mGroup) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException::GROUP_INCL_ERROR);
+    
+    if( MPI_CALL("MPI_Comm_create", (MPI_Comm_create(MPI_COMM_WORLD, mGroup, &mCommunicator) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException::COMM_CREATE_ERROR);
+
+    if( MPI_CALL("MPI_Group_free", (MPI_Group_free(&lWorldGroup) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException::GROUP_FREE_ERROR);
+}
+
+pmMPI::pmMpiCommWrapper::~pmMpiCommWrapper()
+{
+    if( MPI_CALL("MPI_Comm_free", (MPI_Comm_free(&mCommunicator) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException::COMM_FREE_ERROR);
+
+    if( MPI_CALL("MPI_Group_free", (MPI_Group_free(&mGroup) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException::GROUP_FREE_ERROR);
+}
+
+MPI_Comm pmMPI::pmMpiCommWrapper::GetCommunicator() const
+{
+    return mCommunicator;
 }
 
 

@@ -151,7 +151,8 @@ pmScheduler::pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(STEAL_REQUEST_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SHADOW_MEM_TRANSFER_STRUCT);
-	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SUBTASK_REDUCE_STRUCT);
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SUBTASK_REDUCE_STRUCT);
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(SUBTASK_MEMORY_REDUCE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(REDISTRIBUTION_ORDER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->RegisterTransferDataType(DATA_REDISTRIBUTION_STRUCT);
@@ -179,6 +180,7 @@ pmScheduler::~pmScheduler()
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(STEAL_RESPONSE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SHADOW_MEM_TRANSFER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SUBTASK_REDUCE_STRUCT);
+    NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(SUBTASK_MEMORY_REDUCE_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(HOST_FINALIZATION_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(REDISTRIBUTION_ORDER_STRUCT);
 	NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->UnregisterTransferDataType(DATA_REDISTRIBUTION_STRUCT);
@@ -214,6 +216,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     finalize_ptr<communicator::stealResponseStruct> lStealResponseRecvData(new stealResponseStruct());
     finalize_ptr<communicator::subtaskRangeCancelStruct> lSubtaskRangeCancelData(new subtaskRangeCancelStruct());
     finalize_ptr<communicator::noReductionReqdStruct> lNoReductionReqdData(new noReductionReqdStruct());
+    finalize_ptr<communicator::subtaskMemoryReduceStruct> lSubtaskMemoryReduceData(new subtaskMemoryReduceStruct());
 
 #define PERSISTENT_RECV_COMMAND(tag, structEnumType, structType, recvDataPtr) pmCommunicatorCommand<structType>::CreateSharedPtr(MAX_CONTROL_PRIORITY, RECEIVE, tag, NULL, structEnumType, recvDataPtr, 1, SchedulerCommandCompletionCallback)
 
@@ -222,7 +225,8 @@ void pmScheduler::SetupPersistentCommunicationCommands()
 	mStealRequestRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_REQUEST_TAG, STEAL_REQUEST_STRUCT,	stealRequestStruct, lStealRequestRecvData);
     mStealResponseRecvCommand = PERSISTENT_RECV_COMMAND(STEAL_RESPONSE_TAG, STEAL_RESPONSE_STRUCT, stealResponseStruct, lStealResponseRecvData);
     mSubtaskRangeCancelCommand = PERSISTENT_RECV_COMMAND(SUBTASK_RANGE_CANCEL_TAG, SUBTASK_RANGE_CANCEL_STRUCT, subtaskRangeCancelStruct, lSubtaskRangeCancelData);
-	mNoReductionReqdCommand = PERSISTENT_RECV_COMMAND(NO_REDUCTION_REQD_TAG, NO_REDUCTION_REQD_STRUCT, noReductionReqdStruct, lNoReductionReqdData);
+    mNoReductionReqdCommand = PERSISTENT_RECV_COMMAND(NO_REDUCTION_REQD_TAG, NO_REDUCTION_REQD_STRUCT, noReductionReqdStruct, lNoReductionReqdData);
+    mSubtaskMemoryReduceCommand = PERSISTENT_RECV_COMMAND(SUBTASK_MEMORY_REDUCE_TAG, SUBTASK_MEMORY_REDUCE_STRUCT, subtaskMemoryReduceStruct, lSubtaskMemoryReduceData);
 
     mRemoteSubtaskRecvCommand->SetPersistent();
     mTaskEventRecvCommand->SetPersistent();
@@ -230,6 +234,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     mStealResponseRecvCommand->SetPersistent();
     mSubtaskRangeCancelCommand->SetPersistent();
     mNoReductionReqdCommand->SetPersistent();
+    mSubtaskMemoryReduceCommand->SetPersistent();
     
     pmNetwork* lNetwork = NETWORK_IMPLEMENTATION_CLASS::GetNetwork();
     lNetwork->InitializePersistentCommand(mRemoteSubtaskRecvCommand);
@@ -238,6 +243,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     lNetwork->InitializePersistentCommand(mStealResponseRecvCommand);
     lNetwork->InitializePersistentCommand(mSubtaskRangeCancelCommand);
     lNetwork->InitializePersistentCommand(mNoReductionReqdCommand);
+    lNetwork->InitializePersistentCommand(mSubtaskMemoryReduceCommand);
 
 	pmCommunicator::GetCommunicator()->Receive(mRemoteSubtaskRecvCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mTaskEventRecvCommand, false);
@@ -245,6 +251,7 @@ void pmScheduler::SetupPersistentCommunicationCommands()
     pmCommunicator::GetCommunicator()->Receive(mStealResponseRecvCommand, false);
 	pmCommunicator::GetCommunicator()->Receive(mSubtaskRangeCancelCommand, false);
     pmCommunicator::GetCommunicator()->Receive(mNoReductionReqdCommand, false);
+    pmCommunicator::GetCommunicator()->Receive(mSubtaskMemoryReduceCommand, false);
 	
 	// Only MPI master host receives finalization signal
 	if(pmMachinePool::GetMachinePool()->GetMachine(0) == PM_LOCAL_MACHINE)
@@ -271,6 +278,7 @@ void pmScheduler::DestroyPersistentCommunicationCommands()
     lNetwork->TerminatePersistentCommand(mStealResponseRecvCommand);
     lNetwork->TerminatePersistentCommand(mSubtaskRangeCancelCommand);
     lNetwork->TerminatePersistentCommand(mNoReductionReqdCommand);
+    lNetwork->TerminatePersistentCommand(mSubtaskMemoryReduceCommand);
 
 	if(mHostFinalizationCommand.get())
         lNetwork->TerminatePersistentCommand(mHostFinalizationCommand);
@@ -512,6 +520,11 @@ void pmScheduler::AffinityTransferEvent(pmLocalTask* pLocalTask, std::set<const 
 void pmScheduler::AllReductionsDoneEvent(pmLocalTask* pLocalTask, pmExecutionStub* pLastStub, ulong pLastSubtaskId, const pmSplitData& pLastSplitData)
 {
     SwitchThread(std::shared_ptr<schedulerEvent>(new allReductionsDoneEvent(ALL_REDUCTIONS_DONE_EVENT, pLocalTask, pLastStub, pLastSubtaskId, pLastSplitData)), pLocalTask->GetPriority());
+}
+    
+void pmScheduler::AddRegisterExternalReductionFinishEvent(pmTask* pTask)
+{
+    SwitchThread(std::shared_ptr<schedulerEvent>(new externalReductionFinishEvent(EXTERNAL_REDUCTION_FINISH_EVENT, pTask)), pTask->GetPriority());
 }
     
 void pmScheduler::SendFinalizationSignal()
@@ -797,12 +810,78 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
             subtaskReduceEvent& lEventDetails = static_cast<subtaskReduceEvent&>(pEvent);
             
             std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr(lEventDetails.splitData.operator std::unique_ptr<pmSplitInfo>());
+            
+            pmSubscriptionManager& lSubscriptionManager = lEventDetails.task->GetSubscriptionManager();
+            bool lHasScratchBuffers = lSubscriptionManager.HasScratchBuffers(lEventDetails.reducingStub, lEventDetails.subtaskId, lSplitInfoAutoPtr.get());
+            
+            const pmAddressSpace* lAddressSpace = 0;
+            size_t lReducibleAddressSpaces = 0;
+            size_t lAddressSpaceIndex = 0;
+            for_each_with_index(lEventDetails.task->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pIndex)
+            {
+                if(lEventDetails.task->IsWritable(pAddressSpace) && lEventDetails.task->IsReducible(pAddressSpace))
+                {
+                    lAddressSpace = pAddressSpace;
+                    lAddressSpaceIndex = pIndex;
+                    ++lReducibleAddressSpaces;
+                }
+            });
 
-            finalize_ptr<subtaskReducePacked> lPackedData(new subtaskReducePacked(lEventDetails.reducingStub, lEventDetails.task, lEventDetails.subtaskId, lSplitInfoAutoPtr.get()));
-        
-            pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<subtaskReducePacked>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, SUBTASK_REDUCE_TAG, lEventDetails.machine, SUBTASK_REDUCE_PACKED, lPackedData, 1, NULL, lEventDetails.task);
+            bool lOptimalSendDone = false;
 
-            pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
+        #ifdef SUPPORT_LAZY_MEMORY
+        #else
+            // Check if reduction data can be transferred without mpi packing
+            if(!lHasScratchBuffers && lReducibleAddressSpaces == 1 && NETWORK_IMPLEMENTATION_CLASS::GetNetwork()->IsImplicitlyReducible(lEventDetails.task))
+            {
+                void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(lEventDetails.reducingStub, lEventDetails.subtaskId, lSplitInfoAutoPtr.get(), (uint)lAddressSpaceIndex);
+                ulong lOffset = 0, lLength = 0;
+                
+                if(lEventDetails.task->GetAddressSpaceSubscriptionVisibility(lAddressSpace, lEventDetails.reducingStub) == SUBSCRIPTION_NATURAL)
+                {
+                    pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(lEventDetails.reducingStub, lEventDetails.subtaskId, lSplitInfoAutoPtr.get(), (uint)lAddressSpaceIndex);
+
+                    subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(lEventDetails.reducingStub, lEventDetails.subtaskId, lSplitInfoAutoPtr.get(), (uint)lAddressSpaceIndex, lBeginIter, lEndIter);
+                    
+                    EXCEPTION_ASSERT(std::distance(lBeginIter, lEndIter) == 1);    // Only one write subscription
+
+                    lOffset =  lBeginIter->first - lUnifiedSubscriptionInfo.offset;
+                    lLength = (uint)lBeginIter->second.first;
+                }
+                else    // SUBSCRIPTION_COMPACT
+                {
+                    const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(lEventDetails.reducingStub, lEventDetails.subtaskId, lSplitInfoAutoPtr.get(), (uint)lAddressSpaceIndex);
+
+                    subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+                    lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(lEventDetails.reducingStub, lEventDetails.subtaskId, lSplitInfoAutoPtr.get(), (uint)lAddressSpaceIndex, lBeginIter, lEndIter);
+                    
+                    auto lCompactWriteIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
+                    
+                    EXCEPTION_ASSERT(std::distance(lBeginIter, lEndIter) == 1);    // Only one write subscription
+
+                    lOffset = *lCompactWriteIter;
+                    lLength = (uint)lBeginIter->second.first;
+                }
+                
+                finalize_ptr<subtaskMemoryReduceStruct> lData(new subtaskMemoryReduceStruct(*lEventDetails.task->GetOriginatingHost(), lEventDetails.task->GetSequenceNumber(), lEventDetails.subtaskId, lOffset, lLength, std::numeric_limits<int>::max(), *PM_LOCAL_MACHINE));
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<subtaskMemoryReduceStruct>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, SUBTASK_MEMORY_REDUCE_TAG, lEventDetails.machine, SUBTASK_MEMORY_REDUCE_STRUCT, lData, 1, NULL, (static_cast<char*>(lShadowMem) + lOffset));
+                
+                pmCommunicator::GetCommunicator()->SendReduce(lCommand, false);
+
+                lOptimalSendDone = true;
+            }
+        #endif
+            
+            // Send reduction data as MPI_PACKED
+            if(!lOptimalSendDone)
+            {
+                finalize_ptr<subtaskReducePacked> lPackedData(new subtaskReducePacked(lEventDetails.reducingStub, lEventDetails.task, lEventDetails.subtaskId, lSplitInfoAutoPtr.get()));
+            
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<subtaskReducePacked>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, SUBTASK_REDUCE_TAG, lEventDetails.machine, SUBTASK_REDUCE_PACKED, lPackedData, 1, NULL, lEventDetails.task);
+
+                pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->PackAndSendData(lCommand);
+            }
 
             break;
         }
@@ -971,6 +1050,15 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
 
             std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr(lEventDetails.lastSplitData.operator std::unique_ptr<pmSplitInfo>());
             lEventDetails.localTask->AllReductionsDone(lEventDetails.lastStub, lEventDetails.lastSubtaskId, lSplitInfoAutoPtr.get());
+            
+            break;
+        }
+            
+        case EXTERNAL_REDUCTION_FINISH_EVENT:
+        {
+            externalReductionFinishEvent& lEventDetails = static_cast<externalReductionFinishEvent&>(pEvent);
+            
+            lEventDetails.task->GetReducer()->RegisterExternalReductionFinish();
             
             break;
         }
@@ -1972,6 +2060,19 @@ void pmScheduler::HandleCommandCompletion(const pmCommandPtr& pCommand)
                     
 					break;
 				}
+                    
+                case SUBTASK_MEMORY_REDUCE_TAG:
+                {
+                    pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
+                    subtaskMemoryReduceStruct* lReceiveStruct = (subtaskMemoryReduceStruct*)(lCommunicatorCommand->GetData());
+
+                    const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->originatingHost);
+                    pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lReceiveStruct->sequenceNumber);
+
+                    lTask->GetReducer()->PrepareForExternalReceive(*lReceiveStruct);
+                    
+                    break;
+                }
 
 				case DATA_REDISTRIBUTION_TAG:
 				{

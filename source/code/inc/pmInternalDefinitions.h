@@ -193,6 +193,10 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 #endif
 
 
+/* Reduction Controls */
+#define PRE_CREATE_SUB_COMMUNICATORS    // MPI-2 requires all nodes to call MPI_Create_Comm call even if they are not part of the subcommunicator
+
+
 /* Utility controls */
 #define BUILD_FOR_PMLIB_ANALYZER
 

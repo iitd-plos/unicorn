@@ -25,6 +25,8 @@
 #include "pmTask.h"
 #include "pmExecutionStub.h"
 #include "pmMemoryManager.h"
+#include "pmDevicePool.h"
+#include "pmTaskManager.h"
 
 #include <algorithm>
 
@@ -33,18 +35,30 @@ namespace pm
 
 using namespace reducer;
     
+void PostMpiReduceCommandCompletionCallback(const pmCommandPtr& pCommand)
+{
+    pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
+
+    communicator::subtaskMemoryReduceStruct* lReceiveStruct = (communicator::subtaskMemoryReduceStruct*)(lCommunicatorCommand->GetData());
+    
+    const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->originatingHost);
+    pmTask* lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lReceiveStruct->sequenceNumber);
+    
+    pmScheduler::GetScheduler()->AddRegisterExternalReductionFinishEvent(lRequestingTask);
+}
+    
 pmReducer::pmReducer(pmTask* pTask)
 	: mReductionsDone(0)
 	, mExternalReductionsRequired(0)
 	, mReduceState(false)
 	, mSendToMachine(NULL)
     , mTask(pTask)
-    , mAddedReductionFinishEvent(false)
+    , mReductionTerminated(false)
     , mResourceLock __LOCK_NAME__("pmReducer::mResourceLock")
 {
 	PopulateExternalMachineList();
 }
-
+    
 void pmReducer::PopulateExternalMachineList()
 {
     std::set<const pmMachine*> lMachines = (dynamic_cast<pmLocalTask*>(mTask) ? ((pmLocalTask*)mTask)->GetAssignedMachines() : ((pmRemoteTask*)mTask)->GetAssignedMachines());
@@ -120,6 +134,15 @@ ulong pmReducer::GetMaxPossibleExternalReductionReceives(uint pFollowingMachineC
 	return lMaxReceives;
 }
 
+void pmReducer::PrepareForExternalReceive(communicator::subtaskMemoryReduceStruct& pStruct)
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    mSubtaskMemoryReduceStructVector.emplace_back(pStruct);
+    
+    CheckReductionFinishInternal();
+}
+
 void pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
 	FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
@@ -147,6 +170,15 @@ void pmReducer::AddSubtask(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo
 		CheckReductionFinishInternal();
 	}
 }
+    
+void pmReducer::RegisterExternalReductionFinish()
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+    
+    ++mReductionsDone;
+
+    CheckReductionFinishInternal();
+}
 
 void pmReducer::CheckReductionFinish()
 {
@@ -155,36 +187,115 @@ void pmReducer::CheckReductionFinish()
     CheckReductionFinishInternal();
 }
 
+void pmReducer::PerformDirectExternalReductions()
+{
+    FINALIZE_RESOURCE_PTR(dResourceLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mResourceLock, Lock(), Unlock());
+
+    EXCEPTION_ASSERT(mExternalReductionsRequired);
+
+    if(mSubtaskMemoryReduceStructVector.empty())
+        return;
+
+    DEBUG_EXCEPTION_ASSERT(mTask->HasSubtaskExecutionFinished());
+
+    communicator::subtaskMemoryReduceStruct& lSubtaskMemoryReduceStruct = mSubtaskMemoryReduceStructVector.back();
+    
+    pmSubscriptionManager& lSubscriptionManager = mTask->GetSubscriptionManager();
+    bool lHasScratchBuffers = lSubscriptionManager.HasScratchBuffers(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
+    
+    const pmAddressSpace* lAddressSpace = 0;
+    size_t lReducibleAddressSpaces = 0;
+    size_t lAddressSpaceIndex = 0;
+    for_each_with_index(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pIndex)
+    {
+        if(mTask->IsWritable(pAddressSpace) && mTask->IsReducible(pAddressSpace))
+        {
+            lAddressSpace = pAddressSpace;
+            lAddressSpaceIndex = pIndex;
+            ++lReducibleAddressSpaces;
+        }
+    });
+    
+    EXCEPTION_ASSERT(!lHasScratchBuffers && lReducibleAddressSpaces == 1);
+
+    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex);
+    ulong lOffset = 0;
+    
+    if(mTask->GetAddressSpaceSubscriptionVisibility(lAddressSpace, mLastSubtask.stub) == SUBSCRIPTION_NATURAL)
+    {
+        pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex);
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex, lBeginIter, lEndIter);
+        
+        EXCEPTION_ASSERT(std::distance(lBeginIter, lEndIter) == 1);    // Only one write subscription
+
+        lOffset =  lBeginIter->first - lUnifiedSubscriptionInfo.offset;
+    }
+    else    // SUBSCRIPTION_COMPACT
+    {
+        const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex);
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex, lBeginIter, lEndIter);
+        
+        auto lCompactWriteIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
+        
+        EXCEPTION_ASSERT(std::distance(lBeginIter, lEndIter) == 1);    // Only one write subscription
+
+        lOffset = *lCompactWriteIter;
+    }
+
+    communicator::communicatorCommandTags lTag = (communicator::communicatorCommandTags)lSubtaskMemoryReduceStruct.mpiTag;
+    const pmMachine* lSendingMachine = pmMachinePool::GetMachinePool()->GetMachine(lSubtaskMemoryReduceStruct.senderHost);
+
+    finalize_ptr<communicator::subtaskMemoryReduceStruct> lData(new communicator::subtaskMemoryReduceStruct(lSubtaskMemoryReduceStruct));
+    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::subtaskMemoryReduceStruct>::CreateSharedPtr(mTask->GetPriority(), communicator::RECEIVE, lTag, lSendingMachine, communicator::BYTE, lData, 1, PostMpiReduceCommandCompletionCallback, (static_cast<char*>(lShadowMem) + lOffset));
+
+    mSubtaskMemoryReduceStructVector.resize(mSubtaskMemoryReduceStructVector.size() - 1);
+
+    pmCommunicator::GetCommunicator()->ReceiveReduce(lCommand);
+}
+
 /* This function must be called with mResourceLock acquired */
 void pmReducer::CheckReductionFinishInternal()
 {
     ulong lSubtasksSplitted = 0;
     ulong lSplitCount = mTask->GetTotalSplitCount(lSubtasksSplitted);
     ulong lExtraReductionsForSplits = lSplitCount - lSubtasksSplitted;
-    
-	if(mReduceState && mTask->HasSubtaskExecutionFinished() && (mReductionsDone == (mExternalReductionsRequired + lExtraReductionsForSplits + mTask->GetSubtasksExecuted() - 1)))
-	{
-		if(mSendToMachine)
-		{
-			EXCEPTION_ASSERT(mSendToMachine != PM_LOCAL_MACHINE && mLastSubtask.stub != NULL);
+    ulong lInternalReductionsCount = lExtraReductionsForSplits + mTask->GetSubtasksExecuted() - 1;
 
-			// Send mLastSubtaskId to machine mSendToMachine for reduction
-			pmScheduler::GetScheduler()->ReduceRequestEvent(mLastSubtask.stub, mTask, mSendToMachine, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
-		}
-		else
-		{
-            AddReductionFinishEvent();
-		}
-	}
+    if(mReduceState && mTask->HasSubtaskExecutionFinished())
+    {
+        if(mReductionsDone == (mExternalReductionsRequired + lInternalReductionsCount))
+        {
+            if(!mReductionTerminated)
+            {
+                mReductionTerminated = true;
+        
+                if(mSendToMachine)
+                {
+                    EXCEPTION_ASSERT(mSendToMachine != PM_LOCAL_MACHINE && mLastSubtask.stub != NULL);
+
+                    // Send mLastSubtaskId to machine mSendToMachine for reduction
+                    pmScheduler::GetScheduler()->ReduceRequestEvent(mLastSubtask.stub, mTask, mSendToMachine, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
+                }
+                else
+                {
+                    AddReductionFinishEvent();
+                }
+            }
+        }
+        else if(mReductionsDone >= lInternalReductionsCount)
+        {
+            mLastSubtask.stub->AddPlaceHolderEventForDirectExternalReduction(mTask);
+        }
+    }
 }
     
 /* This function must be called with mResourceLock acquired */
 void pmReducer::AddReductionFinishEvent()
 {
-    if(mAddedReductionFinishEvent)
-        return;
-    
-    mAddedReductionFinishEvent = true;
     mLastSubtask.stub->ReductionFinishEvent(mTask);
 }
     
@@ -211,13 +322,18 @@ void pmReducer::SignalSendToMachineAboutNoLocalReductionInternal()
 {
     if(mSendToMachine && !mExternalReductionsRequired)
     {
-        // No subtask has been executed on this machine
-        EXCEPTION_ASSERT(mSendToMachine != PM_LOCAL_MACHINE && mLastSubtask.stub == NULL);
-        
-        if(mSendToMachine)
-            pmScheduler::GetScheduler()->NoReductionRequiredEvent(mTask, mSendToMachine);
-        else
-            AddReductionFinishEvent();
+        if(!mReductionTerminated)
+        {
+            mReductionTerminated = true;
+            
+            // No subtask has been executed on this machine
+            EXCEPTION_ASSERT(mSendToMachine != PM_LOCAL_MACHINE && mLastSubtask.stub == NULL);
+            
+            if(mSendToMachine)
+                pmScheduler::GetScheduler()->NoReductionRequiredEvent(mTask, mSendToMachine);
+            else
+                AddReductionFinishEvent();
+        }
     }
 }
     

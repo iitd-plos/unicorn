@@ -120,6 +120,26 @@ void pmCommunicator::All2All(pmCommunicatorCommandPtr& pCommand, bool pBlocking 
 	if(pBlocking)
 		pCommand->WaitForFinish();
 }
+    
+void pmCommunicator::SendReduce(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* = false */)
+{
+	SAFE_GET_NETWORK(lNetwork);
+
+	lNetwork->SendReduce(pCommand);
+
+	if(pBlocking)
+		pCommand->WaitForFinish();
+}
+
+void pmCommunicator::ReceiveReduce(pmCommunicatorCommandPtr& pCommand, bool pBlocking /* = false */)
+{
+	SAFE_GET_NETWORK(lNetwork);
+
+	lNetwork->ReceiveReduce(pCommand);
+
+	if(pBlocking)
+		pCommand->WaitForFinish();
+}
 
 
 /* struct noReductionReqdStruct */
@@ -242,7 +262,7 @@ subtaskReducePacked::subtaskReducePacked(pmExecutionStub* pReducingStub, pmTask*
         reduceStruct.scratchBuffer3Length = (uint)lScratchBuffer3Size;
         scratchBuffer3.reset(lScratchBuffer3, false);
     }
-    
+
     filtered_for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (pTask->IsWritable(pAddressSpace) && pTask->IsReducible(pAddressSpace));},
     [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex, size_t pOutputAddressSpaceIndex)
     {
