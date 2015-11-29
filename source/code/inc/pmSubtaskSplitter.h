@@ -173,7 +173,7 @@ private:
     pmTask* mTask;
     pmDeviceType mSplittingType;
 
-    std::vector<pmSplitGroup> mSplitGroupVector;
+    std::vector<std::shared_ptr<pmSplitGroup>> mSplitGroupVector;
     std::map<pmExecutionStub*, uint> mSplitGroupMap;
 };
 

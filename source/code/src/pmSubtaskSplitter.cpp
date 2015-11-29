@@ -87,7 +87,7 @@ pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
                 {
                     size_t lSplitGroupIndex = mSplitGroupVector.size();
 
-                    mSplitGroupVector.emplace_back(this, std::vector<pmExecutionStub*>(pDomain.begin(), pDomain.begin() + lUsableStubs));
+                    mSplitGroupVector.emplace_back(new pmSplitGroup(this, std::vector<pmExecutionStub*>(pDomain.begin(), pDomain.begin() + lUsableStubs)));
                     
                     std::for_each(pDomain.begin(), pDomain.begin() + lUsableStubs, [&] (pmExecutionStub* pStub)
                     {
@@ -124,7 +124,7 @@ pmSubtaskSplitter::pmSubtaskSplitter(pmTask* pTask)
                 mSplitGroupMap.emplace(lStub, lSplitGroupIndex);
             }
             
-            mSplitGroupVector.emplace_back(this, std::move(lDomainStubs));
+            mSplitGroupVector.emplace_back(new pmSplitGroup(this, std::move(lDomainStubs)));
 
             mSplittingType = GPU_CUDA;
         }
@@ -143,40 +143,40 @@ bool pmSubtaskSplitter::IsSplitting(pmDeviceType pDeviceType)
     
 std::unique_ptr<pmSplitSubtask> pmSubtaskSplitter::GetPendingSplit(ulong* pSubtaskId, pmExecutionStub* pSourceStub)
 {
-    return mSplitGroupVector[mSplitGroupMap[pSourceStub]].GetPendingSplit(pSubtaskId, pSourceStub);
+    return mSplitGroupVector[mSplitGroupMap[pSourceStub]]->GetPendingSplit(pSubtaskId, pSourceStub);
 }
     
 void pmSubtaskSplitter::FinishedSplitExecution(ulong pSubtaskId, uint pSplitId, pmExecutionStub* pStub, bool pPrematureTermination, double pExecTime)
 {
-    mSplitGroupVector[mSplitGroupMap[pStub]].FinishedSplitExecution(pSubtaskId, pSplitId, pStub, pPrematureTermination, pExecTime);
+    mSplitGroupVector[mSplitGroupMap[pStub]]->FinishedSplitExecution(pSubtaskId, pSplitId, pStub, pPrematureTermination, pExecTime);
 }
 
 bool pmSubtaskSplitter::Negotiate(pmExecutionStub* pStub, ulong pSubtaskId, std::vector<pmExecutionStub*>& pStubsToBeCancelled, pmExecutionStub*& pSourceStub)
 {
-    return mSplitGroupVector[mSplitGroupMap[pStub]].Negotiate(pSubtaskId, pStubsToBeCancelled, pSourceStub);
+    return mSplitGroupVector[mSplitGroupMap[pStub]]->Negotiate(pSubtaskId, pStubsToBeCancelled, pSourceStub);
 }
     
 void pmSubtaskSplitter::StubHasProcessedDummyEvent(pmExecutionStub* pStub)
 {
-    mSplitGroupVector[mSplitGroupMap[pStub]].StubHasProcessedDummyEvent(pStub);
+    mSplitGroupVector[mSplitGroupMap[pStub]]->StubHasProcessedDummyEvent(pStub);
 }
 
 void pmSubtaskSplitter::FreezeDummyEvents()
 {
-    for_each(mSplitGroupVector, [] (pmSplitGroup& pSplitGroup)
+    for_each(mSplitGroupVector, [] (std::shared_ptr<pmSplitGroup>& pSplitGroup)
     {
-        pSplitGroup.FreezeDummyEvents();
+        pSplitGroup->FreezeDummyEvents();
     });
 }
     
 void pmSubtaskSplitter::PrefetchSubscriptionsForUnsplittedSubtask(pmExecutionStub* pStub, ulong pSubtaskId)
 {
-    mSplitGroupVector[mSplitGroupMap[pStub]].PrefetchSubscriptionsForUnsplittedSubtask(pStub, pSubtaskId);
+    mSplitGroupVector[mSplitGroupMap[pStub]]->PrefetchSubscriptionsForUnsplittedSubtask(pStub, pSubtaskId);
 }
     
 float pmSubtaskSplitter::GetProgress(ulong pSubtaskId, pmExecutionStub* pStub)
 {
-    return mSplitGroupVector[mSplitGroupMap[pStub]].GetProgress(pSubtaskId);
+    return mSplitGroupVector[mSplitGroupMap[pStub]]->GetProgress(pSubtaskId);
 }
 
 void pmSubtaskSplitter::MakeDeviceGroups(const std::vector<const pmProcessingElement*>& pDevices, std::vector<std::vector<const pmProcessingElement*>>& pDeviceGroups, std::map<const pmProcessingElement*, std::vector<const pmProcessingElement*>*>& pQueryMap, ulong& pUnsplittedDevices)
@@ -661,4 +661,3 @@ double pmSplitFactorCalculator::GetAverageTimeForSplitFactor(uint pSplitFactor)
 }
 
 #endif
-

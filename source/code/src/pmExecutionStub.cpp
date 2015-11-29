@@ -2586,12 +2586,12 @@ void pmExecutionStub::WaitForNetworkFetch(const std::vector<pmCommandPtr>& pNetw
         DEBUG_EXCEPTION_ASSERT(mCurrentSubtaskRangeStats);
     }
 #endif
-    
+
+#if defined(ENABLE_TASK_PROFILING) || defined(DUMP_EVENT_TIMELINE)
     pmTask* lTask = NULL;
     ulong lSubtaskId = std::numeric_limits<ulong>::max();
     std::unique_ptr<pmSplitData> lSplitDataPtr(new pmSplitData(NULL));
 
-#if defined(ENABLE_TASK_PROFILING) || defined(DUMP_EVENT_TIMELINE)
     // Auto lock/unlock scope
     {
         FINALIZE_RESOURCE_PTR(dCurrentSubtaskLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mCurrentSubtaskRangeLock, Lock(), Unlock());

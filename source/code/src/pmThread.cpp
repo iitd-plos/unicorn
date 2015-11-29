@@ -36,7 +36,6 @@ pmPThread<T, P>::pmPThread()
 	THROW_ON_NON_ZERO_RET_VAL( pthread_create(&mThread, NULL, ThreadLoop<T, P>, this), pmThreadFailureException, pmThreadFailureException::THREAD_CREATE_ERROR );
     
     mThreadStartSignalWaitPtr->Wait();
-    mThreadStartSignalWaitPtr.reset();
 }
 
 template<typename T, typename P>
@@ -68,6 +67,7 @@ template<typename T, typename P>
 void pmPThread<T, P>::ThreadCommandLoop()
 {
     mThreadStartSignalWaitPtr->Signal();
+    mThreadStartSignalWaitPtr.reset();
 
 	while(1)
 	{

@@ -224,11 +224,11 @@ void pmHeavyOperationsThreadPool::CancelMemoryTransferEvents(pmAddressSpace* pAd
 {
     size_t lPoolSize = mThreadVector.size();
 
-    std::vector<SIGNAL_WAIT_IMPLEMENTATION_CLASS> lSignalWaitArray(lPoolSize, SIGNAL_WAIT_IMPLEMENTATION_CLASS(true));
-	SubmitToAllThreadsInPool(std::shared_ptr<heavyOperationsEvent>(new memTransferCancelEvent(MEM_TRANSFER_CANCEL, pAddressSpace, &lSignalWaitArray[0])), MAX_CONTROL_PRIORITY);
+    std::vector<std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS>> lSignalWaitArray(lPoolSize, std::shared_ptr<SIGNAL_WAIT_IMPLEMENTATION_CLASS>(new SIGNAL_WAIT_IMPLEMENTATION_CLASS(true)));
+	SubmitToAllThreadsInPool(std::shared_ptr<heavyOperationsEvent>(new memTransferCancelEvent(MEM_TRANSFER_CANCEL, pAddressSpace, lSignalWaitArray[0].get())), MAX_CONTROL_PRIORITY);
     
     for(size_t i = 0; i < lPoolSize; ++i)
-        lSignalWaitArray[i].Wait();
+        lSignalWaitArray[i]->Wait();
 }
     
 void pmHeavyOperationsThreadPool::CancelTaskSpecificMemoryTransferEvents(pmTask* pTask)
