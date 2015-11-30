@@ -352,7 +352,25 @@ void pmReducer::RegisterNoReductionReqdResponse()
 }
 
 template<typename datatype>
-void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+struct getBitwiseOperatableType
+{
+    typedef datatype type;
+};
+    
+template<>
+struct getBitwiseOperatableType<float>
+{
+    typedef uint type;
+};
+    
+template<>
+struct getBitwiseOperatableType<double>
+{
+    typedef ulong type;
+};
+
+template<typename datatype>
+void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionType)
 {
     size_t lDataSize = sizeof(datatype);
     
@@ -397,6 +415,168 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
                     break;
                 }
                     
+                case REDUCE_MIN:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] = std::min(lArray1[i], lArray2[i]);
+                    }
+                    
+                    break;
+                }
+
+                case REDUCE_MAX:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] = std::max(lArray1[i], lArray2[i]);
+                    }
+                    
+                    break;
+                }
+
+                case REDUCE_PRODUCT:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] *= lArray2[i];
+                    }
+                    
+                    break;
+                }
+
+                case REDUCE_LOGICAL_AND:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] = (lArray1[i] && lArray2[i]);
+                    }
+                    
+                    break;
+                }
+
+                case REDUCE_BITWISE_AND:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lArray1[i]) & (typename getBitwiseOperatableType<datatype>::type)(lArray2[i]));
+                    }
+                    
+                    break;
+                }
+
+                case REDUCE_LOGICAL_OR:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] = (lArray1[i] || lArray2[i]);
+                    }
+                    
+                    break;
+                }
+
+                case REDUCE_BOTWISE_OR:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lArray1[i]) | (typename getBitwiseOperatableType<datatype>::type)(lArray2[i]));
+                    }
+                    
+                    break;
+                }
+
+                case REDUCE_LOGICAL_XOR:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] = (lArray1[i] != lArray2[i]);
+                    }
+                    
+                    break;
+                }
+
+                case REDUCE_BITWISE_XOR:
+                {
+                    for(; lIter != lEndIter; ++lIter)
+                    {
+                        size_t lStartPage = lIter->first;
+                        size_t lPageCount = lIter->second;
+                        
+                        size_t lDataCount = (lPageCount * lPageSize) / lDataSize;
+                        datatype* lArray1 = lShadowMem1 + ((lStartPage * lPageSize) / lDataSize);
+                        datatype* lArray2 = lShadowMem2 + ((lStartPage * lPageSize) / lDataSize);
+                        
+                        for(size_t i = 0; i < lDataCount; ++i)
+                            lArray1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lArray1[i]) ^ (typename getBitwiseOperatableType<datatype>::type)(lArray2[i]));
+                    }
+                    
+                    break;
+                }
+
                 default:
                     PMTHROW(pmFatalErrorException());
             }
@@ -421,6 +601,78 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
                     break;
                 }
                     
+                case REDUCE_MIN:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] = std::min(lShadowMem1[i], lShadowMem2[i]);
+                    
+                    break;
+                }
+                
+                case REDUCE_MAX:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] = std::max(lShadowMem1[i], lShadowMem2[i]);
+                    
+                    break;
+                }
+                
+                case REDUCE_PRODUCT:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] *= lShadowMem2[i];
+                    
+                    break;
+                }
+                
+                case REDUCE_LOGICAL_AND:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] = (lShadowMem1[i] && lShadowMem2[i]);
+                    
+                    break;
+                }
+                
+                case REDUCE_BITWISE_AND:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lShadowMem1[i]) & (typename getBitwiseOperatableType<datatype>::type)(lShadowMem2[i]));
+                    
+                    break;
+                }
+                
+                case REDUCE_LOGICAL_OR:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] = (lShadowMem1[i] || lShadowMem2[i]);
+                    
+                    break;
+                }
+                
+                case REDUCE_BITWISE_OR:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lShadowMem1[i]) | (typename getBitwiseOperatableType<datatype>::type)(lShadowMem2[i]));
+                    
+                    break;
+                }
+                
+                case REDUCE_LOGICAL_XOR:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] = (lShadowMem1[i] != lShadowMem2[i]);
+                    
+                    break;
+                }
+
+                case REDUCE_BITWISE_XOR:
+                {
+                    for(size_t i = 0; i < lDataCount; ++i)
+                        lShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lShadowMem1[i]) ^ (typename getBitwiseOperatableType<datatype>::type)(lShadowMem2[i]));
+                    
+                    break;
+                }
+
                 default:
                     PMTHROW(pmFatalErrorException());
             }
@@ -428,34 +680,31 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
     });
 }
 
-void pmReducer::ReduceInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionOperation, pmReductionDataType pReductionDataType)
 {
-    ReduceSubtasks<int>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
-}
-    
-void pmReducer::ReduceUInts(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    ReduceSubtasks<uint>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
-}
-
-void pmReducer::ReduceLongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    ReduceSubtasks<long>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
-}
-
-void pmReducer::ReduceULongs(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    ReduceSubtasks<ulong>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
-}
-
-void pmReducer::ReduceFloats(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    ReduceSubtasks<float>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
-}
-
-void pmReducer::ReduceDoubles(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    ReduceSubtasks<double>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionType);
+    switch(pReductionDataType)
+    {
+        case REDUCE_INTS:
+            return ReduceSubtasks<int>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionOperation);
+            
+        case REDUCE_UNSIGNED_INTS:
+            return ReduceSubtasks<uint>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionOperation);
+            
+        case REDUCE_LONGS:
+            return ReduceSubtasks<long>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionOperation);
+            
+        case REDUCE_UNSIGNED_LONGS:
+            return ReduceSubtasks<ulong>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionOperation);
+            
+        case REDUCE_FLOATS:
+            return ReduceSubtasks<float>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionOperation);
+            
+        case REDUCE_DOUBLES:
+            return ReduceSubtasks<double>(pStub1, pSubtaskId1, pSplitInfo1, pStub2, pSubtaskId2, pSplitInfo2, pReductionOperation);
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
 }
 
 }

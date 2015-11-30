@@ -416,52 +416,12 @@ pmRedistributionMetadata* pmController::GetRedistributionMetadata_Public(pmTaskH
     return lTask->GetRedistributor(lAddressSpace)->GetRedistributionMetadata(pCount);
 }
 
-void pmController::pmReduceInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
+void pmController::pmReduceSubtasks_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionOperation, pmReductionDataType pReductionDataType)
 {
-    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
+    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionOperation >= MAX_REDUCTION_OP_TYPES || pReductionDataType >= MAX_REDUCTION_DATA_TYPES)
         PMTHROW(pmFatalErrorException());
 
-    (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceInts(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
-}
-
-void pmController::pmReduceUInts_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
-        PMTHROW(pmFatalErrorException());
-
-    (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceUInts(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
-}
-
-void pmController::pmReduceLongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
-        PMTHROW(pmFatalErrorException());
-
-    (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceLongs(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
-}
-
-void pmController::pmReduceULongs_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
-        PMTHROW(pmFatalErrorException());
-
-    (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceULongs(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
-}
-
-void pmController::pmReduceFloats_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
-        PMTHROW(pmFatalErrorException());
-
-    (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceFloats(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
-}
-
-void pmController::pmReduceDoubles_Public(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, ulong pSubtask1Id, pmSplitInfo* pSplitInfo1, pmDeviceHandle pDevice2Handle, ulong pSubtask2Id, pmSplitInfo* pSplitInfo2, pmReductionType pReductionType)
-{
-    if(!pTaskHandle || !pDevice1Handle || !pDevice2Handle || pReductionType >= MAX_REDUCTION_TYPES)
-        PMTHROW(pmFatalErrorException());
-
-    (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceDoubles(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionType);
+    (static_cast<pmTask*>(pTaskHandle))->GetReducer()->ReduceSubtasks(static_cast<pmExecutionStub*>(pDevice1Handle), pSubtask1Id, pSplitInfo1, static_cast<pmExecutionStub*>(pDevice2Handle), pSubtask2Id, pSplitInfo2, pReductionOperation, pReductionDataType);
 }
 
 void pmController::MapFile_Public(const char* pPath)

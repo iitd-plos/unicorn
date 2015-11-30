@@ -1346,37 +1346,37 @@ bool pmMPI::IsImplicitlyReducible(pmTask* pTask) const
     size_t lSize = 0;
     return (GetReducibleDataTypeAndSize(pTask, lSize) != MPI_DATATYPE_NULL && GetReductionMpiOperation(pTask) != MPI_OP_NULL);
 }
-    
+
 MPI_Datatype pmMPI::GetReducibleDataTypeAndSize(pmTask* pTask, size_t& pSize) const
 {
     const pmDataReductionCallback lDataReductionCallback = pTask->GetCallbackUnit()->GetDataReductionCB()->GetCallback();
     
-    if(lDataReductionCallback == pmReduceIntAdd)
+    if(reductionDataTypeMatches<REDUCE_INTS>(lDataReductionCallback))
     {
         pSize = sizeof(int);
         return MPI_INT;
     }
-    else if(lDataReductionCallback == pmReduceUIntAdd)
+    else if(reductionDataTypeMatches<REDUCE_UNSIGNED_INTS>(lDataReductionCallback))
     {
         pSize = sizeof(uint);
         return MPI_UNSIGNED;
     }
-    else if(lDataReductionCallback == pmReduceLongAdd)
+    else if(reductionDataTypeMatches<REDUCE_LONGS>(lDataReductionCallback))
     {
         pSize = sizeof(long);
         return MPI_LONG;
     }
-    else if(lDataReductionCallback == pmReduceULongAdd)
+    else if(reductionDataTypeMatches<REDUCE_UNSIGNED_LONGS>(lDataReductionCallback))
     {
         pSize = sizeof(ulong);
         return MPI_UNSIGNED_LONG;
     }
-    else if(lDataReductionCallback == pmReduceFloatAdd)
+    else if(reductionDataTypeMatches<REDUCE_FLOATS>(lDataReductionCallback))
     {
         pSize = sizeof(float);
         return MPI_FLOAT;
     }
-    else if(lDataReductionCallback == pmReduceDoubleAdd)
+    else if(reductionDataTypeMatches<REDUCE_DOUBLES>(lDataReductionCallback))
     {
         pSize = sizeof(double);
         return MPI_DOUBLE;
@@ -1389,10 +1389,45 @@ MPI_Op pmMPI::GetReductionMpiOperation(pmTask* pTask) const
 {
     const pmDataReductionCallback lDataReductionCallback = pTask->GetCallbackUnit()->GetDataReductionCB()->GetCallback();
     
-    if(lDataReductionCallback == pmReduceIntAdd || lDataReductionCallback == pmReduceUIntAdd || lDataReductionCallback == pmReduceLongAdd
-       || lDataReductionCallback == pmReduceULongAdd || lDataReductionCallback == pmReduceFloatAdd || lDataReductionCallback == pmReduceDoubleAdd)
+    if(reductionOperationMatches<REDUCE_ADD>(lDataReductionCallback))
     {
         return MPI_SUM;
+    }
+    else if(reductionOperationMatches<REDUCE_MIN>(lDataReductionCallback))
+    {
+        return MPI_MIN;
+    }
+    else if(reductionOperationMatches<REDUCE_MAX>(lDataReductionCallback))
+    {
+        return MPI_MAX;
+    }
+    else if(reductionOperationMatches<REDUCE_PRODUCT>(lDataReductionCallback))
+    {
+        return MPI_PROD;
+    }
+    else if(reductionOperationMatches<REDUCE_LOGICAL_AND>(lDataReductionCallback))
+    {
+        return MPI_LAND;
+    }
+    else if(reductionOperationMatches<REDUCE_BITWISE_AND>(lDataReductionCallback))
+    {
+        return MPI_BAND;
+    }
+    else if(reductionOperationMatches<REDUCE_LOGICAL_OR>(lDataReductionCallback))
+    {
+        return MPI_LOR;
+    }
+    else if(reductionOperationMatches<REDUCE_BITWISE_OR>(lDataReductionCallback))
+    {
+        return MPI_BOR;
+    }
+    else if(reductionOperationMatches<REDUCE_LOGICAL_XOR>(lDataReductionCallback))
+    {
+        return MPI_LXOR;
+    }
+    else if(reductionOperationMatches<REDUCE_BITWISE_XOR>(lDataReductionCallback))
+    {
+        return MPI_BXOR;
     }
     
     return MPI_OP_NULL;

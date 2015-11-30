@@ -22,6 +22,7 @@
 #define __PM_DATA_TYPES__
 
 #include "pmPublicDefinitions.h"
+#include "pmPublicUtilities.h"
 #include "pmInternalDefinitions.h"
 #include "pmErrorDefinitions.h"
 
@@ -472,6 +473,30 @@ namespace pm
     };
 #endif
     
+    template<pmReductionOpType pOperation, pmReductionDataType pDataType>
+    pmStatus pmReduceSubtasks(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
+    {
+        return pmReduceSubtasks(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, pOperation, pDataType);
+    }
+
+    template<pmReductionOpType pOperation, pmReductionDataType pDataType>
+    bool reductionFunctionPointerMatches(pmDataReductionCallback pCallback)
+    {
+        return (pCallback == pmReduceSubtasks<pOperation, pDataType>);
+    }
+    
+    template<pmReductionDataType pMatchType>
+    bool reductionDataTypeMatches(pmDataReductionCallback pCallback)
+    {
+        return (reductionFunctionPointerMatches<REDUCE_ADD, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_MIN, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_MAX, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_PRODUCT, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_LOGICAL_AND, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_BITWISE_AND, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_LOGICAL_OR, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_BITWISE_OR, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_LOGICAL_XOR, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_BITWISE_XOR, pMatchType>(pCallback));
+    }
+    
+    template<pmReductionOpType pOperationType>
+    bool reductionOperationMatches(pmDataReductionCallback pCallback)
+    {
+        return (reductionFunctionPointerMatches<pOperationType, REDUCE_INTS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_UNSIGNED_INTS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_LONGS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_UNSIGNED_LONGS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_FLOATS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_DOUBLES>(pCallback));
+    }
+
 #ifdef DUMP_EVENT_TIMELINE
     class pmEventTimeline;
 

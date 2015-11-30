@@ -524,9 +524,9 @@ pmCallbacks DoSetDefaultCallbacks()
 #endif
 
 #if PAGE_RANK_DATA_TYPE == float
-    lCallbacks.dataReduction = pmReduceFloatAdd;
+    lCallbacks.dataReduction = pmGetSubtaskReductionCallbackImpl(REDUCE_ADD, REDUCE_FLOATS);
 #elif PAGE_RANK_DATA_TYPE == int
-    lCallbacks.dataReduction = pmReduceIntAdd;
+    lCallbacks.dataReduction = pmGetSubtaskReductionCallbackImpl(REDUCE_ADD, REDUCE_INTS);
 #else
 #error "Unsupported data type"
 #endif

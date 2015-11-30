@@ -734,35 +734,74 @@ pmScatteredSubscriptionInfo::pmScatteredSubscriptionInfo(size_t pOffset, size_t 
     , step(pStep)
     , count(pCount)
 {}
+
+template<pmReductionOpType pOperation>
+pmDataReductionCallback pmGetSubtaskReductionCallbackInner(pmReductionDataType pDataType)
+{
+    switch(pDataType)
+    {
+        case REDUCE_INTS:
+            return pmReduceSubtasks<pOperation, REDUCE_INTS>;
+
+        case REDUCE_UNSIGNED_INTS:
+            return pmReduceSubtasks<pOperation, REDUCE_UNSIGNED_INTS>;
+
+        case REDUCE_LONGS:
+            return pmReduceSubtasks<pOperation, REDUCE_LONGS>;
+
+        case REDUCE_UNSIGNED_LONGS:
+            return pmReduceSubtasks<pOperation, REDUCE_UNSIGNED_LONGS>;
+            
+        case REDUCE_FLOATS:
+            return pmReduceSubtasks<pOperation, REDUCE_FLOATS>;
+
+        case REDUCE_DOUBLES:
+            return pmReduceSubtasks<pOperation, REDUCE_DOUBLES>;
+            
+        default:
+            return NULL;
+    }
+};
     
-pmStatus pmReduceIntAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
+pmDataReductionCallback pmGetSubtaskReductionCallbackImpl(pmReductionOpType pOperation, pmReductionDataType pDataType)
 {
-    return pmReduceInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-}
+    switch(pOperation)
+    {
+        case REDUCE_ADD:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_ADD>(pDataType);
+            
+        case REDUCE_MIN:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_MIN>(pDataType);
 
-pmStatus pmReduceUIntAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
-{
-    return pmReduceUInts(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-}
+        case REDUCE_MAX:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_MAX>(pDataType);
 
-pmStatus pmReduceLongAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
-{
-    return pmReduceLongs(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-}
+        case REDUCE_PRODUCT:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_PRODUCT>(pDataType);
 
-pmStatus pmReduceULongAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
-{
-    return pmReduceULongs(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-}
+        case REDUCE_LOGICAL_AND:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_LOGICAL_AND>(pDataType);
 
-pmStatus pmReduceFloatAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
-{
-    return pmReduceFloats(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
-}
+        case REDUCE_BITWISE_AND:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_BITWISE_AND>(pDataType);
 
-pmStatus pmReduceDoubleAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info)
-{
-    return pmReduceDoubles(pTaskInfo.taskHandle, pDevice1Info.deviceHandle, pSubtask1Info.subtaskId, pSubtask1Info.splitInfo, pDevice2Info.deviceHandle, pSubtask2Info.subtaskId, pSubtask2Info.splitInfo, REDUCE_ADD);
+        case REDUCE_LOGICAL_OR:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_LOGICAL_OR>(pDataType);
+
+        case REDUCE_BITWISE_OR:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_BITWISE_OR>(pDataType);
+    
+        case REDUCE_LOGICAL_XOR:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_LOGICAL_XOR>(pDataType);
+
+        case REDUCE_BITWISE_XOR:
+            return pmGetSubtaskReductionCallbackInner<REDUCE_BITWISE_XOR>(pDataType);
+            
+        default:
+            return NULL;
+    }
+
+    return NULL;
 }
 
 pmStatus pmSubscribeToMemory(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHandle, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, uint pMemIndex, pmSubscriptionType pSubscriptionType, const pmSubscriptionInfo& pSubscriptionInfo)
@@ -786,52 +825,12 @@ pmStatus pmRedistributeData(pmTaskHandle pTaskHandle, pmDeviceHandle pDeviceHand
     SAFE_EXECUTE_ON_CONTROLLER(RedistributeData_Public, pTaskHandle, pDeviceHandle, pSubtaskId, lSplitInfo, pMemIndex, pOffset, pLength, pOrder);
 }
     
-pmStatus pmReduceInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
+pmStatus pmReduceSubtasks(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionOpType pOperation, pmReductionDataType pDataType)
 {
     pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
     pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
 
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceInts_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
-}
-
-pmStatus pmReduceUInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
-{
-    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
-    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
-
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceUInts_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
-}
-
-pmStatus pmReduceLongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
-{
-    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
-    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
-
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceLongs_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
-}
-
-pmStatus pmReduceULongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
-{
-    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
-    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
-
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceULongs_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
-}
-
-pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
-{
-    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
-    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
-
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceFloats_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
-}
-
-pmStatus pmReduceDoubles(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType)
-{
-    pmSplitInfo* lSplitInfo1 = ((pSplitInfo1.splitCount == 0) ? NULL : &pSplitInfo1);
-    pmSplitInfo* lSplitInfo2 = ((pSplitInfo2.splitCount == 0) ? NULL : &pSplitInfo2);
-
-    SAFE_EXECUTE_ON_CONTROLLER(pmReduceDoubles_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pReductionType);
+    SAFE_EXECUTE_ON_CONTROLLER(pmReduceSubtasks_Public, pTaskHandle, pDevice1Handle, pSubtask1Id, lSplitInfo1, pDevice2Handle, pSubtask2Id, lSplitInfo2, pOperation, pDataType);
 }
 
 void* pmGetMappedFile(const char* pPath)

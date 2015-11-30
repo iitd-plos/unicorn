@@ -29,31 +29,37 @@
 
 namespace pm
 {
-    typedef enum pmReductionType
+    typedef enum pmReductionOpType
     {
         REDUCE_ADD,
-        MAX_REDUCTION_TYPES
-    } pmReductionType;
+        REDUCE_MIN,
+        REDUCE_MAX,
+        REDUCE_PRODUCT,
+        REDUCE_LOGICAL_AND,
+        REDUCE_BITWISE_AND,
+        REDUCE_LOGICAL_OR,
+        REDUCE_BITWISE_OR,
+        REDUCE_LOGICAL_XOR,
+        REDUCE_BITWISE_XOR,
+        MAX_REDUCTION_OP_TYPES
+    } pmReductionOpType;
 
-    /** The following functions can be used for optimal inbuilt reduction of two subtasks. Various flavors differ in the data type they process */
-    pmStatus pmReduceIntAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
-    pmStatus pmReduceUIntAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
-    pmStatus pmReduceLongAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
-    pmStatus pmReduceULongAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
-    pmStatus pmReduceFloatAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
-    pmStatus pmReduceDoubleAdd(pmTaskInfo pTaskInfo, pmDeviceInfo pDevice1Info, pmSubtaskInfo pSubtask1Info, pmDeviceInfo pDevice2Info, pmSubtaskInfo pSubtask2Info);
+    typedef enum pmReductionDataType
+    {
+        REDUCE_INTS,
+        REDUCE_UNSIGNED_INTS,
+        REDUCE_LONGS,
+        REDUCE_UNSIGNED_LONGS,
+        REDUCE_FLOATS,
+        REDUCE_DOUBLES,
+        MAX_REDUCTION_DATA_TYPES
+    } pmReductionDataType;
+
+    /** The following function can be used for optimal inbuilt reduction of two subtasks. */
+    pmDataReductionCallback pmGetSubtaskReductionCallbackImpl(pmReductionOpType pOperation, pmReductionDataType pDataType);
     
-    pmStatus pmReduceInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType);
-
-    pmStatus pmReduceUInts(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType);
-
-    pmStatus pmReduceLongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType);
-
-    pmStatus pmReduceULongs(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType);
-
-    pmStatus pmReduceFloats(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType);
-
-    pmStatus pmReduceDoubles(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionType pReductionType);
+    /**  The following function can be called from within a custom implementation of pmDataReductionCallback. */
+    pmStatus pmReduceSubtasks(pmTaskHandle pTaskHandle, pmDeviceHandle pDevice1Handle, unsigned long pSubtask1Id, pmSplitInfo& pSplitInfo1, pmDeviceHandle pDevice2Handle, unsigned long pSubtask2Id, pmSplitInfo& pSplitInfo2, pmReductionOpType pOperation, pmReductionDataType pDataType);
 
     const size_t MAX_FILE_SIZE_LEN = 2048;
 
