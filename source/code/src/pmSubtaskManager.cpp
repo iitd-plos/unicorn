@@ -827,6 +827,64 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
     // All partitions with leftover subtasks are placed at the front. Interleaving devices from different machines distributes load evenly
     const std::vector<const pmProcessingElement*> lInterleavedDevices = pmDevicePool::GetDevicePool()->InterleaveDevicesFromDifferentMachines(lAssignedDevices, mLocalTask->GetSchedulingModel() == scheduler::STATIC_EQUAL);
 
+    // Interleaving disturbs locality of reference. Once the devices are shortlisted, reorder such that the ones from same machine are together
+    std::vector<const pmProcessingElement*> lReorderedDevices;
+    lReorderedDevices.reserve(lInterleavedDevices.size());
+    
+    size_t lSubtaskPartitionsLeft = lSubtaskPartitions.size();
+
+#ifdef SUPPORT_SPLIT_SUBTASKS
+    pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
+    size_t lSplittedPartitionsLeft = (mUseSplits ? lSplittedGroupSubtaskPartitions.size() : 0);
+#endif
+
+    std::map<uint, std::vector<const pmProcessingElement*>> lShortlistedDevicesMap;
+    for_each(lInterleavedDevices, [&] (const pmProcessingElement* pDevice)
+    {
+        bool lAllowDevice = false;
+
+    #ifdef SUPPORT_SPLIT_SUBTASKS
+        if(mUseSplits)
+        {
+            if(!lSplittedPartitionsLeft && !lSubtaskPartitionsLeft)
+                return; // return from lambda
+
+            bool lSplittingDevice = lSubtaskSplitter.IsSplitting(pDevice->GetType());
+            
+            if(lSplittingDevice && lSplittedPartitionsLeft)
+            {
+                lAllowDevice = true;
+                --lSplittedPartitionsLeft;
+            }
+            else if(!lSplittingDevice && lSubtaskPartitionsLeft)
+            {
+                lAllowDevice = true;
+                --lSubtaskPartitionsLeft;
+            }
+        }
+        else
+    #endif
+        {
+            if(lSubtaskPartitionsLeft)
+            {
+                lAllowDevice = true;
+                --lSubtaskPartitionsLeft;
+            }
+            else
+            {
+                return; // return from lambda
+            }
+        }
+
+        if(lAllowDevice)
+            lShortlistedDevicesMap[(uint)(*pDevice->GetMachine())].emplace_back(pDevice);
+    });
+
+    for_each(lShortlistedDevicesMap, [&] (const std::pair<uint, std::vector<const pmProcessingElement*>>& pPair)
+    {
+        std::move(pPair.second.begin(), pPair.second.end(), std::back_inserter(lReorderedDevices));
+    });
+
 #ifdef SUPPORT_SPLIT_SUBTASKS
     if(mUseSplits)
     {
@@ -836,8 +894,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
         auto lUnsplittedGroupIter = lSubtaskPartitions.begin();
         auto lUnsplittedGroupEndIter = lSubtaskPartitions.end();
 
-        pmSubtaskSplitter& lSubtaskSplitter = mLocalTask->GetSubtaskSplitter();
-        for_each(lInterleavedDevices, [&] (const pmProcessingElement* pDevice)
+        for_each(lReorderedDevices, [&] (const pmProcessingElement* pDevice)
         {
             bool lSplittingDevice = lSubtaskSplitter.IsSplitting(pDevice->GetType());
             
@@ -862,7 +919,7 @@ pmPullSchedulingManager::pmPullSchedulingManager(pmLocalTask* pLocalTask, uint p
     else
 #endif
     {
-        multi_for_each(lSubtaskPartitions, lInterleavedDevices, [&] (pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr, const pmProcessingElement* pDevice)
+        multi_for_each(lSubtaskPartitions, lReorderedDevices, [&] (pmUnfinishedPartitionPtr& pUnfinishedPartitionPtr, const pmProcessingElement* pDevice)
         {
             mAllottedPartitions[pDevice] = pUnfinishedPartitionPtr;
         });

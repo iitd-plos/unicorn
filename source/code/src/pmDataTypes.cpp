@@ -658,6 +658,55 @@ bool operator<(const pmSplitInfo& pInfo1, const pmSplitInfo& pInfo2)
 }
 #endif
 
+    
+void findReductionOpAndDataType(pmDataReductionCallback pCallback, pmReductionOpType& pOpType, pmReductionDataType& pDataType)
+{
+    pOpType = MAX_REDUCTION_OP_TYPES;
+    pDataType = MAX_REDUCTION_DATA_TYPES;
+
+    pOpType = findReductionOpType<REDUCE_INTS>(pCallback);
+    if(pOpType != MAX_REDUCTION_OP_TYPES)
+    {
+        pDataType = REDUCE_INTS;
+        return;
+    }
+    
+    pOpType = findReductionOpType<REDUCE_UNSIGNED_INTS>(pCallback);
+    if(pOpType != MAX_REDUCTION_OP_TYPES)
+    {
+        pDataType = REDUCE_UNSIGNED_INTS;
+        return;
+    }
+    
+    pOpType = findReductionOpType<REDUCE_LONGS>(pCallback);
+    if(pOpType != MAX_REDUCTION_OP_TYPES)
+    {
+        pDataType = REDUCE_LONGS;
+        return;
+    }
+    
+    pOpType = findReductionOpType<REDUCE_UNSIGNED_LONGS>(pCallback);
+    if(pOpType != MAX_REDUCTION_OP_TYPES)
+    {
+        pDataType = REDUCE_UNSIGNED_LONGS;
+        return;
+    }
+
+    pOpType = findReductionOpType<REDUCE_FLOATS>(pCallback);
+    if(pOpType != MAX_REDUCTION_OP_TYPES)
+    {
+        pDataType = REDUCE_FLOATS;
+        return;
+    }
+    
+    pOpType = findReductionOpType<REDUCE_DOUBLES>(pCallback);
+    if(pOpType != MAX_REDUCTION_OP_TYPES)
+    {
+        pDataType = REDUCE_DOUBLES;
+        return;
+    }
+}
+
 
 /* struct naturalSorter */
 std::string naturalSorter::GetNextBlock(const std::string& pStr, size_t& pIndex) const

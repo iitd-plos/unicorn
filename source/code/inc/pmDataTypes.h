@@ -480,9 +480,9 @@ namespace pm
     }
 
     template<pmReductionOpType pOperation, pmReductionDataType pDataType>
-    bool reductionFunctionPointerMatches(pmDataReductionCallback pCallback)
+    bool reductionFunctionPointerMatches(const pmDataReductionCallback pCallback)
     {
-        return (pCallback == pmReduceSubtasks<pOperation, pDataType>);
+        return (pCallback == (pmDataReductionCallback)pmReduceSubtasks<pOperation, pDataType>);
     }
     
     template<pmReductionDataType pMatchType>
@@ -490,12 +490,50 @@ namespace pm
     {
         return (reductionFunctionPointerMatches<REDUCE_ADD, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_MIN, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_MAX, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_PRODUCT, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_LOGICAL_AND, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_BITWISE_AND, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_LOGICAL_OR, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_BITWISE_OR, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_LOGICAL_XOR, pMatchType>(pCallback)) || (reductionFunctionPointerMatches<REDUCE_BITWISE_XOR, pMatchType>(pCallback));
     }
-    
+
     template<pmReductionOpType pOperationType>
     bool reductionOperationMatches(pmDataReductionCallback pCallback)
     {
         return (reductionFunctionPointerMatches<pOperationType, REDUCE_INTS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_UNSIGNED_INTS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_LONGS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_UNSIGNED_LONGS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_FLOATS>(pCallback)) || (reductionFunctionPointerMatches<pOperationType, REDUCE_DOUBLES>(pCallback));
     }
+    
+    template<pmReductionDataType pDataType>
+    pmReductionOpType findReductionOpType(pmDataReductionCallback pCallback)
+    {
+        if(reductionFunctionPointerMatches<REDUCE_ADD, pDataType>(pCallback))
+            return REDUCE_ADD;
+        
+        if(reductionFunctionPointerMatches<REDUCE_MIN, pDataType>(pCallback))
+            return REDUCE_MIN;
+        
+        if(reductionFunctionPointerMatches<REDUCE_MAX, pDataType>(pCallback))
+            return REDUCE_MAX;
+        
+        if(reductionFunctionPointerMatches<REDUCE_PRODUCT, pDataType>(pCallback))
+            return REDUCE_PRODUCT;
+
+        if(reductionFunctionPointerMatches<REDUCE_LOGICAL_AND, pDataType>(pCallback))
+            return REDUCE_LOGICAL_AND;
+
+        if(reductionFunctionPointerMatches<REDUCE_BITWISE_AND, pDataType>(pCallback))
+            return REDUCE_BITWISE_AND;
+
+        if(reductionFunctionPointerMatches<REDUCE_LOGICAL_OR, pDataType>(pCallback))
+            return REDUCE_LOGICAL_OR;
+
+        if(reductionFunctionPointerMatches<REDUCE_BITWISE_OR, pDataType>(pCallback))
+            return REDUCE_BITWISE_OR;
+
+        if(reductionFunctionPointerMatches<REDUCE_LOGICAL_XOR, pDataType>(pCallback))
+            return REDUCE_LOGICAL_XOR;
+
+        if(reductionFunctionPointerMatches<REDUCE_BITWISE_XOR, pDataType>(pCallback))
+            return REDUCE_BITWISE_XOR;
+        
+        return MAX_REDUCTION_OP_TYPES;
+    }
+
+    void findReductionOpAndDataType(pmDataReductionCallback pCallback, pmReductionOpType& pOpType, pmReductionDataType& pDataType);
 
 #ifdef DUMP_EVENT_TIMELINE
     class pmEventTimeline;

@@ -1449,8 +1449,11 @@ void pmMPI::SendReduce(pmCommunicatorCommandPtr& pCommand)
 
     pCommand->MarkExecutionStart();
 
+#ifdef USE_MPI_REDUCE
+#else
     // MPI_IReduce does not take any tag
-//    lData->mpiTag = mDynamicMpiTagProducer.GetNextTag(static_cast<const pmMachine*>(pCommand->GetDestination()));
+    lData->mpiTag = mDynamicMpiTagProducer.GetNextTag(static_cast<const pmMachine*>(pCommand->GetDestination()));
+#endif
     
     pmCommunicatorCommandPtr lClonePtr = pCommand->Clone();
     
@@ -1460,14 +1463,7 @@ void pmMPI::SendReduce(pmCommunicatorCommandPtr& pCommand)
 
     char* lTargetMem = static_cast<char*>(const_cast<void*>(lClonePtr->GetUserIdentifier()));
 
-    const pmMachine* lDestMachine = dynamic_cast<const pmMachine*>(pCommand->GetDestination());
-    
-#ifdef PRE_CREATE_SUB_COMMUNICATORS
-    std::shared_ptr<pmMpiCommWrapper>& lWrapperPtr = mSubCommunicators.find(std::make_pair<>((uint)(*lDestMachine), (uint)(*PM_LOCAL_MACHINE)))->second;
-#else
-    std::shared_ptr<pmMpiCommWrapper> lWrapperPtr(new pmMpiCommWrapper((uint)(*lDestMachine), (uint)(*PM_LOCAL_MACHINE)));
-    lClonePtr->HoldExternalDataForLifetimeOfCommand(lWrapperPtr);
-#endif
+    MPI_Request lRequest = MPI_REQUEST_NULL;
 
     const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
     pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
@@ -1478,9 +1474,25 @@ void pmMPI::SendReduce(pmCommunicatorCommandPtr& pCommand)
     EXCEPTION_ASSERT(lLength % lSize == 0);
     lLength /= lSize;
 
-    MPI_Request lRequest = MPI_REQUEST_NULL;
+#ifdef USE_MPI_REDUCE
+#ifdef PRE_CREATE_SUB_COMMUNICATORS
+    const pmMachine* lDestMachine = dynamic_cast<const pmMachine*>(pCommand->GetDestination());
+    std::shared_ptr<pmMpiCommWrapper>& lWrapperPtr = mSubCommunicators.find(std::make_pair<>((uint)(*lDestMachine), (uint)(*PM_LOCAL_MACHINE)))->second;
+#else
+    std::shared_ptr<pmMpiCommWrapper> lWrapperPtr(new pmMpiCommWrapper((uint)(*lDestMachine), (uint)(*PM_LOCAL_MACHINE)));
+    lClonePtr->HoldExternalDataForLifetimeOfCommand(lWrapperPtr);
+#endif
+
     if( MPI_CALL("MPI_Ireduce", (MPI_Ireduce(lTargetMem, lTargetMem, (int)lLength, lDataType, GetReductionMpiOperation(lTask), 0, lWrapperPtr->GetCommunicator(), &lRequest) != MPI_SUCCESS)) )
         PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
+#else
+	MPI_Comm lCommunicator;
+	int lDest;
+
+    SAFE_GET_MPI_COMMUNICATOR_AND_DESTINATION(lCommunicator, lDest, pCommand->GetDestination());
+    if( MPI_CALL("MPI_Isend", (MPI_Isend(lTargetMem, (int)lLength, lDataType, lDest, (int)lData->mpiTag, lCommunicator, &lRequest) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException(pmNetworkException::SEND_ERROR));
+#endif
 
     EXCEPTION_ASSERT(lRequest != MPI_REQUEST_NULL);
 
@@ -1495,7 +1507,7 @@ void pmMPI::SendReduce(pmCommunicatorCommandPtr& pCommand)
     CancelDummyRequest();
 }
 
-void pmMPI::ReceiveReduce(pmCommunicatorCommandPtr &pCommand)
+void pmMPI::ReceiveReduce(pmCommunicatorCommandPtr& pCommand)
 {
     subtaskMemoryReduceStruct* lData = (subtaskMemoryReduceStruct*)(pCommand->GetData());
     ulong lLength = lData->length;
@@ -1513,14 +1525,7 @@ void pmMPI::ReceiveReduce(pmCommunicatorCommandPtr &pCommand)
     
     char* lTargetMem = static_cast<char*>(const_cast<void*>(pCommand->GetUserIdentifier()));
 
-    const pmMachine* lSrcMachine = dynamic_cast<const pmMachine*>(pCommand->GetDestination());
-
-#ifdef PRE_CREATE_SUB_COMMUNICATORS
-    std::shared_ptr<pmMpiCommWrapper>& lWrapperPtr = mSubCommunicators.find(std::make_pair<>((uint)(*PM_LOCAL_MACHINE), (uint)(*lSrcMachine)))->second;
-#else
-    std::shared_ptr<pmMpiCommWrapper> lWrapperPtr(new pmMpiCommWrapper((uint)(*PM_LOCAL_MACHINE), (uint)(*lSrcMachine)));
-    pCommand->HoldExternalDataForLifetimeOfCommand(lWrapperPtr);
-#endif
+    MPI_Request lRequest = MPI_REQUEST_NULL;
 
     const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lData->originatingHost);
     pmTask* lTask = pmTaskManager::GetTaskManager()->FindTask(lOriginatingHost, lData->sequenceNumber);
@@ -1531,9 +1536,27 @@ void pmMPI::ReceiveReduce(pmCommunicatorCommandPtr &pCommand)
     EXCEPTION_ASSERT(lLength % lSize == 0);
     lLength /= lSize;
 
-    MPI_Request lRequest = MPI_REQUEST_NULL;
+#ifdef USE_MPI_REDUCE
+#ifdef PRE_CREATE_SUB_COMMUNICATORS
+    const pmMachine* lSrcMachine = dynamic_cast<const pmMachine*>(pCommand->GetDestination());
+    std::shared_ptr<pmMpiCommWrapper>& lWrapperPtr = mSubCommunicators.find(std::make_pair<>((uint)(*PM_LOCAL_MACHINE), (uint)(*lSrcMachine)))->second;
+#else
+    std::shared_ptr<pmMpiCommWrapper> lWrapperPtr(new pmMpiCommWrapper((uint)(*PM_LOCAL_MACHINE), (uint)(*lSrcMachine)));
+    pCommand->HoldExternalDataForLifetimeOfCommand(lWrapperPtr);
+#endif
+
     if( MPI_CALL("MPI_Ireduce", (MPI_Ireduce(MPI_IN_PLACE, lTargetMem, (int)lLength, lDataType, GetReductionMpiOperation(lTask), 0, lWrapperPtr->GetCommunicator(), &lRequest) != MPI_SUCCESS)) )
         PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
+#else
+	MPI_Comm lCommunicator;
+	int lDest;
+
+    DEBUG_EXCEPTION_ASSERT(pCommand->GetTag() > MAX_COMMUNICATOR_COMMAND_TAGS);
+    
+    SAFE_GET_MPI_COMMUNICATOR_AND_DESTINATION(lCommunicator, lDest, pCommand->GetDestination());
+    if( MPI_CALL("MPI_Irecv", (MPI_Irecv(lTargetMem, (int)lLength, lDataType, lDest, (int)(pCommand->GetTag()), lCommunicator, &lRequest) != MPI_SUCCESS)) )
+        PMTHROW(pmNetworkException(pmNetworkException::RECEIVE_ERROR));
+#endif
 
     EXCEPTION_ASSERT(lRequest != MPI_REQUEST_NULL);
 

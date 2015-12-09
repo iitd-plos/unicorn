@@ -1,4 +1,4 @@
-\
+
 /**
  * Copyright (c) 2011 Indian Institute of Technology, New Delhi
  * All Rights Reserved
@@ -27,6 +27,7 @@
 #include "pmMemoryManager.h"
 #include "pmDevicePool.h"
 #include "pmTaskManager.h"
+#include "pmCallbackUnit.h"
 
 #include <algorithm>
 
@@ -34,7 +35,23 @@ namespace pm
 {
 
 using namespace reducer;
+
+struct reductionDataHolder
+{
+    reductionDataHolder(ulong pLength, const lastSubtaskData& pLastSubtaskData)
+    : mPtr(new char[pLength])
+    , mLastSubtaskData(pLastSubtaskData)
+    {}
     
+    ~reductionDataHolder()
+    {
+        delete[] mPtr;
+    }
+    
+    char* mPtr;
+    lastSubtaskData mLastSubtaskData;
+};
+
 void PostMpiReduceCommandCompletionCallback(const pmCommandPtr& pCommand)
 {
     pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
@@ -46,7 +63,21 @@ void PostMpiReduceCommandCompletionCallback(const pmCommandPtr& pCommand)
     
     pmScheduler::GetScheduler()->AddRegisterExternalReductionFinishEvent(lRequestingTask);
 }
+
+void PostExternalReduceCommandCompletionCallback(const pmCommandPtr& pCommand)
+{
+    pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
+
+    communicator::subtaskMemoryReduceStruct* lReceiveStruct = (communicator::subtaskMemoryReduceStruct*)(lCommunicatorCommand->GetData());
     
+    const pmMachine* lOriginatingHost = pmMachinePool::GetMachinePool()->GetMachine(lReceiveStruct->originatingHost);
+    pmTask* lRequestingTask = pmTaskManager::GetTaskManager()->FindTaskNoThrow(lOriginatingHost, lReceiveStruct->sequenceNumber);
+
+    reductionDataHolder* lDataHolder = (reductionDataHolder*)(lCommunicatorCommand->GetExternalData());
+
+    lDataHolder->mLastSubtaskData.stub->ReduceExternalMemory(lRequestingTask, lDataHolder->mPtr, lDataHolder->mLastSubtaskData.subtaskId, lDataHolder->mLastSubtaskData.splitInfo.get_ptr());
+}
+
 pmReducer::pmReducer(pmTask* pTask)
 	: mReductionsDone(0)
 	, mExternalReductionsRequired(0)
@@ -218,6 +249,12 @@ void pmReducer::PerformDirectExternalReductions()
     
     EXCEPTION_ASSERT(!lHasScratchBuffers && lReducibleAddressSpaces == 1);
 
+    communicator::communicatorCommandTags lTag = (communicator::communicatorCommandTags)lSubtaskMemoryReduceStruct.mpiTag;
+    const pmMachine* lSendingMachine = pmMachinePool::GetMachinePool()->GetMachine(lSubtaskMemoryReduceStruct.senderHost);
+
+    finalize_ptr<communicator::subtaskMemoryReduceStruct> lData(new communicator::subtaskMemoryReduceStruct(lSubtaskMemoryReduceStruct));
+
+#ifdef USE_MPI_REDUCE
     void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex);
     ulong lOffset = 0;
     
@@ -246,11 +283,14 @@ void pmReducer::PerformDirectExternalReductions()
         lOffset = *lCompactWriteIter;
     }
 
-    communicator::communicatorCommandTags lTag = (communicator::communicatorCommandTags)lSubtaskMemoryReduceStruct.mpiTag;
-    const pmMachine* lSendingMachine = pmMachinePool::GetMachinePool()->GetMachine(lSubtaskMemoryReduceStruct.senderHost);
-
-    finalize_ptr<communicator::subtaskMemoryReduceStruct> lData(new communicator::subtaskMemoryReduceStruct(lSubtaskMemoryReduceStruct));
     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::subtaskMemoryReduceStruct>::CreateSharedPtr(mTask->GetPriority(), communicator::RECEIVE, lTag, lSendingMachine, communicator::BYTE, lData, 1, PostMpiReduceCommandCompletionCallback, (static_cast<char*>(lShadowMem) + lOffset));
+#else
+    std::shared_ptr<reductionDataHolder> lDataPtr(new reductionDataHolder(lData->length, mLastSubtask));
+    
+    pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::subtaskMemoryReduceStruct>::CreateSharedPtr(mTask->GetPriority(), communicator::RECEIVE, lTag, lSendingMachine, communicator::BYTE, lData, 1, PostExternalReduceCommandCompletionCallback, lDataPtr->mPtr);
+    
+    lCommand->HoldExternalDataForLifetimeOfCommand(lDataPtr);
+#endif
 
     mSubtaskMemoryReduceStructVector.resize(mSubtaskMemoryReduceStructVector.size() - 1);
 
@@ -298,9 +338,13 @@ void pmReducer::AddReductionFinishEvent()
 {
     mLastSubtask.stub->ReductionFinishEvent(mTask);
 }
-    
+
 void pmReducer::HandleReductionFinish()
 {
+#ifdef ENABLE_TASK_PROFILING
+    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
+#endif
+
     filtered_for_each(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (mTask->IsWritable(pAddressSpace) && mTask->IsReducible(pAddressSpace));},
     [&] (pmAddressSpace* pAddressSpace)
     {
@@ -368,6 +412,202 @@ struct getBitwiseOperatableType<double>
 {
     typedef ulong type;
 };
+
+void pmReducer::ReduceExternalMemory(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, void* pMem)
+{
+#ifdef USE_MPI_REDUCE
+    PMTHROW(pmFatalErrorException());
+#endif
+
+    pmSubscriptionManager& lSubscriptionManager = mTask->GetSubscriptionManager();
+    bool lHasScratchBuffers = lSubscriptionManager.HasScratchBuffers(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
+    
+    const pmAddressSpace* lAddressSpace = 0;
+    size_t lReducibleAddressSpaces = 0;
+    size_t lAddressSpaceIndex = 0;
+    for_each_with_index(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pIndex)
+    {
+        if(mTask->IsWritable(pAddressSpace) && mTask->IsReducible(pAddressSpace))
+        {
+            lAddressSpace = pAddressSpace;
+            lAddressSpaceIndex = pIndex;
+            ++lReducibleAddressSpaces;
+        }
+    });
+    
+    EXCEPTION_ASSERT(!lHasScratchBuffers && lReducibleAddressSpaces == 1);
+
+    void* lShadowMem = lSubscriptionManager.GetSubtaskShadowMem(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex);
+    ulong lOffset = 0, lLength = 0;
+    
+    if(mTask->GetAddressSpaceSubscriptionVisibility(lAddressSpace, mLastSubtask.stub) == SUBSCRIPTION_NATURAL)
+    {
+        pmSubscriptionInfo lUnifiedSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex);
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex, lBeginIter, lEndIter);
+        
+        EXCEPTION_ASSERT(std::distance(lBeginIter, lEndIter) == 1);    // Only one write subscription
+
+        lOffset =  lBeginIter->first - lUnifiedSubscriptionInfo.offset;
+        lLength = (uint)lBeginIter->second.first;
+    }
+    else    // SUBSCRIPTION_COMPACT
+    {
+        const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex);
+
+        subscription::subscriptionRecordType::const_iterator lBeginIter, lEndIter;
+        lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(mLastSubtask.stub, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr(), (uint)lAddressSpaceIndex, lBeginIter, lEndIter);
+        
+        auto lCompactWriteIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
+        
+        EXCEPTION_ASSERT(std::distance(lBeginIter, lEndIter) == 1);    // Only one write subscription
+
+        lOffset = *lCompactWriteIter;
+        lLength = (uint)lBeginIter->second.first;
+    }
+    
+    void* lMem = (static_cast<char*>(lShadowMem) + lOffset);
+
+    pmReductionOpType lOpType;
+    pmReductionDataType lDataType;
+    
+    findReductionOpAndDataType(mTask->GetCallbackUnit()->GetDataReductionCB()->GetCallback(), lOpType, lDataType);
+    
+    switch(lDataType)
+    {
+        case REDUCE_INTS:
+        {
+            ReduceMemories<int>((int*)lMem, (int*)pMem, lLength / sizeof(int), lOpType);
+            break;
+        }
+            
+        case REDUCE_UNSIGNED_INTS:
+        {
+            ReduceMemories<uint>((uint*)lMem, (uint*)pMem, lLength / sizeof(uint), lOpType);
+            break;
+        }
+            
+        case REDUCE_LONGS:
+        {
+            ReduceMemories<long>((long*)lMem, (long*)pMem, lLength / sizeof(long), lOpType);
+            break;
+        }
+            
+        case REDUCE_UNSIGNED_LONGS:
+        {
+            ReduceMemories<ulong>((ulong*)lMem, (ulong*)pMem, lLength / sizeof(ulong), lOpType);
+            break;
+        }
+            
+        case REDUCE_FLOATS:
+        {
+            ReduceMemories<float>((float*)lMem, (float*)pMem, lLength / sizeof(float), lOpType);
+            break;
+        }
+            
+        case REDUCE_DOUBLES:
+        {
+            ReduceMemories<double>((double*)lMem, (double*)pMem, lLength / sizeof(double), lOpType);
+            break;
+        }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+
+    RegisterExternalReductionFinish();
+}
+
+template<typename datatype>
+void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType)
+{
+    switch(pReductionType)
+    {
+        case REDUCE_ADD:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] += pShadowMem2[i];
+            
+            break;
+        }
+            
+        case REDUCE_MIN:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] = std::min(pShadowMem1[i], pShadowMem2[i]);
+            
+            break;
+        }
+        
+        case REDUCE_MAX:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] = std::max(pShadowMem1[i], pShadowMem2[i]);
+            
+            break;
+        }
+        
+        case REDUCE_PRODUCT:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] *= pShadowMem2[i];
+            
+            break;
+        }
+        
+        case REDUCE_LOGICAL_AND:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] = (pShadowMem1[i] && pShadowMem2[i]);
+            
+            break;
+        }
+        
+        case REDUCE_BITWISE_AND:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[i]) & (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+            
+            break;
+        }
+        
+        case REDUCE_LOGICAL_OR:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] = (pShadowMem1[i] || pShadowMem2[i]);
+            
+            break;
+        }
+        
+        case REDUCE_BITWISE_OR:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[i]) | (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+            
+            break;
+        }
+        
+        case REDUCE_LOGICAL_XOR:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] = (pShadowMem1[i] != pShadowMem2[i]);
+            
+            break;
+        }
+
+        case REDUCE_BITWISE_XOR:
+        {
+            for(size_t i = 0; i < pDataCount; ++i)
+                pShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[i]) ^ (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+            
+            break;
+        }
+
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+}
 
 template<typename datatype>
 void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionType)
@@ -591,91 +831,7 @@ void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSpl
             
             size_t lDataCount = lUnifiedSubscriptionInfo1.length / lDataSize;
 
-            switch(pReductionType)
-            {
-                case REDUCE_ADD:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] += lShadowMem2[i];
-                    
-                    break;
-                }
-                    
-                case REDUCE_MIN:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] = std::min(lShadowMem1[i], lShadowMem2[i]);
-                    
-                    break;
-                }
-                
-                case REDUCE_MAX:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] = std::max(lShadowMem1[i], lShadowMem2[i]);
-                    
-                    break;
-                }
-                
-                case REDUCE_PRODUCT:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] *= lShadowMem2[i];
-                    
-                    break;
-                }
-                
-                case REDUCE_LOGICAL_AND:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] = (lShadowMem1[i] && lShadowMem2[i]);
-                    
-                    break;
-                }
-                
-                case REDUCE_BITWISE_AND:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lShadowMem1[i]) & (typename getBitwiseOperatableType<datatype>::type)(lShadowMem2[i]));
-                    
-                    break;
-                }
-                
-                case REDUCE_LOGICAL_OR:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] = (lShadowMem1[i] || lShadowMem2[i]);
-                    
-                    break;
-                }
-                
-                case REDUCE_BITWISE_OR:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lShadowMem1[i]) | (typename getBitwiseOperatableType<datatype>::type)(lShadowMem2[i]));
-                    
-                    break;
-                }
-                
-                case REDUCE_LOGICAL_XOR:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] = (lShadowMem1[i] != lShadowMem2[i]);
-                    
-                    break;
-                }
-
-                case REDUCE_BITWISE_XOR:
-                {
-                    for(size_t i = 0; i < lDataCount; ++i)
-                        lShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(lShadowMem1[i]) ^ (typename getBitwiseOperatableType<datatype>::type)(lShadowMem2[i]));
-                    
-                    break;
-                }
-
-                default:
-                    PMTHROW(pmFatalErrorException());
-            }
+            ReduceMemories(lShadowMem1, lShadowMem2, lDataCount, pReductionType);
         }
     });
 }

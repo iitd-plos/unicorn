@@ -183,7 +183,7 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 
 
 /* Affinity Controls */
-#define MACHINES_PICK_BEST_SUBTASKS // defines whether subtasks choose best machines or vice versa
+//#define MACHINES_PICK_BEST_SUBTASKS // defines whether subtasks choose best machines or vice versa
 #ifdef MACHINES_PICK_BEST_SUBTASKS
 //    #define GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
 #endif
@@ -194,7 +194,10 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 
 
 /* Reduction Controls */
+//#define USE_MPI_REDUCE
+#ifdef USE_MPI_REDUCE
 #define PRE_CREATE_SUB_COMMUNICATORS    // MPI-2 requires all nodes to call MPI_Create_Comm call even if they are not part of the subcommunicator
+#endif
 
 
 /* Utility controls */

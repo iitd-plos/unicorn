@@ -151,7 +151,7 @@ private:
 
     std::set<pmUnfinishedPartitionPtr> mUnacknowledgedPartitions;   // Collection of all unacknowledged partitions
     
-    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;    
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mResourceLock;
 };
     
 class pmPullSchedulingManager : public pmSingleAssignmentSchedulingManager

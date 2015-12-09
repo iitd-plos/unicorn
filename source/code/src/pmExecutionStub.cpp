@@ -235,6 +235,13 @@ void pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitIn
 
 	SwitchThread(std::shared_ptr<stubEvent>(new subtaskReduceEvent(SUBTASK_REDUCE, pTask, pSubtaskId1, pStub2, pSubtaskId2, lSplitData1, lSplitData2)), pTask->GetPriority());
 }
+    
+void pmExecutionStub::ReduceExternalMemory(pmTask* pTask, void* pMem, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+{
+    pmSplitData lSplitData(pSplitInfo);
+
+	SwitchThread(std::shared_ptr<stubEvent>(new externalMemReduceEvent(EXTERNAL_MEM_REDUCE, pTask, pSubtaskId, lSplitData, pMem)), pTask->GetPriority());
+}
 
 void pmExecutionStub::ProcessNegotiatedRange(const pmSubtaskRange& pRange)
 {
@@ -1433,6 +1440,16 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             break;
         }
             
+        case EXTERNAL_MEM_REDUCE:
+        {
+            externalMemReduceEvent& lEvent = static_cast<externalMemReduceEvent&>(pEvent);
+
+            std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr(lEvent.splitData.operator std::unique_ptr<pmSplitInfo>());
+            lEvent.task->GetReducer()->ReduceExternalMemory(this, lEvent.subtaskId, lSplitInfoAutoPtr.get(), lEvent.externalMem);
+
+            break;
+        }
+            
         case CANCEL_ALL_SUBTASKS:
         {
             cancelAllSubtasksEvent& lEvent = static_cast<cancelAllSubtasksEvent&>(pEvent);
@@ -2495,6 +2512,16 @@ void pmExecutionStub::CommonPostNegotiationOnCPU(pmTask* pTask, ulong pSubtaskId
 
 void pmExecutionStub::DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2)
 {
+#ifdef DUMP_EVENT_TIMELINE
+    std::stringstream lStream;
+    lStream << "SubtaskReduction with subtask " << pSubtaskId2;
+    
+    if(pSplitInfo2)
+        lStream << " Sp " << pSplitInfo2->splitId;
+
+    pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId1, pSplitInfo1, GetProcessingElement()->GetGlobalDeviceIndex(), lStream.str().c_str());
+#endif
+
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, &pSubtaskId1);
 	pmStatus lStatus = pTask->GetCallbackUnit()->GetDataReductionCB()->Invoke(pTask, this, pSubtaskId1, pSplitInfo1, true, pStub2, pSubtaskId2, pSplitInfo2, true);
     TLS_IMPLEMENTATION_CLASS::GetTls()->SetThreadLocalStorage(TLS_CURRENT_SUBTASK_ID, NULL);

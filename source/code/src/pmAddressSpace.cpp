@@ -724,17 +724,27 @@ void pmAddressSpace::FlushOwnerships()
 
     DEBUG_EXCEPTION_ASSERT(lTask && lTask->IsWritable(this));
     
-    mDirectoryPtr->CloneFrom(mOriginalDirectoryPtr.get());
+    if(lTask->GetCallbackUnit()->GetDataReductionCB())
+    {
+        mDirectoryPtr->Clear();
+        mDirectoryPtr->Reset(mOwner);
+    }
+    else
+    {
+        mDirectoryPtr->CloneFrom(mOriginalDirectoryPtr.get());
+    }
+
     mOriginalDirectoryPtr->Clear();
     
 	FINALIZE_RESOURCE_PTR(dTransferLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mOwnershipTransferLock, Lock(), Unlock());
 
     EXCEPTION_ASSERT(mOwnershipTransferVector.empty() || mScatteredOwnershipTransferVector.empty());
+    EXCEPTION_ASSERT(((!lTask->GetCallbackUnit()->GetDataReductionCB()) && (!lTask->GetCallbackUnit()->GetDataRedistributionCB())) || (mOwnershipTransferVector.empty() && mScatteredOwnershipTransferVector.empty()));
 
     bool lOwnershipTransferRequired = ((mOwner == PM_LOCAL_MACHINE) && (!lTask->GetCallbackUnit()->GetDataReductionCB()) && (!lTask->GetCallbackUnit()->GetDataRedistributionCB()));
     pmOwnershipTransferMap lOwnershipTransferMap;
     pmScatteredOwnershipTransferMap lScatteredOwnershipTransferMap;
-    
+
     if(lOwnershipTransferRequired)
     {
         const std::set<const pmMachine*>& lMachines = (dynamic_cast<pmLocalTask*>(lTask) ? ((pmLocalTask*)lTask)->GetAssignedMachines() : ((pmRemoteTask*)lTask)->GetAssignedMachines());

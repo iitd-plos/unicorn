@@ -48,6 +48,12 @@ struct lastSubtaskData
     : stub(NULL)
     , subtaskId(std::numeric_limits<ulong>::max())
     {}
+
+    lastSubtaskData(const lastSubtaskData& pLastSubtaskData)
+    : stub(pLastSubtaskData.stub)
+    , subtaskId(pLastSubtaskData.subtaskId)
+    , splitInfo(pLastSubtaskData.splitInfo.get_ptr() ? new pmSplitInfo(*pLastSubtaskData.splitInfo.get_ptr()) : NULL)
+    {}
 };
 
 }
@@ -55,6 +61,7 @@ struct lastSubtaskData
 class pmReducer : public pmBase
 {
     friend void PostMpiReduceCommandCompletionCallback(const pmCommandPtr& pCommand);
+    friend void PostExternalReduceCommandCompletionCallback(const pmCommandPtr& pCommand);
 
     public:
 		pmReducer(pmTask* pTask);
@@ -69,6 +76,8 @@ class pmReducer : public pmBase
         void PrepareForExternalReceive(communicator::subtaskMemoryReduceStruct& pStruct);
 
         void ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionOperation, pmReductionDataType pReductionDataType);
+    
+        void ReduceExternalMemory(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, void* pMem);
 
         void PerformDirectExternalReductions();
         void RegisterExternalReductionFinish();
@@ -83,6 +92,9 @@ class pmReducer : public pmBase
 
         template<typename datatype>
         void ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionType);
+
+        template<typename datatype>
+        void ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType);
 
         reducer::lastSubtaskData mLastSubtask;
 

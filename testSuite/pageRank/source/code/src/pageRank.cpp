@@ -414,24 +414,22 @@ double DoSingleGpuProcess(int argc, char** argv, int pCommonArgs)
 #endif
 }
 
-bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutputMemHandle, pageRankTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
+bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, pageRankTaskConf* pTaskConf, pmCallbackHandle pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy)
 {
-	size_t lMemSize = gTotalWebPages * sizeof(PAGE_RANK_DATA_TYPE);
     pTaskConf->webPagesPerSubtask = getWebPagesPerSubtask(pmGetHostCount() * 4);    // Assuming 5 devices per host
     unsigned long lSubtasks = (gTotalWebPages / pTaskConf->webPagesPerSubtask) + ((gTotalWebPages % pTaskConf->webPagesPerSubtask) ? 1 : 0);
 
-	CREATE_SIMPLE_TASK(0, lMemSize, lSubtasks, pCallbackHandle, pSchedulingPolicy)
+    pmTaskMem lTaskMem[MAX_MEM_INDICES];
+
+    CREATE_TASK(lSubtasks, pCallbackHandle, pSchedulingPolicy)
 
     if(pInputMemHandle)
-    {
-        lTaskMem[INPUT_MEM_INDEX].memHandle = pInputMemHandle;
-        lTaskMem[INPUT_MEM_INDEX].memType = READ_ONLY;
-        lTaskMem[INPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_NATURAL;
-     
-        lTaskDetails.taskMemCount = 2;
-    }
+        lTaskMem[INPUT_MEM_INDEX] = {pInputMemHandle,  READ_ONLY, SUBSCRIPTION_NATURAL};
     
-    lTaskMem[OUTPUT_MEM_INDEX].subscriptionVisibilityType = SUBSCRIPTION_NATURAL;
+    lTaskMem[OUTPUT_MEM_INDEX] = {pOutputMemHandle, WRITE_ONLY, SUBSCRIPTION_NATURAL};
+
+    lTaskDetails.taskMemCount = (pInputMemHandle ? MAX_MEM_INDICES : 1);
+    lTaskDetails.taskMem = (pmTaskMem*)(lTaskMem);
     
 	lTaskDetails.taskConf = (void*)(pTaskConf);
 	lTaskDetails.taskConfLength = sizeof(pageRankTaskConf);
@@ -441,10 +439,8 @@ bool ParallelPageRankIteration(pmMemHandle pInputMemHandle, pmMemHandle* pOutput
     if(pmWaitForTaskCompletion(lTaskHandle) != pmSuccess)
     {
         FREE_TASK_AND_RESOURCES
-        return (double)-1.0;
+        return false;
     }
-
-    *pOutputMemHandle = lTaskMem[OUTPUT_MEM_INDEX].memHandle;
 
     pmReleaseTask(lTaskHandle);
 
@@ -467,7 +463,12 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
 
     pmMemHandle lInputMemHandle = NULL, lOutputMemHandle = NULL;
 
-	pageRankTaskConf lTaskConf;
+    CREATE_MEM(lMemSize, lOutputMemHandle);
+    
+    if(PAGE_RANK_ITERATIONS > 1)
+        CREATE_MEM(lMemSize, lInputMemHandle);
+
+    pageRankTaskConf lTaskConf;
 	lTaskConf.totalWebPages = gTotalWebPages;
     lTaskConf.maxOutlinksPerWebPage = gMaxOutlinksPerWebPage;
     lTaskConf.webPagesPerFile = gWebPagesPerFile;
@@ -478,15 +479,10 @@ double DoParallelProcess(int argc, char** argv, int pCommonArgs, pmCallbackHandl
     for(int i = 0; i < PAGE_RANK_ITERATIONS; ++i)
     {
 		if(i != 0)
-		{
-            if(lInputMemHandle)
-                pmReleaseMemory(lInputMemHandle);
-
-			lInputMemHandle = lOutputMemHandle;
-		}
+            std::swap(lInputMemHandle, lOutputMemHandle);
     
         lTaskConf.iteration = i;
-		if(!ParallelPageRankIteration(lInputMemHandle, &lOutputMemHandle, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
+        if(!ParallelPageRankIteration(((i == 0) ? NULL : lInputMemHandle), lOutputMemHandle, &lTaskConf, pCallbackHandle[0], pSchedulingPolicy))
 			return (double)-1.0;
     }
     

@@ -158,7 +158,7 @@ public:
     virtual ulong GetDataUnits() const = 0;
     virtual ulong GetDataLength() const = 0;
     virtual pmCommunicatorCommandPtr Clone() = 0;   /* Creates a copy of the command. The data is not copied, however */
-    
+
     void HoldExternalDataForLifetimeOfCommand(const std::shared_ptr<void>& pExternalDataPtr)
     {
         mExternalDataPtr = pExternalDataPtr;
@@ -177,6 +177,11 @@ public:
     void SetTag(communicator::communicatorCommandTags pTag)
     {
         mTag = pTag;
+    }
+    
+    const void* GetExternalData() const
+    {
+        return mExternalDataPtr.get();
     }
     
 protected:

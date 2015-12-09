@@ -1314,19 +1314,12 @@ void pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 {
     std::set<const pmMachine*> lMachines = pLocalTask->GetAssignedMachines();
 
-    // Task master host must always be on the list even if none of it's devices were used in execution
-    lMachines.emplace(PM_LOCAL_MACHINE);
-
 	std::set<const pmMachine*>::iterator lIter;
 	for(lIter = lMachines.begin(); lIter != lMachines.end(); ++lIter)
 	{
 		const pmMachine* lMachine = *lIter;
 
-		if(lMachine == PM_LOCAL_MACHINE)
-        {
-            TaskFinishEvent(pLocalTask);
-        }
-        else
+		if(lMachine != PM_LOCAL_MACHINE)
 		{
 			finalize_ptr<taskEventStruct> lTaskEventData(new taskEventStruct(TASK_FINISH_EVENT, *pLocalTask->GetOriginatingHost(), pLocalTask->GetSequenceNumber()));
 
@@ -1335,6 +1328,9 @@ void pmScheduler::SendTaskFinishToMachines(pmLocalTask* pLocalTask)
 			pmCommunicator::GetCommunicator()->Send(lCommand, false);
 		}
 	}
+
+    // Task master host must always be sent task finish even if none of it's devices were used in execution
+    TaskFinishEvent(pLocalTask);
 }
 
 void pmScheduler::SendReductionTerminationToMachines(pmLocalTask* pLocalTask)

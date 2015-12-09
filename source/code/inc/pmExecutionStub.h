@@ -62,6 +62,7 @@ enum eventIdentifier
     THREAD_BIND
     , SUBTASK_EXEC
     , SUBTASK_REDUCE
+    , EXTERNAL_MEM_REDUCE
     , NEGOTIATED_RANGE
 	, FREE_GPU_RESOURCES
     , POST_HANDLE_EXEC_COMPLETION
@@ -140,6 +141,22 @@ struct subtaskReduceEvent : public stubEvent
     , subtaskId2(pSubtaskId2)
     , splitData1(pSplitData1)
     , splitData2(pSplitData2)
+    {}
+};
+
+struct externalMemReduceEvent : public stubEvent
+{
+    pmTask* task;
+    ulong subtaskId;
+    pmSplitData splitData;
+    void* externalMem;
+
+    externalMemReduceEvent(eventIdentifier pEventId, pmTask* pTask, ulong pSubtaskId, pmSplitData& pSplitData, void* pExternalMem)
+    : stubEvent(pEventId)
+    , task(pTask)
+    , subtaskId(pSubtaskId)
+    , splitData(pSplitData)
+    , externalMem(pExternalMem)
     {}
 };
 
@@ -319,6 +336,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void InitializeEventTimeline();
     #endif
 		void ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
+        void ReduceExternalMemory(pmTask* pTask, void* pMem, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
 		void StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate, bool pShouldMultiAssign);
 		void CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation);
         void CancelSubtaskRange(const pmSubtaskRange& pRange);
@@ -362,7 +380,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
 		void FreeGpuResources();
     #endif
 
-		virtual void DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
+		void DoSubtaskReduction(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
 
         virtual ulong FindCollectivelyExecutableSubtaskRangeEnd(const pmSubtaskRange& pSubtaskRange, pmSplitInfo* pSplitInfo, bool pMultiAssign) = 0;
         virtual void WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo) = 0;
