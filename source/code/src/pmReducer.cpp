@@ -38,9 +38,9 @@ using namespace reducer;
 
 struct reductionDataHolder
 {
-    reductionDataHolder(ulong pLength, const lastSubtaskData& pLastSubtaskData)
+    reductionDataHolder(ulong pLength, pmExecutionStub* pStub)
     : mPtr(new char[pLength])
-    , mLastSubtaskData(pLastSubtaskData)
+    , mStub(pStub)
     {}
     
     ~reductionDataHolder()
@@ -49,7 +49,7 @@ struct reductionDataHolder
     }
     
     char* mPtr;
-    lastSubtaskData mLastSubtaskData;
+    pmExecutionStub* mStub;
 };
 
 void PostMpiReduceCommandCompletionCallback(const pmCommandPtr& pCommand)
@@ -75,7 +75,7 @@ void PostExternalReduceCommandCompletionCallback(const pmCommandPtr& pCommand)
 
     reductionDataHolder* lDataHolder = (reductionDataHolder*)(lCommunicatorCommand->GetExternalData());
 
-    lDataHolder->mLastSubtaskData.stub->ReduceExternalMemory(lRequestingTask, lDataHolder->mPtr, lDataHolder->mLastSubtaskData.subtaskId, lDataHolder->mLastSubtaskData.splitInfo.get_ptr());
+    lDataHolder->mStub->ReduceExternalMemory(lRequestingTask, pCommand);
 }
 
 pmReducer::pmReducer(pmTask* pTask)
@@ -285,7 +285,7 @@ void pmReducer::PerformDirectExternalReductions()
 
     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::subtaskMemoryReduceStruct>::CreateSharedPtr(mTask->GetPriority(), communicator::RECEIVE, lTag, lSendingMachine, communicator::BYTE, lData, 1, PostMpiReduceCommandCompletionCallback, (static_cast<char*>(lShadowMem) + lOffset));
 #else
-    std::shared_ptr<reductionDataHolder> lDataPtr(new reductionDataHolder(lData->length, mLastSubtask));
+    std::shared_ptr<reductionDataHolder> lDataPtr(new reductionDataHolder(lData->length, mLastSubtask.stub));
     
     pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<communicator::subtaskMemoryReduceStruct>::CreateSharedPtr(mTask->GetPriority(), communicator::RECEIVE, lTag, lSendingMachine, communicator::BYTE, lData, 1, PostExternalReduceCommandCompletionCallback, lDataPtr->mPtr);
     
@@ -413,8 +413,11 @@ struct getBitwiseOperatableType<double>
     typedef ulong type;
 };
 
-void pmReducer::ReduceExternalMemory(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, void* pMem)
+void pmReducer::ReduceExternalMemory(pmExecutionStub* pStub, const pmCommandPtr& pCommand)
 {
+    pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
+    reductionDataHolder* lDataHolder = (reductionDataHolder*)(lCommunicatorCommand->GetExternalData());
+
 #ifdef USE_MPI_REDUCE
     PMTHROW(pmFatalErrorException());
 #endif
@@ -478,37 +481,37 @@ void pmReducer::ReduceExternalMemory(pmExecutionStub* pStub, ulong pSubtaskId, p
     {
         case REDUCE_INTS:
         {
-            ReduceMemories<int>((int*)lMem, (int*)pMem, lLength / sizeof(int), lOpType);
+            ReduceMemories<int>((int*)lMem, (int*)lDataHolder->mPtr, lLength / sizeof(int), lOpType);
             break;
         }
             
         case REDUCE_UNSIGNED_INTS:
         {
-            ReduceMemories<uint>((uint*)lMem, (uint*)pMem, lLength / sizeof(uint), lOpType);
+            ReduceMemories<uint>((uint*)lMem, (uint*)lDataHolder->mPtr, lLength / sizeof(uint), lOpType);
             break;
         }
             
         case REDUCE_LONGS:
         {
-            ReduceMemories<long>((long*)lMem, (long*)pMem, lLength / sizeof(long), lOpType);
+            ReduceMemories<long>((long*)lMem, (long*)lDataHolder->mPtr, lLength / sizeof(long), lOpType);
             break;
         }
             
         case REDUCE_UNSIGNED_LONGS:
         {
-            ReduceMemories<ulong>((ulong*)lMem, (ulong*)pMem, lLength / sizeof(ulong), lOpType);
+            ReduceMemories<ulong>((ulong*)lMem, (ulong*)lDataHolder->mPtr, lLength / sizeof(ulong), lOpType);
             break;
         }
             
         case REDUCE_FLOATS:
         {
-            ReduceMemories<float>((float*)lMem, (float*)pMem, lLength / sizeof(float), lOpType);
+            ReduceMemories<float>((float*)lMem, (float*)lDataHolder->mPtr, lLength / sizeof(float), lOpType);
             break;
         }
             
         case REDUCE_DOUBLES:
         {
-            ReduceMemories<double>((double*)lMem, (double*)pMem, lLength / sizeof(double), lOpType);
+            ReduceMemories<double>((double*)lMem, (double*)lDataHolder->mPtr, lLength / sizeof(double), lOpType);
             break;
         }
             

@@ -147,16 +147,12 @@ struct subtaskReduceEvent : public stubEvent
 struct externalMemReduceEvent : public stubEvent
 {
     pmTask* task;
-    ulong subtaskId;
-    pmSplitData splitData;
-    void* externalMem;
+    const pmCommandPtr command;
 
-    externalMemReduceEvent(eventIdentifier pEventId, pmTask* pTask, ulong pSubtaskId, pmSplitData& pSplitData, void* pExternalMem)
+    externalMemReduceEvent(eventIdentifier pEventId, pmTask* pTask, const pmCommandPtr& pCommand)
     : stubEvent(pEventId)
     , task(pTask)
-    , subtaskId(pSubtaskId)
-    , splitData(pSplitData)
-    , externalMem(pExternalMem)
+    , command(pCommand)
     {}
 };
 
@@ -336,7 +332,7 @@ class pmExecutionStub : public THREADING_IMPLEMENTATION_CLASS<execStub::stubEven
         void InitializeEventTimeline();
     #endif
 		void ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2);
-        void ReduceExternalMemory(pmTask* pTask, void* pMem, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
+        void ReduceExternalMemory(pmTask* pTask, const pmCommandPtr& pCommand);
 		void StealSubtasks(pmTask* pTask, const pmProcessingElement* pRequestingDevice, double pRequestingDeviceExecutionRate, bool pShouldMultiAssign);
 		void CancelAllSubtasks(pmTask* pTask, bool pTaskListeningOnCancellation);
         void CancelSubtaskRange(const pmSubtaskRange& pRange);

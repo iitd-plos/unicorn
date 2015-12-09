@@ -236,11 +236,9 @@ void pmExecutionStub::ReduceSubtasks(pmTask* pTask, ulong pSubtaskId1, pmSplitIn
 	SwitchThread(std::shared_ptr<stubEvent>(new subtaskReduceEvent(SUBTASK_REDUCE, pTask, pSubtaskId1, pStub2, pSubtaskId2, lSplitData1, lSplitData2)), pTask->GetPriority());
 }
     
-void pmExecutionStub::ReduceExternalMemory(pmTask* pTask, void* pMem, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
+void pmExecutionStub::ReduceExternalMemory(pmTask* pTask, const pmCommandPtr& pCommand)
 {
-    pmSplitData lSplitData(pSplitInfo);
-
-	SwitchThread(std::shared_ptr<stubEvent>(new externalMemReduceEvent(EXTERNAL_MEM_REDUCE, pTask, pSubtaskId, lSplitData, pMem)), pTask->GetPriority());
+	SwitchThread(std::shared_ptr<stubEvent>(new externalMemReduceEvent(EXTERNAL_MEM_REDUCE, pTask, pCommand)), pTask->GetPriority());
 }
 
 void pmExecutionStub::ProcessNegotiatedRange(const pmSubtaskRange& pRange)
@@ -1444,8 +1442,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         {
             externalMemReduceEvent& lEvent = static_cast<externalMemReduceEvent&>(pEvent);
 
-            std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr(lEvent.splitData.operator std::unique_ptr<pmSplitInfo>());
-            lEvent.task->GetReducer()->ReduceExternalMemory(this, lEvent.subtaskId, lSplitInfoAutoPtr.get(), lEvent.externalMem);
+            lEvent.task->GetReducer()->ReduceExternalMemory(this, lEvent.command);
 
             break;
         }

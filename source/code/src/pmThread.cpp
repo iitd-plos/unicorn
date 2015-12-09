@@ -67,7 +67,6 @@ template<typename T, typename P>
 void pmPThread<T, P>::ThreadCommandLoop()
 {
     mThreadStartSignalWaitPtr->Signal();
-    mThreadStartSignalWaitPtr.reset();
 
 	while(1)
 	{
@@ -105,6 +104,8 @@ void pmPThread<T, P>::ThreadCommandLoop()
         
         mReverseSignalWait.Signal();
 	}
+
+    mThreadStartSignalWaitPtr.reset();
 }
 
 template<typename T, typename P>

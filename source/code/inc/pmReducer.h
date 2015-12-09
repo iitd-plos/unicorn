@@ -77,7 +77,7 @@ class pmReducer : public pmBase
 
         void ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionOperation, pmReductionDataType pReductionDataType);
     
-        void ReduceExternalMemory(pmExecutionStub* pStub, ulong pSubtaskId, pmSplitInfo* pSplitInfo, void* pMem);
+        void ReduceExternalMemory(pmExecutionStub* pStub, const pmCommandPtr& pCommand);
 
         void PerformDirectExternalReductions();
         void RegisterExternalReductionFinish();
