@@ -341,10 +341,6 @@ void pmReducer::AddReductionFinishEvent()
 
 void pmReducer::HandleReductionFinish()
 {
-#ifdef ENABLE_TASK_PROFILING
-    pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(mTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
-#endif
-
     filtered_for_each(mTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace) {return (mTask->IsWritable(pAddressSpace) && mTask->IsReducible(pAddressSpace));},
     [&] (pmAddressSpace* pAddressSpace)
     {
@@ -418,6 +414,8 @@ void pmReducer::ReduceExternalMemory(pmExecutionStub* pStub, const pmCommandPtr&
     pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
     reductionDataHolder* lDataHolder = (reductionDataHolder*)(lCommunicatorCommand->GetExternalData());
 
+    EXCEPTION_ASSERT(pStub == lDataHolder->mStub);
+    
 #ifdef USE_MPI_REDUCE
     PMTHROW(pmFatalErrorException());
 #endif
