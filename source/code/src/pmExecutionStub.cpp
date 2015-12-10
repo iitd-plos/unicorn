@@ -1239,7 +1239,11 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr1(lEvent.splitData1.operator std::unique_ptr<pmSplitInfo>());
             std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr2(lEvent.splitData2.operator std::unique_ptr<pmSplitInfo>());
 
-			DoSubtaskReduction(lEvent.task, lEvent.subtaskId1, lSplitInfoAutoPtr1.get(), lEvent.stub2, lEvent.subtaskId2, lSplitInfoAutoPtr2.get());
+        #ifdef ENABLE_TASK_PROFILING
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEvent.task->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
+        #endif
+
+            DoSubtaskReduction(lEvent.task, lEvent.subtaskId1, lSplitInfoAutoPtr1.get(), lEvent.stub2, lEvent.subtaskId2, lSplitInfoAutoPtr2.get());
 
 			break;
 		}
@@ -1371,6 +1375,10 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             pmTask* lTask = lEvent.task;
             communicator::subtaskReducePacked* lData = static_cast<communicator::subtaskReducePacked*>(lEvent.commandPtr->GetData());
 
+        #ifdef ENABLE_TASK_PROFILING
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
+        #endif
+
             pmSubscriptionManager& lSubscriptionManager = lTask->GetSubscriptionManager();
             lSubscriptionManager.EraseSubtask(this, lData->reduceStruct.subtaskId, NULL);
 
@@ -1441,6 +1449,10 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
         case EXTERNAL_MEM_REDUCE:
         {
             externalMemReduceEvent& lEvent = static_cast<externalMemReduceEvent&>(pEvent);
+
+        #ifdef ENABLE_TASK_PROFILING
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEvent.task->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
+        #endif
 
             lEvent.task->GetReducer()->ReduceExternalMemory(this, lEvent.command);
 
