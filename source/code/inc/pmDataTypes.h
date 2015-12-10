@@ -443,7 +443,8 @@ namespace pm
             TOTAL_MEMORY_TRANSFER,    /* For internal use only */
             DATA_PARTITIONING,
             SUBTASK_EXECUTION,
-            DATA_REDUCTION,
+            LOCAL_DATA_REDUCTION,
+            REMOTE_DATA_REDUCTION,
             DATA_REDISTRIBUTION,
             SHADOW_MEM_COMMIT,
             SUBTASK_STEAL_WAIT,

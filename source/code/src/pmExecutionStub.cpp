@@ -1240,7 +1240,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             std::unique_ptr<pmSplitInfo> lSplitInfoAutoPtr2(lEvent.splitData2.operator std::unique_ptr<pmSplitInfo>());
 
         #ifdef ENABLE_TASK_PROFILING
-            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEvent.task->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEvent.task->GetTaskProfiler(), taskProfiler::LOCAL_DATA_REDUCTION);
         #endif
 
             DoSubtaskReduction(lEvent.task, lEvent.subtaskId1, lSplitInfoAutoPtr1.get(), lEvent.stub2, lEvent.subtaskId2, lSplitInfoAutoPtr2.get());
@@ -1376,7 +1376,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             communicator::subtaskReducePacked* lData = static_cast<communicator::subtaskReducePacked*>(lEvent.commandPtr->GetData());
 
         #ifdef ENABLE_TASK_PROFILING
-            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lTask->GetTaskProfiler(), taskProfiler::REMOTE_DATA_REDUCTION);
         #endif
 
             pmSubscriptionManager& lSubscriptionManager = lTask->GetSubscriptionManager();
@@ -1451,7 +1451,7 @@ void pmExecutionStub::ProcessEvent(stubEvent& pEvent)
             externalMemReduceEvent& lEvent = static_cast<externalMemReduceEvent&>(pEvent);
 
         #ifdef ENABLE_TASK_PROFILING
-            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEvent.task->GetTaskProfiler(), taskProfiler::DATA_REDUCTION);
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEvent.task->GetTaskProfiler(), taskProfiler::REMOTE_DATA_REDUCTION);
         #endif
 
             lEvent.task->GetReducer()->ReduceExternalMemory(this, lEvent.command);
