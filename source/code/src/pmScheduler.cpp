@@ -864,8 +864,63 @@ void pmScheduler::ProcessEvent(schedulerEvent& pEvent)
                     lLength = (uint)lBeginIter->second.first;
                 }
                 
-                finalize_ptr<subtaskMemoryReduceStruct> lData(new subtaskMemoryReduceStruct(*lEventDetails.task->GetOriginatingHost(), lEventDetails.task->GetSequenceNumber(), lEventDetails.subtaskId, lOffset, lLength, std::numeric_limits<int>::max(), *PM_LOCAL_MACHINE));
-                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<subtaskMemoryReduceStruct>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, SUBTASK_MEMORY_REDUCE_TAG, lEventDetails.machine, SUBTASK_MEMORY_REDUCE_STRUCT, lData, 1, NULL, (static_cast<char*>(lShadowMem) + lOffset));
+                pmReductionOpType lOpType;
+                pmReductionDataType lDataType;
+                
+                findReductionOpAndDataType(lEventDetails.task->GetCallbackUnit()->GetDataReductionCB()->GetCallback(), lOpType, lDataType);
+
+                char* lTargetMem = (static_cast<char*>(lShadowMem) + lOffset);
+
+                ulong lCompressedLength = 0;
+                std::shared_ptr<void> lCompressedMem;
+
+                switch(lDataType)
+                {
+                    case REDUCE_INTS:
+                    {
+                        lCompressedMem = pmUtility::CompressForSentinel<int>((int*)lTargetMem, 0, lLength / sizeof(int), lCompressedLength);
+                        break;
+                    }
+                        
+                    case REDUCE_UNSIGNED_INTS:
+                    {
+                        lCompressedMem = pmUtility::CompressForSentinel<uint>((uint*)lTargetMem, 0, lLength / sizeof(uint), lCompressedLength);
+                        break;
+                    }
+                        
+                    case REDUCE_LONGS:
+                    {
+                        lCompressedMem = pmUtility::CompressForSentinel<long>((long*)lTargetMem, 0, lLength / sizeof(long), lCompressedLength);
+                        break;
+                    }
+                        
+                    case REDUCE_UNSIGNED_LONGS:
+                    {
+                        lCompressedMem = pmUtility::CompressForSentinel<ulong>((ulong*)lTargetMem, 0, lLength / sizeof(ulong), lCompressedLength);
+                        break;
+                    }
+                        
+                    case REDUCE_FLOATS:
+                    {
+                        lCompressedMem = pmUtility::CompressForSentinel<float>((float*)lTargetMem, 0, lLength / sizeof(float), lCompressedLength);
+                        break;
+                    }
+                        
+                    case REDUCE_DOUBLES:
+                    {
+                        lCompressedMem = pmUtility::CompressForSentinel<double>((double*)lTargetMem, 0, lLength / sizeof(double), lCompressedLength);
+                        break;
+                    }
+                        
+                    default:
+                        PMTHROW(pmFatalErrorException());
+                }
+
+                finalize_ptr<subtaskMemoryReduceStruct> lData(new subtaskMemoryReduceStruct(*lEventDetails.task->GetOriginatingHost(), lEventDetails.task->GetSequenceNumber(), lEventDetails.subtaskId, lOffset, (lCompressedMem.get() ? lCompressedLength : lLength), std::numeric_limits<int>::max(), *PM_LOCAL_MACHINE, (lCompressedMem.get() != NULL)));
+                pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<subtaskMemoryReduceStruct>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, SUBTASK_MEMORY_REDUCE_TAG, lEventDetails.machine, SUBTASK_MEMORY_REDUCE_STRUCT, lData, 1, NULL, (lCompressedMem.get() ? lCompressedMem.get() : lTargetMem));
+                
+                if(lCompressedMem.get())
+                    lCommand->HoldExternalDataForLifetimeOfCommand(lCompressedMem);
                 
                 pmCommunicator::GetCommunicator()->SendReduce(lCommand, false);
 

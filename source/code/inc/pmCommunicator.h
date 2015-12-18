@@ -871,10 +871,11 @@ struct subtaskMemoryReduceStruct
     ulong length;
     int mpiTag;             // MPI tag of the upcoming message that contains actual memory
     uint senderHost;        // Id of the host sending this message
+    ushort compressed;
 
     typedef enum fieldCount
     {
-        FIELD_COUNT_VALUE = 7
+        FIELD_COUNT_VALUE = 8
     } fieldCount;
     
     subtaskMemoryReduceStruct()
@@ -885,9 +886,10 @@ struct subtaskMemoryReduceStruct
     , length(0)
     , mpiTag(0)
     , senderHost(std::numeric_limits<uint>::max())
+    , compressed(0)
     {}
 
-    subtaskMemoryReduceStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pSubtaskId, ulong pOffset, ulong pLength, int pMpiTag, uint pSenderHost)
+    subtaskMemoryReduceStruct(uint pOriginatingHost, ulong pSequenceNumber, ulong pSubtaskId, ulong pOffset, ulong pLength, int pMpiTag, uint pSenderHost, bool pCompressed)
     : originatingHost(pOriginatingHost)
     , sequenceNumber(pSequenceNumber)
     , subtaskId(pSubtaskId)
@@ -895,6 +897,7 @@ struct subtaskMemoryReduceStruct
     , length(pLength)
     , mpiTag(pMpiTag)
     , senderHost(pSenderHost)
+    , compressed((ushort)pCompressed)
     {}
 };
 

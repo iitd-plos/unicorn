@@ -2412,6 +2412,7 @@ void pmMPI::RegisterTransferDataType(communicatorDataTypes pDataType)
 			REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.length, lLengthMPI, MPI_UNSIGNED_LONG, 4, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.mpiTag, lMpiTagMPI, MPI_INT, 5, 1);
             REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.senderHost, lSenderHostMPI, MPI_UNSIGNED, 6, 1);
+            REGISTER_MPI_DATA_TYPE_HELPER(lDataMPI, lData.compressed, lCompressedMPI, MPI_UNSIGNED_SHORT, 7, 1);
 
 			break;
 		}

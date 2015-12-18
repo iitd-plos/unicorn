@@ -74,6 +74,45 @@ public:
     static bool IsLazyWriteOnly(pmMemType pMemType);
     static bool IsLazyReadWrite(pmMemType pMemType);
 
+    template<typename T>
+    static std::shared_ptr<T> CompressForSentinel(const T* pMem, T pSentinel, ulong pCount, ulong& pCompressedLength)
+    {
+        std::shared_ptr<T> lMemPtr(new T[pCount]);
+        T* lMem = lMemPtr.get();
+
+        bool lOngoingSentinels = false;
+        ulong lIndex = 0;
+
+        for(ulong i = 0; i < pCount; ++i)
+        {
+            if(pMem[i] == pSentinel)
+            {
+                lOngoingSentinels = true;
+            }
+            else
+            {
+                if(lOngoingSentinels)
+                {
+                    if(lIndex + 1 >= pCount)
+                        return std::shared_ptr<T>();
+
+                    lMem[lIndex++] = pSentinel;
+                    lMem[lIndex++] = (T)i;
+                    
+                    lOngoingSentinels = false;
+                }
+                
+                if(lIndex >= pCount)
+                    return std::shared_ptr<T>();
+
+                lMem[lIndex++] = pMem[i];
+            }
+        }
+
+        pCompressedLength = lIndex * sizeof(T);
+        return lMemPtr;
+    }
+
 private:
     static ulong& GetMultiFileOperationsId();
     static multiFileOperationsMapType& GetMultiFileOperationsMap();

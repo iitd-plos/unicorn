@@ -96,6 +96,9 @@ class pmReducer : public pmBase
         template<typename datatype>
         void ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType);
 
+        template<typename datatype>
+        void ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType, datatype pSentinel);
+
         reducer::lastSubtaskData mLastSubtask;
 
 		ulong mReductionsDone;

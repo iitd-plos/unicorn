@@ -414,6 +414,9 @@ void pmReducer::ReduceExternalMemory(pmExecutionStub* pStub, const pmCommandPtr&
     pmCommunicatorCommandPtr lCommunicatorCommand = std::dynamic_pointer_cast<pmCommunicatorCommandBase>(pCommand);
     reductionDataHolder* lDataHolder = (reductionDataHolder*)(lCommunicatorCommand->GetExternalData());
 
+    communicator::subtaskMemoryReduceStruct* lReceiveStruct = (communicator::subtaskMemoryReduceStruct*)(lCommunicatorCommand->GetData());
+    bool lCompressed = lReceiveStruct->compressed;
+    
     EXCEPTION_ASSERT(pStub == lDataHolder->mStub);
     
 #ifdef USE_MPI_REDUCE
@@ -467,6 +470,11 @@ void pmReducer::ReduceExternalMemory(pmExecutionStub* pStub, const pmCommandPtr&
         lOffset = *lCompactWriteIter;
         lLength = (uint)lBeginIter->second.first;
     }
+
+#if 0
+    if(lCompressed)
+        std::cout << "Received " << lReceiveStruct->length << " bytes instead of " << lLength << " (" << (double)(lReceiveStruct->length * 100) / lLength << "%)" << std::endl;
+#endif
     
     void* lMem = (static_cast<char*>(lShadowMem) + lOffset);
 
@@ -475,46 +483,93 @@ void pmReducer::ReduceExternalMemory(pmExecutionStub* pStub, const pmCommandPtr&
     
     findReductionOpAndDataType(mTask->GetCallbackUnit()->GetDataReductionCB()->GetCallback(), lOpType, lDataType);
     
-    switch(lDataType)
+    if(!lCompressed)
     {
-        case REDUCE_INTS:
+        switch(lDataType)
         {
-            ReduceMemories<int>((int*)lMem, (int*)lDataHolder->mPtr, lLength / sizeof(int), lOpType);
-            break;
+            case REDUCE_INTS:
+            {
+                ReduceMemories<int>((int*)lMem, (int*)lDataHolder->mPtr, lLength / sizeof(int), lOpType);
+                break;
+            }
+                
+            case REDUCE_UNSIGNED_INTS:
+            {
+                ReduceMemories<uint>((uint*)lMem, (uint*)lDataHolder->mPtr, lLength / sizeof(uint), lOpType);
+                break;
+            }
+                
+            case REDUCE_LONGS:
+            {
+                ReduceMemories<long>((long*)lMem, (long*)lDataHolder->mPtr, lLength / sizeof(long), lOpType);
+                break;
+            }
+                
+            case REDUCE_UNSIGNED_LONGS:
+            {
+                ReduceMemories<ulong>((ulong*)lMem, (ulong*)lDataHolder->mPtr, lLength / sizeof(ulong), lOpType);
+                break;
+            }
+                
+            case REDUCE_FLOATS:
+            {
+                ReduceMemories<float>((float*)lMem, (float*)lDataHolder->mPtr, lLength / sizeof(float), lOpType);
+                break;
+            }
+                
+            case REDUCE_DOUBLES:
+            {
+                ReduceMemories<double>((double*)lMem, (double*)lDataHolder->mPtr, lLength / sizeof(double), lOpType);
+                break;
+            }
+                
+            default:
+                PMTHROW(pmFatalErrorException());
         }
-            
-        case REDUCE_UNSIGNED_INTS:
+    }
+    else
+    {
+        switch(lDataType)
         {
-            ReduceMemories<uint>((uint*)lMem, (uint*)lDataHolder->mPtr, lLength / sizeof(uint), lOpType);
-            break;
+            case REDUCE_INTS:
+            {
+                ReduceMemoriesCompressed<int>((int*)lMem, (int*)lDataHolder->mPtr, lReceiveStruct->length / sizeof(int), lOpType, 0);
+                break;
+            }
+                
+            case REDUCE_UNSIGNED_INTS:
+            {
+                ReduceMemoriesCompressed<uint>((uint*)lMem, (uint*)lDataHolder->mPtr, lReceiveStruct->length / sizeof(uint), lOpType, 0);
+                break;
+            }
+                
+            case REDUCE_LONGS:
+            {
+                ReduceMemoriesCompressed<long>((long*)lMem, (long*)lDataHolder->mPtr, lReceiveStruct->length / sizeof(long), lOpType, 0);
+                break;
+            }
+                
+            case REDUCE_UNSIGNED_LONGS:
+            {
+                ReduceMemoriesCompressed<ulong>((ulong*)lMem, (ulong*)lDataHolder->mPtr, lReceiveStruct->length / sizeof(ulong), lOpType, 0);
+                break;
+            }
+                
+            case REDUCE_FLOATS:
+            {
+                ReduceMemoriesCompressed<float>((float*)lMem, (float*)lDataHolder->mPtr, lReceiveStruct->length / sizeof(float), lOpType, 0);
+                break;
+            }
+                
+            case REDUCE_DOUBLES:
+            {
+                ReduceMemoriesCompressed<double>((double*)lMem, (double*)lDataHolder->mPtr, lReceiveStruct->length / sizeof(double), lOpType, 0);
+                break;
+            }
+                
+            default:
+                PMTHROW(pmFatalErrorException());
         }
-            
-        case REDUCE_LONGS:
-        {
-            ReduceMemories<long>((long*)lMem, (long*)lDataHolder->mPtr, lLength / sizeof(long), lOpType);
-            break;
-        }
-            
-        case REDUCE_UNSIGNED_LONGS:
-        {
-            ReduceMemories<ulong>((ulong*)lMem, (ulong*)lDataHolder->mPtr, lLength / sizeof(ulong), lOpType);
-            break;
-        }
-            
-        case REDUCE_FLOATS:
-        {
-            ReduceMemories<float>((float*)lMem, (float*)lDataHolder->mPtr, lLength / sizeof(float), lOpType);
-            break;
-        }
-            
-        case REDUCE_DOUBLES:
-        {
-            ReduceMemories<double>((double*)lMem, (double*)lDataHolder->mPtr, lLength / sizeof(double), lOpType);
-            break;
-        }
-            
-        default:
-            PMTHROW(pmFatalErrorException());
     }
 
     RegisterExternalReductionFinish();
@@ -610,6 +665,181 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
     }
 }
 
+template<typename datatype>
+void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType, datatype pSentinel)
+{
+    size_t index = 0;
+
+    switch(pReductionType)
+    {
+        case REDUCE_ADD:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+    if(index >= 100000)
+        std::cout << index << " " << i << std::endl;
+
+                pShadowMem1[index] += pShadowMem2[i];
+            }
+            
+            break;
+        }
+            
+        case REDUCE_MIN:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] = std::min(pShadowMem1[index], pShadowMem2[i]);
+            }
+            
+            break;
+        }
+        
+        case REDUCE_MAX:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] = std::max(pShadowMem1[index], pShadowMem2[i]);
+            }
+            
+            break;
+        }
+        
+        case REDUCE_PRODUCT:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] *= pShadowMem2[i];
+            }
+            
+            break;
+        }
+        
+        case REDUCE_LOGICAL_AND:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] = (pShadowMem1[index] && pShadowMem2[i]);
+            }
+            
+            break;
+        }
+        
+        case REDUCE_BITWISE_AND:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) & (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+            }
+            
+            break;
+        }
+        
+        case REDUCE_LOGICAL_OR:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] = (pShadowMem1[index] || pShadowMem2[i]);
+            }
+            
+            break;
+        }
+        
+        case REDUCE_BITWISE_OR:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) | (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+            }
+            
+            break;
+        }
+        
+        case REDUCE_LOGICAL_XOR:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] = (pShadowMem1[index] != pShadowMem2[i]);
+            }
+            
+            break;
+        }
+
+        case REDUCE_BITWISE_XOR:
+        {
+            for(size_t i = 0; i < pDataCount; ++i, ++index)
+            {
+                if(pShadowMem2[i] == pSentinel)
+                {
+                    ++i;
+                    index = (size_t)pShadowMem2[i++];
+                }
+
+                pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) ^ (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+            }
+            
+            break;
+        }
+
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+}
+    
 template<typename datatype>
 void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionType)
 {
