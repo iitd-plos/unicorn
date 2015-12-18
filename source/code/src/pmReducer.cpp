@@ -682,9 +682,6 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
                     index = (size_t)pShadowMem2[i++];
                 }
 
-    if(index >= 100000)
-        std::cout << index << " " << i << std::endl;
-
                 pShadowMem1[index] += pShadowMem2[i];
             }
             
