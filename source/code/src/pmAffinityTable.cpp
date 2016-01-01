@@ -117,6 +117,9 @@ struct GetEstimatedCompletionTime<MAXIMIZE_LOCAL_DATA>
 
     double operator() (const GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::type& pVal) const
     {
+        if(!pVal)
+            return sNormalizationFactor;
+
         return sNormalizationFactor/pVal;
     }
 };
@@ -345,7 +348,7 @@ void pmAffinityTable::CreateSubtaskMappings()
     // Logical subtask ids are already assigned by scheduler; this code maps them to the physical ones
     std::vector<ulong> lLogicalSubtaskIdsVector;
     std::map<uint, std::pair<ulong, ulong>> lMap = lManager->ComputeMachineVersusInitialSubtaskCountMap(lLogicalSubtaskIdsVector);
-    
+
 #ifdef MACHINES_PICK_BEST_SUBTASKS
     #ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
         std::vector<long> lSubtaskAssignment;
@@ -483,7 +486,7 @@ void pmAffinityTable::CreateSubtaskMappings()
 #else
     std::vector<double> mEstimatedCompletionTimeOnMachineVector(lMap.size(), 0);
     double mCurrentMaximumCompletionTime = 0;
-    
+
     for(ulong i = 0; i < lSubtaskCount; ++i)
     {
         const std::vector<std::pair<const pmMachine*, double>>& lSubtaskRow = mTable.GetRow(i);
@@ -501,7 +504,7 @@ void pmAffinityTable::CreateSubtaskMappings()
         {
             const pmMachine* lMachinePtr = lSubtaskRowIter->first;
             uint lMachine = *lMachinePtr;
-
+            
             double lCompletionTimeOfSubtask = lSubtaskRowIter->second;
             double lCompletionTime = mEstimatedCompletionTimeOnMachineVector[lMachine] + lCompletionTimeOfSubtask;
             
@@ -524,7 +527,6 @@ void pmAffinityTable::CreateSubtaskMappings()
                     }
                 }
             }
-            
         }
         
         if(!lTargetMachinePtr)
