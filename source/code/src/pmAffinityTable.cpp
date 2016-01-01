@@ -35,7 +35,7 @@ namespace pm
 template<pmAffinityCriterion>
 struct GetAffinityDataType
 {};
-    
+
 template<>
 struct GetAffinityDataType<MAXIMIZE_LOCAL_DATA>
 {
@@ -44,6 +44,7 @@ struct GetAffinityDataType<MAXIMIZE_LOCAL_DATA>
     typedef double difference_type;
     
     static constexpr type sentinel_value = std::numeric_limits<type>::min();
+    static constexpr pmAffinityCriterion enum_value = MAXIMIZE_LOCAL_DATA;
 };
 
 template<>
@@ -54,6 +55,7 @@ struct GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>
     typedef long difference_type;
 
     static constexpr type sentinel_value = std::numeric_limits<type>::max();
+    static constexpr pmAffinityCriterion enum_value = MINIMIZE_REMOTE_SOURCES;
 };
 
 template<>
@@ -64,6 +66,7 @@ struct GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>
     typedef double difference_type;
 
     static constexpr type sentinel_value = std::numeric_limits<type>::max();
+    static constexpr pmAffinityCriterion enum_value = MINIMIZE_REMOTE_TRANSFER_EVENTS;
 };
 
 template<>
@@ -74,6 +77,7 @@ struct GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>
     typedef double difference_type;
 
     static constexpr type sentinel_value = std::numeric_limits<type>::max();
+    static constexpr pmAffinityCriterion enum_value = MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME;
 };
 
 template<>
@@ -84,9 +88,83 @@ struct GetAffinityDataType<DERIVED_AFFINITY>
     typedef derivedAffinityData difference_type;
 
     static type sentinel_value;
+    static constexpr pmAffinityCriterion enum_value = DERIVED_AFFINITY;
 };
     
 derivedAffinityData GetAffinityDataType<DERIVED_AFFINITY>::sentinel_value = {std::numeric_limits<ulong>::max(), std::numeric_limits<float>::max()};
+    
+#ifdef MACHINES_PICK_BEST_SUBTASKS
+
+#ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
+template<typename T>
+double pmAffinityTable::GetProfitValue(T& pData)
+{
+    return 0;
+}
+#endif
+    
+#else
+
+template<pmAffinityCriterion>
+struct GetEstimatedCompletionTime
+{
+};
+    
+template<>
+struct GetEstimatedCompletionTime<MAXIMIZE_LOCAL_DATA>
+{
+    static constexpr double sNormalizationFactor = 1024.0 * 1024.0 * 1024.0;
+
+    double operator() (const GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::type& pVal) const
+    {
+        return sNormalizationFactor/pVal;
+    }
+};
+
+template<>
+struct GetEstimatedCompletionTime<MINIMIZE_REMOTE_SOURCES>
+{
+    static constexpr double sNormalizationFactor = 1.0;
+
+    double operator() (const GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::type& pVal) const
+    {
+        return pVal/sNormalizationFactor;
+    }
+};
+
+template<>
+struct GetEstimatedCompletionTime<MINIMIZE_REMOTE_TRANSFER_EVENTS>
+{
+    static constexpr double sNormalizationFactor = 1.0;
+
+    double operator() (const GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::type& pVal) const
+    {
+        return pVal/sNormalizationFactor;
+    }
+};
+
+template<>
+struct GetEstimatedCompletionTime<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>
+{
+    static constexpr double sNormalizationFactor = 0.01;
+
+    double operator() (const GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type& pVal) const
+    {
+        return pVal/sNormalizationFactor;
+    }
+};
+
+template<>
+struct GetEstimatedCompletionTime<DERIVED_AFFINITY>
+{
+    static constexpr double sNormalizationFactor = 1;
+
+    double operator() (const GetAffinityDataType<DERIVED_AFFINITY>::type& pVal) const
+    {
+        return (pVal.remoteEvents * pVal.estimatedTime)/sNormalizationFactor;
+    }
+};
+#endif
 
 pmAffinityTable::pmAffinityTable(pmLocalTask* pLocalTask, pmAffinityCriterion pAffinityCriterion)
     : mLocalTask(pLocalTask)
@@ -100,31 +178,31 @@ void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpac
     {
         case MAXIMIZE_LOCAL_DATA:
         {
-            MakeAffinityTable<GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::type, GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::sorter>(pAffinityAddressSpace, pMachinesVector, GetAffinityDataType<MAXIMIZE_LOCAL_DATA>::sentinel_value);
+            MakeAffinityTable<GetAffinityDataType<MAXIMIZE_LOCAL_DATA>>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
             
         case MINIMIZE_REMOTE_SOURCES:
         {
-            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::type, GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::sorter>(pAffinityAddressSpace, pMachinesVector, GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>::sentinel_value);
+            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_SOURCES>>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
             
         case MINIMIZE_REMOTE_TRANSFER_EVENTS:
         {
-            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::sorter>(pAffinityAddressSpace, pMachinesVector, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>::sentinel_value);
+            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFER_EVENTS>>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
 
         case MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME:
         {
-            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::type, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::sorter>(pAffinityAddressSpace, pMachinesVector, GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>::sentinel_value);
+            MakeAffinityTable<GetAffinityDataType<MINIMIZE_REMOTE_TRANSFERS_ESTIMATED_TIME>>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
             
         case DERIVED_AFFINITY:
         {
-            MakeAffinityTable<GetAffinityDataType<DERIVED_AFFINITY>::type, GetAffinityDataType<DERIVED_AFFINITY>::sorter>(pAffinityAddressSpace, pMachinesVector, GetAffinityDataType<DERIVED_AFFINITY>::sentinel_value);
+            MakeAffinityTable<GetAffinityDataType<DERIVED_AFFINITY>>(pAffinityAddressSpace, pMachinesVector);
             break;
         }
 
@@ -133,9 +211,12 @@ void pmAffinityTable::PopulateAffinityTable(pmAddressSpace* pAffinityAddressSpac
     }
 }
 
-template<typename T, typename S>
-void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, T pSentinelValue)
+template<typename TS>
+void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector)
 {
+    typedef typename TS::type T;
+    typedef typename TS::sorter S;
+
 #ifdef DUMP_AFFINITY_DATA
     std::stringstream lStream;
 
@@ -181,7 +262,7 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
                 }
                 else
                 {
-                    lData = pSentinelValue;
+                    lData = TS::sentinel_value;
                 }
             }
             else
@@ -235,11 +316,11 @@ void pmAffinityTable::MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, c
         #endif
     #else
         std::vector<std::pair<const pmMachine*, double>> lTableRow;
-        lTableRow.resize(lMachines);
+        lTableRow.reserve(lMachines);
         
         for_each(pEntry, [&] (const std::pair<T, const pmMachine*>& pMapEntry)
         {
-            lTableRow.emplace_back(pMapEntry.second, GetEstimatedCompletionTime(pMapEntry.first));
+            lTableRow.emplace_back(pMapEntry.second, GetEstimatedCompletionTime<TS::enum_value>()(pMapEntry.first));
         });
 
         mTable.AddRow(pIndex, std::move(lTableRow));
@@ -496,27 +577,6 @@ void pmAffinityTable::CreateSubtaskMappings()
 
     mLocalTask->SetAffinityMappings(std::move(lLogicalToPhysicalSubtaskMapping), std::move(lPhysicalToLogicalSubtaskMapping));
 }
-
-#ifdef MACHINES_PICK_BEST_SUBTASKS
-
-#ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
-template<typename T>
-double pmAffinityTable::GetProfitValue(T& pData)
-{
-    return 0;
-}
-#endif
-    
-#else
-
-template<typename T>
-double pmAffinityTable::GetEstimatedCompletionTime(T& pData)
-{
-    return 0;
-}
-
-#endif
-
     
 #ifdef USE_AFFINITY_IN_STEAL
 std::vector<ulong> pmAffinityTable::FindSubtasksWithBestAffinity(pmTask* pTask, ulong pStartSubtask, ulong pEndSubtask, ulong pCount, const pmMachine* pMachine)

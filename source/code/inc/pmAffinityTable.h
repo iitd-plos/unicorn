@@ -114,17 +114,14 @@ public:
 #endif
 
 private:
-    template<typename T, typename S>
-    void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector, T pSentinelValue);
+    template<typename TS>
+    void MakeAffinityTable(pmAddressSpace* pAffinityAddressSpace, const std::vector<const pmMachine*>& pMachinesVector);
 
 #ifdef MACHINES_PICK_BEST_SUBTASKS
 #ifdef GENERALIZED_RESIDUAL_PROFIT_ASSIGNMENT
     template<typename T>
     double GetProfitValue(T& pData);
 #endif
-#else
-    template<typename T>
-    double GetEstimatedCompletionTime(T& pData);
 #endif
     
 #ifdef USE_AFFINITY_IN_STEAL
