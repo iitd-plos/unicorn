@@ -66,7 +66,7 @@ class pmSubtaskCB : public pmCallback
     #endif
 
     #ifdef SUPPORT_CUDA
-		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, std::vector<pmCudaMemcpyCommand>* pHostToDeviceCommands = NULL, std::vector<pmCudaMemcpyCommand>* pDeviceToHostCommands = NULL, void* pStreamPtr = NULL) const;
+		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, std::vector<pmCudaMemcpyCommand>* pHostToDeviceCommands = NULL, std::vector<pmCudaMemcpyCommand>* pDeviceToHostCommands = NULL, void* pStreamPtr = NULL, pmReductionDataType pSentinelCompressionReductionDataType = MAX_REDUCTION_DATA_TYPES) const;
     #else
 		pmStatus Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo) const;
     #endif

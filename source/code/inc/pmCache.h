@@ -45,6 +45,7 @@ template<typename mappedType>
 struct listContainer
 {
     typedef std::list<mappedType> containerType;
+    typedef typename containerType::const_iterator constIteratorType;
     typedef typename containerType::iterator iteratorType;
 
     containerType mCacheList;
@@ -73,11 +74,16 @@ struct listContainer
         return mCacheList.empty();
     }
     
-    const typename mappedType::second_type& getValue(iteratorType pIter)
+    const typename mappedType::second_type& getValue(constIteratorType pIter)
     {
         return pIter->second;
     }
     
+    typename mappedType::second_type& getValue(iteratorType pIter)
+    {
+        return pIter->second;
+    }
+
     void purge(pmCacheEvictionPolicy pEvictionPolicy, typename mappedType::second_type& pValue, const std::function<void(const typename mappedType::first_type&)>& pLambda)
     {
         if(pEvictionPolicy == LEAST_RECENTLY_USED)
@@ -117,22 +123,27 @@ template<typename mappedType>
 struct mapContainer
 {
     typedef uint frequencyType;
-    typedef std::map<frequencyType, mappedType> containerType;   // access frequency versus mapped value
+    typedef std::multimap<frequencyType, mappedType> containerType;   // access frequency versus mapped value
+    typedef typename containerType::const_iterator constIteratorType;
     typedef typename containerType::iterator iteratorType;
 
     containerType mCacheMap;
     
     iteratorType emplace(const typename mappedType::first_type& pKey, const typename mappedType::second_type& pValue)
     {
-        return mCacheMap.emplace(std::piecewise_construct, std::forward_as_tuple(0), std::forward_as_tuple(pKey, pValue)).second;
+        return mCacheMap.emplace(std::piecewise_construct, std::forward_as_tuple(0), std::forward_as_tuple(pKey, pValue));
     }
     
     iteratorType onAccess(iteratorType pIter, bool& pIterInvalidated)
     {
         pIterInvalidated = true;
 
+        frequencyType lFrequency = pIter->first + 1;
+        mappedType& lMappedValue = pIter->second;
+        
         mCacheMap.erase(pIter);
-        return mCacheMap.emplace(std::piecewise_construct, std::forward_as_tuple(pIter.first + 1), pIter.second).second;
+        
+        return mCacheMap.emplace(std::piecewise_construct, std::forward_as_tuple(lFrequency), std::forward_as_tuple(lMappedValue));
     }
 
     void erase(iteratorType pIter)
@@ -145,7 +156,12 @@ struct mapContainer
         return mCacheMap.empty();
     }
 
-    const typename mappedType::second_type& getValue(iteratorType pIter)
+    const typename mappedType::second_type& getValue(constIteratorType pIter)
+    {
+        return pIter->second.second;
+    }
+
+    typename mappedType::second_type& getValue(iteratorType pIter)
     {
         return pIter->second.second;
     }
@@ -200,7 +216,7 @@ struct containerSelector<mappedType, LEAST_FREQUENTLY_USED>
 template<typename mappedType>
 struct containerSelector<mappedType, MOST_FREQUENTLY_USED>
 {
-    typedef mapContainer<mappedType> containerType;
+    typedef mapContainer<mappedType> abstractContainerType;
 };
 
 }

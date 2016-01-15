@@ -2710,7 +2710,7 @@ pmStubCPU::~pmStubCPU()
 
 void pmStubCPU::BindToProcessingElement()
 {
-	 SetProcessorAffinity((int)mCoreId);
+//	 SetProcessorAffinity((int)mCoreId);
 }
 
 size_t pmStubCPU::GetCoreId()
@@ -3093,8 +3093,13 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
         else
     #endif
         {
+            pmReductionDataType lReductionDataType = MAX_REDUCTION_DATA_TYPES;
+            size_t lCompressedLength = 0;
+
+            bool lSentinelCompression = CheckSentinelCompression(pTask, pSubtaskId, pSplitInfo, lCompressedLength, lReductionDataType);
+
             size_t lReservedMem = lSubscriptionManager.GetReservedCudaGlobalMemSize(this, pSubtaskId, pSplitInfo);
-            size_t lTotalMem = lReservedMem + sizeof(pmStatus);
+            size_t lTotalMem = lReservedMem + sizeof(pmStatus) + (lSentinelCompression ? lCompressedLength : 0);
 
             if(lTotalMem)
             {
@@ -3114,6 +3119,9 @@ bool pmStubCUDA::CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId,
                     {
                         lStruct.statusCudaPtr = lPtr;
                     }
+                    
+                    if(lSentinelCompression)
+                        lStruct.compressedMemCudaPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lStruct.statusCudaPtr) + sizeof(pmStatus));
                 }
             #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
                 else
@@ -3283,7 +3291,12 @@ void pmStubCUDA::Execute(pmTask* pTask, ulong pSubtaskId, bool pIsMultiAssign, u
     pmEventTimelineAutoPtr lEventTimelineAutoPtr(pTask, mEventTimelineAutoPtr.get(), pSubtaskId, pSplitInfo, GetProcessingElement()->GetGlobalDeviceIndex(), "SubtaskExecution");
 #endif
 
-	INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, &lHostToDeviceCommands, &lDeviceToHostCommands, mCudaStreams[pSubtaskId].get());
+    pmReductionDataType lReductionDataType = MAX_REDUCTION_DATA_TYPES;
+    size_t lCompressedLength = 0;
+
+    CheckSentinelCompression(pTask, pSubtaskId, pSplitInfo, lCompressedLength, lReductionDataType);
+
+    INVOKE_SAFE_THROW_ON_FAILURE(pmSubtaskCB, pTask->GetCallbackUnit()->GetSubtaskCB(), Invoke, this, pTask, pSplitInfo, pIsMultiAssign, lIter->second, lSubtaskInfo, &lHostToDeviceCommands, &lDeviceToHostCommands, mCudaStreams[pSubtaskId].get(), lReductionDataType);
 }
 
 void* pmStubCUDA::CreateTaskConf(const pmTaskInfo& pTaskInfo)
@@ -3569,7 +3582,7 @@ void pmStubCUDA::PopulateMemcpyCommands(pmTask* pTask, ulong pSubtaskId, pmSplit
         #endif
         }
     }
-
+    
 #if 0   // Not reading out status
     if(lSecondaryStruct.statusCudaPtr)
     {
@@ -3716,8 +3729,8 @@ void pmStubCUDA::CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSpli
     if(lStruct.statusPinnedPtr)
         *((pmStatus*)lStruct.statusPinnedPtr) = pmStatusUnavailable;
 }
-    
-pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo)
+
+pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo, bool pCopySubtaskMemory)
 {
 #ifdef ENABLE_TASK_PROFILING
     pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::COPY_FROM_PINNED_MEMORY);
@@ -3734,62 +3747,65 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
     
     DEBUG_EXCEPTION_ASSERT(lVector.size() <= lAddressSpaceCount + 1);
 
-    for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
+    if(pCopySubtaskMemory)
     {
-        if(!pTask->IsReadOnly(pAddressSpace))
+        for_each_with_index(pTask->GetAddressSpaces(), [&] (const pmAddressSpace* pAddressSpace, size_t pAddressSpaceIndex)
         {
-            pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
-            
-            subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
-            lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
-
-            if(lVisibilityType == SUBSCRIPTION_NATURAL)
+            if(!pTask->IsReadOnly(pAddressSpace))
             {
-                pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+                pmSubscriptionVisibilityType lVisibilityType = pTask->GetAddressSpaceSubscriptionVisibility(pAddressSpace, this);
                 
-                if(lSubscriptionInfo.length)
-                {
-                    for(lIter = lBegin; lIter != lEnd; ++lIter)
-                    {
-                        void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
-                        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+                lSubscriptionManager.GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex, lBegin, lEnd);
 
-                        PMLIB_MEMCPY(lDataPtr, lPinnedPtr, lIter->second.first, std::string("pmStubCUDA::CopyDataFromPinnedBuffers1"));
+                if(lVisibilityType == SUBSCRIPTION_NATURAL)
+                {
+                    pmSubscriptionInfo lSubscriptionInfo = lSubscriptionManager.GetUnifiedReadWriteSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
+                    
+                    if(lSubscriptionInfo.length)
+                    {
+                        for(lIter = lBegin; lIter != lEnd; ++lIter)
+                        {
+                            void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + lIter->first - lSubscriptionInfo.offset);
+                            void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr) + lIter->first - lSubscriptionInfo.offset);
+
+                            PMLIB_MEMCPY(lDataPtr, lPinnedPtr, lIter->second.first, std::string("pmStubCUDA::CopyDataFromPinnedBuffers1"));
+                        }
                     }
                 }
-            }
-            else    // SUBSCRIPTION_COMPACT
-            {
-                const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
-
-                if(lCompactViewData.subscriptionInfo.length)
+                else    // SUBSCRIPTION_COMPACT
                 {
-                    void* lShadowMemAddr = pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr;
-                    
-                    if(lShadowMemAddr && pTask->IsWriteOnly(pAddressSpace))
-                    {
-                        PMLIB_MEMCPY(lShadowMemAddr, lVector[pAddressSpaceIndex].pinnedPtr, lCompactViewData.subscriptionInfo.length, std::string("pmStubCUDA::CopyDataFromPinnedBuffers2"));
-                    }
-                    else
-                    {
-                        size_t lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
-                        size_t lShadowAddr = reinterpret_cast<size_t>(lShadowMemAddr);
+                    const subscription::pmCompactViewData& lCompactViewData = lSubscriptionManager.GetCompactedSubscription(this, pSubtaskId, pSplitInfo, pAddressSpaceIndex);
 
-                        auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
-                        DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
-
-                        for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                    if(lCompactViewData.subscriptionInfo.length)
+                    {
+                        void* lShadowMemAddr = pSubtaskInfo.memInfo[pAddressSpaceIndex].ptr;
+                        
+                        if(lShadowMemAddr && pTask->IsWriteOnly(pAddressSpace))
                         {
-                            void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
-                            void* lDataPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
+                            PMLIB_MEMCPY(lShadowMemAddr, lVector[pAddressSpaceIndex].pinnedPtr, lCompactViewData.subscriptionInfo.length, std::string("pmStubCUDA::CopyDataFromPinnedBuffers2"));
+                        }
+                        else
+                        {
+                            size_t lBaseAddr = reinterpret_cast<size_t>(pAddressSpace->GetMem());
+                            size_t lShadowAddr = reinterpret_cast<size_t>(lShadowMemAddr);
 
-                            PMLIB_MEMCPY(lDataPtr, lPinnedPtr, lIter->second.first, std::string("pmStubCUDA::CopyDataFromPinnedBuffers3"));
+                            auto lOffsetsIter = lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.begin();
+                            DEBUG_EXCEPTION_ASSERT(std::distance(lOffsetsIter, lCompactViewData.nonConsolidatedWriteSubscriptionOffsets.end()) == std::distance(lBegin, lEnd));
+
+                            for(lIter = lBegin; lIter != lEnd; ++lIter, ++lOffsetsIter)
+                            {
+                                void* lPinnedPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lVector[pAddressSpaceIndex].pinnedPtr) + (*lOffsetsIter));
+                                void* lDataPtr = reinterpret_cast<void*>((lShadowMemAddr ? (lShadowAddr + (*lOffsetsIter)) : (lBaseAddr + lIter->first)));
+
+                                PMLIB_MEMCPY(lDataPtr, lPinnedPtr, lIter->second.first, std::string("pmStubCUDA::CopyDataFromPinnedBuffers3"));
+                            }
                         }
                     }
                 }
             }
-        }
-    });
+        });
+    }
     
     if(lVector.size() > lAddressSpaceCount)
     {
@@ -3811,15 +3827,134 @@ pmStatus pmStubCUDA::CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, 
     return pmStatusUnavailable;
 }
 #endif  // SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
+    
+bool pmStubCUDA::CheckSentinelCompression(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t& pCompressedLength, pmReductionDataType& pReductionDataType)
+{
+    bool lSentinelCompression = false;
+
+    if(pTask->GetCallbackUnit()->GetDataReductionCB() && (pTask->GetAddressSpaces().size() == 1))
+    {
+        pmAddressSpace* lAddressSpace = pTask->GetAddressSpaces()[0];
+        
+        if(!pTask->IsReadOnly(lAddressSpace))
+        {
+            pmReductionOpType lOpType;
+            
+            findReductionOpAndDataType(pTask->GetCallbackUnit()->GetDataReductionCB()->GetCallback(), lOpType, pReductionDataType);
+            
+            if(pReductionDataType != MAX_REDUCTION_DATA_TYPES)
+            {
+                size_t lElemSize = getReductionDataTypeSize(pReductionDataType);
+                
+                subscription::subscriptionRecordType::const_iterator lBegin, lEnd, lIter;
+                pTask->GetSubscriptionManager().GetNonConsolidatedWriteSubscriptions(this, pSubtaskId, pSplitInfo, 0, lBegin, lEnd);
+
+                lSentinelCompression = (lBegin->second.first == lAddressSpace->GetLength()) && (++lBegin == lEnd) && (lAddressSpace->GetLength() > CUDA_SENTINEL_COMPRESSION_THRESHOLD);  // Only one subscription
+                size_t lMaxNonSentinels = std::ceil(((double)lAddressSpace->GetLength() * CUDA_SENTINEL_COMPRESSION_MAX_NON_SENTINELS + lElemSize - 1) / lElemSize);
+                pCompressedLength = sizeof(uint) + lMaxNonSentinels * lElemSize + lMaxNonSentinels * sizeof(uint);   // Compressed memory stores no. of non-sentinels followed by non-sentinels followed by their indices
+            }
+        }
+    }
+    
+    return lSentinelCompression;
+}
+
+template<typename T>
+struct UncompressSentinelCompressionImpl
+{
+    void operator() (const void* pSrcMem, void* pDestMem, size_t pLength)
+    {
+        size_t lNonSentinels = ((uint*)pSrcMem)[0];
+        T* lDataPtr = (T*)(((uint*)pSrcMem) + 1);
+        uint* lIndicesPtr = (uint*)(lDataPtr + lNonSentinels);
+
+        std::auto_ptr<T> lMemPtr;
+        std::auto_ptr<uint> lLocsPtr;
+
+        if(pSrcMem == pDestMem)
+        {
+            lMemPtr.reset(new T[lNonSentinels]);
+            lLocsPtr.reset(new uint[lNonSentinels]);
+
+            memcpy(lMemPtr.get(), lDataPtr, lNonSentinels * sizeof(T));
+            memcpy(lLocsPtr.get(), lIndicesPtr, lNonSentinels * sizeof(uint));
+            
+            lDataPtr = lMemPtr.get();
+            lIndicesPtr = lLocsPtr.get();
+        }
+        
+        memset(pDestMem, 0, pLength);
+        for(uint i = 0; i < lNonSentinels; ++i)
+            ((T*)pDestMem)[lIndicesPtr[i]] = lDataPtr[i];
+    }
+};
+    
+void pmStubCUDA::UncompressSentinelCompressedData(const void* pSrcMem, void* pDestMem, size_t pLength, pmReductionDataType pReductionDataType)
+{
+    switch(pReductionDataType)
+    {
+        case REDUCE_INTS:
+        {
+            return UncompressSentinelCompressionImpl<int>() (pSrcMem, pDestMem, pLength);
+        }
+            
+        case REDUCE_UNSIGNED_INTS:
+        {
+            return UncompressSentinelCompressionImpl<uint>() (pSrcMem, pDestMem, pLength);
+        }
+            
+        case REDUCE_LONGS:
+        {
+            return UncompressSentinelCompressionImpl<long>() (pSrcMem, pDestMem, pLength);
+        }
+            
+        case REDUCE_UNSIGNED_LONGS:
+        {
+            return UncompressSentinelCompressionImpl<ulong>() (pSrcMem, pDestMem, pLength);
+        }
+            
+        case REDUCE_FLOATS:
+        {
+            return UncompressSentinelCompressionImpl<float>() (pSrcMem, pDestMem, pLength);
+        }
+            
+        case REDUCE_DOUBLES:
+        {
+            return UncompressSentinelCompressionImpl<double>() (pSrcMem, pDestMem, pLength);
+        }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+}
 
 void pmStubCUDA::WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo)
 {
     EXCEPTION_ASSERT(mCudaStreams.find(pSubtaskId) != mCudaStreams.end());
 
     pmCudaInterface::WaitForStreamCompletion(*mCudaStreams[pSubtaskId].get());
+
+    pmSubtaskInfo lSubtaskInfo = pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo);
     
+    pmReductionDataType lReductionDataType = MAX_REDUCTION_DATA_TYPES;
+    size_t lCompressedLength = 0;
+
+    bool lSentinelCompression = CheckSentinelCompression(pTask, pSubtaskId, pSplitInfo, lCompressedLength, lReductionDataType);
+
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
-    CopyDataFromPinnedBuffers(pTask, pSubtaskId, pSplitInfo, pTask->GetSubscriptionManager().GetSubtaskInfo(this, pSubtaskId, pSplitInfo));
+    if(lSentinelCompression)
+    {
+        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfo.memInfo[0].ptr));
+        UncompressSentinelCompressedData(mSubtaskPointersMap[pSubtaskId][0].pinnedPtr, lDataPtr, pTask->GetAddressSpaces()[0]->GetLength(), lReductionDataType);
+    }
+
+    CopyDataFromPinnedBuffers(pTask, pSubtaskId, pSplitInfo, lSubtaskInfo, !lSentinelCompression);
+#else
+    if(lSentinelCompression)
+    {
+        void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfo.memInfo[0].ptr));
+        UncompressSentinelCompressedData(lDataPtr, lDataPtr, pTask->GetAddressSpaces()[0]->GetLength(), lReductionDataType);
+    }
 #endif
     
     CleanupPostSubtaskExecution(pTask, pSubtaskId, pSplitInfo);

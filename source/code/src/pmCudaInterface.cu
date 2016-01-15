@@ -30,6 +30,12 @@
 #include <map>
 #include <sstream>
 
+#include <thrust/count.h>
+#include <thrust/copy.h>
+#include <thrust/remove.h>
+#include <thrust/device_vector.h>
+#include <thrust/iterator/counting_iterator.h>
+
 namespace pm
 {
     
@@ -357,7 +363,101 @@ size_t pmCudaInterface::GetCudaDeviceCount()
     return GetDeviceVector().size();
 }
 
-pmStatus pmCudaInterface::InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, const pmSubtaskInfo& pSubtaskInfoCuda, const pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, const std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, const std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, pmStatus* pStatusCudaPtr, pmCudaStreamAutoPtr& pStreamPtr)
+template<typename T>
+struct isNonSentinel : public thrust::unary_function<T, bool>
+{
+public:
+    isNonSentinel(T pSentinel)
+    : mSentinel(pSentinel)
+    {
+    }
+    
+    __host__ __device__ bool operator() (T x)
+    {
+        return x != mSentinel;
+    }
+    
+private:
+    T mSentinel;
+};
+    
+template<typename T>
+struct CompressForSentinelImpl
+{
+    bool operator() (void* pCudaPtr, size_t pSize, void* pCompressedPtr, size_t& pCompressedSize, uint& pNonSentinelCount)
+    {
+        const T lSentinel = 0;
+
+        thrust::device_ptr<T> lCudaPtr = thrust::device_pointer_cast((T*)pCudaPtr);
+        
+        uint lElemCount = pSize / sizeof(T);
+        uint lSentinelCount = thrust::count(lCudaPtr, lCudaPtr + lElemCount, lSentinel);
+        pNonSentinelCount = lElemCount - lSentinelCount;
+
+        // Compress if non-sentinels less than limit
+        if(pNonSentinelCount < lElemCount * CUDA_SENTINEL_COMPRESSION_MAX_NON_SENTINELS)
+        {
+            pCompressedSize = sizeof(uint) + pNonSentinelCount * sizeof(T) + pNonSentinelCount * sizeof(uint);
+
+            thrust::device_ptr<T> lCompressedCudaPtr = thrust::device_pointer_cast((T*)pCompressedPtr + 1);
+            thrust::device_ptr<uint> lIndexLoc = thrust::device_pointer_cast((uint*)((T*)pCompressedPtr + 1 + pNonSentinelCount));
+
+            thrust::copy_if(lCudaPtr, lCudaPtr + lElemCount, lCompressedCudaPtr, isNonSentinel<T>(lSentinel));
+            thrust::copy_if(thrust::make_counting_iterator((uint)0), thrust::make_counting_iterator(lElemCount), lCudaPtr, lIndexLoc, isNonSentinel<T>(lSentinel));
+
+            return true;
+        }
+        
+        return false;
+    }
+};
+
+bool pmCudaInterface::CompressForSentinel(pmReductionDataType pReductionDataType, void* pCudaPtr, size_t pSize, void* pCompressedPtr, size_t& pCompressedSize, uint& pNonSentinelCount)
+{
+    switch(pReductionDataType)
+    {
+        case REDUCE_INTS:
+        {
+            return CompressForSentinelImpl<int>() (pCudaPtr, pSize, pCompressedPtr, pCompressedSize, pNonSentinelCount);
+        }
+            
+        case REDUCE_UNSIGNED_INTS:
+        {
+            return CompressForSentinelImpl<uint>() (pCudaPtr, pSize, pCompressedPtr, pCompressedSize, pNonSentinelCount);
+        }
+            
+        case REDUCE_LONGS:
+        {
+            return CompressForSentinelImpl<long>() (pCudaPtr, pSize, pCompressedPtr, pCompressedSize, pNonSentinelCount);
+        }
+            
+        case REDUCE_UNSIGNED_LONGS:
+        {
+            return CompressForSentinelImpl<ulong>() (pCudaPtr, pSize, pCompressedPtr, pCompressedSize, pNonSentinelCount);
+        }
+            
+        case REDUCE_FLOATS:
+        {
+            return CompressForSentinelImpl<float>() (pCudaPtr, pSize, pCompressedPtr, pCompressedSize, pNonSentinelCount);
+        }
+            
+        case REDUCE_DOUBLES:
+        {
+        #if __CUDA_ARCH__ >= 130
+            return CompressForSentinelImpl<double>() (pCudaPtr, pSize, pCompressedPtr, pCompressedSize, pNonSentinelCount);
+        #else
+            break;
+        #endif
+        }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
+    
+    return false;
+}
+
+pmStatus pmCudaInterface::InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, const pmSubtaskInfo& pSubtaskInfoCuda, const pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, const std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, const std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, pmStatus* pStatusCudaPtr, pmCudaStreamAutoPtr& pStreamPtr, pmReductionDataType pSentinelCompressionReductionDataType, void* pCompressedPtr)
 {
     cudaStream_t lStream = (cudaStream_t)(pStreamPtr.GetStream());
 
@@ -372,11 +472,28 @@ pmStatus pmCudaInterface::InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTas
 
     CHECK_LAST_ERROR(GetRuntimeHandle());
     
-    std::vector<pmCudaMemcpyCommand>::const_iterator lDeviceToHostIter = pDeviceToHostCommands.begin(), lDeviceToHostEndIter = pDeviceToHostCommands.end();
-    for(; lDeviceToHostIter != lDeviceToHostEndIter; ++lDeviceToHostIter)
+    bool lCompressed = false;
+    size_t lCompressedSize = 0;
+    uint lNonSentinelCount = 0;
+
+    if(pSentinelCompressionReductionDataType != MAX_REDUCTION_DATA_TYPES && pCompressedPtr)
+        lCompressed = CompressForSentinel(pSentinelCompressionReductionDataType, (*pDeviceToHostCommands.begin()).srcPtr, (*pDeviceToHostCommands.begin()).size, pCompressedPtr, lCompressedSize, lNonSentinelCount);
+
+    if(!lCompressed)
     {
-        const pmCudaMemcpyCommand& lMemcpyCommand = *lDeviceToHostIter;
-        SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, lMemcpyCommand.destPtr, lMemcpyCommand.srcPtr, lMemcpyCommand.size, cudaMemcpyDeviceToHost, lStream );
+        std::vector<pmCudaMemcpyCommand>::const_iterator lDeviceToHostIter = pDeviceToHostCommands.begin(), lDeviceToHostEndIter = pDeviceToHostCommands.end();
+        for(; lDeviceToHostIter != lDeviceToHostEndIter; ++lDeviceToHostIter)
+        {
+            const pmCudaMemcpyCommand& lMemcpyCommand = *lDeviceToHostIter;
+            SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, lMemcpyCommand.destPtr, lMemcpyCommand.srcPtr, lMemcpyCommand.size, cudaMemcpyDeviceToHost, lStream );
+        }
+    }
+    else
+    {
+        SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, (uint*)pCompressedPtr, &lNonSentinelCount, sizeof(uint), cudaMemcpyHostToDevice, lStream );
+
+        const pmCudaMemcpyCommand& lMemcpyCommand = (*pDeviceToHostCommands.begin());
+        SAFE_EXECUTE_CUDA( GetRuntimeHandle(), "cudaMemcpyAsync", gFuncPtr_cudaMemcpyAsync, lMemcpyCommand.destPtr, pCompressedPtr, lCompressedSize, cudaMemcpyDeviceToHost, lStream );
     }
     
     return lStatus;

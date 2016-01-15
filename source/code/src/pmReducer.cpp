@@ -28,6 +28,7 @@
 #include "pmDevicePool.h"
 #include "pmTaskManager.h"
 #include "pmCallbackUnit.h"
+#include "pmHeavyOperations.h"
 
 #include <algorithm>
 
@@ -318,7 +319,7 @@ void pmReducer::CheckReductionFinishInternal()
                     EXCEPTION_ASSERT(mSendToMachine != PM_LOCAL_MACHINE && mLastSubtask.stub != NULL);
 
                     // Send mLastSubtaskId to machine mSendToMachine for reduction
-                    pmScheduler::GetScheduler()->ReduceRequestEvent(mLastSubtask.stub, mTask, mSendToMachine, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
+                    pmHeavyOperationsThreadPool::GetHeavyOperationsThreadPool()->ReduceRequestEvent(mLastSubtask.stub, mTask, mSendToMachine, mLastSubtask.subtaskId, mLastSubtask.splitInfo.get_ptr());
                 }
                 else
                 {
@@ -582,6 +583,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
     {
         case REDUCE_ADD:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] += pShadowMem2[i];
             
@@ -590,6 +594,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
             
         case REDUCE_MIN:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] = std::min(pShadowMem1[i], pShadowMem2[i]);
             
@@ -598,6 +605,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
         
         case REDUCE_MAX:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] = std::max(pShadowMem1[i], pShadowMem2[i]);
             
@@ -606,6 +616,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
         
         case REDUCE_PRODUCT:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] *= pShadowMem2[i];
             
@@ -614,6 +627,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
         
         case REDUCE_LOGICAL_AND:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] = (pShadowMem1[i] && pShadowMem2[i]);
             
@@ -622,6 +638,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
         
         case REDUCE_BITWISE_AND:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[i]) & (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
             
@@ -630,6 +649,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
         
         case REDUCE_LOGICAL_OR:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] = (pShadowMem1[i] || pShadowMem2[i]);
             
@@ -638,6 +660,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
         
         case REDUCE_BITWISE_OR:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[i]) | (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
             
@@ -646,6 +671,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
         
         case REDUCE_LOGICAL_XOR:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] = (pShadowMem1[i] != pShadowMem2[i]);
             
@@ -654,6 +682,9 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
 
         case REDUCE_BITWISE_XOR:
         {
+        #ifdef USE_OMP_FOR_REDUCTION
+            #pragma omp parallel for
+        #endif
             for(size_t i = 0; i < pDataCount; ++i)
                 pShadowMem1[i] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[i]) ^ (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
             
@@ -665,6 +696,193 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
     }
 }
 
+#ifdef USE_OMP_FOR_REDUCTION
+template<typename datatype>
+void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType, datatype pSentinel)
+{
+    size_t lFirstSentinelIndex = (size_t)(pShadowMem2[pDataCount - 1]);
+    size_t lSentinelCount = (pDataCount - 1 - lFirstSentinelIndex) / 2;
+    
+    EXCEPTION_ASSERT(lFirstSentinelIndex);
+    EXCEPTION_ASSERT(lSentinelCount);
+    EXCEPTION_ASSERT((pDataCount - 1 - lFirstSentinelIndex) % 2 == 0);
+    
+    #pragma omp parallel for
+    for(size_t sentinelId = 0; sentinelId < lSentinelCount; ++sentinelId)
+    {
+        size_t lBeginIndex = pShadowMem2[lFirstSentinelIndex + 2 * sentinelId];
+        size_t lEndIndex = (sentinelId == lSentinelCount - 1) ? lFirstSentinelIndex - 1 : pShadowMem2[lFirstSentinelIndex + 2 * sentinelId + 2];
+        
+        size_t index = pShadowMem2[lFirstSentinelIndex + 2 * sentinelId + 1];
+
+        switch(pReductionType)
+        {
+            case REDUCE_ADD:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] += pShadowMem2[i];
+                }
+                
+                break;
+            }
+                
+            case REDUCE_MIN:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] = std::min(pShadowMem1[index], pShadowMem2[i]);
+                }
+                
+                break;
+            }
+            
+            case REDUCE_MAX:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] = std::max(pShadowMem1[index], pShadowMem2[i]);
+                }
+                
+                break;
+            }
+            
+            case REDUCE_PRODUCT:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] *= pShadowMem2[i];
+                }
+                
+                break;
+            }
+            
+            case REDUCE_LOGICAL_AND:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] = (pShadowMem1[index] && pShadowMem2[i]);
+                }
+                
+                break;
+            }
+            
+            case REDUCE_BITWISE_AND:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) & (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+                }
+                
+                break;
+            }
+            
+            case REDUCE_LOGICAL_OR:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] = (pShadowMem1[index] || pShadowMem2[i]);
+                }
+                
+                break;
+            }
+            
+            case REDUCE_BITWISE_OR:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) | (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+                }
+                
+                break;
+            }
+            
+            case REDUCE_LOGICAL_XOR:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] = (pShadowMem1[index] != pShadowMem2[i]);
+                }
+                
+                break;
+            }
+
+            case REDUCE_BITWISE_XOR:
+            {
+                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                {
+                    if(pShadowMem2[i] == pSentinel)
+                    {
+                        ++i;
+                        index = (size_t)pShadowMem2[i++];
+                    }
+
+                    pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) ^ (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
+                }
+                
+                break;
+            }
+
+            default:
+                PMTHROW(pmFatalErrorException());
+        }
+    }
+}
+#else
 template<typename datatype>
 void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType, datatype pSentinel)
 {
@@ -836,6 +1054,7 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
             PMTHROW(pmFatalErrorException());
     }
 }
+#endif
     
 template<typename datatype>
 void pmReducer::ReduceSubtasks(pmExecutionStub* pStub1, ulong pSubtaskId1, pmSplitInfo* pSplitInfo1, pmExecutionStub* pStub2, ulong pSubtaskId2, pmSplitInfo* pSplitInfo2, pmReductionOpType pReductionType)

@@ -25,6 +25,7 @@
 #include "pmPublicDefinitions.h"
 #include "pmInternalDefinitions.h"
 #include "pmErrorDefinitions.h"
+#include "pmPublicUtilities.h"
 
 #include <vector>
 #include <string>
@@ -37,7 +38,7 @@ struct pmCudaMemcpyCommand
     void* srcPtr;
     void* destPtr;
     size_t size;
-    
+
     pmCudaMemcpyCommand(void* pSrcPtr, void* pDestPtr, size_t pSize)
     : srcPtr(pSrcPtr)
     , destPtr(pDestPtr)
@@ -69,6 +70,7 @@ struct pmCudaSubtaskSecondaryBuffersStruct
 {
     void* reservedMemCudaPtr;
     void* statusCudaPtr;
+    void* compressedMemCudaPtr;
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     void* statusPinnedPtr;
 #endif
@@ -76,6 +78,7 @@ struct pmCudaSubtaskSecondaryBuffersStruct
     pmCudaSubtaskSecondaryBuffersStruct()
     : reservedMemCudaPtr(NULL)
     , statusCudaPtr(NULL)
+    , compressedMemCudaPtr(NULL)
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     , statusPinnedPtr(NULL)
 #endif
@@ -139,11 +142,13 @@ public:
     static void* AllocatePinnedBuffer(size_t pSize);
     static void DeallocatePinnedBuffer(const void* pMem);
 #endif
-
-    static pmStatus InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, const pmSubtaskInfo& pSubtaskInfoCuda, const pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, const std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, const std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, pmStatus* pStatusCudaPtr, pmCudaStreamAutoPtr& pStreamPtr);
+    
+    static pmStatus InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, const pmSubtaskInfo& pSubtaskInfoCuda, const pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, const std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, const std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, pmStatus* pStatusCudaPtr, pmCudaStreamAutoPtr& pStreamPtr, pmReductionDataType pSentinelCompressionReductionDataType, void* pCompressedPtr);
 
 private:
     static pmStatus ExecuteKernel(const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmDeviceInfo& pDeviceInfo, pmDeviceInfo* pDeviceInfoCudaPtr, const pmSubtaskInfo& pSubtaskInfoCuda, const pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, void* pStream, pmStatus* pStatusCudaPtr);
+
+    static bool CompressForSentinel(pmReductionDataType pReductionDataType, void* pCudaPtr, size_t pSize, void* pCompressedPtr, size_t& pCompressedSize, uint& pNonSentinelCount);
 
     static size_t GetUnallocatableCudaMemSize();
     static void*& GetRuntimeHandle();

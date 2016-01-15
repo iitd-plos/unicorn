@@ -53,7 +53,7 @@ inline std::shared_ptr<__value>& pmCache<__key, __value, __hasher, __evictor, __
         EXCEPTION_ASSERT(lIter != mCacheHash.end());
     }
     
-    return lIter->second->second;
+    return mContainer.getValue(lIter->second);
 }
 
 template<typename __key, typename __value, typename __hasher, typename __evictor, pmCacheEvictionPolicy __evictionPolicy>

@@ -533,7 +533,8 @@ namespace pm
         
         return MAX_REDUCTION_OP_TYPES;
     }
-
+    
+    size_t getReductionDataTypeSize(pmReductionDataType pDataType);
     void findReductionOpAndDataType(pmDataReductionCallback pCallback, pmReductionOpType& pOpType, pmReductionDataType& pDataType);
 
 #ifdef DUMP_EVENT_TIMELINE

@@ -77,12 +77,44 @@ public:
     template<typename T>
     static std::shared_ptr<T> CompressForSentinel(const T* pMem, T pSentinel, ulong pCount, ulong& pCompressedLength)
     {
+    #ifdef USE_OMP_FOR_REDUCTION
+        std::vector<ulong> lSentinelLocationsVector;
+        lSentinelLocationsVector.reserve(pCount/2);
+    #endif
+
         std::shared_ptr<T> lMemPtr(new T[pCount]);
         T* lMem = lMemPtr.get();
 
         bool lOngoingSentinels = false;
         ulong lIndex = 0;
 
+    #ifdef USE_OMP_FOR_REDUCTION
+        if(pMem[0] != pSentinel)
+        {
+            lSentinelLocationsVector.emplace_back(0);
+            lSentinelLocationsVector.emplace_back(0);
+        }
+
+        for(ulong i = 0; i < pCount; ++i)
+        {
+            if(pMem[i] == pSentinel)
+            {
+                lOngoingSentinels = true;
+            }
+            else
+            {
+                if(lOngoingSentinels)
+                {
+                    lSentinelLocationsVector.emplace_back(lIndex);
+                    lSentinelLocationsVector.emplace_back(i);
+                    
+                    lOngoingSentinels = false;
+                }
+                
+                lMem[lIndex++] = pMem[i];
+            }
+        }
+    #else
         for(ulong i = 0; i < pCount; ++i)
         {
             if(pMem[i] == pSentinel)
@@ -108,6 +140,20 @@ public:
                 lMem[lIndex++] = pMem[i];
             }
         }
+    #endif
+
+    #ifdef USE_OMP_FOR_REDUCTION
+        ulong lFirstSentinelLoc = lIndex;
+        if(lIndex + 1 + lSentinelLocationsVector.size() >= pCount)
+            return std::shared_ptr<T>();
+        
+        for_each(lSentinelLocationsVector, [&] (ulong pLocation)
+        {
+            lMem[lIndex++] = (T)pLocation;
+        });
+        
+        lMem[lIndex++] = (T)lFirstSentinelLoc;
+    #endif
 
         pCompressedLength = lIndex * sizeof(T);
         return lMemPtr;

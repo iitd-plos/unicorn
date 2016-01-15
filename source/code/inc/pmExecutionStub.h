@@ -615,7 +615,7 @@ class pmStubCUDA : public pmStubGPU
     
     #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
         void CopyDataToPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo);
-        pmStatus CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo);
+        pmStatus CopyDataFromPinnedBuffers(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, const pmSubtaskInfo& pSubtaskInfo, bool pCopySubtaskMemory);
     #endif
 
 	private:
@@ -626,6 +626,9 @@ class pmStubCUDA : public pmStubGPU
         void DestroyDeviceInfoCudaPtr(void* pDeviceInfoCudaPtr);
     
         bool CheckSubtaskMemoryRequirements(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, std::map<ulong, std::vector<std::shared_ptr<pmCudaCacheValue>>>& pPreventCachePurgeMap, size_t pCudaAlignment);
+
+        bool CheckSentinelCompression(pmTask* pTask, ulong pSubtaskId, pmSplitInfo* pSplitInfo, size_t& pCompressedLength, pmReductionDataType& pReductionDataType);
+        void UncompressSentinelCompressedData(const void* pSrcMem, void* pDestMem, size_t pLength, pmReductionDataType pReductionDataType);
 
         void* AllocateMemoryOnDevice(size_t pLength, size_t pCudaAlignment, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection);
         bool AllocateMemoryForDeviceCopy(size_t pLength, size_t pCudaAlignment, pmCudaSubtaskMemoryStruct& pMemoryStruct, pmAllocatorCollection<pmCudaMemChunkTraits>& pChunkCollection);

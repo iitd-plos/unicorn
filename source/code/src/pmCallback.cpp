@@ -159,7 +159,7 @@ pmSubtaskCallback_CPU pmSubtaskCB::GetCpuCallback() const
 
 
 #ifdef SUPPORT_CUDA
-pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, std::vector<pmCudaMemcpyCommand>* pHostToDeviceCommands /* = NULL */, std::vector<pmCudaMemcpyCommand>* pDeviceToHostCommands /* = NULL */, void* pStreamPtr /* = NULL */) const
+pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo, std::vector<pmCudaMemcpyCommand>* pHostToDeviceCommands /* = NULL */, std::vector<pmCudaMemcpyCommand>* pDeviceToHostCommands /* = NULL */, void* pStreamPtr /* = NULL */, pmReductionDataType pSentinelCompressionReductionDataType /* = MAX_REDUCTION_DATA_TYPES */) const
 #else
 pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo* pSplitInfo, bool pMultiAssign, const pmTaskInfo& pTaskInfo, const pmSubtaskInfo& pSubtaskInfo) const
 #endif
@@ -207,7 +207,7 @@ pmStatus pmSubtaskCB::Invoke(pmExecutionStub* pStub, pmTask* pTask, pmSplitInfo*
 			pmCudaLaunchConf& lCudaLaunchConf = pTask->GetSubscriptionManager().GetCudaLaunchConf(pStub, pSubtaskInfo.subtaskId, pSplitInfo);
 
             // pTaskInfo is task info with CUDA pointers; pTask->GetTaskInfo() is with CPU pointers
-            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask, (pmStubCUDA*)pStub, pTask->GetTaskInfo(), pTaskInfo, pSubtaskInfo, lCudaLaunchConf, mCallback_GPU_CUDA, mCallback_GPU_Custom, *((pmCudaStreamAutoPtr*)pStreamPtr), *pHostToDeviceCommands, *pDeviceToHostCommands);
+            lStatus = pmDispatcherGPU::GetDispatcherGPU()->GetDispatcherCUDA()->InvokeKernel(pTask, (pmStubCUDA*)pStub, pTask->GetTaskInfo(), pTaskInfo, pSubtaskInfo, lCudaLaunchConf, mCallback_GPU_CUDA, mCallback_GPU_Custom, pSentinelCompressionReductionDataType, *((pmCudaStreamAutoPtr*)pStreamPtr), *pHostToDeviceCommands, *pDeviceToHostCommands);
             
 			break;
 		}

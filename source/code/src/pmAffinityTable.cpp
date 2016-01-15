@@ -535,7 +535,7 @@ void pmAffinityTable::CreateSubtaskMappings()
             lTargettedCompletionTime = lCompletionTimeOfProbableMachine;
         }
 
-        EXCEPTION_ASSERT(lTargetMachinePtr && lTargettedCompletionTime);
+        EXCEPTION_ASSERT(lTargetMachinePtr);
 
         uint lMachine = *lTargetMachinePtr;
 

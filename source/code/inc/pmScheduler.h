@@ -83,7 +83,6 @@ enum eventIdentifier
 	TASK_CANCEL,
 	TASK_FINISH,
     TASK_COMPLETE,
-	SUBTASK_REDUCE,
     NO_REDUCTION_REQD,
 	COMMAND_COMPLETION,
     HOST_FINALIZATION,
@@ -376,24 +375,6 @@ struct taskTerminateEvent : public schedulerEvent
     , task(pTask)
     {}
 };
-
-struct subtaskReduceEvent : public schedulerEvent
-{
-	pmTask* task;
-	const pmMachine* machine;
-    pmExecutionStub* reducingStub;
-	ulong subtaskId;
-    pmSplitData splitData;
-    
-    subtaskReduceEvent(eventIdentifier pEventId, pmTask* pTask, const pmMachine* pMachine, pmExecutionStub* pReducingStub, ulong pSubtaskId, pmSplitData& pSplitData)
-    : schedulerEvent(pEventId)
-    , task(pTask)
-    , machine(pMachine)
-    , reducingStub(pReducingStub)
-    , subtaskId(pSubtaskId)
-    , splitData(pSplitData)
-    {}
-};
     
 struct noReductionRequiredEvent : public schedulerEvent
 {
@@ -598,7 +579,6 @@ class pmScheduler : public THREADING_IMPLEMENTATION_CLASS<scheduler::schedulerEv
 		void TaskCancelEvent(pmTask* pTask);
         void TaskFinishEvent(pmTask* pTask);
         void TaskCompleteEvent(pmLocalTask* pLocalTask);
-		void ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, const pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
         void NoReductionRequiredEvent(pmTask* pTask, const pmMachine* pDestMachine);
     
         void CommandCompletionEvent(const pmCommandPtr& pCommand);

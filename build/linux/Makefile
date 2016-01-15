@@ -20,7 +20,7 @@ BOOST_INCLUDE= -I../../thirdparty/boost
 
 COMPILER=g++
 NVCC_COMPILER=nvcc
-FLAGS=-Wall -std=c++11 -fPIC -DUNIX -D$(PLATFORM) -MMD
+FLAGS=-Wall -std=c++11 -fPIC -DUNIX -D$(PLATFORM) -MMD -fopenmp
 CUDAFLAGS= -DUNIX --compiler-options -fPIC --machine 64
 
 ifeq ($(PLATFORM), LINUX)
@@ -47,7 +47,7 @@ SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared
 endif
 endif
 
-LIBRARIES= $(PTHREAD_LIBS) $(MPI_LIBS) -lstdc++ -lm
+LIBRARIES= $(PTHREAD_LIBS) $(MPI_LIBS) -lstdc++ -lm -lgomp
 ifeq ($(PLATFORM), LINUX)
 LIBRARIES += -lrt
 endif

@@ -475,7 +475,7 @@ const std::vector<const pmProcessingElement*>& pmTask::GetStealListForDevice(con
     auto lIter = mStealListForDevice.find(pDevice);
     if(lIter == mStealListForDevice.end())
     {
-        std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
+        const std::vector<const pmProcessingElement*>& lDevices = (dynamic_cast<pmLocalTask*>(this) != NULL) ? (((pmLocalTask*)this)->GetAssignedDevices()) : (((pmRemoteTask*)this)->GetAssignedDevices());
 
     #ifdef SUPPORT_SPLIT_SUBTASKS
         std::vector<std::vector<const pmProcessingElement*>> lDeviceGroups;

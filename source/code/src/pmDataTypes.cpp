@@ -658,7 +658,48 @@ bool operator<(const pmSplitInfo& pInfo1, const pmSplitInfo& pInfo2)
 }
 #endif
 
+
+size_t getReductionDataTypeSize(pmReductionDataType pDataType)
+{
+    switch(pDataType)
+    {
+        case REDUCE_INTS:
+        {
+            return sizeof(int);
+        }
+            
+        case REDUCE_UNSIGNED_INTS:
+        {
+            return sizeof(uint);
+        }
+            
+        case REDUCE_LONGS:
+        {
+            return sizeof(long);
+        }
+            
+        case REDUCE_UNSIGNED_LONGS:
+        {
+            return sizeof(ulong);
+        }
+            
+        case REDUCE_FLOATS:
+        {
+            return sizeof(float);
+        }
+            
+        case REDUCE_DOUBLES:
+        {
+            return sizeof(double);
+        }
+            
+        default:
+            PMTHROW(pmFatalErrorException());
+    }
     
+    return 0;
+}
+
 void findReductionOpAndDataType(pmDataReductionCallback pCallback, pmReductionOpType& pOpType, pmReductionDataType& pDataType)
 {
     pOpType = MAX_REDUCTION_OP_TYPES;

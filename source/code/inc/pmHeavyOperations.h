@@ -44,6 +44,7 @@ enum eventIdentifier
     NETWORK_REQUEST_EVENT,
 	PACK_DATA,
     UNPACK_DATA,
+    SUBTASK_REDUCE,
     MEM_TRANSFER,
     MEM_TRANSFER_CANCEL,
     TASK_MEM_TRANSFER_CANCEL,
@@ -99,7 +100,25 @@ struct unpackEvent : public heavyOperationsEvent
     , packedLength(pPackedLength)
     {}
 };
+
+struct subtaskReduceEvent : public heavyOperationsEvent
+{
+	pmTask* task;
+	const pmMachine* machine;
+    pmExecutionStub* reducingStub;
+	ulong subtaskId;
+    pmSplitData splitData;
     
+    subtaskReduceEvent(eventIdentifier pEventId, pmTask* pTask, const pmMachine* pMachine, pmExecutionStub* pReducingStub, ulong pSubtaskId, pmSplitData& pSplitData)
+    : heavyOperationsEvent(pEventId)
+    , task(pTask)
+    , machine(pMachine)
+    , reducingStub(pReducingStub)
+    , subtaskId(pSubtaskId)
+    , splitData(pSplitData)
+    {}
+};
+
 struct memTransferEvent : public heavyOperationsEvent
 {
 	communicator::memoryIdentifierStruct srcMemIdentifier;
@@ -206,6 +225,7 @@ public:
     void QueueNetworkRequest(pmCommunicatorCommandPtr& pCommand, heavyOperations::networkRequestType pType);
     void PackAndSendData(const pmCommunicatorCommandPtr& pCommand);
     void UnpackDataEvent(finalize_ptr<char, deleteArrayDeallocator<char>>&& pPackedData, int pPackedLength, ushort pPriority);
+    void ReduceRequestEvent(pmExecutionStub* pReducingStub, pmTask* pTask, const pmMachine* pDestMachine, ulong pSubtaskId, pmSplitInfo* pSplitInfo);
     void MemTransferEvent(communicator::memoryIdentifierStruct& pSrcMemIdentifier, communicator::memoryIdentifierStruct& pDestMemIdentifier, communicator::memoryTransferType pTransferType, ulong pOffset, ulong pLength, ulong pStep, ulong pCount, const pmMachine* pDestMachine, ulong pReceiverOffset, bool pIsForwarded, ushort pPriority, bool pIsTaskOriginated, uint pTaskOriginatingHost, ulong pTaskSequenceNumber);
     void CancelMemoryTransferEvents(pmAddressSpace* pAddressSpace);
     void CancelTaskSpecificMemoryTransferEvents(pmTask* pTask);

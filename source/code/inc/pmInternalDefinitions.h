@@ -197,7 +197,13 @@ const double SUBTASK_TRANSFER_OVERHEAD = 1.05;  // Assuming 5% overhead for stea
 //#define USE_MPI_REDUCE
 #ifdef USE_MPI_REDUCE
 #define PRE_CREATE_SUB_COMMUNICATORS    // MPI-2 requires all nodes to call MPI_Create_Comm call even if they are not part of the subcommunicator
+#else
+#ifndef __clang__
+#define USE_OMP_FOR_REDUCTION
 #endif
+#endif
+const unsigned int CUDA_SENTINEL_COMPRESSION_THRESHOLD = (1024 * 1024 * 1024);  // 1 GB
+const float CUDA_SENTINEL_COMPRESSION_MAX_NON_SENTINELS = 0.4;
 
 
 /* Utility controls */
