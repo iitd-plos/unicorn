@@ -700,31 +700,31 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
 template<typename datatype>
 void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType, datatype pSentinel)
 {
-    size_t lFirstSentinelIndex = (size_t)(*((uint*)(&pShadowMem2[pDataCount - 1])));
-    size_t lSentinelCount = (pDataCount - 1 - lFirstSentinelIndex) / 2;
-    
+    uint lFirstSentinelIndex = *((uint*)(&pShadowMem2[pDataCount - 1]));
+    uint lSentinelCount = (pDataCount - 1 - lFirstSentinelIndex) / 2;
+
     EXCEPTION_ASSERT(lFirstSentinelIndex);
     EXCEPTION_ASSERT(lSentinelCount);
     EXCEPTION_ASSERT((pDataCount - 1 - lFirstSentinelIndex) % 2 == 0);
     
     #pragma omp parallel for
-    for(size_t sentinelId = 0; sentinelId < lSentinelCount; ++sentinelId)
+    for(uint sentinelId = 0; sentinelId < lSentinelCount; ++sentinelId)
     {
-        size_t lBeginIndex = pShadowMem2[lFirstSentinelIndex + 2 * sentinelId];
-        size_t lEndIndex = (sentinelId == lSentinelCount - 1) ? lFirstSentinelIndex - 1 : pShadowMem2[lFirstSentinelIndex + 2 * sentinelId + 2];
+        uint lBeginIndex = *((uint*)(&pShadowMem2[lFirstSentinelIndex + 2 * sentinelId]));
+        uint lEndIndex = (sentinelId == lSentinelCount - 1) ? lFirstSentinelIndex - 1 : *((uint*)(&pShadowMem2[lFirstSentinelIndex + 2 * sentinelId + 2]));
         
-        size_t index = pShadowMem2[lFirstSentinelIndex + 2 * sentinelId + 1];
+        uint index = *((uint*)(&pShadowMem2[lFirstSentinelIndex + 2 * sentinelId + 1]));
 
         switch(pReductionType)
         {
             case REDUCE_ADD:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] += pShadowMem2[i];
@@ -735,12 +735,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
                 
             case REDUCE_MIN:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] = std::min(pShadowMem1[index], pShadowMem2[i]);
@@ -751,12 +751,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
             
             case REDUCE_MAX:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] = std::max(pShadowMem1[index], pShadowMem2[i]);
@@ -767,12 +767,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
             
             case REDUCE_PRODUCT:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] *= pShadowMem2[i];
@@ -783,12 +783,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
             
             case REDUCE_LOGICAL_AND:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] = (pShadowMem1[index] && pShadowMem2[i]);
@@ -799,12 +799,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
             
             case REDUCE_BITWISE_AND:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) & (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
@@ -815,12 +815,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
             
             case REDUCE_LOGICAL_OR:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] = (pShadowMem1[index] || pShadowMem2[i]);
@@ -831,12 +831,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
             
             case REDUCE_BITWISE_OR:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) | (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
@@ -847,12 +847,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
             
             case REDUCE_LOGICAL_XOR:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] = (pShadowMem1[index] != pShadowMem2[i]);
@@ -863,12 +863,12 @@ void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShado
 
             case REDUCE_BITWISE_XOR:
             {
-                for(size_t i = lBeginIndex; i < lEndIndex; ++i, ++index)
+                for(uint i = lBeginIndex; i < lEndIndex; ++i, ++index)
                 {
                     if(pShadowMem2[i] == pSentinel)
                     {
                         ++i;
-                        index = (size_t)pShadowMem2[i++];
+                        index = *((uint*)(&pShadowMem2[i++]));
                     }
 
                     pShadowMem1[index] = (datatype)((typename getBitwiseOperatableType<datatype>::type)(pShadowMem1[index]) ^ (typename getBitwiseOperatableType<datatype>::type)(pShadowMem2[i]));
