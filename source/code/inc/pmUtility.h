@@ -86,16 +86,16 @@ public:
         T* lMem = lMemPtr.get();
 
         bool lOngoingSentinels = false;
-        ulong lIndex = 0;
+        uint lIndex = 0;
 
     #ifdef USE_OMP_FOR_REDUCTION
-        if(pMem[0] != pSentinel)
+         if(pMem[0] != pSentinel)
         {
             lSentinelLocationsVector.emplace_back(0);
             lSentinelLocationsVector.emplace_back(0);
         }
 
-        for(ulong i = 0; i < pCount; ++i)
+        for(uint i = 0; i < pCount; ++i)
         {
             if(pMem[i] == pSentinel)
             {
@@ -115,7 +115,7 @@ public:
             }
         }
     #else
-        for(ulong i = 0; i < pCount; ++i)
+        for(uint i = 0; i < pCount; ++i)
         {
             if(pMem[i] == pSentinel)
             {
@@ -129,7 +129,9 @@ public:
                         return std::shared_ptr<T>();
 
                     lMem[lIndex++] = pSentinel;
-                    lMem[lIndex++] = (T)i;
+                    *((uint*)(&lMem[lIndex])) = i;
+                    
+                    ++lIndex;
                     
                     lOngoingSentinels = false;
                 }
@@ -143,19 +145,22 @@ public:
     #endif
 
     #ifdef USE_OMP_FOR_REDUCTION
-        ulong lFirstSentinelLoc = lIndex;
+        uint lFirstSentinelLoc = lIndex;
         if(lIndex + 1 + lSentinelLocationsVector.size() >= pCount)
             return std::shared_ptr<T>();
         
-        for_each(lSentinelLocationsVector, [&] (ulong pLocation)
+        for_each(lSentinelLocationsVector, [&] (uint pLocation)
         {
-            lMem[lIndex++] = (T)pLocation;
+            *((uint*)(&lMem[lIndex])) = pLocation;
+            ++lIndex;
         });
         
-        lMem[lIndex++] = (T)lFirstSentinelLoc;
+        *((uint*)(&lMem[lIndex])) = lFirstSentinelLoc;
+        ++lIndex;
     #endif
 
         pCompressedLength = lIndex * sizeof(T);
+
         return lMemPtr;
     }
 

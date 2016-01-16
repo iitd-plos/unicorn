@@ -700,7 +700,7 @@ void pmReducer::ReduceMemories(datatype* pShadowMem1, datatype* pShadowMem2, siz
 template<typename datatype>
 void pmReducer::ReduceMemoriesCompressed(datatype* pShadowMem1, datatype* pShadowMem2, size_t pDataCount, pmReductionOpType pReductionType, datatype pSentinel)
 {
-    size_t lFirstSentinelIndex = (size_t)(pShadowMem2[pDataCount - 1]);
+    size_t lFirstSentinelIndex = (size_t)(*((uint*)(&pShadowMem2[pDataCount - 1])));
     size_t lSentinelCount = (pDataCount - 1 - lFirstSentinelIndex) / 2;
     
     EXCEPTION_ASSERT(lFirstSentinelIndex);
