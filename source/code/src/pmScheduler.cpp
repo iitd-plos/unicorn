@@ -1363,7 +1363,7 @@ const pmProcessingElement* pmScheduler::RandomlySelectStealTarget(const pmProces
 
 	EXCEPTION_ASSERT(lStub);
 
-	pmTaskExecStats& lTaskExecStats = pTask->GetTaskExecStats();
+    pmTaskExecStats& lTaskExecStats = pTask->GetTaskExecStats();
 
 	uint lAttempts = lTaskExecStats.GetStealAttempts(lStub);
     
@@ -1382,7 +1382,12 @@ const pmProcessingElement* pmScheduler::RandomlySelectStealTarget(const pmProces
 
 #ifdef ENABLE_TWO_LEVEL_STEALING
 #ifdef USE_STEAL_AGENT_PER_NODE
-    if(pTask->GetStealAgent()->HasAnotherStubToStealFrom(pStealingDevice->GetLocalExecutionStub(), pShouldMultiAssign))
+    // Keep a higher bias towards local node if there is anything stealable. In this case, the remote node gets skipped.
+    // In 25% cases, a local steal is attempted before a remote steal.
+    
+    srand((uint)time(NULL));
+
+    if((rand() % 4) == 0 && pTask->GetStealAgent()->HasAnotherStubToStealFrom(pStealingDevice->GetLocalExecutionStub(), pShouldMultiAssign))
         return PM_LOCAL_MACHINE;
 #endif
 #endif

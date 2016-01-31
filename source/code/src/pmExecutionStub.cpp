@@ -773,15 +773,17 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
                 lTotalExecRate += pLocalExecutionRate;
             }
 
-            double lTotalExecutionTimeRequired = pAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time reqd
+            double lTotalExecutionTimeRequired = pAvailableSubtasks / lTotalExecRate;	// if subtasks are divided between both devices, how much time is required
             double lLocalExecutionTimeForAllSubtasks = pAvailableSubtasks / pLocalExecutionRate;	// if all subtasks are executed locally, how much time it will take
             double lDividedExecutionTimeForAllSubtasks = lTotalExecutionTimeRequired * ((pRequestingDevice->GetMachine() != PM_LOCAL_MACHINE) ? SUBTASK_TRANSFER_OVERHEAD : 1.0);
             
             if(lLocalExecutionTimeForAllSubtasks > lDividedExecutionTimeForAllSubtasks)
             {
-                double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
-                lStealCount = (ulong)(lTimeDiff * pLocalExecutionRate);
+//                double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
+//                lStealCount = (ulong)(lTimeDiff * pLocalExecutionRate);
                 
+                lStealCount = (ulong)(lDividedExecutionTimeForAllSubtasks * pRequestingDeviceExecutionRate);
+
                 // Minimum unit of steal is a subtask. Since it can't be divided any further, so a perfect balance can't be achieved.
                 // Instead, check whether it is beneficial to assign one more subtask to the requesting device or not.
                 if(lStealCount < pAvailableSubtasks && (lStealCount + 1) / pRequestingDeviceExecutionRate < (pAvailableSubtasks - lStealCount) / pLocalExecutionRate)
@@ -2267,13 +2269,15 @@ ulong pmExecutionStub::ExecuteWrapper(const pmSubtaskRange& pCurrentRange, const
                 {
                     double lStealTime = lParentRange.task->GetStealAgent()->GetAverageStealWaitTime(this);
                     double lDataFetchTime = lParentRange.task->GetStealAgent()->GetAverageSubtaskSubscriptionFetchTime(this);
+                    double lSubtaskExecTime = 1.0/lRate;
                     
                     if(lStealTime != std::numeric_limits<double>::max() && lDataFetchTime != std::numeric_limits<double>::max())
                     {
-                        double lTotalWait = lStealTime + lDataFetchTime;
+                        double lTotalWait = lStealTime + (lDataFetchTime + lSubtaskExecTime)/2.0;
                         
                         ulong lMaxAggressiveness = lEndSubtask - lStartSubtask;
                         ulong lRequiredAggressiveness = (ulong)(lTotalWait * lRate);
+
                         lAggressiveness = std::min<ulong>(lMaxAggressiveness, lRequiredAggressiveness);
                     }
                 }
