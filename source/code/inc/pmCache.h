@@ -139,7 +139,7 @@ struct mapContainer
         pIterInvalidated = true;
 
         frequencyType lFrequency = pIter->first + 1;
-        mappedType& lMappedValue = pIter->second;
+        mappedType lMappedValue = pIter->second;
         
         mCacheMap.erase(pIter);
         
