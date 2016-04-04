@@ -180,9 +180,20 @@ void serialImageFilter(void* pImageData, size_t pFilterRadius, char* pSerialOutp
     
 bool parallelImageFilter(pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy pSchedulingPolicy, pmMemHandle pInputMemHandle, pmMemHandle pOutputMemHandle, const char* pImagePath, int pFilterRadius, char pFilter[MAX_FILTER_DIM][MAX_FILTER_DIM])
 {
+#ifdef USE_VARIABLE_SIZED_SUBTASKS
+    // Image is logically divided into two halves along its height. The top half uses subtasks of size TILE_DIM*TILE_DIM while the bottom half uses subtasks of size (2*TILE_DIM)*(2*TILE_DIM)
+    size_t lHalfHeight = ((gImageHeight / 2) / TILE_DIM) * TILE_DIM;
+    unsigned int lSubtasks = ((unsigned int)gImageWidth/TILE_DIM + ((unsigned int)gImageWidth%TILE_DIM ? 1 : 0)) * ((unsigned int)lHalfHeight/TILE_DIM);
+    unsigned int lFirstSubtaskWithDifferentSize = lSubtasks;
+    
+    size_t lRemainingHeight = gImageHeight - lHalfHeight;
+    size_t lDoubleTimeDim = 2 * TILE_DIM;
+    lSubtasks += ((unsigned int)gImageWidth/lDoubleTimeDim + ((unsigned int)gImageWidth%lDoubleTimeDim ? 1 : 0)) * ((unsigned int)lRemainingHeight/lDoubleTimeDim + ((unsigned int)lRemainingHeight%lDoubleTimeDim ? 1 : 0));
+#else
 	// Number of subtasks is equal to the number of tiles in the image
     unsigned int lSubtasks = ((unsigned int)gImageWidth/TILE_DIM + ((unsigned int)gImageWidth%TILE_DIM ? 1 : 0)) * ((unsigned int)gImageHeight/TILE_DIM + ((unsigned int)gImageHeight%TILE_DIM ? 1 : 0));
-
+#endif
+    
     pmTaskMem lTaskMem[MAX_MEM_INDICES];
 
 #ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
@@ -205,7 +216,11 @@ bool parallelImageFilter(pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy p
     lTaskConf.imageOffset = gImageOffset;
     lTaskConf.imageBytesPerLine = gImageBytesPerLine;
     lTaskConf.filterRadius = pFilterRadius;
-    
+#ifdef USE_VARIABLE_SIZED_SUBTASKS
+    lTaskConf.firstSubtaskIdWithDifferentSize = lFirstSubtaskWithDifferentSize;
+    lTaskConf.firstImageRowWithDifferentSubtaskSizes = lHalfHeight;
+#endif
+
     int lFilterDim = 2 * pFilterRadius + 1;
     for(int i = 0; i < lFilterDim; ++i)
         for(int j = 0;  j < lFilterDim; ++j)
@@ -231,6 +246,29 @@ bool parallelImageFilter(pmCallbackHandle* pCallbackHandle, pmSchedulingPolicy p
     
 bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubtaskId, pmSplitInfo& pSplitInfo, int* pStartCol, int* pEndCol, int* pStartRow, int* pEndRow)
 {
+#ifdef USE_VARIABLE_SIZED_SUBTASKS
+    if(pSubtaskId < pTaskConf->firstSubtaskIdWithDifferentSize)
+    {
+        unsigned int lTilesPerRow = (pTaskConf->imageWidth/TILE_DIM + (pTaskConf->imageWidth%TILE_DIM ? 1 : 0));
+
+        // Subscribe to one tile of the output matrix
+        *pStartCol = (int)((pSubtaskId % lTilesPerRow) * TILE_DIM);
+        *pEndCol = *pStartCol + TILE_DIM;
+        *pStartRow = (int)((pSubtaskId / lTilesPerRow) * TILE_DIM);
+        *pEndRow = *pStartRow + TILE_DIM;
+    }
+    else
+    {
+        unsigned int lTileDim = 2 * TILE_DIM;
+        unsigned int lTilesPerRow = (pTaskConf->imageWidth/lTileDim + (pTaskConf->imageWidth%lTileDim ? 1 : 0));
+
+        // Subscribe to one tile of the output matrix
+        *pStartCol = (int)(((pSubtaskId - pTaskConf->firstSubtaskIdWithDifferentSize) % lTilesPerRow) * lTileDim);
+        *pEndCol = *pStartCol + lTileDim;
+        *pStartRow = pTaskConf->firstImageRowWithDifferentSubtaskSizes + (int)(((pSubtaskId - pTaskConf->firstSubtaskIdWithDifferentSize) / lTilesPerRow) * lTileDim);
+        *pEndRow = *pStartRow + lTileDim;
+    }
+#else
     unsigned int lTilesPerRow = (pTaskConf->imageWidth/TILE_DIM + (pTaskConf->imageWidth%TILE_DIM ? 1 : 0));
 
 	// Subscribe to one tile of the output matrix
@@ -238,7 +276,8 @@ bool GetSubtaskSubscription(imageFilterTaskConf* pTaskConf, unsigned long pSubta
     *pEndCol = *pStartCol + TILE_DIM;
     *pStartRow = (int)((pSubtaskId / lTilesPerRow) * TILE_DIM);
     *pEndRow = *pStartRow + TILE_DIM;
-    
+#endif
+
     if((size_t)*pEndCol > pTaskConf->imageWidth)
         *pEndCol = pTaskConf->imageWidth;
 

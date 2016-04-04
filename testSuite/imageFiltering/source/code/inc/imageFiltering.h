@@ -8,6 +8,7 @@ namespace imageFiltering
 #define IMAGE_SIZE ((size_t)gImageWidth * gImageHeight * PIXEL_COUNT)
     
 #define LOAD_IMAGE_INTO_ADDRESS_SPACE
+//#define USE_VARIABLE_SIZED_SUBTASKS
 //#define USE_ELLIPTICAL_FILTER
     
 #ifdef LOAD_IMAGE_INTO_ADDRESS_SPACE
@@ -67,6 +68,10 @@ typedef struct imageFilterTaskConf
     size_t imageOffset;
     size_t imageBytesPerLine;
     size_t filterRadius;
+#ifdef USE_VARIABLE_SIZED_SUBTASKS
+    size_t firstSubtaskIdWithDifferentSize;
+    size_t firstImageRowWithDifferentSubtaskSizes;
+#endif
     char imagePath[MAX_IMAGE_PATH_LENGTH];
     char filter[MAX_FILTER_DIM][MAX_FILTER_DIM];
 } imageFilterTaskConf;
