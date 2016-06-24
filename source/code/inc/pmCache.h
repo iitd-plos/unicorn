@@ -25,6 +25,7 @@
 #include "pmResourceLock.h"
 
 #include <list>
+#include <random>
 #include <unordered_map>
 
 namespace pm
@@ -35,7 +36,8 @@ enum pmCacheEvictionPolicy
     LEAST_RECENTLY_USED,
     MOST_RECENTLY_USED,
     LEAST_FREQUENTLY_USED,
-    MOST_FREQUENTLY_USED
+    MOST_FREQUENTLY_USED,
+    RANDOM_EVICTION
 };
 
 namespace cacheInternals
@@ -101,7 +103,7 @@ struct listContainer
                 }
             }
         }
-        else if(pEvictionPolicy == MOST_RECENTLY_USED)
+        else if(pEvictionPolicy == MOST_RECENTLY_USED || pEvictionPolicy == RANDOM_EVICTION)
         {
             typename decltype(mCacheList)::iterator lIter = mCacheList.begin(), lEndIter = mCacheList.end();
             for(; lIter != lEndIter; ++lIter)
@@ -116,6 +118,29 @@ struct listContainer
                 }
             }
         }
+    }
+};
+    
+template<typename mappedType>
+struct listContainerWithRandomEviction : public listContainer<mappedType>
+{
+    typedef typename listContainer<mappedType>::iteratorType iteratorType;
+    using listContainer<mappedType>::mCacheList;
+
+    iteratorType onAccess(iteratorType pIter, bool& pIterInvalidated)
+    {
+        pIterInvalidated = false;
+
+        iteratorType lIter = mCacheList.begin();
+        
+        std::random_device lRandomDevice;
+        std::mt19937 lGenerator(lRandomDevice());
+
+        size_t lAdvanceAmount = lGenerator() % mCacheList.size();
+        std::advance(lIter, lAdvanceAmount);
+        
+        mCacheList.splice(mCacheList.begin(), mCacheList, lIter);
+        return mCacheList.begin();
     }
 };
 
@@ -205,6 +230,12 @@ template<typename mappedType, pmCacheEvictionPolicy __evictionPolicy>
 struct containerSelector
 {
     typedef listContainer<mappedType> abstractContainerType;
+};
+    
+template<typename mappedType>
+struct containerSelector<mappedType, RANDOM_EVICTION>
+{
+    typedef listContainerWithRandomEviction<mappedType> abstractContainerType;
 };
 
 template<typename mappedType>
