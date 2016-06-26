@@ -396,50 +396,59 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 findReductionOpAndDataType(lEventDetails.task->GetCallbackUnit()->GetDataReductionCB()->GetCallback(), lOpType, lDataType);
 
                 char* lTargetMem = (static_cast<char*>(lShadowMem) + lOffset);
-
+                
                 ulong lCompressedLength = 0;
                 std::shared_ptr<void> lCompressedMem;
 
-                switch(lDataType)
+                // Scope for task profiling
                 {
-                    case REDUCE_INTS:
+                #ifdef ENABLE_TASK_PROFILING
+                    #ifdef DUMP_DATA_COMPRESSION_STATISTICS
+                        pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEventDetails.task->GetTaskProfiler(), taskProfiler::DATA_COMPRESSION);
+                    #endif
+                #endif
+
+                    switch(lDataType)
                     {
-                        lCompressedMem = pmUtility::CompressForSentinel<int>((int*)lTargetMem, 0, lLength / sizeof(int), lCompressedLength);
-                        break;
+                        case REDUCE_INTS:
+                        {
+                            lCompressedMem = pmUtility::CompressForSentinel<int>((int*)lTargetMem, 0, lLength / sizeof(int), lCompressedLength);
+                            break;
+                        }
+                            
+                        case REDUCE_UNSIGNED_INTS:
+                        {
+                            lCompressedMem = pmUtility::CompressForSentinel<uint>((uint*)lTargetMem, 0, lLength / sizeof(uint), lCompressedLength);
+                            break;
+                        }
+                            
+                        case REDUCE_LONGS:
+                        {
+                            lCompressedMem = pmUtility::CompressForSentinel<long>((long*)lTargetMem, 0, lLength / sizeof(long), lCompressedLength);
+                            break;
+                        }
+                            
+                        case REDUCE_UNSIGNED_LONGS:
+                        {
+                            lCompressedMem = pmUtility::CompressForSentinel<ulong>((ulong*)lTargetMem, 0, lLength / sizeof(ulong), lCompressedLength);
+                            break;
+                        }
+                            
+                        case REDUCE_FLOATS:
+                        {
+                            lCompressedMem = pmUtility::CompressForSentinel<float>((float*)lTargetMem, 0, lLength / sizeof(float), lCompressedLength);
+                            break;
+                        }
+                            
+                        case REDUCE_DOUBLES:
+                        {
+                            lCompressedMem = pmUtility::CompressForSentinel<double>((double*)lTargetMem, 0, lLength / sizeof(double), lCompressedLength);
+                            break;
+                        }
+                            
+                        default:
+                            PMTHROW(pmFatalErrorException());
                     }
-                        
-                    case REDUCE_UNSIGNED_INTS:
-                    {
-                        lCompressedMem = pmUtility::CompressForSentinel<uint>((uint*)lTargetMem, 0, lLength / sizeof(uint), lCompressedLength);
-                        break;
-                    }
-                        
-                    case REDUCE_LONGS:
-                    {
-                        lCompressedMem = pmUtility::CompressForSentinel<long>((long*)lTargetMem, 0, lLength / sizeof(long), lCompressedLength);
-                        break;
-                    }
-                        
-                    case REDUCE_UNSIGNED_LONGS:
-                    {
-                        lCompressedMem = pmUtility::CompressForSentinel<ulong>((ulong*)lTargetMem, 0, lLength / sizeof(ulong), lCompressedLength);
-                        break;
-                    }
-                        
-                    case REDUCE_FLOATS:
-                    {
-                        lCompressedMem = pmUtility::CompressForSentinel<float>((float*)lTargetMem, 0, lLength / sizeof(float), lCompressedLength);
-                        break;
-                    }
-                        
-                    case REDUCE_DOUBLES:
-                    {
-                        lCompressedMem = pmUtility::CompressForSentinel<double>((double*)lTargetMem, 0, lLength / sizeof(double), lCompressedLength);
-                        break;
-                    }
-                        
-                    default:
-                        PMTHROW(pmFatalErrorException());
                 }
 
                 finalize_ptr<subtaskMemoryReduceStruct> lData(new subtaskMemoryReduceStruct(*lEventDetails.task->GetOriginatingHost(), lEventDetails.task->GetSequenceNumber(), lEventDetails.subtaskId, lOffset, (lCompressedMem.get() ? lCompressedLength : lLength), std::numeric_limits<int>::max(), *PM_LOCAL_MACHINE, (lCompressedMem.get() != NULL)));

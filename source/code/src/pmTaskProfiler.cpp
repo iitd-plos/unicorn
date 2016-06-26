@@ -54,6 +54,7 @@ static const char* profileName[] =
     (char*)"AFFINITY_SUBTASK_MAPPINGS",
     (char*)"AFFINITY_USE_OVERHEAD",
     (char*)"FLUSH_MEMORY_OWNERSHIPS",
+    (char*)"DATA_COMPRESSION",
     (char*)"UNIVERSAL"
 };
 

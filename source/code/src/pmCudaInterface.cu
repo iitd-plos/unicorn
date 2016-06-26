@@ -21,6 +21,7 @@
 #ifdef SUPPORT_CUDA
 
 #include "pmCudaInterface.h"
+#include "pmDataTypesHelper.h"
 
 #include "cuda.h"
 #include "cuda_runtime_api.h"
@@ -457,7 +458,11 @@ bool pmCudaInterface::CompressForSentinel(pmReductionDataType pReductionDataType
     return false;
 }
 
-pmStatus pmCudaInterface::InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, const pmSubtaskInfo& pSubtaskInfoCuda, const pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, const std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, const std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, pmStatus* pStatusCudaPtr, pmCudaStreamAutoPtr& pStreamPtr, pmReductionDataType pSentinelCompressionReductionDataType, void* pCompressedPtr)
+pmStatus pmCudaInterface::InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTaskInfo, const pmTaskInfo& pTaskInfoCuda, const pmDeviceInfo& pDeviceInfo, void* pDeviceInfoCudaPtr, const pmSubtaskInfo& pSubtaskInfoCuda, const pmCudaLaunchConf& pCudaLaunchConf, pmSubtaskCallback_GPU_CUDA pKernelPtr, pmSubtaskCallback_GPU_Custom pCustomKernelPtr, const std::vector<pmCudaMemcpyCommand>& pHostToDeviceCommands, const std::vector<pmCudaMemcpyCommand>& pDeviceToHostCommands, pmStatus* pStatusCudaPtr, pmCudaStreamAutoPtr& pStreamPtr, pmReductionDataType pSentinelCompressionReductionDataType, void* pCompressedPtr
+#ifdef ENABLE_TASK_PROFILING
+   , pmTaskProfiler* pTaskProfiler
+#endif
+   )
 {
     cudaStream_t lStream = (cudaStream_t)(pStreamPtr.GetStream());
 
@@ -477,7 +482,19 @@ pmStatus pmCudaInterface::InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTas
     uint lNonSentinelCount = 0;
 
     if(pSentinelCompressionReductionDataType != MAX_REDUCTION_DATA_TYPES && pCompressedPtr)
+    {
+    #ifdef DUMP_DATA_COMPRESSION_STATISTICS
+        #ifdef ENABLE_TASK_PROFILING
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTaskProfiler, taskProfiler::DATA_COMPRESSION);
+        #endif
+        
         lCompressed = CompressForSentinel(pSentinelCompressionReductionDataType, (*pDeviceToHostCommands.begin()).srcPtr, (*pDeviceToHostCommands.begin()).size, pCompressedPtr, lCompressedSize, lNonSentinelCount);
+
+        pmCompressionDataRecorder::RecordCompressionData((*pDeviceToHostCommands.begin()).size, lCompressedSize);
+    #else
+        lCompressed = CompressForSentinel(pSentinelCompressionReductionDataType, (*pDeviceToHostCommands.begin()).srcPtr, (*pDeviceToHostCommands.begin()).size, pCompressedPtr, lCompressedSize, lNonSentinelCount);
+    #endif
+    }
 
     if(!lCompressed)
     {

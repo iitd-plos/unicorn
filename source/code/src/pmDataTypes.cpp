@@ -646,8 +646,20 @@ void pmMemCopyTracker::End(const std::string& pKey)
 }
 
 #endif
-
     
+    
+#ifdef DUMP_DATA_COMPRESSION_STATISTICS
+void pmCompressionDataRecorder::RecordCompressionData(ulong pUncompresedSize, ulong pCompressedSize)
+{
+    std::stringstream lStream;
+    
+    lStream << pUncompresedSize << " bytes compressed to " << pCompressedSize << " (" << 100.0 * ((double)(pUncompresedSize - pCompressedSize) / pUncompresedSize) << "% compression schieved)"<< std::endl;
+    
+    pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+}
+#endif
+
+
 #ifdef SUPPORT_SPLIT_SUBTASKS
 bool operator<(const pmSplitInfo& pInfo1, const pmSplitInfo& pInfo2)
 {

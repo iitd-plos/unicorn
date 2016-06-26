@@ -194,7 +194,11 @@ pmStatus pmDispatcherCUDA::InvokeKernel(pmTask* pTask, pmStubCUDA* pStub, const 
     DEBUG_EXCEPTION_ASSERT(lSubtaskSecondaryBuffers.statusCudaPtr);
     pmStatus* lStatusCudaPtr = (pmStatus*)lSubtaskSecondaryBuffers.statusCudaPtr;
 
-	return pmCudaInterface::InvokeKernel(pStub, pTaskInfo, pTaskInfoCuda, pStub->GetProcessingElement()->GetDeviceInfo(), lDeviceInfoCudaPtr, lSubtaskInfoCuda, pCudaLaunchConf, pKernelPtr, pCustomKernelPtr, pHostToDeviceCommands, pDeviceToHostCommands, lStatusCudaPtr, pStreamPtr, pSentinelCompressionReductionDataType, lSubtaskSecondaryBuffers.compressedMemCudaPtr);
+	return pmCudaInterface::InvokeKernel(pStub, pTaskInfo, pTaskInfoCuda, pStub->GetProcessingElement()->GetDeviceInfo(), lDeviceInfoCudaPtr, lSubtaskInfoCuda, pCudaLaunchConf, pKernelPtr, pCustomKernelPtr, pHostToDeviceCommands, pDeviceToHostCommands, lStatusCudaPtr, pStreamPtr, pSentinelCompressionReductionDataType, lSubtaskSecondaryBuffers.compressedMemCudaPtr
+#ifdef ENABLE_TASK_PROFILING
+         , pTask->GetTaskProfiler()
+#endif
+     );
 }
     
 void* pmDispatcherCUDA::GetRuntimeHandle()

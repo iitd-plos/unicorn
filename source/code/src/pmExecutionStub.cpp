@@ -2704,8 +2704,8 @@ void pmExecutionStub::currentSubtaskRangeStats::ResetEndSubtaskId(ulong pEndSubt
 /* class pmStubCPU */
 pmStubCPU::pmStubCPU(size_t pCoreId, uint pDeviceIndexOnMachine)
 	: pmExecutionStub(pDeviceIndexOnMachine)
+    , mCoreId(pCoreId)
 {
-	mCoreId = pCoreId;
 }
 
 pmStubCPU::~pmStubCPU()
@@ -2714,7 +2714,9 @@ pmStubCPU::~pmStubCPU()
 
 void pmStubCPU::BindToProcessingElement()
 {
-//	 SetProcessorAffinity((int)mCoreId);
+#ifdef BIND_PROCESSING_ELEMENTS_TO_CPU_CORES
+	 SetProcessorAffinity((int)mCoreId);
+#endif
 }
 
 size_t pmStubCPU::GetCoreId()
@@ -3948,6 +3950,12 @@ void pmStubCUDA::WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pSubtaskId
 #ifdef SUPPORT_CUDA_COMPUTE_MEM_TRANSFER_OVERLAP
     if(lSentinelCompression)
     {
+    #ifdef ENABLE_TASK_PROFILING
+        #ifdef DUMP_DATA_COMPRESSION_STATISTICS
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_COMPRESSION);
+        #endif
+    #endif
+
         void* lDataPtr = reinterpret_cast<void*>(reinterpret_cast<size_t>(lSubtaskInfo.memInfo[0].ptr));
         UncompressSentinelCompressedData(mSubtaskPointersMap[pSubtaskId][0].pinnedPtr, lDataPtr, pTask->GetAddressSpaces()[0]->GetLength(), lReductionDataType);
     }

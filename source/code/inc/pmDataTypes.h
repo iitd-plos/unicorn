@@ -25,6 +25,7 @@
 #include "pmPublicUtilities.h"
 #include "pmInternalDefinitions.h"
 #include "pmErrorDefinitions.h"
+#include "pmDataTypesHelper.h"
 
 #include <cstdlib>
 #include <setjmp.h>
@@ -429,49 +430,6 @@ namespace pm
     };
 #endif
 
-#endif
-
-#ifdef ENABLE_TASK_PROFILING
-    class pmTaskProfiler;
-
-    namespace taskProfiler
-    {
-        enum profileType
-        {
-            INPUT_MEMORY_TRANSFER,
-            OUTPUT_MEMORY_TRANSFER,
-            TOTAL_MEMORY_TRANSFER,    /* For internal use only */
-            DATA_PARTITIONING,
-            SUBTASK_EXECUTION,
-            LOCAL_DATA_REDUCTION,
-            REMOTE_DATA_REDUCTION,
-            DATA_REDISTRIBUTION,
-            SHADOW_MEM_COMMIT,
-            SUBTASK_STEAL_WAIT,
-            SUBTASK_STEAL_SERVE,
-            STUB_WAIT_ON_NETWORK,
-            COPY_TO_PINNED_MEMORY,
-            COPY_FROM_PINNED_MEMORY,
-            CUDA_COMMAND_PREPARATION,
-            PREPROCESSOR_TASK_EXECUTION,
-            AFFINITY_SUBTASK_MAPPINGS,
-            AFFINITY_USE_OVERHEAD,
-            FLUSH_MEMORY_OWNERSHIPS,
-            UNIVERSAL, /* For internal use only */
-            MAX_PROFILE_TYPES
-        };
-    }
-
-    class pmRecordProfileEventAutoPtr
-    {
-        public:
-            pmRecordProfileEventAutoPtr(pmTaskProfiler* pTaskProfiler, taskProfiler::profileType pProfileType);
-            ~pmRecordProfileEventAutoPtr();
-        
-        private:
-            pmTaskProfiler* mTaskProfiler;
-            taskProfiler::profileType mProfileType;
-    };
 #endif
     
     template<pmReductionOpType pOperation, pmReductionDataType pDataType>
