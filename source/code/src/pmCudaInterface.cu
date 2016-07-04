@@ -485,7 +485,7 @@ pmStatus pmCudaInterface::InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTas
     {
     #ifdef DUMP_DATA_COMPRESSION_STATISTICS
         #ifdef ENABLE_TASK_PROFILING
-            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTaskProfiler, taskProfiler::DATA_COMPRESSION);
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTaskProfiler, taskProfiler::GPU_DATA_COMPRESSION);
         #endif
         
         lCompressed = CompressForSentinel(pSentinelCompressionReductionDataType, (*pDeviceToHostCommands.begin()).srcPtr, (*pDeviceToHostCommands.begin()).size, pCompressedPtr, lCompressedSize, lNonSentinelCount);

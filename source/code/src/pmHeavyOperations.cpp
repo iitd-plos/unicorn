@@ -405,7 +405,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 {
                 #ifdef ENABLE_TASK_PROFILING
                     #ifdef DUMP_DATA_COMPRESSION_STATISTICS
-                        pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEventDetails.task->GetTaskProfiler(), taskProfiler::DATA_COMPRESSION);
+                        pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(lEventDetails.task->GetTaskProfiler(), taskProfiler::NETWORK_DATA_COMPRESSION);
                     #endif
                 #endif
 

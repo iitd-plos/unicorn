@@ -3954,7 +3954,7 @@ void pmStubCUDA::WaitForSubtaskExecutionToFinish(pmTask* pTask, ulong pSubtaskId
     {
     #ifdef ENABLE_TASK_PROFILING
         #ifdef DUMP_DATA_COMPRESSION_STATISTICS
-            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::DATA_COMPRESSION);
+            pmRecordProfileEventAutoPtr lRecordProfileEventAutoPtr(pTask->GetTaskProfiler(), taskProfiler::GPU_DATA_COMPRESSION);
         #endif
     #endif
 

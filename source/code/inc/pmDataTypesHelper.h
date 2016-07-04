@@ -50,7 +50,8 @@ namespace taskProfiler
         AFFINITY_SUBTASK_MAPPINGS,
         AFFINITY_USE_OVERHEAD,
         FLUSH_MEMORY_OWNERSHIPS,
-        DATA_COMPRESSION,
+        NETWORK_DATA_COMPRESSION,
+        GPU_DATA_COMPRESSION,
         UNIVERSAL, /* For internal use only */
         MAX_PROFILE_TYPES
     };
