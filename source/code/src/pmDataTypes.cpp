@@ -654,9 +654,9 @@ void pmCompressionDataRecorder::RecordCompressionData(ulong pUncompresedSize, ul
     std::stringstream lStream;
     
     if(pIsDataForNetworkTransfer)
-        lStream << "Network compression: " << pUncompresedSize << " bytes compressed to " << pCompressedSize << " (" << 100.0 * ((double)(pUncompresedSize - pCompressedSize) / pUncompresedSize) << "% compression schieved)"<< std::endl;
+        lStream << "Network compression: " << pUncompresedSize << " bytes compressed to " << pCompressedSize << " (" << 100.0 * ((double)(pUncompresedSize - pCompressedSize) / pUncompresedSize) << "% compression achieved)"<< std::endl;
     else
-        lStream << "GPU->CPU compression: " << pUncompresedSize << " bytes compressed to " << pCompressedSize << " (" << 100.0 * ((double)(pUncompresedSize - pCompressedSize) / pUncompresedSize) << "% compression schieved)"<< std::endl;
+        lStream << "GPU->CPU compression: " << pUncompresedSize << " bytes compressed to " << pCompressedSize << " (" << 100.0 * ((double)(pUncompresedSize - pCompressedSize) / pUncompresedSize) << "% compression achieved)"<< std::endl;
     
     pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
 }
