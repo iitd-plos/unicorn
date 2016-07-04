@@ -490,7 +490,7 @@ pmStatus pmCudaInterface::InvokeKernel(pmStubCUDA* pStub, const pmTaskInfo& pTas
         
         lCompressed = CompressForSentinel(pSentinelCompressionReductionDataType, (*pDeviceToHostCommands.begin()).srcPtr, (*pDeviceToHostCommands.begin()).size, pCompressedPtr, lCompressedSize, lNonSentinelCount);
 
-        pmCompressionDataRecorder::RecordCompressionData((*pDeviceToHostCommands.begin()).size, lCompressedSize);
+        pmCompressionDataRecorder::RecordCompressionData((*pDeviceToHostCommands.begin()).size, lCompressedSize, false);
     #else
         lCompressed = CompressForSentinel(pSentinelCompressionReductionDataType, (*pDeviceToHostCommands.begin()).srcPtr, (*pDeviceToHostCommands.begin()).size, pCompressedPtr, lCompressedSize, lNonSentinelCount);
     #endif

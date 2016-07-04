@@ -162,7 +162,7 @@ public:
         pCompressedLength = lIndex * sizeof(T);
 
     #ifdef DUMP_DATA_COMPRESSION_STATISTICS
-        pmCompressionDataRecorder::RecordCompressionData(pCount * sizeof(T), pCompressedLength);
+        pmCompressionDataRecorder::RecordCompressionData(pCount * sizeof(T), pCompressedLength, true);
     #endif
         
         return lMemPtr;

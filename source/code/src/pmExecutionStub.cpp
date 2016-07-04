@@ -3838,6 +3838,7 @@ bool pmStubCUDA::CheckSentinelCompression(pmTask* pTask, ulong pSubtaskId, pmSpl
 {
     bool lSentinelCompression = false;
 
+#ifndef TURN_OFF_GPU_SENTINEL_COMPRESSION
     if(pTask->GetCallbackUnit()->GetDataReductionCB() && (pTask->GetAddressSpaces().size() == 1))
     {
         pmAddressSpace* lAddressSpace = pTask->GetAddressSpaces()[0];
@@ -3861,6 +3862,7 @@ bool pmStubCUDA::CheckSentinelCompression(pmTask* pTask, ulong pSubtaskId, pmSpl
             }
         }
     }
+#endif
     
     return lSentinelCompression;
 }

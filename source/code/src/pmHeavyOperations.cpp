@@ -400,6 +400,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                 ulong lCompressedLength = 0;
                 std::shared_ptr<void> lCompressedMem;
 
+            #ifndef TURN_OFF_NETWORK_SENTINEL_COMPRESSION
                 // Scope for task profiling
                 {
                 #ifdef ENABLE_TASK_PROFILING
@@ -450,6 +451,7 @@ void pmHeavyOperationsThread::ProcessEvent(heavyOperationsEvent& pEvent)
                             PMTHROW(pmFatalErrorException());
                     }
                 }
+            #endif
 
                 finalize_ptr<subtaskMemoryReduceStruct> lData(new subtaskMemoryReduceStruct(*lEventDetails.task->GetOriginatingHost(), lEventDetails.task->GetSequenceNumber(), lEventDetails.subtaskId, lOffset, (lCompressedMem.get() ? lCompressedLength : lLength), std::numeric_limits<int>::max(), *PM_LOCAL_MACHINE, (lCompressedMem.get() != NULL)));
                 pmCommunicatorCommandPtr lCommand = pmCommunicatorCommand<subtaskMemoryReduceStruct>::CreateSharedPtr(lEventDetails.task->GetPriority(), SEND, SUBTASK_MEMORY_REDUCE_TAG, lEventDetails.machine, SUBTASK_MEMORY_REDUCE_STRUCT, lData, 1, NULL, (lCompressedMem.get() ? lCompressedMem.get() : lTargetMem));

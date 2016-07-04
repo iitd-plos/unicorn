@@ -72,7 +72,7 @@ private:
 class pmCompressionDataRecorder
 {
 public:
-    static void RecordCompressionData(ulong pUncompresedSize, ulong pCompressedSize);
+    static void RecordCompressionData(ulong pUncompresedSize, ulong pCompressedSize, bool pIsDataForNetworkTransfer);
 };
 #endif
 

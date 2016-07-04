@@ -649,11 +649,14 @@ void pmMemCopyTracker::End(const std::string& pKey)
     
     
 #ifdef DUMP_DATA_COMPRESSION_STATISTICS
-void pmCompressionDataRecorder::RecordCompressionData(ulong pUncompresedSize, ulong pCompressedSize)
+void pmCompressionDataRecorder::RecordCompressionData(ulong pUncompresedSize, ulong pCompressedSize, bool pIsDataForNetworkTransfer)
 {
     std::stringstream lStream;
     
-    lStream << pUncompresedSize << " bytes compressed to " << pCompressedSize << " (" << 100.0 * ((double)(pUncompresedSize - pCompressedSize) / pUncompresedSize) << "% compression schieved)"<< std::endl;
+    if(pIsDataForNetworkTransfer)
+        lStream << "Network compression: " << pUncompresedSize << " bytes compressed to " << pCompressedSize << " (" << 100.0 * ((double)(pUncompresedSize - pCompressedSize) / pUncompresedSize) << "% compression schieved)"<< std::endl;
+    else
+        lStream << "GPU->CPU compression: " << pUncompresedSize << " bytes compressed to " << pCompressedSize << " (" << 100.0 * ((double)(pUncompresedSize - pCompressedSize) / pUncompresedSize) << "% compression schieved)"<< std::endl;
     
     pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
 }
