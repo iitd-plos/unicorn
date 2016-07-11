@@ -654,6 +654,11 @@ void pmHeavyOperationsThread::ServeScatteredMemoryRequest(pmAddressSpace* pSrcAd
                 }
             #endif
 
+            #ifdef DUMP_DATA_TRANSFER_FREQUENCY
+                if(!pRequestingTask->ShouldSuppressTaskLogs())
+                    pSrcAddressSpace->RecordDataTransferFrequency(lScatteredInfo.offset, lScatteredInfo.size, lScatteredInfo.step, lScatteredInfo.count);
+            #endif
+                
                 pmAddressSpace* lOwnerAddressSpace = pmAddressSpace::FindAddressSpace(pmMachinePool::GetMachinePool()->GetMachine(lRangeOwner.memIdentifier.memOwnerHost), lRangeOwner.memIdentifier.generationNumber);
                 char* lBeginAddr = (char*)(lOwnerAddressSpace->GetMem());
 

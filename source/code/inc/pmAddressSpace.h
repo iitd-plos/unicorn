@@ -126,7 +126,11 @@ class pmAddressSpace : public pmBase
         void RecordMemTransfer(size_t pTransferSize);
 #endif
     
-        pmScatteredTransferMapType SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet);            
+#ifdef DUMP_DATA_TRANSFER_FREQUENCY
+        void RecordDataTransferFrequency(ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
+#endif
+
+        pmScatteredTransferMapType SetupRemoteRegionsForFetching(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo, ulong pPriority, std::set<pmCommandPtr>& pCommandsAlreadyIssuedSet);
         pmLinearTransferVectorType SetupRemoteRegionsForFetching(const pmSubscriptionInfo& pSubscriptionInfo, ulong pPriority, std::vector<pmCommandPtr>& pCommandVector);
         virtual pmRemoteRegionsInfoMapType GetRemoteRegionsInfo(const pmScatteredSubscriptionInfo& pScatteredSubscriptionInfo);
 

@@ -30,7 +30,7 @@
 #include "pmUtility.h"
 #include "pmHardware.h"
 
-#ifdef ENABLE_MEM_PROFILING
+#if defined(ENABLE_MEM_PROFILING) || defined(DUMP_DATA_TRANSFER_FREQUENCY)
 #include "pmLogger.h"
 #endif
 
@@ -158,14 +158,33 @@ void pmAddressSpace::Init()
 pmAddressSpace::~pmAddressSpace()
 {
 #ifdef ENABLE_MEM_PROFILING
-    std::stringstream lStream;
+    {
+        std::stringstream lStream;
 
-    lStream << "Address Space [" << (uint)(*mOwner) << ", " << mGenerationNumberOnOwner << "] memory transfer statistics on [Host " << pmGetHostId() << "] ..." << std::endl;
-    lStream << mMemReceived << " bytes memory received in " << mMemReceiveEvents << " events" << std::endl;
-    lStream << mMemTransferred << " bytes memory transferred in " << mMemTransferEvents << " events" << std::endl;
+        lStream << "Address Space [" << (uint)(*mOwner) << ", " << mGenerationNumberOnOwner << "] memory transfer statistics on [Host " << pmGetHostId() << "] ..." << std::endl;
+        lStream << mMemReceived << " bytes memory received in " << mMemReceiveEvents << " events" << std::endl;
+        lStream << mMemTransferred << " bytes memory transferred in " << mMemTransferEvents << " events" << std::endl;
 
-    pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
-#endif    
+        pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+    }
+#endif
+    
+#ifdef DUMP_DATA_TRANSFER_FREQUENCY
+    if(mAddressSpaceType == ADDRESS_SPACE_2D)
+    {
+        std::pair<ulong, ulong> lPair = dynamic_cast<pmMemoryDirectory2D*>(mDirectoryPtr.get())->GetTransferFrequencyStatistics();
+        
+        if(lPair.first)
+        {
+            std::stringstream lStream;
+
+            lStream << "Address Space [" << (uint)(*mOwner) << ", " << mGenerationNumberOnOwner << "] data transfer frequency statistics on [Host " << pmGetHostId() << "] ..." << std::endl;
+            lStream << lPair.first << " unique bytes transferred; " << lPair.second << " actual bytes transferred; " << (double)lPair.second/lPair.first << " transfer frequency per byte" << std::endl;
+
+            pmLogger::GetLogger()->LogDeferred(pmLogger::MINIMAL, pmLogger::INFORMATION, lStream.str().c_str());
+        }
+    }
+#endif
 
     // Auto lock/unlock scope
     {
@@ -1059,7 +1078,18 @@ void pmAddressSpace::RecordMemTransfer(size_t pTransferSize)
     ++mMemTransferEvents;
 }
 #endif
+    
+#ifdef DUMP_DATA_TRANSFER_FREQUENCY
+void pmAddressSpace::RecordDataTransferFrequency(ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+{
+    if(mAddressSpaceType == ADDRESS_SPACE_2D)
+    {
+        dynamic_cast<pmMemoryDirectory2D*>(mDirectoryPtr.get())->RecordDataTransferFrequency(pOffset, pLength, pStep, pCount);
+    }
+}
+#endif
 
+    
 /* class pmUserMemHandle */
 pmUserMemHandle::pmUserMemHandle(pmAddressSpace* pAddressSpace)
     : mAddressSpace(pAddressSpace)

@@ -729,6 +729,9 @@ pmMemoryDirectory2D::pmMemoryDirectory2D(ulong pAddressSpaceRows, ulong pAddress
     : pmMemoryDirectory(pMemoryIdentifierStruct)
     , mAddressSpaceRows(pAddressSpaceRows)
     , mAddressSpaceCols(pAddressSpaceCols)
+#ifdef DUMP_DATA_TRANSFER_FREQUENCY
+    , mTransferFrequencyLock __LOCK_NAME__("pmMemoryDirectory2D::mTransferFrequencyLock")
+#endif
 {}
 
 pmMemoryDirectory2D::boost_box_type pmMemoryDirectory2D::GetBox(ulong pOffset, ulong pLength, ulong pStep, ulong pCount) const
@@ -832,7 +835,6 @@ void pmMemoryDirectory2D::SetRangeOwnerInternal(const vmRangeOwner& pRangeOwner,
     lOverlappingBoxes.clear();
     mOwnershipRTree.query(boost::geometry::index::intersects(lBox), std::back_inserter(lOverlappingBoxes));
     EXCEPTION_ASSERT(lOverlappingBoxes.empty());
-
 #endif
 
     CombineAndInsertBox(lBox, pRangeOwner);
@@ -1031,6 +1033,75 @@ void pmMemoryDirectory2D::GetOwners(ulong pOffset, ulong pLength, ulong pStep, u
     
     GetOwnersInternal(pOffset, pLength, pStep, pCount, pOwnerships);
 }
+    
+#ifdef DUMP_DATA_TRANSFER_FREQUENCY
+void pmMemoryDirectory2D::RecordDataTransferFrequency(ulong pOffset, ulong pLength, ulong pStep, ulong pCount)
+{
+    EXCEPTION_ASSERT(mAddressSpaceCols == pStep);
+
+    FINALIZE_RESOURCE_PTR(dTransferFrequencyLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTransferFrequencyLock, Lock(), Unlock());
+    
+    boost_box_type lBox = GetBox(pOffset, pLength, pStep, pCount);
+    std::vector<boost_box_type> lUncoveredBoxes;
+    lUncoveredBoxes.emplace_back(lBox);
+    
+    std::vector<std::pair<boost_box_type, uint>> lOverlappingBoxes;
+    mTransferFrequencyRTree.query(boost::geometry::index::intersects(lBox), std::back_inserter(lOverlappingBoxes));
+
+    std::vector<boost_box_type> lRemainingBoxes;
+    lRemainingBoxes.reserve(4);
+    
+    for_each(lOverlappingBoxes, [&] (const std::pair<boost_box_type, uint>& pPair)
+    {
+        lRemainingBoxes.clear();
+        GetDifferenceOfBoxes(pPair.first, lBox, lRemainingBoxes);
+        
+        boost_box_type lIntersection;
+        if(!boost::geometry::intersection(pPair.first, lBox, lIntersection))
+            EXCEPTION_ASSERT(0);
+
+        mTransferFrequencyRTree.remove(pPair);
+        mTransferFrequencyRTree.insert(std::make_pair(lIntersection, pPair.second + 1));
+        
+        std::vector<boost_box_type> lUncoveredBoxesInternal;
+        for_each(lUncoveredBoxes, [&] (const boost_box_type& pUncoveredBox)
+        {
+            GetDifferenceOfBoxes(pUncoveredBox, lIntersection, lUncoveredBoxesInternal);
+        });
+        
+        std::swap(lUncoveredBoxes, lUncoveredBoxesInternal);
+
+        for_each(lRemainingBoxes, [&] (const boost_box_type& pBox)
+        {
+            mTransferFrequencyRTree.insert(std::make_pair(pBox, pPair.second));
+        });
+    });
+    
+    for_each(lUncoveredBoxes, [&] (const boost_box_type& pBox)
+    {
+        mTransferFrequencyRTree.insert(std::make_pair(pBox, 1));
+    });
+}
+    
+std::pair<ulong, ulong> pmMemoryDirectory2D::GetTransferFrequencyStatistics()
+{
+    FINALIZE_RESOURCE_PTR(dTransferFrequencyLock, RESOURCE_LOCK_IMPLEMENTATION_CLASS, &mTransferFrequencyLock, Lock(), Unlock());
+
+    ulong lUniqueBytesTransferred = 0;
+    ulong lActualBytesTransferred = 0;
+
+    std::for_each(mTransferFrequencyRTree.qbegin(boost::geometry::index::satisfies([] (decltype(mTransferFrequencyRTree)::value_type const&) {return true;})),
+                mTransferFrequencyRTree.qend(), [&] (decltype(mTransferFrequencyRTree)::value_type const& pPair)
+                {
+                    pmScatteredSubscriptionInfo lInfo = GetReverseBoxMapping(pPair.first);
+    
+                    lUniqueBytesTransferred += (lInfo.size * lInfo.count);
+                    lActualBytesTransferred += (pPair.second * lInfo.size * lInfo.count);
+                });
+
+    return std::make_pair(lUniqueBytesTransferred, lActualBytesTransferred);
+}
+#endif
 
 // Must be called with mOwnershipLock acquired
 void pmMemoryDirectory2D::GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships)

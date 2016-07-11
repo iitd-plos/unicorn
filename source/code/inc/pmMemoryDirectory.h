@@ -252,6 +252,10 @@ class pmMemoryDirectory2D : public pmMemoryDirectory
     typedef typename boost::geometry::index::rtree<std::pair<boost_box_type, vmRangeOwner>, boost::geometry::index::quadratic<16>> pmScatteredMemOwnershipRTree;
     typedef typename boost::geometry::index::rtree<std::pair<boost_box_type, regionFetchData2D>, boost::geometry::index::quadratic<16>> pmInFlightScatteredRegions;
 
+#ifdef DUMP_DATA_TRANSFER_FREQUENCY
+    typedef typename boost::geometry::index::rtree<std::pair<boost_box_type, uint>, boost::geometry::index::quadratic<16>> pmTransferFrequencyRTree;
+#endif
+    
 public:
     pmMemoryDirectory2D(ulong pAddressSpaceRows, ulong pAddressSpaceCols, const communicator::memoryIdentifierStruct& pMemoryIdentifierStruct);
 
@@ -279,6 +283,11 @@ public:
 
     virtual void CopyOrUpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, std::function<void (char*, ulong)>* pDataSource);
     virtual void UpdateReceivedMemory(pmAddressSpace* pAddressSpace, void* pAddressSpaceBaseAddr, pmTask* pLockingTask, ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
+    
+#ifdef DUMP_DATA_TRANSFER_FREQUENCY
+    void RecordDataTransferFrequency(ulong pOffset, ulong pLength, ulong pStep, ulong pCount);
+    std::pair<ulong, ulong> GetTransferFrequencyStatistics();
+#endif
 
 private:
     void GetOwnersInternal(ulong pOffset, ulong pLength, ulong pStep, ulong pCount, pmScatteredMemOwnership& pScatteredOwnerships);
@@ -306,6 +315,11 @@ private:
 
     pmScatteredMemOwnershipRTree mOwnershipRTree;
     pmInFlightScatteredRegions mInFlightRTree;
+
+#ifdef DUMP_DATA_TRANSFER_FREQUENCY
+    pmTransferFrequencyRTree mTransferFrequencyRTree;
+    RESOURCE_LOCK_IMPLEMENTATION_CLASS mTransferFrequencyLock;
+#endif
 };
 
 class pmScatteredSubscriptionFilter
