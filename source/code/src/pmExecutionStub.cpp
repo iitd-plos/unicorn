@@ -782,7 +782,7 @@ ulong pmExecutionStub::GetStealCount(pmTask* pTask, const pmProcessingElement* p
 //                double lTimeDiff = lLocalExecutionTimeForAllSubtasks - lDividedExecutionTimeForAllSubtasks;
 //                lStealCount = (ulong)(lTimeDiff * pLocalExecutionRate);
                 
-                lStealCount = (ulong)(lDividedExecutionTimeForAllSubtasks * pRequestingDeviceExecutionRate);
+                lStealCount = std::min((ulong)(lDividedExecutionTimeForAllSubtasks * pRequestingDeviceExecutionRate), pAvailableSubtasks);
 
                 // Minimum unit of steal is a subtask. Since it can't be divided any further, so a perfect balance can't be achieved.
                 // Instead, check whether it is beneficial to assign one more subtask to the requesting device or not.
