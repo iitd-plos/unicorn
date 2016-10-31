@@ -26,7 +26,7 @@ CUDAFLAGS= -DUNIX --compiler-options -fPIC --machine 64
 ifeq ($(PLATFORM), LINUX)
 STRIP=strip -s
 else
-#STRIP=strip -x
+STRIP=strip -x
 endif
 
 ifeq ($(DEBUG), 1)
@@ -125,23 +125,26 @@ endif
 
 INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(BOOST_INCLUDE)
 
-all: prebuild compile link postbuild final
-
-prebuild:
-
-compile: precompile $(OBJECTS)
+all: precompile compile prelink link final
 
 precompile:
 	@echo "*** Compiling ***"
 
-link: 
+compile: $(OBJECTS)
+
+prelink:
 	@echo "\n*** Linking ***"
-	$(COMPILER) $(SO_FLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
+
+link: $(PROGRAM)
 
 ifeq ($(DEBUG), 1)
-postbuild:
+$(PROGRAM):
+	$(COMPILER) $(SO_FLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
 else
-postbuild: strip
+$(PROGRAM):
+	$(COMPILER) $(SO_FLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
+	@echo "\n*** Stripping ***"
+	$(STRIP) $(PROGRAM)
 endif
 
 final:
@@ -154,10 +157,6 @@ $(OUTDIR)/%.o: ../../source/code/src/%.cpp
 
 $(OUTDIR)/%.o: ../../source/code/src/%.cu
 	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
-
-strip: $(PROGRAM)
-	@echo "\n*** Stripping ***"
-	$(STRIP) $(PROGRAM)
 
 clean: 
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
