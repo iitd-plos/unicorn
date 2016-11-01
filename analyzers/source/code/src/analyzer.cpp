@@ -52,6 +52,15 @@ void Analyzer::Analyze()
 
 int main(int argc, const char* argv[])
 {
+#ifdef BUILD_FOR_DISTRIBUTION
+    const char* lBasePath = getenv("DISTRIB_INSTALL_PATH");
+
+    if(!lBasePath)
+    {
+        std::cout << "DISTRIB_INSTALL_PATH not defined" << std::endl;
+        return 1;
+    }
+#else
     const char* lBasePath = getenv("PMLIB_INSTALL_PATH");
     if(!lBasePath)
     {
@@ -59,12 +68,13 @@ int main(int argc, const char* argv[])
         lBasePath = PMLIB_INSTALL_PATH;
     #endif
     }
-        
+
     if(!lBasePath)
     {
         std::cout << "PMLIB_INSTALL_PATH not defined" << std::endl;
         return 1;
     }
+#endif
     
     Analyzer lAnalyzer(lBasePath);
     lAnalyzer.Analyze();
