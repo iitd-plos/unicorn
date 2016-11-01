@@ -20,6 +20,10 @@ else
 	BUILD=release
 endif
 
+ifeq ($(AUTOCONF), 1)
+FLAGS += -DBUILD_FOR_DISTRIBUTION -DDISTRIB_INSTALL_PATH=$(prefix)
+endif
+
 OUTDIR= $(BUILD)
 
 ifeq ($(DEBUG), 1)
@@ -58,10 +62,10 @@ prelink:
 link: $(PROGRAM)
 
 ifeq ($(DEBUG), 1)
-$(PROGRAM):
+$(PROGRAM): $(OBJECTS)
 	$(COMPILER) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
 else
-$(PROGRAM):
+$(PROGRAM): $(OBJECTS)
 	$(COMPILER) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
 	@echo "\n*** Stripping ***"
 	$(STRIP) $(PROGRAM)
@@ -80,6 +84,14 @@ $(OUTDIR)/%.o: ../../thirdparty/regex_boost/libs/regex/src/%.cpp
 
 clean: 
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
+
+install:
+	$(INSTALL) -d $(prefix)
+	$(INSTALL) -d $(prefix)/analyzers
+	$(INSTALL) -d $(prefix)/analyzers/bin
+	$(INSTALL) $(PROGRAM) $(prefix)/analyzers/bin
+	rm -rf $(prefix)/analyzers/conf
+	cp -R $(PMLIB_INSTALL_PATH)/analyzers/conf $(prefix)/analyzers/conf
 
 -include $(OUTDIR)/*.d
 

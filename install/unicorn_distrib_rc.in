@@ -1,0 +1,21 @@
+export PMLIB_INSTALL_PATH=@prefix@
+export PMLIB_DEBUG_LIB_PATH=
+export PMLIB_RELEASE_LIB_PATH=$PMLIB_INSTALL_PATH/lib
+export PMLIB_INCLUDE_PATH=$PMLIB_INSTALL_PATH/include
+export DYLD_LIBRARY_PATH=$PMLIB_RELEASE_LIB_PATH:$DYLD_LIBRARY_PATH
+export BUILD_FOR_OPENCL=@build_for_opencl@
+export PLATFORM=@platform@
+export MPI_RELEASE_INSTALL_PATH=@mpi_prefix@
+export DYLD_LIBRARY_PATH=$MPI_RELEASE_INSTALL_PATH/lib:$DYLD_LIBRARY_PATH
+export PATH=$MPI_RELEASE_INSTALL_PATH/bin:$PATH
+export PATH=$PATH:@cuda_prefix@/bin
+if [ -d "@cuda_prefix@/lib64" ]; then
+export CUDA_LIB_PATH=@cuda_prefix@/lib64
+else
+export CUDA_LIB_PATH=@cuda_prefix@/lib
+fi
+export CUDA_DRIVER_LIB_PATH=@cuda_driver_lib@
+export DYLD_LIBRARY_PATH=$CUDA_LIB_PATH:$DYLD_LIBRARY_PATH
+export CUDA_INCLUDE_PATH=@cuda_prefix@/include
+export BUILD_FOR_CUDA=@build_for_cuda@
+alias cdpmbase="cd $PMLIB_INSTALL_PATH/"

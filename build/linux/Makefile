@@ -14,12 +14,16 @@ SUPPORT_OPENCL=$(BUILD_FOR_OPENCL)
 
 DEBUG=0
 
+ifndef NVCC_PATH
+NVCC_PATH=nvcc
+endif
+
 PTHREAD_LIBS= -lpthread
 
 BOOST_INCLUDE= -I../../thirdparty/boost
 
 COMPILER=g++
-NVCC_COMPILER=nvcc
+NVCC_COMPILER=$(NVCC_PATH)
 FLAGS=-Wall -std=c++11 -fPIC -DUNIX -D$(PLATFORM) -MMD -fopenmp
 CUDAFLAGS= -DUNIX --compiler-options -fPIC --machine 64
 
@@ -31,7 +35,8 @@ endif
 
 ifeq ($(DEBUG), 1)
 MPI_INCLUDE= -I$(MPI_DEBUG_INSTALL_PATH)/include
-MPI_LIBS= -L$(MPI_DEBUG_INSTALL_PATH)/lib -lmpi -lmpi_cxx
+MPI_LIB_PATH=$(MPI_DEBUG_INSTALL_PATH)/lib
+MPI_LIBS= -L$(MPI_LIB_PATH) -lmpi -lmpi_cxx
 ifeq ($(PLATFORM), LINUX)
 SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared -Wl,-soname,libpmlib_g.so
 else
@@ -39,7 +44,8 @@ SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared
 endif
 else
 MPI_INCLUDE= -I$(MPI_RELEASE_INSTALL_PATH)/include
-MPI_LIBS= -L$(MPI_RELEASE_INSTALL_PATH)/lib -lmpi -lmpi_cxx
+MPI_LIB_PATH=$(MPI_RELEASE_INSTALL_PATH)/lib
+MPI_LIBS= -L$(MPI_LIB_PATH) -lmpi -lmpi_cxx
 ifeq ($(PLATFORM), LINUX)
 SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared -Wl,-soname,libpmlib.so
 else
@@ -123,6 +129,10 @@ OBJECTS += $(CUDA_OBJECTS)
 LIBRARIES += -L$(CUDA_LIB_PATH) -L$(CUDA_DRIVER_LIB_PATH) -lcuda -lcudart
 endif
 
+ifeq ($(AUTOCONF), 1)
+LIBRARIES += -Wl,-rpath,$(MPI_LIB_PATH),-rpath,$(CUDA_LIB_PATH)
+endif
+
 INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(BOOST_INCLUDE)
 
 all: precompile compile prelink link final
@@ -138,10 +148,10 @@ prelink:
 link: $(PROGRAM)
 
 ifeq ($(DEBUG), 1)
-$(PROGRAM):
+$(PROGRAM): $(OBJECTS)
 	$(COMPILER) $(SO_FLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
 else
-$(PROGRAM):
+$(PROGRAM): $(OBJECTS)
 	$(COMPILER) $(SO_FLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
 	@echo "\n*** Stripping ***"
 	$(STRIP) $(PROGRAM)
@@ -160,5 +170,12 @@ $(OUTDIR)/%.o: ../../source/code/src/%.cu
 
 clean: 
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
+
+install:
+	$(INSTALL) -d $(prefix)
+	$(INSTALL) -d $(prefix)/lib
+	$(INSTALL) -d $(prefix)/include
+	$(INSTALL) $(OUTDIR)/libpmlib.so $(prefix)/lib
+	$(INSTALL) ../../source/code/inc/pmPublicDefinitions.h ../../source/code/inc/pmPublicUtilities.h $(prefix)/include
 
 -include $(OUTDIR)/*.d

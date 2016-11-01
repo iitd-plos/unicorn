@@ -3,7 +3,12 @@
 # This makefile is included from makefiles in various testSuite's
 
 COMPILER=g++
-NVCC_COMPILER=nvcc
+
+ifndef NVCC_PATH
+NVCC_PATH=nvcc
+endif
+
+NVCC_COMPILER=$(NVCC_PATH)
 
 FLAGS += -Wall -DUNIX -DLINUX -DSAMPLE_NAME=$(SAMPLE_NAME) -std=c++11 -MMD
 CUDAFLAGS += -DUNIX -DSAMPLE_NAME=$(SAMPLE_NAME) --machine 64
@@ -55,19 +60,31 @@ INCLUDES += -I$(PMLIB_INCLUDE_PATH) -I../../source/code/inc -I$(PATH_PREFIX)../.
 ifeq ($(ENABLE_BLAS), 1)
 FLAGS += -DENABLE_BLAS
 
+ifndef CBLAS_LIB_PATH
 ifeq ($(PLATFORM), MACOS)
-INCLUDES += -I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/Headers
-LIBRARIES += -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.11.sdk/usr/lib/
-LIBRARIES += -lcblas
+LIBRARIES += -L/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A
 else
-ifeq ($(MKL_BLAS), 1)
-FLAGS += -DUSE_MKL_BLAS -DMKL_ILP64 -m64 -I${MKLROOT}/include
-LIBRARIES +=  -Wl,--no-as-needed -L${MKLROOT}/lib/intel64 -lmkl_intel_ilp64 -lmkl_core -lmkl_sequential
-else
-LIBRARIES += -L/usr/lib64/atlas -lcblas
+LIBRARIES += -L/usr/lib64/atlas
 endif
+else
+LIBRARIES += -L$(CBLAS_LIB_PATH)
 endif
 
+ifndef CBLAS_INCLUDE_PATH
+ifeq ($(PLATFORM), MACOS)
+INCLUDES += -I/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/Headers
+endif
+else
+INCLUDES += -I$(CBLAS_INCLUDE_PATH)
+endif
+
+LIBRARIES += -lcblas
+endif
+
+INCLUDES += -I$(PMLIB_INCLUDE_PATH) -I../../source/code/inc -I$(PATH_PREFIX)../../../common/source/code/inc
+
+ifeq ($(AUTOCONF), 1)
+LIBRARIES += -Wl,-rpath,$(prefix)/lib,-rpath,$(CUDA_LIB_PATH)
 endif
 
 ifeq ($(PLATFORM), LINUX)
@@ -91,10 +108,10 @@ prelink:
 link: $(PROGRAM)
 
 ifeq ($(DEBUG), 1)
-$(PROGRAM):
+$(PROGRAM): $(OBJS)
 	$(COMPILER) -o $(PROGRAM) $(OBJS) $(LIBRARIES) -lstdc++
 else
-$(PROGRAM):
+$(PROGRAM): $(OBJS)
 	$(COMPILER) -o $(PROGRAM) $(OBJS) $(LIBRARIES) -lstdc++
 	@echo "\n*** Stripping ***"
 	$(STRIP) $(PROGRAM)
@@ -117,11 +134,13 @@ $(OUTDIR)/%$(NAME_SUFFIX).o: ../../source/code/src/%.cu
 $(OUTDIR)/%.o: $(PATH_PREFIX)../../../common/source/code/src/%.cu
 	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
 
-strip: $(PROGRAM)
-	@echo "\n*** Stripping ***"
-	$(STRIP) $(PROGRAM)
-
 clean: 
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
+
+install:
+	$(INSTALL) -d $(prefix)
+	$(INSTALL) -d $(prefix)/testsuite
+	$(INSTALL) -d $(prefix)/testsuite/$(SAMPLE_NAME)
+	$(INSTALL) $(PROGRAM) $(prefix)/testsuite/$(SAMPLE_NAME)
 
 -include $(OUTDIR)/*.d
