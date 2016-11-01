@@ -84,7 +84,7 @@ endif
 INCLUDES += -I$(PMLIB_INCLUDE_PATH) -I../../source/code/inc -I$(PATH_PREFIX)../../../common/source/code/inc
 
 ifeq ($(AUTOCONF), 1)
-LIBRARIES += -Wl,-rpath,$(prefix)/lib
+LIBRARIES += -Wl,-rpath,$(prefix)/lib,-rpath,$(CUDA_LIB_PATH)
 endif
 
 ifeq ($(PLATFORM), LINUX)

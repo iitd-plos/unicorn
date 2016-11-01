@@ -130,7 +130,7 @@ LIBRARIES += -L$(CUDA_LIB_PATH) -L$(CUDA_DRIVER_LIB_PATH) -lcuda -lcudart
 endif
 
 ifeq ($(AUTOCONF), 1)
-LIBRARIES += -Wl,-rpath,$(MPI_LIB_PATH)
+LIBRARIES += -Wl,-rpath,$(MPI_LIB_PATH),-rpath,$(CUDA_LIB_PATH)
 endif
 
 INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(BOOST_INCLUDE)
