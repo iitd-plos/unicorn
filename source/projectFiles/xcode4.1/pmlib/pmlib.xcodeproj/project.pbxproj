@@ -201,6 +201,7 @@
 		2BCCED6B151C7B07006AA45D /* pmTaskManager.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTaskManager.cpp; sourceTree = "<group>"; };
 		2BCCED6C151C7B07006AA45D /* pmThread.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmThread.cpp; sourceTree = "<group>"; };
 		2BCCED6D151C7B07006AA45D /* pmTimer.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmTimer.cpp; sourceTree = "<group>"; };
+		2BD3A1841D1FE791008FAAEE /* pmDataTypesHelper.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmDataTypesHelper.h; sourceTree = "<group>"; };
 		2BD5487017FC328B00A95158 /* pmCudaInterface.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmCudaInterface.h; sourceTree = "<group>"; };
 		2BEB038B1801E68F00890B3C /* pmAllocatorCollection.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = pmAllocatorCollection.h; sourceTree = "<group>"; };
 		2BEB038C1801E9B300890B3C /* pmAllocatorCollection.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = pmAllocatorCollection.cpp; sourceTree = "<group>"; };
@@ -275,6 +276,7 @@
 				2BCCED35151C7B07006AA45D /* pmController.h */,
 				2BD5487017FC328B00A95158 /* pmCudaInterface.h */,
 				2BCCED36151C7B07006AA45D /* pmDataTypes.h */,
+				2BD3A1841D1FE791008FAAEE /* pmDataTypesHelper.h */,
 				2BCCED37151C7B07006AA45D /* pmDevicePool.h */,
 				2BCCED38151C7B07006AA45D /* pmDispatcherGPU.h */,
 				2BCCED39151C7B07006AA45D /* pmErrorDefinitions.h */,
