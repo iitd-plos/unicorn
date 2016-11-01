@@ -1382,13 +1382,24 @@ const pmProcessingElement* pmScheduler::RandomlySelectStealTarget(const pmProces
 
 #ifdef ENABLE_TWO_LEVEL_STEALING
 #ifdef USE_STEAL_AGENT_PER_NODE
-    // Keep a higher bias towards local node if there is anything stealable. In this case, the remote node gets skipped.
-    // In 25% cases, a local steal is attempted before a remote steal.
-    
-    srand((uint)time(NULL));
+    if(pTask->GetSchedulingModel() == scheduler::PULL_WITH_AFFINITY)
+    {
+        // Running the code in else branch for affinity enabled tasks has a negative impact on data transfers,
+        // as local node already has the subtasks with maximum affinity for it. Remote nodes have low affinity subtasks,
+        // which if stolen increase data transfer.
+        if(pTask->GetStealAgent()->HasAnotherStubToStealFrom(pStealingDevice->GetLocalExecutionStub(), pShouldMultiAssign))
+            return PM_LOCAL_MACHINE;
+    }
+    else
+    {
+        // Keep a higher bias towards local node if there is anything stealable. In this case, the remote node gets skipped.
+        // In 25% cases, a local steal is attempted before a remote steal.
+        
+        srand((uint)time(NULL));
 
-    if((rand() % 4) == 0 && pTask->GetStealAgent()->HasAnotherStubToStealFrom(pStealingDevice->GetLocalExecutionStub(), pShouldMultiAssign))
-        return PM_LOCAL_MACHINE;
+        if((rand() % 4) == 0 && pTask->GetStealAgent()->HasAnotherStubToStealFrom(pStealingDevice->GetLocalExecutionStub(), pShouldMultiAssign))
+            return PM_LOCAL_MACHINE;
+    }
 #endif
 #endif
 
