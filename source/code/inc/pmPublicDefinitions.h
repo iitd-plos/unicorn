@@ -38,7 +38,7 @@ namespace pm
     const size_t MAX_NAME_STR_LEN = 256;
     const size_t MAX_DESC_STR_LEN = 1024;
     const size_t MAX_CB_KEY_LEN = 128;
-    const size_t MAX_MEM_SECTIONS_PER_TASK = 4;
+    const size_t MAX_MEM_SECTIONS_PER_TASK = 3;
 
 	/**
 	 * This enumeration defines success and all error conditions for the PMLIB Application Programming Interface (API).
