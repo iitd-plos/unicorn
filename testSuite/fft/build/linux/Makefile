@@ -60,9 +60,9 @@ endif
 include ../../../common/build/linux/Makefile.common
 
 ifeq ($(FFT_1D), 0)
-%.o: $(PATH_PREFIX)../../../matrixTranspose/source/code/src/%.cpp
-	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+$(OUTDIR)/%.o: $(PATH_PREFIX)../../../matrixTranspose/source/code/src/%.cpp
+	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $@
 
-%.o: $(PATH_PREFIX)../../../matrixTranspose/source/code/src/%.cu
-	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+$(OUTDIR)/%.o: $(PATH_PREFIX)../../../matrixTranspose/source/code/src/%.cu
+	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
 endif

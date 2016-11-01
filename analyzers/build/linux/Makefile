@@ -20,6 +20,10 @@ else
 	BUILD=release
 endif
 
+ifeq ($(AUTOCONF), 1)
+FLAGS += -DBUILD_FOR_DISTRIBUTION
+endif
+
 OUTDIR= $(BUILD)
 
 ifeq ($(DEBUG), 1)
@@ -45,23 +49,26 @@ OBJS += $(ANALYZER_SRCS:../../source/code/src/%.cpp=%.o)
 
 OBJECTS= $(OBJS:%.o=$(OUTDIR)/%.o)
 
-all: prebuild compile link postbuild final
-
-prebuild:
-
-compile: precompile $(OBJECTS)
+all: precompile compile prelink link final
 
 precompile:
 	@echo "*** Compiling ***"
 
-link: 
+compile: $(OBJECTS)
+
+prelink:
 	@echo "\n*** Linking ***"
-	$(COMPILER) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
+
+link: $(PROGRAM)
 
 ifeq ($(DEBUG), 1)
-postbuild:
+$(PROGRAM): $(OBJECTS)
+	$(COMPILER) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
 else
-postbuild: strip
+$(PROGRAM): $(OBJECTS)
+	$(COMPILER) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
+	@echo "\n*** Stripping ***"
+	$(STRIP) $(PROGRAM)
 endif
 
 final:
@@ -75,12 +82,16 @@ $(OUTDIR)/%.o: ../../source/code/src/%.cpp
 $(OUTDIR)/%.o: ../../thirdparty/regex_boost/libs/regex/src/%.cpp
 	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $@
 
-strip: $(PROGRAM)
-	@echo "\n*** Stripping ***"
-	$(STRIP) $(PROGRAM)
-
 clean: 
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
+
+install:
+	$(INSTALL) -d $(prefix)
+	$(INSTALL) -d $(prefix)/analyzers
+	$(INSTALL) -d $(prefix)/analyzers/bin
+	$(INSTALL) $(PROGRAM) $(prefix)/analyzers/bin
+	rm -rf $(prefix)/analyzers/conf
+	cp -R $(PMLIB_INSTALL_PATH)/analyzers/conf $(prefix)/analyzers/conf
 
 -include $(OUTDIR)/*.d
 

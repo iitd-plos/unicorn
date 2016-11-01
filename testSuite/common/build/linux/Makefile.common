@@ -3,7 +3,12 @@
 # This makefile is included from makefiles in various testSuite's
 
 COMPILER=g++
-NVCC_COMPILER=nvcc
+
+ifndef NVCC_PATH
+NVCC_PATH=nvcc
+endif
+
+NVCC_COMPILER=$(NVCC_PATH)
 
 FLAGS += -Wall -DUNIX -DLINUX -DSAMPLE_NAME=$(SAMPLE_NAME) -std=c++11 -MMD
 CUDAFLAGS += -DUNIX -DSAMPLE_NAME=$(SAMPLE_NAME) --machine 64
@@ -50,14 +55,27 @@ OBJECTS += $(CUDA_OBJECTS)
 LIBRARIES += -L$(CUDA_LIB_PATH) -lcudart
 endif
 
+INCLUDES += -I$(PMLIB_INCLUDE_PATH) -I../../source/code/inc -I$(PATH_PREFIX)../../../common/source/code/inc
+
 ifeq ($(ENABLE_BLAS), 1)
 FLAGS += -DENABLE_BLAS
 
+ifndef CBLAS_LIB_PATH
 ifeq ($(PLATFORM), MACOS)
-INCLUDES += -I/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/Headers
-LIBRARIES += -L/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.9.sdk/usr/lib/
+LIBRARIES += -L/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A
 else
 LIBRARIES += -L/usr/lib64/atlas
+endif
+else
+LIBRARIES += -L$(CBLAS_LIB_PATH)
+endif
+
+ifndef CBLAS_INCLUDE_PATH
+ifeq ($(PLATFORM), MACOS)
+INCLUDES += -I/System/Library/Frameworks/Accelerate.framework/Versions/A/Frameworks/vecLib.framework/Versions/A/Headers
+endif
+else
+INCLUDES += -I$(CBLAS_INCLUDE_PATH)
 endif
 
 LIBRARIES += -lcblas
@@ -65,29 +83,38 @@ endif
 
 INCLUDES += -I$(PMLIB_INCLUDE_PATH) -I../../source/code/inc -I$(PATH_PREFIX)../../../common/source/code/inc
 
+ifeq ($(AUTOCONF), 1)
+LIBRARIES += -Wl,-rpath,$(prefix)/lib
+endif
+
 ifeq ($(PLATFORM), LINUX)
 	STRIP=strip -s
 else
 	STRIP=strip -u -r
 endif
 
-all: prebuild compile link postbuild final
+OBJS= $(OBJECTS:%.o=$(OUTDIR)/%.o)
 
-prebuild:
-
-compile: precompile $(OBJECTS)
+all: precompile compile prelink link final
 
 precompile:
 	@echo "*** Compiling ***"
 
-link: 
+compile: $(OBJS)
+
+prelink:
 	@echo "\n*** Linking ***"
-	$(COMPILER) -o $(PROGRAM) $(OBJECTS:%.o=$(OUTDIR)/%.o) $(LIBRARIES) -lstdc++
+
+link: $(PROGRAM)
 
 ifeq ($(DEBUG), 1)
-postbuild:
+$(PROGRAM): $(OBJS)
+	$(COMPILER) -o $(PROGRAM) $(OBJS) $(LIBRARIES) -lstdc++
 else
-postbuild: strip
+$(PROGRAM): $(OBJS)
+	$(COMPILER) -o $(PROGRAM) $(OBJS) $(LIBRARIES) -lstdc++
+	@echo "\n*** Stripping ***"
+	$(STRIP) $(PROGRAM)
 endif
 
 final:
@@ -95,23 +122,25 @@ final:
 
 # Generic rule for compiling any cpp file. Any specific rules must
 # be added after this rule as the later one overrides
-%$(NAME_SUFFIX).o: ../../source/code/src/%.cpp
-	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+$(OUTDIR)/%$(NAME_SUFFIX).o: ../../source/code/src/%.cpp
+	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $@
 
-%.o: $(PATH_PREFIX)../../../common/source/code/src/%.cpp
-	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+$(OUTDIR)/%.o: $(PATH_PREFIX)../../../common/source/code/src/%.cpp
+	$(COMPILER) $(FLAGS) $(INCLUDES) -c $< -o $@
 
-%$(NAME_SUFFIX).o: ../../source/code/src/%.cu
-	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
+$(OUTDIR)/%$(NAME_SUFFIX).o: ../../source/code/src/%.cu
+	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
 
-%.o: $(PATH_PREFIX)../../../common/source/code/src/%.cu
-	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $(OUTDIR)/$@
-
-strip: $(PROGRAM)
-	@echo "\n*** Stripping ***"
-	$(STRIP) $(PROGRAM)
+$(OUTDIR)/%.o: $(PATH_PREFIX)../../../common/source/code/src/%.cu
+	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
 
 clean: 
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
+
+install:
+	$(INSTALL) -d $(prefix)
+	$(INSTALL) -d $(prefix)/testsuite
+	$(INSTALL) -d $(prefix)/testsuite/$(SAMPLE_NAME)
+	$(INSTALL) $(PROGRAM) $(prefix)/testsuite/$(SAMPLE_NAME)
 
 -include $(OUTDIR)/*.d

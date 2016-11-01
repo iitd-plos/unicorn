@@ -1,0 +1,11 @@
+# For any issues with Unicorn, please contact onlinetarun@gmail.com
+
+# Build process for Unicorn-1.0.0
+$ cd install
+$ ./configure --prefix=<install location> --with-cuda=<cuda install path> --with-mpi=<mpi install path> --with-cblas-lib=<location of libcblas.so> --with-cblas-header=<location of cblas.h>
+$ make
+$ make install
+
+
+# After installation, add the following source file to your bashrc or bash_profile
+$ echo "source <install location>/.unicorn_distrib_rc" >> ~/.bashrc

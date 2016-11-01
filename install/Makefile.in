@@ -1,0 +1,103 @@
+
+# Makefile for Unicorn
+
+# Usage:
+# make - Builds Unicorn in release mode
+# make DEBUG=1 - Builds Unicorn in debug mode
+# make clean - Cleans Unicorn's release build files
+# make DEBUG=1 clean - Cleans Unicorn's debug build files
+
+prefix=@prefix@
+PMLIB_INSTALL_PATH=@abs_root@
+PLATFORM=@platform@
+INSTALL=@INSTALL@
+DEBUG=0
+AUTOCONF=1
+
+# MPI specific variables
+MPI_RELEASE_INSTALL_PATH=@mpi_prefix@
+MPI_DEBUG_INSTALL_PATH=@mpi_prefix@
+
+# CUDA specific variables
+CUDA_INSTALL_PATH=@cuda_prefix@
+CUDA_DRIVER_LIB_PATH=@cuda_prefix@/lib
+BUILD_FOR_CUDA=@build_for_cuda@
+
+# OpenCL specific variables
+BUILD_FOR_OPENCL=@build_for_opencl@
+
+# CBLAS specific variables
+CBLAS_INCLUDE_PATH=@cblas_header@
+CBLAS_LIB_PATH=@cblas_lib@
+
+# Dependent variables
+PMLIB_RELEASE_LIB_PATH=$(PMLIB_INSTALL_PATH)/build/linux/release
+PMLIB_DEBUG_LIB_PATH=$(PMLIB_INSTALL_PATH)/build/linux/debug
+PMLIB_INCLUDE_PATH=$(PMLIB_INSTALL_PATH)/source/code/inc
+CUDA_LIB_PATH=$(CUDA_INSTALL_PATH)/lib
+CUDA_INCLUDE_PATH=$(CUDA_INSTALL_PATH)/include
+NVCC_PATH=$(CUDA_INSTALL_PATH)/bin/nvcc
+
+
+#STD_LIB_PATH=/opt/gcc-4.8.1/lib
+#DYLD_LIBRARY_PATH=$(PMLIB_RELEASE_LIB_PATH):$(DYLD_LIBRARY_PATH)
+#DYLD_LIBRARY_PATH=$(PMLIB_DEBUG_LIB_PATH):$(DYLD_LIBRARY_PATH)
+#DYLD_LIBRARY_PATH=$(CUDA_LIB_PATH):$(DYLD_LIBRARY_PATH)
+#DYLD_LIBRARY_PATH=$(MPI_RELEASE_INSTALL_PATH)/lib:$(DYLD_LIBRARY_PATH)
+#PATH=$(MPI_RELEASE_INSTALL_PATH)/bin:$PATH
+#DYLD_LIBRARY_PATH=$(MPI_DEBUG_INSTALL_PATH)/lib:$(DYLD_LIBRARY_PATH)
+#PATH=$(MPI_DEBUG_INSTALL_PATH)/bin:$PATH
+
+export
+
+MAKEFILE_DIRS= ../build/linux/ \
+	../analyzers/build/linux/ \
+	../testSuite/imageFiltering/build/linux/ \
+	../testSuite/matrixMultiply/build/linux/ \
+	../testSuite/matrixTranspose/build/linux/ \
+	../testSuite/pageRank/build/linux/ \
+	../testSuite/fft/build/linux/ \
+	../testSuite/luDecomposition/build/linux/ \
+	../testSuite/matrixMultiplyBlas/build/linux/ \
+
+PRE_INSTALL=../testSuite/fft/thirdparty/fftw-3.3.3 \
+
+all:
+	@for dir in ${PRE_INSTALL}; do \
+	  (cd $$dir && $(MAKE) all && $(MAKE) install) \
+	  || case "$(MFLAGS)" in *k*) fail=yes;; *) exit 1;; esac; \
+	done && test -z "$$fail"
+
+	@for dir in ${MAKEFILE_DIRS}; do \
+	  (cd $$dir && $(MAKE) all) \
+	  || case "$(MFLAGS)" in *k*) fail=yes;; *) exit 1;; esac; \
+	done && test -z "$$fail"
+
+install:
+	@for dir in ${MAKEFILE_DIRS}; do \
+	  (cd $$dir && $(MAKE) install) \
+	  || case "$(MFLAGS)" in *k*) fail=yes;; *) exit 1;; esac; \
+	done && test -z "$$fail"
+
+	cp -r unicorn_distrib_rc $(prefix)/.unicorn_distrib_rc
+
+clean:
+	/bin/rm -f *~
+
+	@for dir in ${PRE_INSTALL}; do \
+	  (cd $$dir && $(MAKE) clean) \
+	  || case "$(MFLAGS)" in *k*) fail=yes;; *) exit 1;; esac; \
+	done && test -z "$$fail"
+
+	@for dir in ${MAKEFILE_DIRS}; do \
+	  (cd $$dir && $(MAKE) clean) \
+	  || case "$(MFLAGS)" in *k*) fail=yes;; *) exit 1;; esac; \
+	done && test -z "$$fail"
+
+distclean: clean
+	/bin/rm -rf unicorn_distrib_rc Makefile config.h config.status autom4te.cache config.cache config.log aclocal.m4
+	@for dir in ${PRE_INSTALL}; do \
+	  (cd $$dir && $(MAKE) distclean) \
+	  || case "$(MFLAGS)" in *k*) fail=yes;; *) exit 1;; esac; \
+	done && test -z "$$fail"
+

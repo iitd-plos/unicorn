@@ -14,19 +14,23 @@ SUPPORT_OPENCL=$(BUILD_FOR_OPENCL)
 
 DEBUG=0
 
+ifndef NVCC_PATH
+NVCC_PATH=nvcc
+endif
+
 PTHREAD_LIBS= -lpthread
 
 BOOST_INCLUDE= -I../../thirdparty/boost
 
 COMPILER=g++
-NVCC_COMPILER=nvcc
+NVCC_COMPILER=$(NVCC_PATH)
 FLAGS=-Wall -std=c++11 -fPIC -DUNIX -D$(PLATFORM) -MMD -fopenmp
 CUDAFLAGS= -DUNIX --compiler-options -fPIC --machine 64
 
 ifeq ($(PLATFORM), LINUX)
 STRIP=strip -s
 else
-#STRIP=strip -x
+STRIP=strip -x
 endif
 
 ifeq ($(DEBUG), 1)
@@ -125,23 +129,26 @@ endif
 
 INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(BOOST_INCLUDE)
 
-all: prebuild compile link postbuild final
-
-prebuild:
-
-compile: precompile $(OBJECTS)
+all: precompile compile prelink link final
 
 precompile:
 	@echo "*** Compiling ***"
 
-link: 
+compile: $(OBJECTS)
+
+prelink:
 	@echo "\n*** Linking ***"
-	$(COMPILER) $(SO_FLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
+
+link: $(PROGRAM)
 
 ifeq ($(DEBUG), 1)
-postbuild:
+$(PROGRAM): $(OBJECTS)
+	$(COMPILER) $(SO_FLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
 else
-postbuild: strip
+$(PROGRAM): $(OBJECTS)
+	$(COMPILER) $(SO_FLAGS) -o $(PROGRAM) $(OBJECTS) $(LIBRARIES)
+	@echo "\n*** Stripping ***"
+	$(STRIP) $(PROGRAM)
 endif
 
 final:
@@ -155,11 +162,14 @@ $(OUTDIR)/%.o: ../../source/code/src/%.cpp
 $(OUTDIR)/%.o: ../../source/code/src/%.cu
 	$(NVCC_COMPILER) $(CUDAFLAGS) $(INCLUDES) -c $< -o $@
 
-strip: $(PROGRAM)
-	@echo "\n*** Stripping ***"
-	$(STRIP) $(PROGRAM)
-
 clean: 
 	rm -f $(OUTDIR)/*.o $(OUTDIR)/*.d core.* $(PROGRAM)
+
+install:
+	$(INSTALL) -d $(prefix)
+	$(INSTALL) -d $(prefix)/lib
+	$(INSTALL) -d $(prefix)/include
+	$(INSTALL) $(OUTDIR)/libpmlib.so $(prefix)/lib
+	$(INSTALL) ../../source/code/inc/pmPublicDefinitions.h ../../source/code/inc/pmPublicUtilities.h $(prefix)/include
 
 -include $(OUTDIR)/*.d
