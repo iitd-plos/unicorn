@@ -36,7 +36,7 @@ PMLIB_DEBUG_LIB_PATH=$(PMLIB_INSTALL_PATH)/build/linux/debug
 PMLIB_INCLUDE_PATH=$(PMLIB_INSTALL_PATH)/source/code/inc
 CUDA_INCLUDE_PATH=$(CUDA_INSTALL_PATH)/include
 NVCC_PATH=$(CUDA_INSTALL_PATH)/bin/nvcc
-ifeq (, $(firstword "$(CUDA_INSTALL_PATH)/lib64"))
+ifeq (, $(firstword $(wildcard "$(CUDA_INSTALL_PATH)/lib64")))
 CUDA_LIB_PATH = $(CUDA_INSTALL_PATH)/lib
 else
 CUDA_LIB_PATH = $(CUDA_INSTALL_PATH)/lib64
