@@ -35,7 +35,8 @@ endif
 
 ifeq ($(DEBUG), 1)
 MPI_INCLUDE= -I$(MPI_DEBUG_INSTALL_PATH)/include
-MPI_LIBS= -L$(MPI_DEBUG_INSTALL_PATH)/lib -lmpi -lmpi_cxx
+MPI_LIB_PATH=$(MPI_DEBUG_INSTALL_PATH)/lib
+MPI_LIBS= -L$(MPI_LIB_PATH) -lmpi -lmpi_cxx
 ifeq ($(PLATFORM), LINUX)
 SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared -Wl,-soname,libpmlib_g.so
 else
@@ -43,7 +44,8 @@ SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared
 endif
 else
 MPI_INCLUDE= -I$(MPI_RELEASE_INSTALL_PATH)/include
-MPI_LIBS= -L$(MPI_RELEASE_INSTALL_PATH)/lib -lmpi -lmpi_cxx
+MPI_LIB_PATH=$(MPI_RELEASE_INSTALL_PATH)/lib
+MPI_LIBS= -L$(MPI_LIB_PATH) -lmpi -lmpi_cxx
 ifeq ($(PLATFORM), LINUX)
 SO_FLAGS=-Wall -DUNIX -D$(PLATFORM) -shared -Wl,-soname,libpmlib.so
 else
@@ -125,6 +127,10 @@ CUDAFLAGS += -DSUPPORT_CUDA
 INCLUDES += -I$(CUDA_INCLUDE_PATH)
 OBJECTS += $(CUDA_OBJECTS)
 LIBRARIES += -L$(CUDA_LIB_PATH) -L$(CUDA_DRIVER_LIB_PATH) -lcuda -lcudart
+endif
+
+ifeq ($(AUTOCONF), 1)
+LIBRARIES += -Wl,-rpath,$(MPI_LIB_PATH)
 endif
 
 INCLUDES += -I../../source/code/inc $(MPI_INCLUDE) $(BOOST_INCLUDE)
