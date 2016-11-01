@@ -53,7 +53,7 @@ void Analyzer::Analyze()
 int main(int argc, const char* argv[])
 {
 #ifdef BUILD_FOR_DISTRIBUTION
-    const char* lBasePath = getenv("DISTRIB_INSTALL_PATH");
+    const char* lBasePath = DISTRIB_INSTALL_PATH;   // Macro defined in Makefile
 
     if(!lBasePath)
     {
