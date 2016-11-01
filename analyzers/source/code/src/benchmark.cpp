@@ -49,10 +49,20 @@
 
 #ifdef _WIN32
     const char PATH_SEPARATOR = '\\';
-    const char* gIntermediatePath = "build\\windows\\release";
+
+    #ifdef BUILD_FOR_DISTRIBUTION
+        const char* gIntermediatePath = "";
+    #else
+        const char* gIntermediatePath = "build\\windows\\release";
+    #endif
 #else
     const char PATH_SEPARATOR = '/';
-    const char* gIntermediatePath = "build/linux/release";
+
+    #ifdef BUILD_FOR_DISTRIBUTION
+        const char* gIntermediatePath = "";
+    #else
+        const char* gIntermediatePath = "build/linux/release";
+    #endif
 #endif
 
 #define HANDLE_BENCHMARK_HANGS
@@ -1496,7 +1506,7 @@ size_t Benchmark::GenerateTimelineGraphs(size_t pPanelIndex, size_t pPlotWidth, 
     if(!mConfiguration[lVarying2Str].empty())
         lPanelConf.push_back(std::make_pair(mConfiguration["Varying2_Name"][0], mConfiguration[lVarying2Str]));
 
-    const char* lPolicies[] = {"PUSH", "PULL"};
+    const char* lPolicies[] = {"PUSH", "PULL", "PULL_WITH_AFFINITY"};
     lPanelConf.push_back(std::make_pair("Scheduling&nbsp;Policy", std::vector<std::string>(lPolicies, lPolicies + sizeof(lPolicies)/sizeof(lPolicies[0]))));
 
     const char* lMaOptions[] = {"Yes", "No"};
@@ -1555,6 +1565,17 @@ size_t Benchmark::GenerateTimelineGraphs(size_t pPanelIndex, size_t pPlotWidth, 
                                 GenerateTimelineGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (bool)overlap, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PULL, *lInnerTaskIter);
                                 
                                 pHtmlStream << "</div>" << std::endl;
+
+                                pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << lInnerIndex << "_" << 3 << "_" << lMaStr << "_" << lOverlapStr;
+                                
+                                if(lHasInnerTasks)
+                                    pHtmlStream << "_" << lInnerTaskIndex;
+                                
+                                pHtmlStream << "' style='display:none'>" << std::endl;
+                                
+                                GenerateTimelineGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (bool)overlap, lHostsIter->first, (size_t)atoi(((*lIter).c_str())), (size_t)atoi(((*lInnerIter).c_str())), PULL_WITH_AFFINITY, *lInnerTaskIter);
+                                
+                                pHtmlStream << "</div>" << std::endl;
                             }
                         }
                     }
@@ -1596,6 +1617,17 @@ size_t Benchmark::GenerateTimelineGraphs(size_t pPanelIndex, size_t pPlotWidth, 
                             pHtmlStream << "' style='display:none'>" << std::endl;
                             
                             GenerateTimelineGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (bool)overlap, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PULL, *lInnerTaskIter);
+                            
+                            pHtmlStream << "</div>" << std::endl;
+
+                            pHtmlStream << "<div class='p" << pPanelIndex << "_toggler' id='p" << pPanelIndex << "_table_" << lHostIndex << "_" << lIndex << "_" << 3 << "_" << lMaStr << "_" << lOverlapStr;
+                            
+                            if(lHasInnerTasks)
+                                pHtmlStream << "_" << lInnerTaskIndex;
+                            
+                            pHtmlStream << "' style='display:none'>" << std::endl;
+                            
+                            GenerateTimelineGraphsInternal(pPlotWidth, pPlotHeight, pHtmlStream, (bool)maVal, (bool)overlap, lHostsIter->first, (size_t)atoi((*lIter).c_str()), 0, PULL_WITH_AFFINITY, *lInnerTaskIter);
                             
                             pHtmlStream << "</div>" << std::endl;
                         }
@@ -2148,8 +2180,9 @@ void Benchmark::GenerateTimelineGraphsInternal(size_t pPlotWidth, size_t pPlotHe
         lGraphDisplayNameStream << ", Overlap";
 
     lGraphDisplayNameStream << ", Hosts=" << pHosts;
-    lGraphDisplayNameStream << ", " << ((pPolicy == PUSH) ? "Push" : "Pull");
 #endif
+
+    lGraphDisplayNameStream << ", " << ((pPolicy == PUSH) ? "Push" : ((pPolicy == PULL) ? "Pull" : "Pull_With_Affinity"));
     
     lGraphDisplayNameStream << "] --->" << std::endl;
 
