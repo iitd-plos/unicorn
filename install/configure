@@ -641,6 +641,7 @@ build_for_cuda
 cuda_prefix
 CUDA_LDFLAGS
 CUDA_CFLAGS
+cuda_driver_lib
 PTHREAD_CFLAGS
 PTHREAD_LIBS
 PTHREAD_CC
@@ -716,6 +717,7 @@ ac_user_opts='
 enable_option_checking
 with_mpi
 with_cuda
+with_cudalib
 enable_openmp
 with_cblas_lib
 with_cblas_header
@@ -1361,6 +1363,7 @@ Optional Packages:
   --without-PACKAGE       do not use PACKAGE (same as --with-PACKAGE=no)
   --with-mpi=PREFIX      Prefix of your MPI installation
   --with-cuda=PREFIX      Prefix of your CUDA installation
+  --with-cudalib=PATH      Location of libcuda
   --with-cblas-lib=PATH      Path to libcblas
   --with-cblas-header=PATH   Path to cblas.h
 --with-opencl=yes/no
@@ -6759,6 +6762,20 @@ else
 fi
 
 
+# Check whether --with-cudalib was given.
+if test "${with_cudalib+set}" = set; then :
+  withval=$with_cudalib; cuda_driver_lib=$withval
+else
+  cuda_driver_lib="/usr/local/cuda/lib"
+fi
+
+
+if test "$cuda_driver_lib" == "no"; then
+as_fn_error $? "libcuda not found !!!" "$LINENO" 5
+fi
+
+
+
 if test "$cuda_prefix" == "no"; then
 	build_for_cuda=0
 else
@@ -6807,7 +6824,7 @@ See \`config.log' for more details" "$LINENO" 5; }
 	CUDA_CFLAGS="-I$cuda_prefix/include"
 	CFLAGS="$CUDA_CFLAGS $CFLAGS"
 	CXXFLAGS="$CUDA_CFLAGS $CFLAGS"
-	CUDA_LDFLAGS="-L$cuda_prefix/lib64 -L$cuda_prefix/lib"
+	CUDA_LDFLAGS="-L$cuda_prefix/lib64 -L$cuda_prefix/lib -L$cuda_driver_lib"
 	LDFLAGS="$CUDA_LDFLAGS $LDFLAGS"
 
 	# And the header and the lib

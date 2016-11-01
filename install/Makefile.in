@@ -21,11 +21,7 @@ MPI_DEBUG_INSTALL_PATH=@mpi_prefix@
 # CUDA specific variables
 BUILD_FOR_CUDA=@build_for_cuda@
 CUDA_INSTALL_PATH=@cuda_prefix@
-ifeq (, $(firstword "/data/opt/cuda/lib64"))
-CUDA_DRIVER_LIB_PATH = /data/opt/cuda/lib
-else
-CUDA_DRIVER_LIB_PATH = /data/opt/cuda/lib64
-endif
+CUDA_DRIVER_LIB_PATH = @cuda_driver_lib@
 
 # OpenCL specific variables
 BUILD_FOR_OPENCL=@build_for_opencl@

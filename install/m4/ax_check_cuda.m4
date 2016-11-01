@@ -2,6 +2,13 @@ AC_DEFUN([AX_CHECK_CUDA], [
 
 # Provide your CUDA path with this      
 AC_ARG_WITH(cuda, [  --with-cuda=PREFIX      Prefix of your CUDA installation], [cuda_prefix=$withval], [cuda_prefix="/usr/local/cuda"])
+AC_ARG_WITH(cudalib, [  --with-cudalib=PATH      Location of libcuda], [cuda_driver_lib=$withval], [cuda_driver_lib="/usr/local/cuda/lib"])
+
+if test "$cuda_driver_lib" == "no"; then
+AC_MSG_ERROR([libcuda not found !!!])
+fi
+
+AC_SUBST([cuda_driver_lib])
 
 if test "$cuda_prefix" == "no"; then
 	build_for_cuda=0
@@ -41,7 +48,7 @@ else
 	CUDA_CFLAGS="-I$cuda_prefix/include"
 	CFLAGS="$CUDA_CFLAGS $CFLAGS"
 	CXXFLAGS="$CUDA_CFLAGS $CFLAGS"
-	CUDA_LDFLAGS="-L$cuda_prefix/lib64 -L$cuda_prefix/lib"
+	CUDA_LDFLAGS="-L$cuda_prefix/lib64 -L$cuda_prefix/lib -L$cuda_driver_lib"
 	LDFLAGS="$CUDA_LDFLAGS $LDFLAGS"
 
 	# And the header and the lib
