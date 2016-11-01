@@ -20,7 +20,11 @@ MPI_DEBUG_INSTALL_PATH=@mpi_prefix@
 
 # CUDA specific variables
 CUDA_INSTALL_PATH=@cuda_prefix@
-CUDA_DRIVER_LIB_PATH=@cuda_prefix@/lib
+if [ -d "@cuda_prefix@/lib64" ]; then \
+	CUDA_DRIVER_LIB_PATH=@cuda_prefix@/lib64 \
+else \
+	CUDA_DRIVER_LIB_PATH=@cuda_prefix@/lib \
+fi
 BUILD_FOR_CUDA=@build_for_cuda@
 
 # OpenCL specific variables
@@ -34,7 +38,11 @@ CBLAS_LIB_PATH=@cblas_lib@
 PMLIB_RELEASE_LIB_PATH=$(PMLIB_INSTALL_PATH)/build/linux/release
 PMLIB_DEBUG_LIB_PATH=$(PMLIB_INSTALL_PATH)/build/linux/debug
 PMLIB_INCLUDE_PATH=$(PMLIB_INSTALL_PATH)/source/code/inc
-CUDA_LIB_PATH=$(CUDA_INSTALL_PATH)/lib
+if [ -d "$(CUDA_INSTALL_PATH)/lib64" ]; then \
+	CUDA_LIB_PATH=$(CUDA_INSTALL_PATH)/lib64 \
+else \
+	CUDA_LIB_PATH=$(CUDA_INSTALL_PATH)/lib \
+fi
 CUDA_INCLUDE_PATH=$(CUDA_INSTALL_PATH)/include
 NVCC_PATH=$(CUDA_INSTALL_PATH)/bin/nvcc
 

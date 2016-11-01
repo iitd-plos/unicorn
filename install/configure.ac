@@ -12,6 +12,11 @@ m4_include([m4/ax_check_cuda.m4])
 m4_include([m4/ax_mpi.m4])
 m4_include([m4/ax_cblas.m4])
 
+AC_CHECK_SIZEOF([void*])
+if test "$ac_cv_sizeof_voidp" != "8"; then
+AC_MSG_FAILURE([Unicorn supports only 64-bit platforms !!!])
+fi
+
 abs_root="`pwd`/.."
 AC_SUBST([abs_root])
 
