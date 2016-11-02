@@ -1,7 +1,7 @@
-Varying_1 = 12 13 14 15 16
-Varying_2 = 12 13 14 15
+Varying_1 = 12 13
+Varying_2 = 12 13
 Benchmark_Name = Non-Square Matrix Transpose
 Varying1_Name = log(rows)
 Varying2_Name = log(cols)
-Subtask_Definition = 4096 rows * 4096 cols
+Subtask_Definition = 2048 rows * 2048 cols
 Fixed_Args = 0

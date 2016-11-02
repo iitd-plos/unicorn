@@ -1,6 +1,6 @@
 Hosts = 1 2
-Mpi_Options = --hostfile ~/Data/hosts2.txt --mca mpi_preconnect_mpi 1 
+Mpi_Options = --hostfile ~/Data/hosts.txt --mca mpi_preconnect_mpi 1 
 Generate_Static_Best = false
-Benchmarks = matrixMultiply matrixMultiplyBlas matrixTranspose imageFiltering
-fft_Configurations = 4
+Benchmarks = matrixMultiply matrixMultiplyBlas imageFiltering luDecomposition fft matrixTranspose
+fft_Configurations = 2
 matrixTranspose_Configurations = 2

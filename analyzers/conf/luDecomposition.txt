@@ -1,5 +1,5 @@
-Varying_1 = 12 13 14 15 16
+Varying_1 = 16384 32768
 Benchmark_Name = Inplace Block LU Decomposition
-Varying1_Name = log(MatrixDim)
+Varying1_Name = MatrixDim
 Subtask_Definition = A00: 1 block; A01_A10: 1 block; A11: 1 block 
 Inner_Task_Names = A00 A01_A10 A11 ...

@@ -74,6 +74,7 @@ install:
 	done && test -z "$$fail"
 
 	cp -r unicorn_distrib_rc $(prefix)/.unicorn_distrib_rc
+	cp ../COPYING $(prefix)/COPYING
 
 clean:
 	/bin/rm -f *~
