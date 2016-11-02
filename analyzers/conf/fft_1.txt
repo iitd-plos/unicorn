@@ -1,6 +1,6 @@
 Varying_1 = 8192
-Benchmark_Name = 1D FFT
+Benchmark_Name = 2D FFT
 Varying1_Name = Matrix Dimension
 Fixed_Args = 0
-Subtask_Definition = 512 rows
-Exec_Name = fft_1d
+Subtask_Definition = 512 rows and 512 columns
+Exec_Name = fft_2d
