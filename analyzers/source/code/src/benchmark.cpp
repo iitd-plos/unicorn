@@ -49,10 +49,18 @@
 
 #ifdef _WIN32
     const char PATH_SEPARATOR = '\\';
+#ifdef BUILD_FOR_DISTRIBUTION
+    const char* gIntermediatePath = "";
+#else
     const char* gIntermediatePath = "build\\windows\\release";
+#endif
 #else
     const char PATH_SEPARATOR = '/';
+#ifdef BUILD_FOR_DISTRIBUTION
+    const char* gIntermediatePath = "";
+#else
     const char* gIntermediatePath = "build/linux/release";
+#endif
 #endif
 
 #define HANDLE_BENCHMARK_HANGS
