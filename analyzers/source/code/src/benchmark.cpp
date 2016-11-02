@@ -2520,6 +2520,11 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
         if(!lGenerateStaticBest && ((enum SchedulingPolicy)i == STATIC_BEST))
             continue;
         
+    #ifdef BUILD_FOR_DISTRIBUTION
+        if(i != (size_t)PULL && i != (size_t)PULL_WITH_AFFINITY)
+            continue;
+    #endif
+        
         for(size_t j = 0; j < (size_t)MAX_CLUSTER_TYPE; ++j)
         {
             for(size_t k = 0; k <= 1; ++k) // Multi Assign
@@ -2587,6 +2592,11 @@ void Benchmark::ExecuteSample(const std::string& pHosts, const std::string& pSpa
                                         break;
                                 };
                             }
+
+                        #ifdef BUILD_FOR_DISTRIBUTION
+                            if(i == (size_t)PULL_WITH_AFFINITY && ((n == 1) || (n == 2)))
+                                continue;
+                        #endif
 
                             std::ifstream lFileStream(lOutputFile.str().c_str());
 
