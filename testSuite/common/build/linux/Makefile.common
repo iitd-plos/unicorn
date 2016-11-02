@@ -139,8 +139,8 @@ clean:
 
 install:
 	$(INSTALL) -d $(prefix)
-	$(INSTALL) -d $(prefix)/testsuite
-	$(INSTALL) -d $(prefix)/testsuite/$(SAMPLE_NAME)
-	$(INSTALL) $(PROGRAM) $(prefix)/testsuite/$(SAMPLE_NAME)
+	$(INSTALL) -d $(prefix)/testSuite
+	$(INSTALL) -d $(prefix)/testSuite/$(SAMPLE_NAME)
+	$(INSTALL) $(PROGRAM) $(prefix)/testSuite/$(SAMPLE_NAME)
 
 -include $(OUTDIR)/*.d
