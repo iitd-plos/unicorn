@@ -1,9 +1,0 @@
-Varying_1 = 11 12 13 14
-Varying_2 = 11 12 13 14
-Benchmark_Name = Inplace 2D FFT
-Varying1_Name = log(rows)
-Varying2_Name = log(cols)
-Subtask_Definition = FFT: 128 rows; Transpose: 4096 rows * 4096 cols
-Inner_Task_Names = FFT1 Transpose1 FFT2 Transpose2
-Fixed_Args = 1
-Exec_Name = fft_2d

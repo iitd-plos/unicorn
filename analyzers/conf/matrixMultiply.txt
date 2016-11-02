@@ -1,4 +1,4 @@
-Varying_1 = 500 1000 1500 2000 2500 3000 4000 5000
+Varying_1 = 500 1000
 Benchmark_Name = Square Matrix Multiplication
 Varying1_Name = Matrix Dimension
 Subtask_Definition = 1 row

@@ -91,6 +91,7 @@ install:
 	$(INSTALL) -d $(prefix)/analyzers/bin
 	$(INSTALL) $(PROGRAM) $(prefix)/analyzers/bin
 	rm -rf $(prefix)/analyzers/conf
+	rm -rf $(prefix)/analyzers/results
 	cp -R $(PMLIB_INSTALL_PATH)/analyzers/conf $(prefix)/analyzers/conf
 
 -include $(OUTDIR)/*.d
