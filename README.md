@@ -1,0 +1,19 @@
+# unicorn
+Unicorn - An HPC Library for hybrid CPU-GPU clusters (TPDS 2016 paper)
+# For any issues in installing/using Unicorn or for any bug reports or enhancement requests, please contact onlinetarun@gmail.com, sbansal@cse.iitd.ac.in and subodh@cse.iitd.ac.in
+
+# Build process for Unicorn-1.0.0
+$ cd install
+$ ./configure --prefix=<install location> --with-cuda=<cuda install path> --with-cudalib=<location of libcuda> --with-mpi=<mpi install path> --with-cblas-lib=<location of libcblas.so> --with-cblas-header=<location of cblas.h>
+$ make
+$ make install
+
+
+# After installation, add the following source file to your bashrc or bash_profile
+$ echo "source <install location>/.unicorn_distrib_rc" >> ~/.bashrc
+
+
+# To run the analysis engine and to test the installation, do the following steps
+$ Create a file ~/Data/hosts.txt and list your MPI hosts in this file (one host per line). The location of this file can be changed in the configuration file <install location>/analyzers/conf/global.txt
+$ cd <install location>/analyzers/bin
+$ ./analyzers.exe    # Results are produced under the directory <install location>/analyzers/results. Ensure that the folder has write and execute permissions.
