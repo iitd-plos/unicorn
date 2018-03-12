@@ -17,3 +17,16 @@ $ echo "source <install location>/.unicorn_distrib_rc" >> ~/.bashrc
 $ Create a file ~/Data/hosts.txt and list your MPI hosts in this file (one host per line). The location of this file can be changed in the configuration file <install location>/analyzers/conf/global.txt
 $ cd <install location>/analyzers/bin
 $ ./analyzers.exe    # Results are produced under the directory <install location>/analyzers/results. Ensure that the folder has write and execute permissions.
+
+
+# Note: Unicorn requires a multi-threaded build of openMPI. Use the following commands to build and install it.
+(a) ./configure --prefix=$install_path/release --with-threads=posix --enable-mpi-threads
+(b) make
+(c) make install
+
+# Note that we have used the following versions of various software to build and run Unicorn:
+1. openmpi 1.4.5
+2. gcc 4.8.3
+3. cuda 5.5
+4. CentOS 6.2
+
