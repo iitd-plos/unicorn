@@ -4,26 +4,26 @@ Unicorn - An HPC Library for hybrid CPU-GPU clusters (TPDS 2016 paper)
 
 # Build process for Unicorn-1.0.0
 $ cd install  
-$ ./configure --prefix=<install location> --with-cuda=<cuda install path> --with-cudalib=<location of libcuda> --with-mpi=<mpi install path> --with-cblas-lib=<location of libcblas.so> --with-cblas-header=<location of cblas.h>  
+$ ./configure --prefix=\<install location\> --with-cuda=\<cuda install path\> --with-cudalib=\<location of libcuda\> --with-mpi=\<mpi install path\> --with-cblas-lib=\<location of libcblas.so\> --with-cblas-header=\<location of cblas.h\>  
 $ make  
 $ make install  
 
 
 # After installation, add the following source file to your bashrc or bash_profile
-$ echo "source <install location>/.unicorn_distrib_rc" >> ~/.bashrc  
+$ echo "source \<install location\>/.unicorn_distrib_rc" >> ~/.bashrc  
 
 
 # To run the analysis engine and to test the installation, do the following steps
-$ Create a file ~/Data/hosts.txt and list your MPI hosts in this file (one host per line). The location of this file can be changed in the configuration file <install location>/analyzers/conf/global.txt  
-$ cd <install location>/analyzers/bin  
+$ Create a file ~/Data/hosts.txt and list your MPI hosts in this file (one host per line). The location of this file can be changed in the configuration file \<install location\>/analyzers/conf/global.txt  
+$ cd \<install location\>/analyzers/bin  
 $ ./analyzers.exe  
 
-# Results are produced under the directory <install location>/analyzers/results. Ensure that the folder has write and execute permissions.
+# Results are produced under the directory \<install location\>/analyzers/results. Ensure that the folder has write and execute permissions.
 
 
 # Note: Unicorn requires a multi-threaded build of openMPI. Use the following commands to build and install it.
 $ cd to the location of openMPI source
-$ ./configure --prefix=$install_path/release --with-threads=posix --enable-mpi-threads  
+$ ./configure --prefix=\<MPI install location\> --with-threads=posix --enable-mpi-threads  
 $ make  
 $ make install  
 
