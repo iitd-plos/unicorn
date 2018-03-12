@@ -22,9 +22,10 @@ $ ./analyzers.exe
 
 
 # Note: Unicorn requires a multi-threaded build of openMPI. Use the following commands to build and install it.
-(a) configure --prefix=$install_path/release --with-threads=posix --enable-mpi-threads  
-(b) make  
-(c) make install  
+$ cd to the location of openMPI source
+$ ./configure --prefix=$install_path/release --with-threads=posix --enable-mpi-threads  
+$ make  
+$ make install  
 
 # Note that we have used the following versions of various software to build and run Unicorn:
 1. openmpi 1.4.5
