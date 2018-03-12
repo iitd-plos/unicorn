@@ -1,4 +1,4 @@
-# unicorn
+# Unicorn
 Unicorn - An HPC Library for hybrid CPU-GPU clusters (TPDS 2016 paper)
 # For any issues in installing/using Unicorn or for any bug reports or enhancement requests, please contact onlinetarun@gmail.com, sbansal@cse.iitd.ac.in and subodh@cse.iitd.ac.in
 
